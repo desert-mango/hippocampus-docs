@@ -18,13 +18,24 @@ Validates, failing loudly with actionable messages:
      entry of data/cloudinary-manifest.json (matched on public_id, so delivery
      transformations are fine), and every manifest entry must be referenced;
   6b. hygiene: no credentials, key material or personal emails in content/**.md,
-     data/*.json or .mcp.json;
+     data/**/*.json (the graph shards included) or .mcp.json;
   6c. people: data/people.json (when present) carries exactly name/title/photo/
      link per person, every photo resolves to a manifest entry, every link is an
      http(s) URL;
   7. shell: index.html references exist; vendored marked.min.js matches its
      pinned sha256;
-  8. probes: data/search-probes.json carries exactly 10 well-formed probes.
+  8. probes: data/search-probes.json carries exactly 10 well-formed probes;
+  9. graph: the semantic layer under data/graph/ is in step with the registries —
+     every registry page is a wiki.json node exactly once with the right kind and
+     no stale ones, the 3 index views and one node per org repo, the counts block
+     matches the real tallies, every edge resolves/has a type and a 'why' and is
+     unique, every node carries a summary and summaries.json covers exactly the
+     page+index nodes, every non-fork repo has a data/graph/repo-<name>.json shard
+     (and no fork or stray one does), repos-index.json has one well-formed row per
+     org repo, xref terms resolve and collide with neither stoplist nor each other,
+     and every hand-authored edge was merged into wiki.json as 'related';
+  10. contributors: data/graph/contributors.json (when present) is the projected,
+     address-free shape build_contributors.py writes.
 
 This gate is OFFLINE by design (it never touches the network). URL liveness is
 the job of its online twin, tools/check_urls.py.
@@ -53,6 +64,16 @@ SECRET_KEY_RE = re.compile(
     r"(password|passwd|pwd|api_key|apikey|api_secret|secret|token)", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 EMAIL_OK = re.compile(r"@(github\.com|[\w.-]*\.local|example\.[a-z]+)$")
+# ---- the semantic graph under data/graph/ (checks 9 + 10) ----
+GRAPH = "data/graph"
+# index views are landing pages, not content: they are counted separately, the
+# same rule tools/build_wiki_graph.py and the search index use.
+PAGE_KINDS = ("setup", "project", "tool", "about")
+INDEX_IDS = ("index:home", "index:projects", "index:tools")
+EDGE_TYPES = ("links-to", "member", "mentions", "related")
+SUMMARY_SOURCES = ("derived", "authored")
+CONTRIB_ORG = "HippoCampusRobotics"
+CONTRIB_MAX_ROWS = 12
 errors = []
 
 
@@ -110,6 +131,503 @@ def walk_json(node, path=""):
         yield path, path.rsplit(".", 1)[-1].split("[")[0], node
 
 
+# --------------------------------------------------------------------------
+# 9. the semantic graph (data/graph/**) — pure checks over loaded documents.
+#
+# Each one takes already-parsed dicts and RETURNS a list of messages, so it can
+# be exercised against in-memory fixtures without a file ever being touched.
+# main() feeds the results to err(). See tools/tests/test_check_graph.py.
+# --------------------------------------------------------------------------
+def read_repo_shards(root):
+    """{repo name: parsed data/graph/repo-<name>.json} for every shard on disk.
+
+    A shard whose JSON does not parse maps to None: it still counts as present
+    (so it is not reported as missing too), and the decode error is reported by
+    the JSON hygiene scan at 6b, which walks data/**/*.json.
+    """
+    shards = {}
+    for p in sorted((Path(root) / "data" / "graph").glob("repo-*.json")):
+        name = p.name[len("repo-"):-len(".json")]
+        try:
+            shards[name] = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            shards[name] = None
+    return shards
+
+
+def node_ids(wiki):
+    return {n["id"] for n in wiki.get("nodes") or []
+            if isinstance(n, dict) and isinstance(n.get("id"), str)}
+
+
+def enumerate_page_nodes(setup, projects, tools):
+    """Every content page the registries define, as (node id, kind) pairs.
+
+    The id scheme is tools/build_wiki_graph.py's: 'setup/<id>', 'projects/<id>',
+    'tools/<id>', 'about'. Index views and repos are not registry pages.
+    """
+    rows = []
+    for sec in setup["sections"]:
+        for p in sec["pages"]:
+            rows.append((f"setup/{p['id']}", "setup"))
+    for pr in projects["projects"]:
+        rows.append((f"projects/{pr['id']}", "project"))
+    for t in tools["tools"]:
+        rows.append((f"tools/{t['id']}", "tool"))
+    rows.append(("about", "about"))
+    return rows
+
+
+def check_graph_parity(wiki, setup, projects, tools, org):
+    """wiki.json's node set is exactly the registries', repo for repo."""
+    out = []
+    nodes = wiki.get("nodes")
+    if not isinstance(nodes, list):
+        return [f"{GRAPH}/wiki.json: 'nodes' must be a list — re-run "
+                f"tools/build_wiki_graph.py"]
+    kept, by_id = [], {}
+    for i, n in enumerate(nodes):
+        if not isinstance(n, dict) or not isinstance(n.get("id"), str) or not n["id"]:
+            out.append(f"{GRAPH}/wiki.json: node #{i} needs a non-empty string 'id' "
+                       f"— re-run tools/build_wiki_graph.py")
+            continue
+        kept.append(n)
+        by_id.setdefault(n["id"], []).append(n)
+    nodes = kept
+    for nid, dupes in sorted(by_id.items()):
+        if len(dupes) > 1:
+            out.append(f"{GRAPH}/wiki.json: node '{nid}' appears {len(dupes)} times "
+                       f"— a node id is unique; re-run tools/build_wiki_graph.py")
+
+    rows = enumerate_page_nodes(setup, projects, tools)
+    want = dict(rows)
+    if len(want) != len(rows):
+        seen, dupes = set(), set()
+        for nid, _ in rows:
+            (dupes if nid in seen else seen).add(nid)
+        out.append(f"data/setup.json + projects.json + tools.json: duplicate page id"
+                   f"(s) {sorted(dupes)} — a page id is unique across the registries")
+    for nid, kind in sorted(want.items()):
+        got = by_id.get(nid)
+        if not got:
+            out.append(f"{GRAPH}/wiki.json: registry page '{nid}' has no node — "
+                       f"re-run tools/build_wiki_graph.py")
+        elif got[0].get("kind") != kind:
+            out.append(f"{GRAPH}/wiki.json: node '{nid}' has kind "
+                       f"'{got[0].get('kind')}', expected '{kind}' — re-run "
+                       f"tools/build_wiki_graph.py")
+
+    # Exact parity means the node set is CLOSED: every node is a registry page,
+    # one of the fixed index views, or an org repo. A node of any other kind (or
+    # an unknown id under a known kind) is stale or malformed and must fail here,
+    # not slip between the per-kind checks below.
+    allowed_kinds = set(PAGE_KINDS) | {"index", "repo"}
+    for n in nodes:
+        if n.get("kind") not in allowed_kinds:
+            out.append(f"{GRAPH}/wiki.json: node '{n['id']}' has unknown kind "
+                       f"'{n.get('kind')}' — a node is a registry page, an index "
+                       f"view, or an org repo; re-run tools/build_wiki_graph.py")
+
+    pages = [n for n in nodes if n.get("kind") in PAGE_KINDS]
+    if len(pages) != len(want):
+        out.append(f"{GRAPH}/wiki.json: page-kind nodes {len(pages)} != enumerated "
+                   f"{len(want)} — re-run tools/build_wiki_graph.py")
+    for n in pages:
+        if n["id"] not in want:
+            out.append(f"{GRAPH}/wiki.json: stale page node '{n['id']}' is in no "
+                       f"registry — re-run tools/build_wiki_graph.py")
+
+    index = [n["id"] for n in nodes if n.get("kind") == "index"]
+    if sorted(index) != sorted(INDEX_IDS):
+        out.append(f"{GRAPH}/wiki.json: index nodes {sorted(index)} != "
+                   f"{sorted(INDEX_IDS)} — the landing views are fixed; re-run "
+                   f"tools/build_wiki_graph.py")
+
+    repos = [n["id"] for n in nodes if n.get("kind") == "repo"]
+    want_repos = {f"repo:{r['name']}" for r in org
+                  if isinstance(r, dict) and isinstance(r.get("name"), str)}
+    for rid in sorted(want_repos - set(repos)):
+        out.append(f"{GRAPH}/wiki.json: org repo node '{rid}' is missing — re-run "
+                   f"tools/build_repo_graphs.py, then tools/build_wiki_graph.py")
+    for rid in sorted(set(repos) - want_repos):
+        out.append(f"{GRAPH}/wiki.json: repo node '{rid}' is not an org repo "
+                   f"(data/org-repos.json) — re-run tools/build_wiki_graph.py")
+    if len(repos) != len(want_repos):
+        out.append(f"{GRAPH}/wiki.json: repo nodes {len(repos)} != org repos "
+                   f"{len(want_repos)} — re-run tools/build_wiki_graph.py")
+
+    counts = wiki.get("counts")
+    if not isinstance(counts, dict):
+        out.append(f"{GRAPH}/wiki.json: 'counts' block missing — re-run "
+                   f"tools/build_wiki_graph.py")
+    else:
+        for key, actual in (("pages", len(pages)), ("index", len(index)),
+                            ("repos", len(repos))):
+            if counts.get(key) != actual:
+                out.append(f"{GRAPH}/wiki.json: counts.{key} says "
+                           f"{counts.get(key)} but the graph holds {actual} — "
+                           f"stale counts; re-run tools/build_wiki_graph.py")
+        tally = {}
+        for e in wiki.get("edges") or []:
+            if isinstance(e, dict) and isinstance(e.get("type"), str):
+                tally[e["type"]] = tally.get(e["type"], 0) + 1
+        if counts.get("edges") != tally:
+            out.append(f"{GRAPH}/wiki.json: counts.edges {counts.get('edges')} != "
+                       f"actual {tally} — stale counts; re-run "
+                       f"tools/build_wiki_graph.py")
+    return out
+
+
+def check_graph_edges(wiki):
+    """Every edge resolves, is typed, explains itself, and appears once."""
+    out = []
+    edges = wiki.get("edges")
+    if not isinstance(edges, list):
+        return [f"{GRAPH}/wiki.json: 'edges' must be a list — re-run "
+                f"tools/build_wiki_graph.py"]
+    ids = node_ids(wiki)
+    seen = set()
+    for i, e in enumerate(edges):
+        if not isinstance(e, dict):
+            out.append(f"{GRAPH}/wiki.json: edge #{i} must be an object — re-run "
+                       f"tools/build_wiki_graph.py")
+            continue
+        s, t, kind = e.get("s"), e.get("t"), e.get("type")
+        where = f"{GRAPH}/wiki.json: edge #{i} {s} -> {t}"
+        for side, value in (("s", s), ("t", t)):
+            if not isinstance(value, str) or value not in ids:
+                out.append(f"{where}: '{side}' endpoint '{value}' is not a node — "
+                           f"dangling edge; re-run tools/build_wiki_graph.py")
+        if s is not None and s == t:
+            out.append(f"{where}: self edge on '{s}' — a page does not link to "
+                       f"itself; re-run tools/build_wiki_graph.py")
+        if kind not in EDGE_TYPES:
+            out.append(f"{where}: unknown type '{kind}' — one of "
+                       f"{sorted(EDGE_TYPES)}")
+        if not (isinstance(e.get("why"), str) and e["why"].strip()):
+            out.append(f"{where}: 'why' must be a non-empty string — every edge "
+                       f"says why it exists")
+        key = (str(s), str(t), str(kind))
+        if key in seen:
+            out.append(f"{GRAPH}/wiki.json: duplicate edge {s} -{kind}-> {t} — "
+                       f"re-run tools/build_wiki_graph.py")
+        seen.add(key)
+    return out
+
+
+def check_graph_summaries(wiki, summaries):
+    """Every node carries prose, and summaries.json covers the page+index nodes."""
+    out = []
+    pages = summaries.get("pages")
+    if not isinstance(pages, dict):
+        return [f"{GRAPH}/summaries.json: 'pages' must be an object keyed by node "
+                f"id — re-run tools/build_wiki_graph.py"]
+    want = set()
+    for n in wiki.get("nodes") or []:
+        if not isinstance(n, dict):
+            continue
+        nid, text = n.get("id"), n.get("summary")
+        if not (isinstance(text, str) and text.strip()):
+            source = (f"its one-liner comes from {GRAPH}/repos-index.json"
+                      if n.get("kind") == "repo"
+                      else f"write one in {GRAPH}/summaries.json")
+            out.append(f"{GRAPH}/wiki.json: node '{nid}' has an empty summary — "
+                       f"{source}; re-run tools/build_wiki_graph.py")
+        if n.get("kind") != "repo" and isinstance(nid, str):
+            want.add(nid)
+    for nid in sorted(want - set(pages)):
+        out.append(f"{GRAPH}/summaries.json: no entry for node '{nid}' — re-run "
+                   f"tools/build_wiki_graph.py")
+    for nid in sorted(set(pages) - want):
+        out.append(f"{GRAPH}/summaries.json: entry '{nid}' is not a page or index "
+                   f"node of wiki.json — stale summary; re-run "
+                   f"tools/build_wiki_graph.py")
+    for nid in sorted(set(pages) & want):
+        row = pages[nid]
+        if not isinstance(row, dict):
+            out.append(f"{GRAPH}/summaries.json: '{nid}' must be an object with "
+                       f"summary/source")
+            continue
+        if not (isinstance(row.get("summary"), str) and row["summary"].strip()):
+            out.append(f"{GRAPH}/summaries.json: '{nid}' has an empty summary — "
+                       f"write one (source 'authored') or re-run "
+                       f"tools/build_wiki_graph.py")
+        if row.get("source") not in SUMMARY_SOURCES:
+            out.append(f"{GRAPH}/summaries.json: '{nid}' has source "
+                       f"'{row.get('source')}' — must be one of "
+                       f"{sorted(SUMMARY_SOURCES)}")
+    return out
+
+
+def check_graph_shards(org, repos_index, projects, shards):
+    """One shard per non-fork org repo, and one repos-index row per org repo."""
+    out = []
+    org_rows = {r["name"]: r for r in org
+                if isinstance(r, dict) and isinstance(r.get("name"), str)}
+    project_ids = {p["id"] for p in projects.get("projects", [])
+                   if isinstance(p, dict)}
+    for name in sorted(org_rows):
+        fork = bool(org_rows[name].get("isFork"))
+        present = name in shards
+        if fork and present:
+            out.append(f"{GRAPH}/repo-{name}.json: shard for a fork — forks are "
+                       f"upstream code and get no graph shard; delete it")
+            continue
+        if not fork and not present:
+            out.append(f"{GRAPH}/repo-{name}.json: missing shard for org repo "
+                       f"'{name}' — re-run tools/build_repo_graphs.py")
+            continue
+        doc = shards.get(name)
+        if doc is None:
+            continue  # unparseable: the 6b hygiene scan reports the decode error
+        if not isinstance(doc, dict):
+            out.append(f"{GRAPH}/repo-{name}.json: top level must be an object — "
+                       f"re-run tools/build_repo_graphs.py")
+            continue
+        if doc.get("repo") != name:
+            out.append(f"{GRAPH}/repo-{name}.json: 'repo' is '{doc.get('repo')}', "
+                       f"expected '{name}' — the shard is filed under the wrong "
+                       f"name; re-run tools/build_repo_graphs.py")
+        if not isinstance(doc.get("counts"), dict):
+            out.append(f"{GRAPH}/repo-{name}.json: 'counts' block missing — re-run "
+                       f"tools/build_repo_graphs.py")
+        for key in ("god_nodes", "communities"):
+            if not isinstance(doc.get(key), list):
+                out.append(f"{GRAPH}/repo-{name}.json: '{key}' must be a list, got "
+                           f"{type(doc.get(key)).__name__} — re-run "
+                           f"tools/build_repo_graphs.py")
+    for name in sorted(set(shards) - set(org_rows)):
+        out.append(f"{GRAPH}/repo-{name}.json: stray shard — '{name}' is not an org "
+                   f"repo (data/org-repos.json); delete it")
+
+    rows = repos_index.get("repos")
+    if not isinstance(rows, list):
+        out.append(f"{GRAPH}/repos-index.json: 'repos' must be a list — re-run "
+                   f"tools/build_repo_graphs.py")
+        return out
+    seen = {}
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict) or not isinstance(r.get("name"), str):
+            out.append(f"{GRAPH}/repos-index.json: row #{i} needs a string 'name' — "
+                       f"re-run tools/build_repo_graphs.py")
+            continue
+        seen.setdefault(r["name"], []).append(r)
+    for name in sorted(org_rows):
+        n = len(seen.get(name, []))
+        if n == 0:
+            out.append(f"{GRAPH}/repos-index.json: no row for org repo '{name}' — "
+                       f"re-run tools/build_repo_graphs.py")
+        elif n > 1:
+            out.append(f"{GRAPH}/repos-index.json: org repo '{name}' has {n} rows — "
+                       f"exactly one per repo; re-run tools/build_repo_graphs.py")
+    for name in sorted(set(seen) - set(org_rows)):
+        out.append(f"{GRAPH}/repos-index.json: row '{name}' is not an org repo "
+                   f"(data/org-repos.json) — re-run tools/build_repo_graphs.py")
+    for name in sorted(seen):
+        for r in seen[name]:
+            if not (isinstance(r.get("oneliner"), str) and r["oneliner"].strip()):
+                out.append(f"{GRAPH}/repos-index.json: '{name}' has an empty "
+                           f"oneliner — every repo card needs one line; re-run "
+                           f"tools/build_repo_graphs.py")
+            if name in org_rows and bool(r.get("fork")) != bool(
+                    org_rows[name].get("isFork")):
+                out.append(f"{GRAPH}/repos-index.json: '{name}' fork flag "
+                           f"{bool(r.get('fork'))} != data/org-repos.json isFork "
+                           f"{bool(org_rows[name].get('isFork'))} — re-run "
+                           f"tools/build_repo_graphs.py")
+            pid = r.get("project")
+            if pid is not None and pid not in project_ids:
+                out.append(f"{GRAPH}/repos-index.json: '{name}' names unknown "
+                           f"project '{pid}' — must be null or an id from "
+                           f"data/projects.json")
+    return out
+
+
+def check_xref_terms(xref, wiki):
+    """Cross-reference terms resolve and collide with nothing."""
+    out = []
+    terms = xref.get("terms")
+    if not isinstance(terms, dict):
+        return [f"{GRAPH}/xref-terms.json: 'terms' must be an object mapping term "
+                f"to node id — re-run tools/build_wiki_graph.py"]
+    ids = node_ids(wiki)
+    stop = {s.lower() for s in xref.get("stoplist") or [] if isinstance(s, str)}
+    rejected = {s.lower() for s in xref.get("rejected") or [] if isinstance(s, str)}
+    folded = {}
+    for term in sorted(terms):
+        if not (isinstance(term, str) and term.strip()):
+            out.append(f"{GRAPH}/xref-terms.json: term {term!r} must be a non-empty "
+                       f"string — drop it")
+            continue
+        low = term.lower()
+        target = terms[term]
+        if low in stop:
+            out.append(f"{GRAPH}/xref-terms.json: term '{term}' is on the stoplist "
+                       f"— drop it from 'terms', or from 'stoplist' if it really "
+                       f"should link")
+        if low in rejected:
+            out.append(f"{GRAPH}/xref-terms.json: term '{term}' is on the rejected "
+                       f"list — a rejected term may not also be linked")
+        if not isinstance(target, str) or target not in ids:
+            out.append(f"{GRAPH}/xref-terms.json: term '{term}' points at "
+                       f"'{target}', which is not a wiki.json node — re-run "
+                       f"tools/build_wiki_graph.py")
+        folded.setdefault(low, []).append(term)
+    for low, group in sorted(folded.items()):
+        if len(group) > 1:
+            out.append(f"{GRAPH}/xref-terms.json: terms {sorted(group)} differ only "
+                       f"by case — the client matches case-insensitively; keep one")
+    return out
+
+
+def check_authored_edges(authored, wiki):
+    """The hand-written overlay resolves and was merged into wiki.json."""
+    out = []
+    rows = authored.get("edges")
+    if not isinstance(rows, list):
+        return [f"{GRAPH}/edges-authored.json: 'edges' must be a list"]
+    ids = node_ids(wiki)
+    related = {(e.get("s"), e.get("t")): e.get("why") for e in wiki.get("edges") or []
+               if isinstance(e, dict) and e.get("type") == "related"}
+    for i, e in enumerate(rows):
+        if not isinstance(e, dict):
+            out.append(f"{GRAPH}/edges-authored.json: edge #{i} must be an object")
+            continue
+        s, t = e.get("s"), e.get("t")
+        where = f"{GRAPH}/edges-authored.json: edge #{i} {s} -> {t}"
+        for side, value in (("s", s), ("t", t)):
+            if not isinstance(value, str) or value not in ids:
+                out.append(f"{where}: '{side}' endpoint '{value}' is not a "
+                           f"wiki.json node — fix the overlay or re-run "
+                           f"tools/build_wiki_graph.py")
+        if not (isinstance(e.get("why"), str) and e["why"].strip()):
+            out.append(f"{where}: 'why' must be a non-empty string — an authored "
+                       f"edge says why it exists")
+        if (s, t) not in related:
+            out.append(f"{GRAPH}/edges-authored.json: edge {s} -> {t} is not in "
+                       f"wiki.json as a 'related' edge — the overlay was not "
+                       f"merged; re-run tools/build_wiki_graph.py")
+        elif related[(s, t)] != e.get("why"):
+            # the generator copies the why verbatim; a mismatch is a stale wiki.json
+            out.append(f"{GRAPH}/edges-authored.json: edge {s} -> {t} 'why' differs "
+                       f"from wiki.json's related edge — stale graph; re-run "
+                       f"tools/build_wiki_graph.py")
+    return out
+
+
+# --------------------------------------------------------------------------
+# 10. contributors — optional-when-present, like data/people.json at 6c.
+# --------------------------------------------------------------------------
+def check_contributors(contributors, projects):
+    """data/graph/contributors.json, when it exists, is address-free and sorted.
+
+    The file is a gated artifact: a checkout without it is fine (None), and the
+    check is then a no-op — the same shape as the people.json rule at 6c.
+    """
+    if contributors is None:
+        return []
+    where = f"{GRAPH}/contributors.json"
+    if not isinstance(contributors, dict):
+        return [f"{where}: top level must be an object with generated/org/note/"
+                f"projects — re-run tools/build_contributors.py"]
+    out = []
+    want_keys = {"generated", "org", "note", "projects"}
+    extra = sorted(set(contributors) - want_keys)
+    missing = sorted(want_keys - set(contributors))
+    if extra:
+        out.append(f"{where}: unknown top-level key(s) {extra} — exactly "
+                   f"generated/org/note/projects")
+    if missing:
+        out.append(f"{where}: missing top-level key(s) {missing} — exactly "
+                   f"generated/org/note/projects")
+    if contributors.get("org") != CONTRIB_ORG:
+        out.append(f"{where}: 'org' is {contributors.get('org')!r}, expected "
+                   f"'{CONTRIB_ORG}' — this file only ever covers the lab's org")
+    for keypath, _key, value in walk_json(contributors):
+        if "@" in value:
+            out.append(f"{where}: '@' in the string at '{keypath}' — this file "
+                       f"carries logins and display names only (privacy "
+                       f"projection); re-run tools/build_contributors.py")
+    buckets = contributors.get("projects")
+    if not isinstance(buckets, dict):
+        out.append(f"{where}: 'projects' must be an object keyed by project id — "
+                   f"re-run tools/build_contributors.py")
+        return out
+    project_ids = {p["id"] for p in projects.get("projects", [])
+                   if isinstance(p, dict)}
+    for pid in sorted(set(buckets) - project_ids):
+        out.append(f"{where}: '{pid}' is not a project id of data/projects.json — "
+                   f"re-run tools/build_contributors.py")
+    for pid in sorted(project_ids - set(buckets)):
+        out.append(f"{where}: no entry for project '{pid}' — every project gets a "
+                   f"bucket; re-run tools/build_contributors.py")
+    for pid in sorted(set(buckets) & project_ids):
+        bucket = buckets[pid]
+        if not isinstance(bucket, dict):
+            out.append(f"{where}: '{pid}' must be an object with a 'contributors' "
+                       f"list")
+            continue
+        extra_keys = sorted(set(bucket) - {"contributors", "truncated"})
+        if extra_keys:
+            out.append(f"{where}: '{pid}' has unknown key(s) {extra_keys} — exactly "
+                       f"contributors/truncated")
+        if "truncated" in bucket and not (
+                isinstance(bucket["truncated"], int)
+                and not isinstance(bucket["truncated"], bool)
+                and bucket["truncated"] > 0):
+            out.append(f"{where}: '{pid}' has truncated={bucket['truncated']!r} — "
+                       f"must be a positive integer when present")
+        rows = bucket.get("contributors")
+        if not isinstance(rows, list):
+            out.append(f"{where}: '{pid}' has no 'contributors' list — re-run "
+                       f"tools/build_contributors.py")
+            continue
+        if len(rows) > CONTRIB_MAX_ROWS:
+            out.append(f"{where}: '{pid}' lists {len(rows)} contributors — at most "
+                       f"{CONTRIB_MAX_ROWS}; re-run tools/build_contributors.py")
+        order = []
+        seen_logins = set()
+        for i, r in enumerate(rows):
+            who = f"{where}: '{pid}' row #{i}"
+            if not isinstance(r, dict):
+                out.append(f"{who} must be an object")
+                continue
+            dup_login = r.get("login")
+            if isinstance(dup_login, str):
+                if dup_login in seen_logins:
+                    out.append(f"{who}: login '{dup_login}' appears more than once in "
+                               f"'{pid}' — one row per contributor; re-run "
+                               f"tools/build_contributors.py")
+                seen_logins.add(dup_login)
+            extra_fields = sorted(set(r) - {"login", "name", "contributions",
+                                            "roster"})
+            if extra_fields:
+                out.append(f"{who}: unknown field(s) {extra_fields} — a row is "
+                           f"exactly login/name/contributions[/roster]")
+            for key in ("login", "name"):
+                if not (isinstance(r.get(key), str) and r[key].strip()):
+                    out.append(f"{who}: '{key}' must be a non-empty string")
+            n = r.get("contributions")
+            if not (isinstance(n, int) and not isinstance(n, bool) and n > 0):
+                out.append(f"{who}: 'contributions' must be a positive integer, got "
+                           f"{n!r}")
+            if "roster" in r and r["roster"] is not True:
+                out.append(f"{who}: 'roster' must be true when present, got "
+                           f"{r['roster']!r}")
+            login = r.get("login")
+            if isinstance(login, str) and login.endswith("[bot]"):
+                out.append(f"{who}: bot account '{login}' — bots are not "
+                           f"contributors; re-run tools/build_contributors.py")
+            if isinstance(login, str) and isinstance(n, int) \
+                    and not isinstance(n, bool):
+                order.append((-n, login))
+        if order != sorted(order):
+            out.append(f"{where}: '{pid}' rows are not sorted by contributions "
+                       f"(descending) then login — re-run "
+                       f"tools/build_contributors.py")
+    return out
+
+
 def main():
     site = load("data/site.json")
     setup = load("data/setup.json")
@@ -120,6 +638,12 @@ def main():
     org = load("data/org-repos.json")
     probes = load("data/search-probes.json")
     cloudinary = load("data/cloudinary-manifest.json")
+    # the semantic layer: committed artifacts, so a missing one is an error
+    wiki = load(f"{GRAPH}/wiki.json")
+    summaries = load(f"{GRAPH}/summaries.json")
+    xref = load(f"{GRAPH}/xref-terms.json")
+    authored = load(f"{GRAPH}/edges-authored.json")
+    repos_index = load(f"{GRAPH}/repos-index.json")
     if errors:
         report()
 
@@ -420,10 +944,11 @@ def main():
                 if not email_ok.search(em) and em != "git@github.com":
                     err(f"{rel}:{i}: personal email address '{em}' — do not republish personal data")
 
-    # the same hygiene rules over the JSON side of the site: registries and the
-    # MCP wiring. A key NAMED like a credential must not carry a literal value
-    # ('sha256' is a checksum, not a secret, and never matches).
-    json_files = sorted((ROOT / "data").glob("*.json"))
+    # the same hygiene rules over the JSON side of the site: every registry and
+    # graph artifact under data/**/*.json, plus the MCP wiring. A key NAMED like
+    # a credential must not carry a literal value ('sha256' is a checksum, not a
+    # secret, and never matches).
+    json_files = sorted((ROOT / "data").rglob("*.json"))
     if (ROOT / ".mcp.json").exists():
         json_files.append(ROOT / ".mcp.json")
     for jf in json_files:
@@ -466,6 +991,37 @@ def main():
     for p in plist:
         if not (p.get("q") and p.get("expect") and p.get("kind")):
             err(f"search-probes.json: malformed probe {p}")
+
+    # ---- 9. graph: data/graph/** in step with the registries ----
+    # Valid JSON is not a valid document: a list/scalar/null root must fail as
+    # a reported check, not as an AttributeError traceback inside a helper.
+    graph_docs = {"wiki.json": wiki, "summaries.json": summaries,
+                  "xref-terms.json": xref, "edges-authored.json": authored,
+                  "repos-index.json": repos_index}
+    bad_roots = [name for name, doc in graph_docs.items() if not isinstance(doc, dict)]
+    for name in bad_roots:
+        err(f"{GRAPH}/{name}: top level must be a JSON object, got "
+            f"{type(graph_docs[name]).__name__} — re-run the graph build tools")
+    if not bad_roots:
+        shards = read_repo_shards(ROOT)
+        for msg in (check_graph_parity(wiki, setup, projects, tools, org)
+                    + check_graph_edges(wiki)
+                    + check_graph_summaries(wiki, summaries)
+                    + check_graph_shards(org, repos_index, projects, shards)
+                    + check_xref_terms(xref, wiki)
+                    + check_authored_edges(authored, wiki)):
+            err(msg)
+
+    # ---- 10. contributors (optional artifact — absent is fine) ----
+    contributors_path = ROOT / "data" / "graph" / "contributors.json"
+    contributors = load(f"{GRAPH}/contributors.json") \
+        if contributors_path.exists() else None
+    if contributors_path.exists() and not isinstance(contributors, dict):
+        err(f"{GRAPH}/contributors.json: top level must be a JSON object, got "
+            f"{type(contributors).__name__} — re-run tools/build_contributors.py")
+    else:
+        for msg in check_contributors(contributors, projects):
+            err(msg)
 
     report(site)
 
