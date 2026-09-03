@@ -1,0 +1,3364 @@
+{
+ "generated": "run tools/build_wiki_graph.py to regenerate",
+ "note": "Index nodes (#/, #/projects, #/tools) are landing views, not content pages: they are EXCLUDED from the page-kind parity count — the same rule the search index uses (it indexes 90 pages, not landing views). Edges: 'links-to' is an explicit #/ link, 'member' a project's repository, 'mentions' a word-boundary name match in prose (code stripped; terms that spray — stoplisted, vetoed, or matching more than 15 pages — are muted), 'related' a hand-authored edge from data/graph/edges-authored.json.",
+ "counts": {
+  "pages": 90,
+  "index": 3,
+  "repos": 94,
+  "edges": {
+   "links-to": 61,
+   "member": 94,
+   "mentions": 84,
+   "related": 39
+  }
+ },
+ "nodes": [
+  {
+   "id": "about",
+   "kind": "about",
+   "title": "About this site",
+   "route": "#/about",
+   "where": "About",
+   "summary": "This is the documentation home of the **HippoCampusRobotics** lab at TUHH's Institute of\nMechanics and Ocean Engineering. It brings four things into one place: setup guides\n(migrated page for page from the old Sphinx sit",
+   "file": "content/about.md"
+  },
+  {
+   "id": "index:home",
+   "kind": "index",
+   "title": "Home",
+   "route": "#/",
+   "summary": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use."
+  },
+  {
+   "id": "index:projects",
+   "kind": "index",
+   "title": "Projects",
+   "route": "#/projects",
+   "summary": "Everything the lab builds, grouped into projects. One project can own many repositories; forks of upstream software are listed inside the project that uses them."
+  },
+  {
+   "id": "index:tools",
+   "kind": "index",
+   "title": "Agent tools",
+   "route": "#/tools",
+   "summary": "MCP servers are small programs that give AI agents real capabilities — renting a GPU, reading a CAD assembly — through a standard interface. These are the lab's tools. Each page will take you from nothing installed to a working agent connection."
+  },
+  {
+   "id": "projects/acoustics",
+   "kind": "project",
+   "title": "Acoustics & DVL",
+   "route": "#/projects/acoustics",
+   "where": "Project",
+   "summary": "Acoustic sensing around the vehicles: the doppler velocity log (DVL) that measures\nvelocity over ground, and the message definitions for acoustic ranging and modems.",
+   "file": "content/projects/acoustics.md"
+  },
+  {
+   "id": "projects/cameras",
+   "kind": "project",
+   "title": "Cameras",
+   "route": "#/projects/cameras",
+   "where": "Project",
+   "summary": "Image streams into ROS: the MJPEG USB camera driver the vehicles use, and the event-camera\nwork from a research collaboration.",
+   "file": "content/projects/cameras.md"
+  },
+  {
+   "id": "projects/core-stack",
+   "kind": "project",
+   "title": "Core software stack (ROS 2)",
+   "route": "#/projects/core-stack",
+   "where": "Project",
+   "summary": "The shared ROS 2 software every lab vehicle runs: control, state estimation, the message\ndefinitions that tie nodes together, and the meta packages that pull a full system onto a\nrobot. If you contribute code to the lab,",
+   "file": "content/projects/core-stack.md"
+  },
+  {
+   "id": "projects/dev-infrastructure",
+   "kind": "project",
+   "title": "Deployment & dev infrastructure",
+   "route": "#/projects/dev-infrastructure",
+   "where": "Project",
+   "summary": "How software actually reaches robots and users: deployment configuration for onboard\ncomputers, the bot that builds Debian packages, and the dependency definitions that make\n`rosdep` work for lab packages.",
+   "file": "content/projects/dev-infrastructure.md"
+  },
+  {
+   "id": "projects/docs-and-site",
+   "kind": "project",
+   "title": "Documentation & site",
+   "route": "#/projects/docs-and-site",
+   "where": "Project",
+   "summary": "The lab's documentation about itself: the current Sphinx docs site, the org website, and\nthe org profile.",
+   "file": "content/projects/docs-and-site.md"
+  },
+  {
+   "id": "projects/hippocampus-vehicle",
+   "kind": "project",
+   "title": "HippoCampus vehicle",
+   "route": "#/projects/hippocampus-vehicle",
+   "where": "Project",
+   "summary": "The HippoCampus is the lab's own micro autonomous underwater vehicle: a small torpedo-shaped\nrobot sized for the institute's tank. This project collects everything that defines the\nphysical vehicle — the CAD model, the P",
+   "file": "content/projects/hippocampus-vehicle.md"
+  },
+  {
+   "id": "projects/holiday-fun",
+   "kind": "project",
+   "title": "Holiday fun",
+   "route": "#/projects/holiday-fun",
+   "where": "Project",
+   "summary": "`hippo-christmas` — festive hardware humor from 2022, preserved because labs that keep\ntheir jokes keep their people.",
+   "file": "content/projects/holiday-fun.md"
+  },
+  {
+   "id": "projects/lab-infrastructure",
+   "kind": "project",
+   "title": "Lab & tank infrastructure",
+   "route": "#/projects/lab-infrastructure",
+   "where": "Project",
+   "summary": "The systems around the water that every experiment leans on: Qualisys motion capture for\nmillimeter ground truth, the gantry that moves equipment over the tank, and the physical\nbutton boxes wired into the safety and con",
+   "file": "content/projects/lab-infrastructure.md"
+  },
+  {
+   "id": "projects/legacy-ros1",
+   "kind": "project",
+   "title": "Legacy ROS 1 stack",
+   "route": "#/projects/legacy-ros1",
+   "where": "Project",
+   "summary": "The pre-ROS 2 HippoCampus software stack, preserved. The lab moved to ROS 2; these repos\nstay readable for anyone revisiting old experiments or wondering why something is shaped\nthe way it is.",
+   "file": "content/projects/legacy-ros1.md"
+  },
+  {
+   "id": "projects/localization",
+   "kind": "project",
+   "title": "Localization",
+   "route": "#/projects/localization",
+   "where": "Project",
+   "summary": "Knowing where the vehicle is inside the tank. The current approach is visual: cameras on\nthe vehicle detect AprilTag markers, and an EKF fuses the detections into a pose estimate.\nEarlier acoustic and radio-frequency app",
+   "file": "content/projects/localization.md"
+  },
+  {
+   "id": "projects/radio-comms",
+   "kind": "project",
+   "title": "Radio & communications",
+   "route": "#/projects/radio-comms",
+   "where": "Project",
+   "summary": "Getting data to and from vehicles without a tether: the HippoLink telemetry link over\nSi1000-family radios, the MAVLink plumbing underneath, and software-defined radio\nexperiments.",
+   "file": "content/projects/radio-comms.md"
+  },
+  {
+   "id": "projects/scalar-field",
+   "kind": "project",
+   "title": "Scalar-field exploration",
+   "route": "#/projects/scalar-field",
+   "where": "Project",
+   "summary": "Informative path planning over scalar fields — temperature-like quantities spread over the\ntank. The vehicle maintains a belief about the field and plans where measuring next helps\nmost. This is the lab's active research",
+   "file": "content/projects/scalar-field.md"
+  },
+  {
+   "id": "projects/simulation",
+   "kind": "project",
+   "title": "Simulation",
+   "route": "#/projects/simulation",
+   "where": "Project",
+   "summary": "Run the robots in software before the tank: Gazebo worlds, the plugins that make water\nbehave like water (buoyancy, drag, thrusters), and the vehicle models.",
+   "file": "content/projects/simulation.md"
+  },
+  {
+   "id": "projects/teaching",
+   "kind": "project",
+   "title": "Teaching — Formulas and Vehicles",
+   "route": "#/projects/teaching",
+   "where": "Project",
+   "summary": "The lab's teaching side: the **Formulas and Vehicles** course, where students program\nunderwater robots, and the Python onramp that gets them ready.",
+   "file": "content/projects/teaching.md"
+  },
+  {
+   "id": "projects/uvms",
+   "kind": "project",
+   "title": "UVMS — BlueROV2 + Alpha arm",
+   "route": "#/projects/uvms",
+   "where": "Project",
+   "summary": "An underwater vehicle-manipulator system: a BlueROV2 Heavy carrying a Reach Robotics\nAlpha 5 arm, with an end-effector trajectory-tracking framework — the vehicle and the arm\nmove together so the gripper follows a comman",
+   "file": "content/projects/uvms.md"
+  },
+  {
+   "id": "repo:.github",
+   "kind": "repo",
+   "title": ".github",
+   "url": "https://github.com/HippoCampusRobotics/.github",
+   "summary": "org profile readme",
+   "fork": false,
+   "project": "docs-and-site"
+  },
+  {
+   "id": "repo:Firmware",
+   "kind": "repo",
+   "title": "Firmware",
+   "url": "https://github.com/HippoCampusRobotics/Firmware",
+   "summary": "PX4 Autopilot Software",
+   "fork": true,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:RF_Localization",
+   "kind": "repo",
+   "title": "RF_Localization",
+   "url": "https://github.com/HippoCampusRobotics/RF_Localization",
+   "summary": "Radio Frequency based localization (@433MHz) framework for micro underwater robots in confined tanks using software defined radio (SDR)",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:SiK",
+   "kind": "repo",
+   "title": "SiK",
+   "url": "https://github.com/HippoCampusRobotics/SiK",
+   "summary": "Tools and firmware for the Si1000 - Si102x/3x",
+   "fork": true,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:TeensyST7735",
+   "kind": "repo",
+   "title": "TeensyST7735",
+   "url": "https://github.com/HippoCampusRobotics/TeensyST7735",
+   "summary": "display driver",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:UWRange_acoustic_simulator",
+   "kind": "repo",
+   "title": "UWRange_acoustic_simulator",
+   "url": "https://github.com/HippoCampusRobotics/UWRange_acoustic_simulator",
+   "summary": "Python repo",
+   "fork": true,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:acoustic_localization",
+   "kind": "repo",
+   "title": "acoustic_localization",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_localization",
+   "summary": "acoustic localization",
+   "fork": false,
+   "project": "localization"
+  },
+  {
+   "id": "repo:acoustic_msgs",
+   "kind": "repo",
+   "title": "acoustic_msgs",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "acoustics"
+  },
+  {
+   "id": "repo:acoustic_msgs-release",
+   "kind": "repo",
+   "title": "acoustic_msgs-release",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_msgs-release",
+   "summary": "release automation",
+   "fork": false,
+   "project": "acoustics"
+  },
+  {
+   "id": "repo:acoustic_simulator",
+   "kind": "repo",
+   "title": "acoustic_simulator",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_simulator",
+   "summary": "acoustic ranging simulator",
+   "fork": false,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:alpha_msgs",
+   "kind": "repo",
+   "title": "alpha_msgs",
+   "url": "https://github.com/HippoCampusRobotics/alpha_msgs",
+   "summary": "Alpha arm messages",
+   "fork": false,
+   "project": "uvms"
+  },
+  {
+   "id": "repo:apriltag_msgs",
+   "kind": "repo",
+   "title": "apriltag_msgs",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_msgs",
+   "summary": "AprilTag message definitions",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:apriltag_ros",
+   "kind": "repo",
+   "title": "apriltag_ros",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_ros",
+   "summary": "ROS2 node for AprilTag detection",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:apriltag_viz",
+   "kind": "repo",
+   "title": "apriltag_viz",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_viz",
+   "summary": "detection visualization",
+   "fork": false,
+   "project": "localization"
+  },
+  {
+   "id": "repo:apriltags",
+   "kind": "repo",
+   "title": "apriltags",
+   "url": "https://github.com/HippoCampusRobotics/apriltags",
+   "summary": "tag36h11 tag sheets",
+   "fork": false,
+   "project": "localization"
+  },
+  {
+   "id": "repo:bag2to1",
+   "kind": "repo",
+   "title": "bag2to1",
+   "url": "https://github.com/HippoCampusRobotics/bag2to1",
+   "summary": "ROS 2→1 bag converter",
+   "fork": false,
+   "project": "dev-infrastructure"
+  },
+  {
+   "id": "repo:buildbot",
+   "kind": "repo",
+   "title": "buildbot",
+   "url": "https://github.com/HippoCampusRobotics/buildbot",
+   "summary": "package build bot",
+   "fork": false,
+   "project": "dev-infrastructure"
+  },
+  {
+   "id": "repo:buttons",
+   "kind": "repo",
+   "title": "buttons",
+   "url": "https://github.com/HippoCampusRobotics/buttons",
+   "summary": "physical buttons + GUI",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:buttons_msgs",
+   "kind": "repo",
+   "title": "buttons_msgs",
+   "url": "https://github.com/HippoCampusRobotics/buttons_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:camera",
+   "kind": "repo",
+   "title": "camera",
+   "url": "https://github.com/HippoCampusRobotics/camera",
+   "summary": "camera/barometer interfacing (ROS 1 era)",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:control",
+   "kind": "repo",
+   "title": "control",
+   "url": "https://github.com/HippoCampusRobotics/control",
+   "summary": "control (ROS 1)",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:docs",
+   "kind": "repo",
+   "title": "docs",
+   "url": "https://github.com/HippoCampusRobotics/docs",
+   "summary": "Sphinx docs site (being replaced by this site)",
+   "fork": false,
+   "project": "docs-and-site"
+  },
+  {
+   "id": "repo:dvl",
+   "kind": "repo",
+   "title": "dvl",
+   "url": "https://github.com/HippoCampusRobotics/dvl",
+   "summary": "DVL driver",
+   "fork": false,
+   "project": "acoustics"
+  },
+  {
+   "id": "repo:dvl_msgs",
+   "kind": "repo",
+   "title": "dvl_msgs",
+   "url": "https://github.com/HippoCampusRobotics/dvl_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "acoustics"
+  },
+  {
+   "id": "repo:esc",
+   "kind": "repo",
+   "title": "esc",
+   "url": "https://github.com/HippoCampusRobotics/esc",
+   "summary": "ESC I2C driver",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:esc_serial",
+   "kind": "repo",
+   "title": "esc_serial",
+   "url": "https://github.com/HippoCampusRobotics/esc_serial",
+   "summary": "ESC serial protocol",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:event_camera_example",
+   "kind": "repo",
+   "title": "event_camera_example",
+   "url": "https://github.com/HippoCampusRobotics/event_camera_example",
+   "summary": "event-camera example",
+   "fork": false,
+   "project": "cameras"
+  },
+  {
+   "id": "repo:ext_auv_localization",
+   "kind": "repo",
+   "title": "ext_auv_localization",
+   "url": "https://github.com/HippoCampusRobotics/ext_auv_localization",
+   "summary": "ROS-package which features a multi-camera systems with EKF-based sensor fusion for micro underwater robot tracking tracking",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:fav_docs",
+   "kind": "repo",
+   "title": "fav_docs",
+   "url": "https://github.com/HippoCampusRobotics/fav_docs",
+   "summary": "course documentation",
+   "fork": false,
+   "project": "teaching"
+  },
+  {
+   "id": "repo:gantry",
+   "kind": "repo",
+   "title": "gantry",
+   "url": "https://github.com/HippoCampusRobotics/gantry",
+   "summary": "gantry control (current)",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:gantry_control",
+   "kind": "repo",
+   "title": "gantry_control",
+   "url": "https://github.com/HippoCampusRobotics/gantry_control",
+   "summary": "gantry control (ROS 1 era)",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:gantry_gui",
+   "kind": "repo",
+   "title": "gantry_gui",
+   "url": "https://github.com/HippoCampusRobotics/gantry_gui",
+   "summary": "gantry GUI",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:gantry_msgs",
+   "kind": "repo",
+   "title": "gantry_msgs",
+   "url": "https://github.com/HippoCampusRobotics/gantry_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:hardware",
+   "kind": "repo",
+   "title": "hardware",
+   "url": "https://github.com/HippoCampusRobotics/hardware",
+   "summary": "ROS 2 hardware bring-up",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:hardware_interfaces",
+   "kind": "repo",
+   "title": "hardware_interfaces",
+   "url": "https://github.com/HippoCampusRobotics/hardware_interfaces",
+   "summary": "sensor/actuator interfaces (ROS 1 era)",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:hippo-christmas",
+   "kind": "repo",
+   "title": "hippo-christmas",
+   "url": "https://github.com/HippoCampusRobotics/hippo-christmas",
+   "summary": "festive firmware",
+   "fork": false,
+   "project": "holiday-fun"
+  },
+  {
+   "id": "repo:hippo-release",
+   "kind": "repo",
+   "title": "hippo-release",
+   "url": "https://github.com/HippoCampusRobotics/hippo-release",
+   "summary": "release automation",
+   "fork": false,
+   "project": "dev-infrastructure"
+  },
+  {
+   "id": "repo:hippo_common",
+   "kind": "repo",
+   "title": "hippo_common",
+   "url": "https://github.com/HippoCampusRobotics/hippo_common",
+   "summary": "shared C++ utilities",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_common_msgs",
+   "kind": "repo",
+   "title": "hippo_common_msgs",
+   "url": "https://github.com/HippoCampusRobotics/hippo_common_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_control",
+   "kind": "repo",
+   "title": "hippo_control",
+   "url": "https://github.com/HippoCampusRobotics/hippo_control",
+   "summary": "attitude/rate/trajectory control",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_control_msgs",
+   "kind": "repo",
+   "title": "hippo_control_msgs",
+   "url": "https://github.com/HippoCampusRobotics/hippo_control_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_core",
+   "kind": "repo",
+   "title": "hippo_core",
+   "url": "https://github.com/HippoCampusRobotics/hippo_core",
+   "summary": "core packages/libraries",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_deployment",
+   "kind": "repo",
+   "title": "hippo_deployment",
+   "url": "https://github.com/HippoCampusRobotics/hippo_deployment",
+   "summary": "systemd services + device rules",
+   "fork": false,
+   "project": "dev-infrastructure"
+  },
+  {
+   "id": "repo:hippo_full",
+   "kind": "repo",
+   "title": "hippo_full",
+   "url": "https://github.com/HippoCampusRobotics/hippo_full",
+   "summary": "meta package (everything)",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_gz_plugins",
+   "kind": "repo",
+   "title": "hippo_gz_plugins",
+   "url": "https://github.com/HippoCampusRobotics/hippo_gz_plugins",
+   "summary": "Gazebo plugins",
+   "fork": false,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:hippo_infrastructure",
+   "kind": "repo",
+   "title": "hippo_infrastructure",
+   "url": "https://github.com/HippoCampusRobotics/hippo_infrastructure",
+   "summary": "rosdep definitions",
+   "fork": false,
+   "project": "dev-infrastructure"
+  },
+  {
+   "id": "repo:hippo_msgs",
+   "kind": "repo",
+   "title": "hippo_msgs",
+   "url": "https://github.com/HippoCampusRobotics/hippo_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_robot",
+   "kind": "repo",
+   "title": "hippo_robot",
+   "url": "https://github.com/HippoCampusRobotics/hippo_robot",
+   "summary": "meta package (robot, no sim)",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:hippo_sim",
+   "kind": "repo",
+   "title": "hippo_sim",
+   "url": "https://github.com/HippoCampusRobotics/hippo_sim",
+   "summary": "simulation launch + models",
+   "fork": false,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:hippo_simulation",
+   "kind": "repo",
+   "title": "hippo_simulation",
+   "url": "https://github.com/HippoCampusRobotics/hippo_simulation",
+   "summary": "simulation resources",
+   "fork": false,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:hippocampus_common",
+   "kind": "repo",
+   "title": "hippocampus_common",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_common",
+   "summary": "common (ROS 1)",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:hippocampus_msgs",
+   "kind": "repo",
+   "title": "hippocampus_msgs",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_msgs",
+   "summary": "messages (ROS 1)",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:hippocampus_pcbs",
+   "kind": "repo",
+   "title": "hippocampus_pcbs",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_pcbs",
+   "summary": "PCB designs",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:hippocampus_sim",
+   "kind": "repo",
+   "title": "hippocampus_sim",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_sim",
+   "summary": "Gazebo simulation (ROS 1)",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:hippocampusrobotics.github.io",
+   "kind": "repo",
+   "title": "hippocampusrobotics.github.io",
+   "url": "https://github.com/HippoCampusRobotics/hippocampusrobotics.github.io",
+   "summary": "org website",
+   "fork": false,
+   "project": "docs-and-site"
+  },
+  {
+   "id": "repo:hippolink",
+   "kind": "repo",
+   "title": "hippolink",
+   "url": "https://github.com/HippoCampusRobotics/hippolink",
+   "summary": "HippoLink python library",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:hippolink_ros",
+   "kind": "repo",
+   "title": "hippolink_ros",
+   "url": "https://github.com/HippoCampusRobotics/hippolink_ros",
+   "summary": "HippoLink ROS wrapper",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:howto",
+   "kind": "repo",
+   "title": "howto",
+   "url": "https://github.com/HippoCampusRobotics/howto",
+   "summary": "old how-to notes",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:ir_adc_read",
+   "kind": "repo",
+   "title": "ir_adc_read",
+   "url": "https://github.com/HippoCampusRobotics/ir_adc_read",
+   "summary": "IR sensor readout",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:ir_field_hardware",
+   "kind": "repo",
+   "title": "ir_field_hardware",
+   "url": "https://github.com/HippoCampusRobotics/ir_field_hardware",
+   "summary": "IR benchmark field hardware",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:mavlink",
+   "kind": "repo",
+   "title": "mavlink",
+   "url": "https://github.com/HippoCampusRobotics/mavlink",
+   "summary": "git-buildpackage repository for releasing mavlink as 3-rd party library for ROS",
+   "fork": true,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:mavlink_headers",
+   "kind": "repo",
+   "title": "mavlink_headers",
+   "url": "https://github.com/HippoCampusRobotics/mavlink_headers",
+   "summary": "MAVLink headers",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:mavros",
+   "kind": "repo",
+   "title": "mavros",
+   "url": "https://github.com/HippoCampusRobotics/mavros",
+   "summary": "MAVLink to ROS gateway with proxy for Ground Control Station",
+   "fork": true,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:mjpeg_cam",
+   "kind": "repo",
+   "title": "mjpeg_cam",
+   "url": "https://github.com/HippoCampusRobotics/mjpeg_cam",
+   "summary": "MJPEG USB camera driver (ROS 2)",
+   "fork": false,
+   "project": "cameras"
+  },
+  {
+   "id": "repo:mjpeg_cam_ros1",
+   "kind": "repo",
+   "title": "mjpeg_cam_ros1",
+   "url": "https://github.com/HippoCampusRobotics/mjpeg_cam_ros1",
+   "summary": "An alternative to usb_cam package for grabbing mjpeg frames from a webcam",
+   "fork": true,
+   "project": "cameras"
+  },
+  {
+   "id": "repo:mu_auv_localization",
+   "kind": "repo",
+   "title": "mu_auv_localization",
+   "url": "https://github.com/HippoCampusRobotics/mu_auv_localization",
+   "summary": "Python repo",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:multi_uuv",
+   "kind": "repo",
+   "title": "multi_uuv",
+   "url": "https://github.com/HippoCampusRobotics/multi_uuv",
+   "summary": "multi-vehicle experiments (ROS 1)",
+   "fork": false,
+   "project": "legacy-ros1"
+  },
+  {
+   "id": "repo:path_planning",
+   "kind": "repo",
+   "title": "path_planning",
+   "url": "https://github.com/HippoCampusRobotics/path_planning",
+   "summary": "path planning",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:px4_msgs",
+   "kind": "repo",
+   "title": "px4_msgs",
+   "url": "https://github.com/HippoCampusRobotics/px4_msgs",
+   "summary": "ROS/ROS2 messages that match the uORB messages counterparts on the PX4 Firmware",
+   "fork": true,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:python-onramp",
+   "kind": "repo",
+   "title": "python-onramp",
+   "url": "https://github.com/HippoCampusRobotics/python-onramp",
+   "summary": "python introduction",
+   "fork": false,
+   "project": "teaching"
+  },
+  {
+   "id": "repo:qualisys_bridge",
+   "kind": "repo",
+   "title": "qualisys_bridge",
+   "url": "https://github.com/HippoCampusRobotics/qualisys_bridge",
+   "summary": "QTM → ROS 2 odometry bridge",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:radio_firmware",
+   "kind": "repo",
+   "title": "radio_firmware",
+   "url": "https://github.com/HippoCampusRobotics/radio_firmware",
+   "summary": "radio firmware",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:radio_tools",
+   "kind": "repo",
+   "title": "radio_tools",
+   "url": "https://github.com/HippoCampusRobotics/radio_tools",
+   "summary": "radio tools",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:rapid_trajectories",
+   "kind": "repo",
+   "title": "rapid_trajectories",
+   "url": "https://github.com/HippoCampusRobotics/rapid_trajectories",
+   "summary": "trajectory generation",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:rapid_trajectories_msgs",
+   "kind": "repo",
+   "title": "rapid_trajectories_msgs",
+   "url": "https://github.com/HippoCampusRobotics/rapid_trajectories_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:remote_control",
+   "kind": "repo",
+   "title": "remote_control",
+   "url": "https://github.com/HippoCampusRobotics/remote_control",
+   "summary": "remote control",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:rf_localization_ros",
+   "kind": "repo",
+   "title": "rf_localization_ros",
+   "url": "https://github.com/HippoCampusRobotics/rf_localization_ros",
+   "summary": "ROS package for RF localization",
+   "fork": true,
+   "project": "localization"
+  },
+  {
+   "id": "repo:rqt_gantry",
+   "kind": "repo",
+   "title": "rqt_gantry",
+   "url": "https://github.com/HippoCampusRobotics/rqt_gantry",
+   "summary": "rqt plugin",
+   "fork": false,
+   "project": "lab-infrastructure"
+  },
+  {
+   "id": "repo:scalar_field_belief",
+   "kind": "repo",
+   "title": "scalar_field_belief",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_belief",
+   "summary": "GP belief over a 2D field",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:scalar_field_interfaces",
+   "kind": "repo",
+   "title": "scalar_field_interfaces",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_interfaces",
+   "summary": "messages/services",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:scalar_field_sim",
+   "kind": "repo",
+   "title": "scalar_field_sim",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_sim",
+   "summary": "field measurement simulator",
+   "fork": false,
+   "project": "scalar-field"
+  },
+  {
+   "id": "repo:sdr",
+   "kind": "repo",
+   "title": "sdr",
+   "url": "https://github.com/HippoCampusRobotics/sdr",
+   "summary": "software-defined radio",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:sdr_msgs",
+   "kind": "repo",
+   "title": "sdr_msgs",
+   "url": "https://github.com/HippoCampusRobotics/sdr_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "radio-comms"
+  },
+  {
+   "id": "repo:sitl_gazebo",
+   "kind": "repo",
+   "title": "sitl_gazebo",
+   "url": "https://github.com/HippoCampusRobotics/sitl_gazebo",
+   "summary": "Set of plugins, models and worlds to use with OSRF Gazebo Simulator in SITL and HITL.",
+   "fork": true,
+   "project": "simulation"
+  },
+  {
+   "id": "repo:stabilizer",
+   "kind": "repo",
+   "title": "stabilizer",
+   "url": "https://github.com/HippoCampusRobotics/stabilizer",
+   "summary": "attitude/depth stabilizer (ROS 1 era)",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:state_estimation",
+   "kind": "repo",
+   "title": "state_estimation",
+   "url": "https://github.com/HippoCampusRobotics/state_estimation",
+   "summary": "state estimation",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:state_estimation_msgs",
+   "kind": "repo",
+   "title": "state_estimation_msgs",
+   "url": "https://github.com/HippoCampusRobotics/state_estimation_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:switch",
+   "kind": "repo",
+   "title": "switch",
+   "url": "https://github.com/HippoCampusRobotics/switch",
+   "summary": "utility package (ROS 1 era)",
+   "fork": false,
+   "project": "core-stack"
+  },
+  {
+   "id": "repo:teensy_esc_controller",
+   "kind": "repo",
+   "title": "teensy_esc_controller",
+   "url": "https://github.com/HippoCampusRobotics/teensy_esc_controller",
+   "summary": "Teensy ESC controller",
+   "fork": false,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:tgy",
+   "kind": "repo",
+   "title": "tgy",
+   "url": "https://github.com/HippoCampusRobotics/tgy",
+   "summary": "Turnigy/TowerPro/AfroESC/BlueSeries AVR ESC software",
+   "fork": true,
+   "project": "hippocampus-vehicle"
+  },
+  {
+   "id": "repo:uvms",
+   "kind": "repo",
+   "title": "uvms",
+   "url": "https://github.com/HippoCampusRobotics/uvms",
+   "summary": "trajectory-tracking framework (paper code)",
+   "fork": false,
+   "project": "uvms"
+  },
+  {
+   "id": "repo:uvms_msgs",
+   "kind": "repo",
+   "title": "uvms_msgs",
+   "url": "https://github.com/HippoCampusRobotics/uvms_msgs",
+   "summary": "messages",
+   "fork": false,
+   "project": "uvms"
+  },
+  {
+   "id": "repo:vision",
+   "kind": "repo",
+   "title": "vision",
+   "url": "https://github.com/HippoCampusRobotics/vision",
+   "summary": "vision package (ROS 1 era)",
+   "fork": false,
+   "project": "localization"
+  },
+  {
+   "id": "repo:visual_localization",
+   "kind": "repo",
+   "title": "visual_localization",
+   "url": "https://github.com/HippoCampusRobotics/visual_localization",
+   "summary": "camera + AprilTag localization",
+   "fork": false,
+   "project": "localization"
+  },
+  {
+   "id": "setup/bluerov/alpha-arm",
+   "kind": "setup",
+   "title": "Alpha Arm",
+   "route": "#/setup/bluerov/alpha-arm",
+   "where": "Setup · BlueROV",
+   "summary": "Not all of them are public due to licensing. Currently this applies to `alpha_arm`. Ask your favourite research associate to get access if you need it.",
+   "file": "content/setup/bluerov/alpha-arm.md"
+  },
+  {
+   "id": "setup/bluerov/build-and-flash",
+   "kind": "setup",
+   "title": "Build And Flash",
+   "route": "#/setup/bluerov/build-and-flash",
+   "where": "Setup · BlueROV",
+   "summary": "We replaced the original FCU with the Pixhawk4, which is a 5th generation board. So the build command is:",
+   "file": "content/setup/bluerov/build-and-flash.md"
+  },
+  {
+   "id": "setup/bluerov/deploy",
+   "kind": "setup",
+   "title": "Deployment",
+   "route": "#/setup/bluerov/deploy",
+   "where": "Setup · BlueROV",
+   "summary": "Deploying either of the lab's two BlueROV2s: bluerov01 for the SEMS/FAV class and bluerov02 for the UVMS setup with the Alpha arm.",
+   "file": "content/setup/bluerov/deploy.md"
+  },
+  {
+   "id": "setup/bluerov/dvl",
+   "kind": "setup",
+   "title": "DVL",
+   "route": "#/setup/bluerov/dvl",
+   "where": "Setup · BlueROV",
+   "summary": "For this section it is assumed, that the environment variable `VEHICLE_NAME` is set (for example in `.zshrc` or directly inside the terminal).",
+   "file": "content/setup/bluerov/dvl.md"
+  },
+  {
+   "id": "setup/bluerov/full-uvms-setup",
+   "kind": "setup",
+   "title": "Full UVMS Setup",
+   "route": "#/setup/bluerov/full-uvms-setup",
+   "where": "Setup · BlueROV",
+   "summary": "Add all relevant infos. Appropriate structures + titles of sections TBD.",
+   "file": "content/setup/bluerov/full-uvms-setup.md"
+  },
+  {
+   "id": "setup/bluerov/servo-and-light",
+   "kind": "setup",
+   "title": "Servo And Light",
+   "route": "#/setup/bluerov/servo-and-light",
+   "where": "Setup · BlueROV",
+   "summary": "The LED headlights and the camera servo are controlled via PWM signals. To get a jitter-free PWM signal, a library, supporting hardware PWM, is required. For example `pigpio`.",
+   "file": "content/setup/bluerov/servo-and-light.md"
+  },
+  {
+   "id": "setup/concepts/colcon",
+   "kind": "setup",
+   "title": "Colcon",
+   "route": "#/setup/concepts/colcon",
+   "where": "Setup · Concepts",
+   "summary": "Colcon is the build tool used to build our ROS workspace. We have convenience scripts to use colcon for our typical use cases to spare us some tedious typing.",
+   "file": "content/setup/concepts/colcon.md"
+  },
+  {
+   "id": "setup/concepts/deployment",
+   "kind": "setup",
+   "title": "Automated Deployment",
+   "route": "#/setup/concepts/deployment",
+   "where": "Setup · Concepts",
+   "summary": "This section is (so far) only relevant for the old BlueROV2, `bluerov-01`. On this vehicle, we start all ROS nodes automatically at boot.",
+   "file": "content/setup/concepts/deployment.md"
+  },
+  {
+   "id": "setup/concepts/pre-built-packages",
+   "kind": "setup",
+   "title": "Pre-built Packages",
+   "route": "#/setup/concepts/pre-built-packages",
+   "where": "Setup · Concepts",
+   "summary": "Simple answer: you don't. It's mere convenience to be able to install packages we would like to use via a simple `apt install` command. Alternatively, we would need to clone the source code of the packages we would like ",
+   "file": "content/setup/concepts/pre-built-packages.md"
+  },
+  {
+   "id": "setup/concepts/ros2-repositories",
+   "kind": "setup",
+   "title": "ROS2 Repositories",
+   "route": "#/setup/concepts/ros2-repositories",
+   "where": "Setup · Concepts",
+   "summary": "hippo_core ==================================================================",
+   "file": "content/setup/concepts/ros2-repositories.md"
+  },
+  {
+   "id": "setup/concepts/ros2-workspace",
+   "kind": "setup",
+   "title": "ROS2 Workspace",
+   "route": "#/setup/concepts/ros2-workspace",
+   "where": "Setup · Concepts",
+   "summary": "The following workspace structure is recommended in general, but is mandatory for shared devices (i.e. every device that is not your own computer, like Raspberry Pis or lab computers) to avoid confusion.",
+   "file": "content/setup/concepts/ros2-workspace.md"
+  },
+  {
+   "id": "setup/contributing/debian-packages",
+   "kind": "setup",
+   "title": "Releasing Debian Packages",
+   "route": "#/setup/contributing/debian-packages",
+   "where": "Setup · Contributing",
+   "summary": "This section is targeted at the maintainers of our repositories and is not relevant for anyone else.",
+   "file": "content/setup/contributing/debian-packages.md"
+  },
+  {
+   "id": "setup/contributing/documentation",
+   "kind": "setup",
+   "title": "Contributing to Documentation",
+   "route": "#/setup/contributing/documentation",
+   "where": "Setup · Contributing",
+   "summary": "Go to this documentation's GitHub repository and fork it (see GitHub's documentation for details on forking if you do not know how to fork a repository).",
+   "file": "content/setup/contributing/documentation.md"
+  },
+  {
+   "id": "setup/contributing/hippocampus",
+   "kind": "setup",
+   "title": "Contributing to HippoCampus",
+   "route": "#/setup/contributing/hippocampus",
+   "where": "Setup · Contributing",
+   "summary": "This requires write permissions for the HippoCampus project. Hence, the instructions are only applicable for maintainers/owners of HippoCampus",
+   "file": "content/setup/contributing/hippocampus.md"
+  },
+  {
+   "id": "setup/getting-started/apriltag-localization",
+   "kind": "setup",
+   "title": "Apriltag Localization",
+   "route": "#/setup/getting-started/apriltag-localization",
+   "where": "Setup · Getting started",
+   "summary": "This page explains how to start and check the AprilTag localization setup.",
+   "file": "content/setup/getting-started/apriltag-localization.md"
+  },
+  {
+   "id": "setup/getting-started/deploying-hippocampus",
+   "kind": "setup",
+   "title": "Deploying HippoCampus",
+   "route": "#/setup/getting-started/deploying-hippocampus",
+   "where": "Setup · Getting started",
+   "summary": "The start-everything checklist for running HippoCampus in the tank: push-button boxes first, then the remaining launch steps in order.",
+   "file": "content/setup/getting-started/deploying-hippocampus.md"
+  },
+  {
+   "id": "setup/getting-started/installing-qgc",
+   "kind": "setup",
+   "title": "Installing QGroundControl",
+   "route": "#/setup/getting-started/installing-qgc",
+   "where": "Setup · Getting started",
+   "summary": "This is currently used for the real robot exclusively and is not part of the simulation. Skip this section if you are **not** preparing for the lab experiments. If in doubt ask your supervisor.",
+   "file": "content/setup/getting-started/installing-qgc.md"
+  },
+  {
+   "id": "setup/getting-started/pre-built-packages",
+   "kind": "setup",
+   "title": "Pre-built Packages",
+   "route": "#/setup/getting-started/pre-built-packages",
+   "where": "Setup · Getting started",
+   "summary": "For convenience, we provide our own packages as pre-built binaries at repositories.hippocampus-robotics.net. The advantage is that we do **not** need to compile the packages we are not developing actively ourselfs.",
+   "file": "content/setup/getting-started/pre-built-packages.md"
+  },
+  {
+   "id": "setup/getting-started/px4-setup",
+   "kind": "setup",
+   "title": "PX4 Setup",
+   "route": "#/setup/getting-started/px4-setup",
+   "where": "Setup · Getting started",
+   "summary": "PX4 is currently used for the real robot exclusively and is not part of the simulation. Skip this section if you are **not** preparing for the lab experiments. If in doubt ask your supervisor.",
+   "file": "content/setup/getting-started/px4-setup.md"
+  },
+  {
+   "id": "setup/getting-started/ros-installation",
+   "kind": "setup",
+   "title": "ROS Installation",
+   "route": "#/setup/getting-started/ros-installation",
+   "where": "Setup · Getting started",
+   "summary": "We are moving to ROS2. This guide and the following pages are still in the process of being updated. There might be some construction works still going on here and there.",
+   "file": "content/setup/getting-started/ros-installation.md"
+  },
+  {
+   "id": "setup/getting-started/starting-gazebo-simulation",
+   "kind": "setup",
+   "title": "Starting Simulation",
+   "route": "#/setup/getting-started/starting-gazebo-simulation",
+   "where": "Setup · Getting started",
+   "summary": "Vehicle-specific nodes should be launched in namespace \"vehicle_name\", for example `uuv00` - `uuv99`.",
+   "file": "content/setup/getting-started/starting-gazebo-simulation.md"
+  },
+  {
+   "id": "setup/getting-started/workspace-setup",
+   "kind": "setup",
+   "title": "Workspace Setup",
+   "route": "#/setup/getting-started/workspace-setup",
+   "where": "Setup · Getting started",
+   "summary": "In the following, we describe our ROS2 system setup.",
+   "file": "content/setup/getting-started/workspace-setup.md"
+  },
+  {
+   "id": "setup/getting-started/workstation-quality-of-life",
+   "kind": "setup",
+   "title": "Quality-of-Life Features",
+   "route": "#/setup/getting-started/workstation-quality-of-life",
+   "where": "Setup · Getting started",
+   "summary": "Before we start, let's install some quality-of-life features to improve the user experience.",
+   "file": "content/setup/getting-started/workstation-quality-of-life.md"
+  },
+  {
+   "id": "setup/guides/apriltag",
+   "kind": "setup",
+   "title": "AprilTag",
+   "route": "#/setup/guides/apriltag",
+   "where": "Setup · Guides & misc",
+   "summary": "There is a PR for porting the good old `apriltag_ros` package to ROS2.",
+   "file": "content/setup/guides/apriltag.md"
+  },
+  {
+   "id": "setup/guides/buttons",
+   "kind": "setup",
+   "title": "Buttons",
+   "route": "#/setup/guides/buttons",
+   "where": "Setup · Guides & misc",
+   "summary": "While operating a real vehicle it is quit nice to have some buttons to easily control the vehicle. This includes, for example, arming and disarming (probably the most important and most used feature) the vehicle quickly ",
+   "file": "content/setup/guides/buttons.md"
+  },
+  {
+   "id": "setup/guides/camera-calibration",
+   "kind": "setup",
+   "title": "Camera Calibration",
+   "route": "#/setup/guides/camera-calibration",
+   "where": "Setup · Guides & misc",
+   "summary": "We have a convenience launch file for camera calibration. We use the standard ROS (monocular) camera calibrator.",
+   "file": "content/setup/guides/camera-calibration.md"
+  },
+  {
+   "id": "setup/guides/dvb-t",
+   "kind": "setup",
+   "title": "DVB-T Stick",
+   "route": "#/setup/guides/dvb-t",
+   "where": "Setup · Guides & misc",
+   "summary": "Firmware and driver installation for the NooElec R820T2 DVB-T stick used as a software-defined radio.",
+   "file": "content/setup/guides/dvb-t.md"
+  },
+  {
+   "id": "setup/guides/informative-path-planning",
+   "kind": "setup",
+   "title": "Informative Path Planning",
+   "route": "#/setup/guides/informative-path-planning",
+   "where": "Setup · Guides & misc",
+   "summary": "Run the informative path planner against the simulated BlueROV: launch the simulation, then start the planner.",
+   "file": "content/setup/guides/informative-path-planning.md"
+  },
+  {
+   "id": "setup/guides/install-source-dependencies",
+   "kind": "setup",
+   "title": "Install Source Dependencies",
+   "route": "#/setup/guides/install-source-dependencies",
+   "where": "Setup · Guides & misc",
+   "summary": "Some ROS packages might have dependencies that you have to install from source. For this case, the git repository URLs are written in a `.repos` file.",
+   "file": "content/setup/guides/install-source-dependencies.md"
+  },
+  {
+   "id": "setup/guides/misc-notes",
+   "kind": "setup",
+   "title": "Misc",
+   "route": "#/setup/guides/misc-notes",
+   "where": "Setup · Guides & misc",
+   "summary": "Miscellaneous workstation fixes, starting with GLX problems when running rviz2 over x2go.",
+   "file": "content/setup/guides/misc-notes.md"
+  },
+  {
+   "id": "setup/guides/mixers",
+   "kind": "setup",
+   "title": "Mixers",
+   "route": "#/setup/guides/mixers",
+   "where": "Setup · Guides & misc",
+   "summary": "We have implemented different mixers in the `hippo_control` package.",
+   "file": "content/setup/guides/mixers.md"
+  },
+  {
+   "id": "setup/guides/path-follower",
+   "kind": "setup",
+   "title": "Path Follower",
+   "route": "#/setup/guides/path-follower",
+   "where": "Setup · Guides & misc",
+   "summary": "Hub for the path-follower controller; the concept page explains how a vehicle tracks a path.",
+   "file": "content/setup/guides/path-follower.md"
+  },
+  {
+   "id": "setup/guides/path-follower-concept",
+   "kind": "setup",
+   "title": "Concept",
+   "route": "#/setup/guides/path-follower-concept",
+   "where": "Setup · Guides & misc",
+   "summary": "The `path_planning` package provides a simple `path_follower` node. It loads a pre-defined path from a `yaml` file and choses the current target point based on the vehicle's current position and the configured look ahead",
+   "file": "content/setup/guides/path-follower-concept.md"
+  },
+  {
+   "id": "setup/guides/ros2-cheatsheet",
+   "kind": "setup",
+   "title": "ROS2",
+   "route": "#/setup/guides/ros2-cheatsheet",
+   "where": "Setup · Guides & misc",
+   "summary": "Hub of ROS 2 notes: miscellaneous tips and the AprilTag guide.",
+   "file": "content/setup/guides/ros2-cheatsheet.md"
+  },
+  {
+   "id": "setup/guides/ros2-misc",
+   "kind": "setup",
+   "title": "Misc",
+   "route": "#/setup/guides/ros2-misc",
+   "where": "Setup · Guides & misc",
+   "summary": "Symlink builds are recommended, so symbolic links to `src` are used where possible.",
+   "file": "content/setup/guides/ros2-misc.md"
+  },
+  {
+   "id": "setup/hardware/acoustic-modems",
+   "kind": "setup",
+   "title": "Acoustic Modems",
+   "route": "#/setup/hardware/acoustic-modems",
+   "where": "Setup · Hardware reference",
+   "summary": "Timing definitions for the acoustic modems: poll durations, propagation and processing delays, and how they add up into one ranging cycle.",
+   "file": "content/setup/hardware/acoustic-modems.md"
+  },
+  {
+   "id": "setup/hardware/bluerov",
+   "kind": "setup",
+   "title": "BlueROV",
+   "route": "#/setup/hardware/bluerov",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the lab's two BlueROV2 vehicles — the older class vehicle and the newer UVMS vehicle carrying the Alpha arm — with links to deployment, build-and-flash, and peripheral setup.",
+   "file": "content/setup/hardware/bluerov.md"
+  },
+  {
+   "id": "setup/hardware/buttons",
+   "kind": "setup",
+   "title": "Buttons",
+   "route": "#/setup/hardware/buttons",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the physical push-button boxes used to start and stop vehicles in the tank; the guide explains how to set them up.",
+   "file": "content/setup/hardware/buttons.md"
+  },
+  {
+   "id": "setup/hardware/cameras",
+   "kind": "setup",
+   "title": "Cameras",
+   "route": "#/setup/hardware/cameras",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the lab's cameras: the IP cameras, USB cameras, event cameras, and the event-camera collaboration.",
+   "file": "content/setup/hardware/cameras.md"
+  },
+  {
+   "id": "setup/hardware/gantry",
+   "kind": "setup",
+   "title": "Gantry",
+   "route": "#/setup/hardware/gantry",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the lab's tank gantry: general information, software installation, usage, the motor node, and the gantry's Raspberry Pi setup.",
+   "file": "content/setup/hardware/gantry.md"
+  },
+  {
+   "id": "setup/hardware/hippocampus",
+   "kind": "setup",
+   "title": "HippoCampus",
+   "route": "#/setup/hardware/hippocampus",
+   "where": "Setup · Hardware reference",
+   "summary": "Hardware hub for the HippoCampus vehicle: links to the bring-up pages for the Afro ESCs, the motor configuration, and the flight-controller (FCU) firmware.",
+   "file": "content/setup/hardware/hippocampus.md"
+  },
+  {
+   "id": "setup/hardware/marker",
+   "kind": "setup",
+   "title": "Custom MoCap Markers",
+   "route": "#/setup/hardware/marker",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the lab's 3D-printed underwater motion-capture markers: the design and how to fabricate them.",
+   "file": "content/setup/hardware/marker.md"
+  },
+  {
+   "id": "setup/hardware/qualisys",
+   "kind": "setup",
+   "title": "Qualisys MoCap System",
+   "route": "#/setup/hardware/qualisys",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the Qualisys motion-capture (MoCap) system over the tank: camera settings, calibration, and defining the bodies to track.",
+   "file": "content/setup/hardware/qualisys.md"
+  },
+  {
+   "id": "setup/hardware/rf-modules",
+   "kind": "setup",
+   "title": "RF Modules",
+   "route": "#/setup/hardware/rf-modules",
+   "where": "Setup · Hardware reference",
+   "summary": "Hub for the lab's radio hardware; currently it points to the DVB-T software-defined-radio stick guide.",
+   "file": "content/setup/hardware/rf-modules.md"
+  },
+  {
+   "id": "setup/hippocampus-bringup/afro-esc",
+   "kind": "setup",
+   "title": "Afro ESC",
+   "route": "#/setup/hippocampus-bringup/afro-esc",
+   "where": "Setup · HippoCampus bring-up",
+   "summary": "Flash the tgy firmware onto the Afro ESCs: build the AVRA assembler, fetch the firmware, and program each ESC.",
+   "file": "content/setup/hippocampus-bringup/afro-esc.md"
+  },
+  {
+   "id": "setup/hippocampus-bringup/fcu-firmware",
+   "kind": "setup",
+   "title": "FCU Firmware",
+   "route": "#/setup/hippocampus-bringup/fcu-firmware",
+   "where": "Setup · HippoCampus bring-up",
+   "summary": "Add instructions for different FCUs, especially PixHawk 6C",
+   "file": "content/setup/hippocampus-bringup/fcu-firmware.md"
+  },
+  {
+   "id": "setup/hippocampus-bringup/motor-configuration",
+   "kind": "setup",
+   "title": "Motor Configuration",
+   "route": "#/setup/hippocampus-bringup/motor-configuration",
+   "where": "Setup · HippoCampus bring-up",
+   "summary": "The following image depicts the thruster configuration. The numbers correspond to the FCU's PWM outputs. Make sure the propellers are mounted correctly since there are two clockwise and two counterclockwise propellers.",
+   "file": "content/setup/hippocampus-bringup/motor-configuration.md"
+  },
+  {
+   "id": "setup/lab-cameras/event-camera-collaboration",
+   "kind": "setup",
+   "title": "Event Camera Collaboration",
+   "route": "#/setup/lab-cameras/event-camera-collaboration",
+   "where": "Setup · Cameras",
+   "summary": "The folloing instructions are targeting ROS2 because our whole framework is implemented in ROS2. The `ros-event-camera` packages are available for ROS1 **and** ROS2, though. All following instructions have ROS1 equivalen",
+   "file": "content/setup/lab-cameras/event-camera-collaboration.md"
+  },
+  {
+   "id": "setup/lab-cameras/event-cameras",
+   "kind": "setup",
+   "title": "Event Cameras",
+   "route": "#/setup/lab-cameras/event-cameras",
+   "where": "Setup · Cameras",
+   "summary": "This is a getting-started-quickly guide, more complete instructions are documented in the repository's README.",
+   "file": "content/setup/lab-cameras/event-cameras.md"
+  },
+  {
+   "id": "setup/lab-cameras/ip-cameras",
+   "kind": "setup",
+   "title": "IP Cameras (Blick)",
+   "route": "#/setup/lab-cameras/ip-cameras",
+   "where": "Setup · Cameras",
+   "summary": "At the time of writing the IP addresses of the cameras are `192.168.0.116` and `192.168.0.148`. This might change in the future.",
+   "file": "content/setup/lab-cameras/ip-cameras.md"
+  },
+  {
+   "id": "setup/lab-cameras/usb-cameras",
+   "kind": "setup",
+   "title": "USB Cameras",
+   "route": "#/setup/lab-cameras/usb-cameras",
+   "where": "Setup · Cameras",
+   "summary": "There is the v4l2_camera package, that provides a V4L2 camera driver using the standard `image_transport` pipeline.",
+   "file": "content/setup/lab-cameras/usb-cameras.md"
+  },
+  {
+   "id": "setup/lab-gantry/general-information",
+   "kind": "setup",
+   "title": "General Information",
+   "route": "#/setup/lab-gantry/general-information",
+   "where": "Setup · Gantry",
+   "summary": "The reference point of the gantry is the edge of the z-axis spindle mount as depicted in the image below.",
+   "file": "content/setup/lab-gantry/general-information.md"
+  },
+  {
+   "id": "setup/lab-gantry/installation",
+   "kind": "setup",
+   "title": "Installation",
+   "route": "#/setup/lab-gantry/installation",
+   "where": "Setup · Gantry",
+   "summary": "Clone the gantry, gantry_msgs, and gantry_gui repositories into a ROS 2 workspace and build them to install the gantry software.",
+   "file": "content/setup/lab-gantry/installation.md"
+  },
+  {
+   "id": "setup/lab-gantry/motor-node",
+   "kind": "setup",
+   "title": "Motor Node",
+   "route": "#/setup/lab-gantry/motor-node",
+   "where": "Setup · Gantry",
+   "summary": "The movement of the motor can either be controlled in position or in velocity mode. If used in position mode, the positon can be set as absolute value or as relative change of the current position target.",
+   "file": "content/setup/lab-gantry/motor-node.md"
+  },
+  {
+   "id": "setup/lab-gantry/raspi-setup",
+   "kind": "setup",
+   "title": "Raspberry Pi Setup",
+   "route": "#/setup/lab-gantry/raspi-setup",
+   "where": "Setup · Gantry",
+   "summary": "Modify the `usercfg.txt`, either pre-boot directly on the `/boot` partition or from the running Raspberry Pi in the `/boot/firmware` directory, and add the following lines:",
+   "file": "content/setup/lab-gantry/raspi-setup.md"
+  },
+  {
+   "id": "setup/lab-gantry/usage",
+   "kind": "setup",
+   "title": "Usage",
+   "route": "#/setup/lab-gantry/usage",
+   "where": "Setup · Gantry",
+   "summary": "On the Raspberry Pi on the gantry ( `ssh pi@gantry.local` ), run:",
+   "file": "content/setup/lab-gantry/usage.md"
+  },
+  {
+   "id": "setup/lab-marker/design",
+   "kind": "setup",
+   "title": "Design",
+   "route": "#/setup/lab-marker/design",
+   "where": "Setup · Reflective markers",
+   "summary": "MoCap markers are used to track the position and orientation of objects in the tank. They are attached to a rigid-body. Commercial Qualisys markers are relatively expensive and not very durable, despite being specified a",
+   "file": "content/setup/lab-marker/design.md"
+  },
+  {
+   "id": "setup/lab-marker/fabrication",
+   "kind": "setup",
+   "title": "Fabrication",
+   "route": "#/setup/lab-marker/fabrication",
+   "where": "Setup · Reflective markers",
+   "summary": "Build the custom MoCap markers: 3D-printed nut and bottom parts, reflective tape, and one M4 nut, replicating the 14 mm and 19 mm Qualisys sizes.",
+   "file": "content/setup/lab-marker/fabrication.md"
+  },
+  {
+   "id": "setup/lab-qualisys/calibration",
+   "kind": "setup",
+   "title": "Calibration",
+   "route": "#/setup/lab-qualisys/calibration",
+   "where": "Setup · Qualisys motion capture",
+   "summary": "In general, the cameras should be calibrated every time they have not been used for a while. If you can be sure that the cameras have not been moved (accidentally), calibration should not be necessary (e.g. resuming expe",
+   "file": "content/setup/lab-qualisys/calibration.md"
+  },
+  {
+   "id": "setup/lab-qualisys/camera-settings",
+   "kind": "setup",
+   "title": "Camera Settings",
+   "route": "#/setup/lab-qualisys/camera-settings",
+   "where": "Setup · Qualisys motion capture",
+   "summary": "Qualisys camera position and orientation settings for tracking in the tank (page still a work in progress).",
+   "file": "content/setup/lab-qualisys/camera-settings.md"
+  },
+  {
+   "id": "setup/lab-qualisys/defining-bodies",
+   "kind": "setup",
+   "title": "Tracking Bodies",
+   "route": "#/setup/lab-qualisys/defining-bodies",
+   "where": "Setup · Qualisys motion capture",
+   "summary": "How to place reflective markers on a vehicle and define it as a tracked rigid body in Qualisys.",
+   "file": "content/setup/lab-qualisys/defining-bodies.md"
+  },
+  {
+   "id": "setup/raspberry-pi/ethernet",
+   "kind": "setup",
+   "title": "Ethernet",
+   "route": "#/setup/raspberry-pi/ethernet",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "We use the T-568B Pinout for all our ethernet connectors.",
+   "file": "content/setup/raspberry-pi/ethernet.md"
+  },
+  {
+   "id": "setup/raspberry-pi/pinout",
+   "kind": "setup",
+   "title": "Pinout",
+   "route": "#/setup/raspberry-pi/pinout",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "Raspberry Pi pin assignments for the UUV, the BlueROV, the gantry, and the button boxes — one diagram per platform.",
+   "file": "content/setup/raspberry-pi/pinout.md"
+  },
+  {
+   "id": "setup/raspberry-pi/quality-of-life",
+   "kind": "setup",
+   "title": "Quality-of-Life Features",
+   "route": "#/setup/raspberry-pi/quality-of-life",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "Similarly to the setup on your desktop computer, let's also install our preferred shell, byobu etc. on all Raspberry Pis.",
+   "file": "content/setup/raspberry-pi/quality-of-life.md"
+  },
+  {
+   "id": "setup/raspberry-pi/uart-configuration",
+   "kind": "setup",
+   "title": "UART Configuration",
+   "route": "#/setup/raspberry-pi/uart-configuration",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "By default UART0 is used as a login terminal. Do not change this, unless there is a compelling reason to do so.",
+   "file": "content/setup/raspberry-pi/uart-configuration.md"
+  },
+  {
+   "id": "setup/raspberry-pi/ubuntu-24-04-server",
+   "kind": "setup",
+   "title": "Ubuntu 24.04 Server 64bit",
+   "route": "#/setup/raspberry-pi/ubuntu-24-04-server",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "Modify `user-data` on the `system-boot` partition to your liking. An example configuration is provided below:",
+   "file": "content/setup/raspberry-pi/ubuntu-24-04-server.md"
+  },
+  {
+   "id": "setup/raspberry-pi/usb-configuration",
+   "kind": "setup",
+   "title": "USB Configuration",
+   "route": "#/setup/raspberry-pi/usb-configuration",
+   "where": "Setup · Raspberry Pi setup",
+   "summary": "Similar to the UART configuration we can add a UDEV rule to identify the Pixracer if connected via USB and create a symlink with meaningful name.",
+   "file": "content/setup/raspberry-pi/usb-configuration.md"
+  },
+  {
+   "id": "setup/start/index",
+   "kind": "setup",
+   "title": "Setup",
+   "route": "#/setup/start/index",
+   "where": "Setup · Start here",
+   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md` until the org cut-over",
+   "file": "content/setup/start/index.md"
+  },
+  {
+   "id": "setup/time-sync/client",
+   "kind": "setup",
+   "title": "Client",
+   "route": "#/setup/time-sync/client",
+   "where": "Setup · Time synchronization",
+   "summary": "We define the local server as only available time server. A wrong system time can cause many problems. So make sure, the local NTP server is available.",
+   "file": "content/setup/time-sync/client.md"
+  },
+  {
+   "id": "setup/time-sync/overview",
+   "kind": "setup",
+   "title": "Time Synchronization",
+   "route": "#/setup/time-sync/overview",
+   "where": "Setup · Time synchronization",
+   "summary": "Hub for keeping clocks aligned across the lab's machines: set up the time server first, then configure each client.",
+   "file": "content/setup/time-sync/overview.md"
+  },
+  {
+   "id": "setup/time-sync/server",
+   "kind": "setup",
+   "title": "Server",
+   "route": "#/setup/time-sync/server",
+   "where": "Setup · Time synchronization",
+   "summary": "Besides from the highlighted lines, the following configuration for `chrony` should be equivalent to the default configuration.",
+   "file": "content/setup/time-sync/server.md"
+  },
+  {
+   "id": "tools/media-uploads",
+   "kind": "tool",
+   "title": "Media uploads (gap)",
+   "route": "#/tools/media-uploads",
+   "where": "Agent tool",
+   "summary": "There is **no Cloudinary MCP today**. The closest existing piece is a private\n`cloudinary-upload` agent skill (upload a local image or video, get back a CDN URL) that\nlives in Kyle's agent configuration, not in a lab-sha",
+   "file": "content/tools/media-uploads.md"
+  },
+  {
+   "id": "tools/onshape-mcp",
+   "kind": "tool",
+   "title": "onshape-mcp",
+   "route": "#/tools/onshape-mcp",
+   "where": "Agent tool",
+   "summary": "Repository: <https://github.com/kyle-nelson-berkeley/onshape-mcp> · MIT · Python.\nSecurity audit 2026-08-28: gitleaks 8.30.1 over the full git history AND working tree —\n**zero findings** (evidence: `docs/security-audit-",
+   "file": "content/tools/onshape-mcp.md"
+  },
+  {
+   "id": "tools/runpod-mcp",
+   "kind": "tool",
+   "title": "runpod-mcp",
+   "route": "#/tools/runpod-mcp",
+   "where": "Agent tool",
+   "summary": "Repository: <https://github.com/kyle-nelson-berkeley/runpod-mcp> · MIT · Python.\nSecurity audit 2026-08-28: gitleaks 8.30.1 over the full git history AND working tree —\n**zero findings** (evidence: `docs/security-audit-2",
+   "file": "content/tools/runpod-mcp.md"
+  }
+ ],
+ "edges": [
+  {
+   "s": "projects/acoustics",
+   "t": "setup/bluerov/dvl",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "setup/hardware/acoustic-modems",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/guides/camera-calibration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/lab-cameras/event-camera-collaboration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/lab-cameras/event-cameras",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/lab-cameras/usb-cameras",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "setup/concepts/ros2-workspace",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "setup/concepts/deployment",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "setup/getting-started/pre-built-packages",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "setup/lab-gantry/general-information",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "setup/lab-qualisys/calibration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/localization",
+   "t": "setup/getting-started/apriltag-localization",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "setup/guides/dvb-t",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "setup/hardware/rf-modules",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "setup/getting-started/starting-gazebo-simulation",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "setup/bluerov/alpha-arm",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "setup/bluerov/full-uvms-setup",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/bluerov/deploy",
+   "t": "setup/concepts/deployment",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "setup/getting-started/pre-built-packages",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "setup/getting-started/ros-installation",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/getting-started/deploying-hippocampus",
+   "t": "setup/guides/buttons",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/getting-started/pre-built-packages",
+   "t": "setup/concepts/pre-built-packages",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/getting-started/pre-built-packages",
+   "t": "setup/getting-started/ros-installation",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/getting-started/workspace-setup",
+   "t": "setup/getting-started/pre-built-packages",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/guides/path-follower",
+   "t": "setup/guides/path-follower-concept",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/guides/ros2-cheatsheet",
+   "t": "setup/guides/apriltag",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/guides/ros2-cheatsheet",
+   "t": "setup/guides/ros2-misc",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/alpha-arm",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/build-and-flash",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/deploy",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/dvl",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/full-uvms-setup",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/servo-and-light",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/buttons",
+   "t": "setup/guides/buttons",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/event-camera-collaboration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/event-cameras",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/ip-cameras",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/usb-cameras",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/general-information",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/installation",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/motor-node",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/raspi-setup",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/usage",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/afro-esc",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/fcu-firmware",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/marker",
+   "t": "setup/lab-marker/design",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/marker",
+   "t": "setup/lab-marker/fabrication",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/qualisys",
+   "t": "setup/lab-qualisys/calibration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/qualisys",
+   "t": "setup/lab-qualisys/camera-settings",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/qualisys",
+   "t": "setup/lab-qualisys/defining-bodies",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hardware/rf-modules",
+   "t": "setup/guides/dvb-t",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/hippocampus-bringup/fcu-firmware",
+   "t": "setup/getting-started/px4-setup",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/bluerov/build-and-flash",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/concepts/ros2-workspace",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/getting-started/ros-installation",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/raspberry-pi/quality-of-life",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/time-sync/overview",
+   "t": "setup/time-sync/client",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "setup/time-sync/overview",
+   "t": "setup/time-sync/server",
+   "type": "links-to",
+   "why": "explicit link"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "repo:acoustic_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "repo:acoustic_msgs-release",
+   "type": "member",
+   "why": "release automation"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "repo:dvl",
+   "type": "member",
+   "why": "DVL driver"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "repo:dvl_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "repo:event_camera_example",
+   "type": "member",
+   "why": "event-camera example"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "repo:mjpeg_cam",
+   "type": "member",
+   "why": "MJPEG USB camera driver (ROS 2)"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "repo:mjpeg_cam_ros1",
+   "type": "member",
+   "why": "upstream fork — ROS 1 driver"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:Firmware",
+   "type": "member",
+   "why": "upstream fork — PX4 autopilot"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_common",
+   "type": "member",
+   "why": "shared C++ utilities"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_common_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_control",
+   "type": "member",
+   "why": "attitude/rate/trajectory control"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_control_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_core",
+   "type": "member",
+   "why": "core packages/libraries"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_full",
+   "type": "member",
+   "why": "meta package (everything)"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:hippo_robot",
+   "type": "member",
+   "why": "meta package (robot, no sim)"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:px4_msgs",
+   "type": "member",
+   "why": "upstream fork — PX4 ROS 2 messages"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:remote_control",
+   "type": "member",
+   "why": "remote control"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:stabilizer",
+   "type": "member",
+   "why": "attitude/depth stabilizer (ROS 1 era)"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:state_estimation",
+   "type": "member",
+   "why": "state estimation"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:state_estimation_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "repo:switch",
+   "type": "member",
+   "why": "utility package (ROS 1 era)"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "repo:bag2to1",
+   "type": "member",
+   "why": "ROS 2→1 bag converter"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "repo:buildbot",
+   "type": "member",
+   "why": "package build bot"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "repo:hippo-release",
+   "type": "member",
+   "why": "release automation"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "repo:hippo_deployment",
+   "type": "member",
+   "why": "systemd services + device rules"
+  },
+  {
+   "s": "projects/dev-infrastructure",
+   "t": "repo:hippo_infrastructure",
+   "type": "member",
+   "why": "rosdep definitions"
+  },
+  {
+   "s": "projects/docs-and-site",
+   "t": "repo:.github",
+   "type": "member",
+   "why": "org profile readme"
+  },
+  {
+   "s": "projects/docs-and-site",
+   "t": "repo:docs",
+   "type": "member",
+   "why": "Sphinx docs site (being replaced by this site)"
+  },
+  {
+   "s": "projects/docs-and-site",
+   "t": "repo:hippocampusrobotics.github.io",
+   "type": "member",
+   "why": "org website"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:TeensyST7735",
+   "type": "member",
+   "why": "display driver"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:camera",
+   "type": "member",
+   "why": "camera/barometer interfacing (ROS 1 era)"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:esc",
+   "type": "member",
+   "why": "ESC I2C driver"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:esc_serial",
+   "type": "member",
+   "why": "ESC serial protocol"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:hardware",
+   "type": "member",
+   "why": "ROS 2 hardware bring-up"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:hardware_interfaces",
+   "type": "member",
+   "why": "sensor/actuator interfaces (ROS 1 era)"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:hippocampus_pcbs",
+   "type": "member",
+   "why": "PCB designs"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:teensy_esc_controller",
+   "type": "member",
+   "why": "Teensy ESC controller"
+  },
+  {
+   "s": "projects/hippocampus-vehicle",
+   "t": "repo:tgy",
+   "type": "member",
+   "why": "upstream fork — AfroESC firmware"
+  },
+  {
+   "s": "projects/holiday-fun",
+   "t": "repo:hippo-christmas",
+   "type": "member",
+   "why": "festive firmware"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:buttons",
+   "type": "member",
+   "why": "physical buttons + GUI"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:buttons_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:gantry",
+   "type": "member",
+   "why": "gantry control (current)"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:gantry_control",
+   "type": "member",
+   "why": "gantry control (ROS 1 era)"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:gantry_gui",
+   "type": "member",
+   "why": "gantry GUI"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:gantry_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:qualisys_bridge",
+   "type": "member",
+   "why": "QTM → ROS 2 odometry bridge"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:rqt_gantry",
+   "type": "member",
+   "why": "rqt plugin"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:control",
+   "type": "member",
+   "why": "control (ROS 1)"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:hippocampus_common",
+   "type": "member",
+   "why": "common (ROS 1)"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:hippocampus_msgs",
+   "type": "member",
+   "why": "messages (ROS 1)"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:hippocampus_sim",
+   "type": "member",
+   "why": "Gazebo simulation (ROS 1)"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:howto",
+   "type": "member",
+   "why": "old how-to notes"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "repo:multi_uuv",
+   "type": "member",
+   "why": "multi-vehicle experiments (ROS 1)"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:RF_Localization",
+   "type": "member",
+   "why": "upstream fork — RF localization framework"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:acoustic_localization",
+   "type": "member",
+   "why": "acoustic localization"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:apriltag_msgs",
+   "type": "member",
+   "why": "upstream fork — messages"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:apriltag_ros",
+   "type": "member",
+   "why": "upstream fork — AprilTag ROS 2 node"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:apriltag_viz",
+   "type": "member",
+   "why": "detection visualization"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:apriltags",
+   "type": "member",
+   "why": "tag36h11 tag sheets"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:ext_auv_localization",
+   "type": "member",
+   "why": "upstream fork — multi-camera EKF localization"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:mu_auv_localization",
+   "type": "member",
+   "why": "upstream fork — microAUV EKF localization"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:rf_localization_ros",
+   "type": "member",
+   "why": "upstream fork — RF localization ROS wrapper"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:vision",
+   "type": "member",
+   "why": "vision package (ROS 1 era)"
+  },
+  {
+   "s": "projects/localization",
+   "t": "repo:visual_localization",
+   "type": "member",
+   "why": "camera + AprilTag localization"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:SiK",
+   "type": "member",
+   "why": "upstream fork — Si1000 radio firmware (HippoLink branch)"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:hippolink",
+   "type": "member",
+   "why": "HippoLink python library"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:hippolink_ros",
+   "type": "member",
+   "why": "HippoLink ROS wrapper"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:mavlink",
+   "type": "member",
+   "why": "upstream fork — MAVLink release packaging"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:mavlink_headers",
+   "type": "member",
+   "why": "MAVLink headers"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:mavros",
+   "type": "member",
+   "why": "upstream fork — MAVLink↔ROS gateway"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:radio_firmware",
+   "type": "member",
+   "why": "radio firmware"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:radio_tools",
+   "type": "member",
+   "why": "radio tools"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:sdr",
+   "type": "member",
+   "why": "software-defined radio"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "repo:sdr_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:ir_adc_read",
+   "type": "member",
+   "why": "IR sensor readout"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:ir_field_hardware",
+   "type": "member",
+   "why": "IR benchmark field hardware"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:path_planning",
+   "type": "member",
+   "why": "path planning"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:rapid_trajectories",
+   "type": "member",
+   "why": "trajectory generation"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:rapid_trajectories_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:scalar_field_belief",
+   "type": "member",
+   "why": "GP belief over a 2D field"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:scalar_field_interfaces",
+   "type": "member",
+   "why": "messages/services"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "repo:scalar_field_sim",
+   "type": "member",
+   "why": "field measurement simulator"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:UWRange_acoustic_simulator",
+   "type": "member",
+   "why": "upstream fork — TWR acoustic simulation paper code"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:acoustic_simulator",
+   "type": "member",
+   "why": "acoustic ranging simulator"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:hippo_gz_plugins",
+   "type": "member",
+   "why": "Gazebo plugins"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:hippo_sim",
+   "type": "member",
+   "why": "simulation launch + models"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:hippo_simulation",
+   "type": "member",
+   "why": "simulation resources"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "repo:sitl_gazebo",
+   "type": "member",
+   "why": "upstream fork — PX4 SITL Gazebo"
+  },
+  {
+   "s": "projects/teaching",
+   "t": "repo:fav_docs",
+   "type": "member",
+   "why": "course documentation"
+  },
+  {
+   "s": "projects/teaching",
+   "t": "repo:python-onramp",
+   "type": "member",
+   "why": "python introduction"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "repo:alpha_msgs",
+   "type": "member",
+   "why": "Alpha arm messages"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "repo:uvms",
+   "type": "member",
+   "why": "trajectory-tracking framework (paper code)"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "repo:uvms_msgs",
+   "type": "member",
+   "why": "messages"
+  },
+  {
+   "s": "projects/acoustics",
+   "t": "setup/hardware/acoustic-modems",
+   "type": "mentions",
+   "why": "mentions “Acoustic Modems”"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/guides/camera-calibration",
+   "type": "mentions",
+   "why": "mentions “Camera Calibration”"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/lab-cameras/event-cameras",
+   "type": "mentions",
+   "why": "mentions “Event Cameras”"
+  },
+  {
+   "s": "projects/cameras",
+   "t": "setup/lab-cameras/usb-cameras",
+   "type": "mentions",
+   "why": "mentions “USB Cameras”"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "setup/concepts/colcon",
+   "type": "mentions",
+   "why": "mentions “Colcon”"
+  },
+  {
+   "s": "projects/core-stack",
+   "t": "setup/guides/mixers",
+   "type": "mentions",
+   "why": "mentions “Mixers”"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "projects/lab-infrastructure",
+   "t": "setup/lab-qualisys/camera-settings",
+   "type": "mentions",
+   "why": "mentions “Camera Settings”"
+  },
+  {
+   "s": "projects/localization",
+   "t": "setup/getting-started/apriltag-localization",
+   "type": "mentions",
+   "why": "mentions “Apriltag Localization”"
+  },
+  {
+   "s": "projects/localization",
+   "t": "setup/guides/apriltag",
+   "type": "mentions",
+   "why": "mentions “AprilTag”"
+  },
+  {
+   "s": "projects/radio-comms",
+   "t": "setup/hardware/rf-modules",
+   "type": "mentions",
+   "why": "mentions “RF Modules”"
+  },
+  {
+   "s": "projects/scalar-field",
+   "t": "setup/guides/informative-path-planning",
+   "type": "mentions",
+   "why": "mentions “Informative Path Planning”"
+  },
+  {
+   "s": "projects/teaching",
+   "t": "repo:fav_docs",
+   "type": "mentions",
+   "why": "mentions “fav_docs”"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "setup/bluerov/alpha-arm",
+   "type": "mentions",
+   "why": "mentions “Alpha Arm”"
+  },
+  {
+   "s": "projects/uvms",
+   "t": "setup/bluerov/full-uvms-setup",
+   "type": "mentions",
+   "why": "mentions “Full UVMS Setup”"
+  },
+  {
+   "s": "setup/bluerov/deploy",
+   "t": "setup/bluerov/alpha-arm",
+   "type": "mentions",
+   "why": "mentions “Alpha Arm”"
+  },
+  {
+   "s": "setup/bluerov/deploy",
+   "t": "setup/concepts/deployment",
+   "type": "mentions",
+   "why": "mentions “Automated Deployment”"
+  },
+  {
+   "s": "setup/bluerov/dvl",
+   "t": "repo:dvl",
+   "type": "mentions",
+   "why": "mentions “dvl”"
+  },
+  {
+   "s": "setup/bluerov/dvl",
+   "t": "repo:dvl_msgs",
+   "type": "mentions",
+   "why": "mentions “dvl_msgs”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:alpha_msgs",
+   "type": "mentions",
+   "why": "mentions “alpha_msgs”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:hippo_common",
+   "type": "mentions",
+   "why": "mentions “hippo_common”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:hippo_control_msgs",
+   "type": "mentions",
+   "why": "mentions “hippo_control_msgs”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:hippo_gz_plugins",
+   "type": "mentions",
+   "why": "mentions “hippo_gz_plugins”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:hippo_msgs",
+   "type": "mentions",
+   "why": "mentions “hippo_msgs”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:hippo_sim",
+   "type": "mentions",
+   "why": "mentions “hippo_sim”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "repo:uvms_msgs",
+   "type": "mentions",
+   "why": "mentions “uvms_msgs”"
+  },
+  {
+   "s": "setup/bluerov/full-uvms-setup",
+   "t": "setup/getting-started/ros-installation",
+   "type": "mentions",
+   "why": "mentions “ROS Installation”"
+  },
+  {
+   "s": "setup/concepts/colcon",
+   "t": "setup/getting-started/ros-installation",
+   "type": "mentions",
+   "why": "mentions “ROS Installation”"
+  },
+  {
+   "s": "setup/concepts/ros2-repositories",
+   "t": "repo:hippo_core",
+   "type": "mentions",
+   "why": "mentions “hippo_core”"
+  },
+  {
+   "s": "setup/concepts/ros2-repositories",
+   "t": "repo:hippo_simulation",
+   "type": "mentions",
+   "why": "mentions “hippo_simulation”"
+  },
+  {
+   "s": "setup/contributing/debian-packages",
+   "t": "repo:buildbot",
+   "type": "mentions",
+   "why": "mentions “buildbot”"
+  },
+  {
+   "s": "setup/contributing/hippocampus",
+   "t": "repo:hippo_common",
+   "type": "mentions",
+   "why": "mentions “hippo_common”"
+  },
+  {
+   "s": "setup/getting-started/apriltag-localization",
+   "t": "setup/guides/apriltag",
+   "type": "mentions",
+   "why": "mentions “AprilTag”"
+  },
+  {
+   "s": "setup/getting-started/installing-qgc",
+   "t": "setup/getting-started/deploying-hippocampus",
+   "type": "mentions",
+   "why": "mentions “Deploying HippoCampus”"
+  },
+  {
+   "s": "setup/getting-started/px4-setup",
+   "t": "repo:px4_msgs",
+   "type": "mentions",
+   "why": "mentions “px4_msgs”"
+  },
+  {
+   "s": "setup/getting-started/starting-gazebo-simulation",
+   "t": "setup/guides/path-follower",
+   "type": "mentions",
+   "why": "mentions “Path Follower”"
+  },
+  {
+   "s": "setup/getting-started/workspace-setup",
+   "t": "setup/getting-started/ros-installation",
+   "type": "mentions",
+   "why": "mentions “ROS Installation”"
+  },
+  {
+   "s": "setup/guides/path-follower-concept",
+   "t": "setup/guides/path-follower",
+   "type": "mentions",
+   "why": "mentions “Path Follower”"
+  },
+  {
+   "s": "setup/guides/ros2-cheatsheet",
+   "t": "setup/guides/apriltag",
+   "type": "mentions",
+   "why": "mentions “AprilTag”"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/alpha-arm",
+   "type": "mentions",
+   "why": "mentions “Alpha Arm”"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/build-and-flash",
+   "type": "mentions",
+   "why": "mentions “Build And Flash”"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/full-uvms-setup",
+   "type": "mentions",
+   "why": "mentions “Full UVMS Setup”"
+  },
+  {
+   "s": "setup/hardware/bluerov",
+   "t": "setup/bluerov/servo-and-light",
+   "type": "mentions",
+   "why": "mentions “Servo And Light”"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/event-camera-collaboration",
+   "type": "mentions",
+   "why": "mentions “Event Camera Collaboration”"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/event-cameras",
+   "type": "mentions",
+   "why": "mentions “Event Cameras”"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/ip-cameras",
+   "type": "mentions",
+   "why": "mentions “IP Cameras (Blick)”"
+  },
+  {
+   "s": "setup/hardware/cameras",
+   "t": "setup/lab-cameras/usb-cameras",
+   "type": "mentions",
+   "why": "mentions “USB Cameras”"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/hardware/gantry",
+   "t": "setup/lab-gantry/motor-node",
+   "type": "mentions",
+   "why": "mentions “Motor Node”"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/afro-esc",
+   "type": "mentions",
+   "why": "mentions “Afro ESC”"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/fcu-firmware",
+   "type": "mentions",
+   "why": "mentions “FCU Firmware”"
+  },
+  {
+   "s": "setup/hardware/hippocampus",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "type": "mentions",
+   "why": "mentions “Motor Configuration”"
+  },
+  {
+   "s": "setup/hardware/marker",
+   "t": "setup/lab-marker/fabrication",
+   "type": "mentions",
+   "why": "mentions “Fabrication”"
+  },
+  {
+   "s": "setup/hardware/qualisys",
+   "t": "setup/lab-qualisys/camera-settings",
+   "type": "mentions",
+   "why": "mentions “Camera Settings”"
+  },
+  {
+   "s": "setup/hardware/qualisys",
+   "t": "setup/lab-qualisys/defining-bodies",
+   "type": "mentions",
+   "why": "mentions “Tracking Bodies”"
+  },
+  {
+   "s": "setup/hippocampus-bringup/fcu-firmware",
+   "t": "setup/getting-started/px4-setup",
+   "type": "mentions",
+   "why": "mentions “PX4 Setup”"
+  },
+  {
+   "s": "setup/lab-cameras/event-camera-collaboration",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-cameras/event-camera-collaboration",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/general-information",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/general-information",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/installation",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/installation",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/motor-node",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/motor-node",
+   "t": "repo:gantry_msgs",
+   "type": "mentions",
+   "why": "mentions “gantry_msgs”"
+  },
+  {
+   "s": "setup/lab-gantry/motor-node",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/raspi-setup",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/raspi-setup",
+   "t": "setup/getting-started/ros-installation",
+   "type": "mentions",
+   "why": "mentions “ROS Installation”"
+  },
+  {
+   "s": "setup/lab-gantry/raspi-setup",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/usage",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/lab-gantry/usage",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/raspberry-pi/ethernet",
+   "t": "setup/raspberry-pi/pinout",
+   "type": "mentions",
+   "why": "mentions “Pinout”"
+  },
+  {
+   "s": "setup/raspberry-pi/pinout",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/raspberry-pi/pinout",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/raspberry-pi/uart-configuration",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/raspberry-pi/uart-configuration",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/raspberry-pi/uart-configuration",
+   "t": "setup/raspberry-pi/pinout",
+   "type": "mentions",
+   "why": "mentions “Pinout”"
+  },
+  {
+   "s": "setup/raspberry-pi/ubuntu-24-04-server",
+   "t": "setup/raspberry-pi/ethernet",
+   "type": "mentions",
+   "why": "mentions “Ethernet”"
+  },
+  {
+   "s": "setup/raspberry-pi/usb-configuration",
+   "t": "setup/raspberry-pi/uart-configuration",
+   "type": "mentions",
+   "why": "mentions “UART Configuration”"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "repo:gantry",
+   "type": "mentions",
+   "why": "mentions “gantry”"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/concepts/colcon",
+   "type": "mentions",
+   "why": "mentions “Colcon”"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/getting-started/ros-installation",
+   "type": "mentions",
+   "why": "mentions “ROS Installation”"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/hardware/gantry",
+   "type": "mentions",
+   "why": "mentions “Gantry”"
+  },
+  {
+   "s": "setup/start/index",
+   "t": "setup/time-sync/overview",
+   "type": "mentions",
+   "why": "mentions “Time Synchronization”"
+  },
+  {
+   "s": "about",
+   "t": "projects/docs-and-site",
+   "type": "related",
+   "why": "the project that builds and maintains this site"
+  },
+  {
+   "s": "about",
+   "t": "setup/contributing/documentation",
+   "type": "related",
+   "why": "About describes how the current site is built; this page is how the previous Sphinx docs were contributed to"
+  },
+  {
+   "s": "about",
+   "t": "tools/media-uploads",
+   "type": "related",
+   "why": "About's 'images from a CDN' note is the hosting gap this tool page documents"
+  },
+  {
+   "s": "index:home",
+   "t": "about",
+   "type": "related",
+   "why": "the footer's 'How this site is built' link"
+  },
+  {
+   "s": "index:home",
+   "t": "index:projects",
+   "type": "related",
+   "why": "home landing card"
+  },
+  {
+   "s": "index:home",
+   "t": "index:tools",
+   "type": "related",
+   "why": "home landing card"
+  },
+  {
+   "s": "index:home",
+   "t": "setup/start/index",
+   "type": "related",
+   "why": "the home page's Setup card leads here first"
+  },
+  {
+   "s": "index:projects",
+   "t": "projects/core-stack",
+   "type": "related",
+   "why": "the stack every other project builds on"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/media-uploads",
+   "type": "related",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/onshape-mcp",
+   "type": "related",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/runpod-mcp",
+   "type": "related",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "projects/core-stack",
+   "type": "related",
+   "why": "the ROS 2 stack that replaced it"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "setup/getting-started/starting-gazebo-simulation",
+   "type": "related",
+   "why": "the how-to for running the project's Gazebo simulation"
+  },
+  {
+   "s": "projects/teaching",
+   "t": "setup/start/index",
+   "type": "related",
+   "why": "students begin with the same setup pages"
+  },
+  {
+   "s": "setup/bluerov/dvl",
+   "t": "projects/acoustics",
+   "type": "related",
+   "why": "the DVL page is the vehicle-side setup for Acoustics & DVL"
+  },
+  {
+   "s": "setup/concepts/deployment",
+   "t": "projects/dev-infrastructure",
+   "type": "related",
+   "why": "hippo_deployment, the automation this concept page describes, lives in dev-infrastructure"
+  },
+  {
+   "s": "setup/contributing/debian-packages",
+   "t": "projects/dev-infrastructure",
+   "type": "related",
+   "why": "buildbot and hippo-release are the release pipeline this page drives"
+  },
+  {
+   "s": "setup/contributing/documentation",
+   "t": "projects/docs-and-site",
+   "type": "related",
+   "why": "contributing to the docs is the docs-and-site project's onboarding path"
+  },
+  {
+   "s": "setup/contributing/documentation",
+   "t": "setup/contributing/hippocampus",
+   "type": "related",
+   "why": "sibling contributing guide — code instead of docs"
+  },
+  {
+   "s": "setup/getting-started/px4-setup",
+   "t": "projects/hippocampus-vehicle",
+   "type": "related",
+   "why": "PX4 is the vehicle's flight-control firmware"
+  },
+  {
+   "s": "setup/getting-started/workstation-quality-of-life",
+   "t": "setup/getting-started/ros-installation",
+   "type": "related",
+   "why": "both are first-day workstation steps in Getting started"
+  },
+  {
+   "s": "setup/getting-started/workstation-quality-of-life",
+   "t": "setup/raspberry-pi/quality-of-life",
+   "type": "related",
+   "why": "the same shell quality-of-life setup, for the Pi instead of the workstation"
+  },
+  {
+   "s": "setup/guides/apriltag",
+   "t": "projects/localization",
+   "type": "related",
+   "why": "AprilTag detection is the visual localization path"
+  },
+  {
+   "s": "setup/guides/dvb-t",
+   "t": "projects/radio-comms",
+   "type": "related",
+   "why": "the SDR stick used for the radio work"
+  },
+  {
+   "s": "setup/guides/informative-path-planning",
+   "t": "projects/scalar-field",
+   "type": "related",
+   "why": "informative path planning is the scalar-field exploration method"
+  },
+  {
+   "s": "setup/guides/install-source-dependencies",
+   "t": "setup/concepts/ros2-workspace",
+   "type": "related",
+   "why": "source dependencies land in the workspace this concept page describes"
+  },
+  {
+   "s": "setup/guides/misc-notes",
+   "t": "setup/getting-started/workstation-quality-of-life",
+   "type": "related",
+   "why": "more workstation fixes (x2go, rviz2 GLX) in the spirit of the quality-of-life tweaks"
+  },
+  {
+   "s": "setup/guides/misc-notes",
+   "t": "setup/guides/ros2-misc",
+   "type": "related",
+   "why": "two grab-bags of ROS 2 workstation notes"
+  },
+  {
+   "s": "setup/guides/mixers",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "type": "related",
+   "why": "mixer matrices map control outputs onto the configured motors"
+  },
+  {
+   "s": "setup/guides/path-follower-concept",
+   "t": "setup/getting-started/starting-gazebo-simulation",
+   "type": "related",
+   "why": "the simulation walkthrough is where the path follower first gets run"
+  },
+  {
+   "s": "setup/hardware/acoustic-modems",
+   "t": "projects/acoustics",
+   "type": "related",
+   "why": "the modem timing definitions underpin the acoustic ranging work"
+  },
+  {
+   "s": "setup/lab-gantry/general-information",
+   "t": "projects/lab-infrastructure",
+   "type": "related",
+   "why": "the gantry is the lab-infrastructure project's main piece of tank hardware"
+  },
+  {
+   "s": "setup/lab-marker/design",
+   "t": "setup/lab-qualisys/defining-bodies",
+   "type": "related",
+   "why": "marker geometry decides how a tracked body is defined"
+  },
+  {
+   "s": "setup/raspberry-pi/ubuntu-24-04-server",
+   "t": "setup/lab-gantry/raspi-setup",
+   "type": "related",
+   "why": "the gantry's Pi is one of the Pis imaged this way"
+  },
+  {
+   "s": "setup/raspberry-pi/usb-configuration",
+   "t": "setup/raspberry-pi/pinout",
+   "type": "related",
+   "why": "same Pi wiring reference"
+  },
+  {
+   "s": "setup/time-sync/server",
+   "t": "setup/time-sync/client",
+   "type": "related",
+   "why": "server and client halves of one time-sync setup"
+  },
+  {
+   "s": "tools/media-uploads",
+   "t": "projects/docs-and-site",
+   "type": "related",
+   "why": "media hosting for this site's pages is a docs-and-site concern"
+  },
+  {
+   "s": "tools/onshape-mcp",
+   "t": "tools/runpod-mcp",
+   "type": "related",
+   "why": "sibling agent tools by the same author, audited to the same gitleaks bar on 2026-08-28"
+  },
+  {
+   "s": "tools/runpod-mcp",
+   "t": "projects/simulation",
+   "type": "related",
+   "why": "large simulations are one of the GPU jobs the server was built to run"
+  }
+ ]
+}

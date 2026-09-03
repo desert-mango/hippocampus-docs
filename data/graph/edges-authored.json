@@ -1,0 +1,200 @@
+{
+ "note": "Authored semantic edges (type forced to 'related' by tools/build_wiki_graph.py). Each edge carries a one-line why; endpoints are validated against wiki.json node ids at build time — a renamed page fails the build by name. Authored once at build time (2026-09-03) by the implementing agent; no runtime keys, no LLM.",
+ "edges": [
+  {
+   "s": "index:home",
+   "t": "setup/start/index",
+   "why": "the home page's Setup card leads here first"
+  },
+  {
+   "s": "index:home",
+   "t": "index:projects",
+   "why": "home landing card"
+  },
+  {
+   "s": "index:home",
+   "t": "index:tools",
+   "why": "home landing card"
+  },
+  {
+   "s": "index:home",
+   "t": "about",
+   "why": "the footer's 'How this site is built' link"
+  },
+  {
+   "s": "index:projects",
+   "t": "projects/core-stack",
+   "why": "the stack every other project builds on"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/runpod-mcp",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/onshape-mcp",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "index:tools",
+   "t": "tools/media-uploads",
+   "why": "listed on the Agent tools landing view"
+  },
+  {
+   "s": "about",
+   "t": "projects/docs-and-site",
+   "why": "the project that builds and maintains this site"
+  },
+  {
+   "s": "about",
+   "t": "setup/contributing/documentation",
+   "why": "About describes how the current site is built; this page is how the previous Sphinx docs were contributed to"
+  },
+  {
+   "s": "about",
+   "t": "tools/media-uploads",
+   "why": "About's 'images from a CDN' note is the hosting gap this tool page documents"
+  },
+  {
+   "s": "tools/media-uploads",
+   "t": "projects/docs-and-site",
+   "why": "media hosting for this site's pages is a docs-and-site concern"
+  },
+  {
+   "s": "tools/onshape-mcp",
+   "t": "tools/runpod-mcp",
+   "why": "sibling agent tools by the same author, audited to the same gitleaks bar on 2026-08-28"
+  },
+  {
+   "s": "tools/runpod-mcp",
+   "t": "projects/simulation",
+   "why": "large simulations are one of the GPU jobs the server was built to run"
+  },
+  {
+   "s": "setup/contributing/documentation",
+   "t": "projects/docs-and-site",
+   "why": "contributing to the docs is the docs-and-site project's onboarding path"
+  },
+  {
+   "s": "setup/contributing/documentation",
+   "t": "setup/contributing/hippocampus",
+   "why": "sibling contributing guide — code instead of docs"
+  },
+  {
+   "s": "setup/getting-started/workstation-quality-of-life",
+   "t": "setup/raspberry-pi/quality-of-life",
+   "why": "the same shell quality-of-life setup, for the Pi instead of the workstation"
+  },
+  {
+   "s": "setup/getting-started/workstation-quality-of-life",
+   "t": "setup/getting-started/ros-installation",
+   "why": "both are first-day workstation steps in Getting started"
+  },
+  {
+   "s": "setup/guides/misc-notes",
+   "t": "setup/getting-started/workstation-quality-of-life",
+   "why": "more workstation fixes (x2go, rviz2 GLX) in the spirit of the quality-of-life tweaks"
+  },
+  {
+   "s": "setup/guides/misc-notes",
+   "t": "setup/guides/ros2-misc",
+   "why": "two grab-bags of ROS 2 workstation notes"
+  },
+  {
+   "s": "setup/hardware/acoustic-modems",
+   "t": "projects/acoustics",
+   "why": "the modem timing definitions underpin the acoustic ranging work"
+  },
+  {
+   "s": "setup/bluerov/dvl",
+   "t": "projects/acoustics",
+   "why": "the DVL page is the vehicle-side setup for Acoustics & DVL"
+  },
+  {
+   "s": "setup/guides/path-follower-concept",
+   "t": "setup/getting-started/starting-gazebo-simulation",
+   "why": "the simulation walkthrough is where the path follower first gets run"
+  },
+  {
+   "s": "setup/guides/mixers",
+   "t": "setup/hippocampus-bringup/motor-configuration",
+   "why": "mixer matrices map control outputs onto the configured motors"
+  },
+  {
+   "s": "setup/time-sync/server",
+   "t": "setup/time-sync/client",
+   "why": "server and client halves of one time-sync setup"
+  },
+  {
+   "s": "setup/lab-marker/design",
+   "t": "setup/lab-qualisys/defining-bodies",
+   "why": "marker geometry decides how a tracked body is defined"
+  },
+  {
+   "s": "setup/guides/dvb-t",
+   "t": "projects/radio-comms",
+   "why": "the SDR stick used for the radio work"
+  },
+  {
+   "s": "setup/guides/apriltag",
+   "t": "projects/localization",
+   "why": "AprilTag detection is the visual localization path"
+  },
+  {
+   "s": "setup/concepts/deployment",
+   "t": "projects/dev-infrastructure",
+   "why": "hippo_deployment, the automation this concept page describes, lives in dev-infrastructure"
+  },
+  {
+   "s": "setup/contributing/debian-packages",
+   "t": "projects/dev-infrastructure",
+   "why": "buildbot and hippo-release are the release pipeline this page drives"
+  },
+  {
+   "s": "setup/getting-started/px4-setup",
+   "t": "projects/hippocampus-vehicle",
+   "why": "PX4 is the vehicle's flight-control firmware"
+  },
+  {
+   "s": "setup/lab-gantry/general-information",
+   "t": "projects/lab-infrastructure",
+   "why": "the gantry is the lab-infrastructure project's main piece of tank hardware"
+  },
+  {
+   "s": "setup/guides/informative-path-planning",
+   "t": "projects/scalar-field",
+   "why": "informative path planning is the scalar-field exploration method"
+  },
+  {
+   "s": "projects/legacy-ros1",
+   "t": "projects/core-stack",
+   "why": "the ROS 2 stack that replaced it"
+  },
+  {
+   "s": "projects/teaching",
+   "t": "setup/start/index",
+   "why": "students begin with the same setup pages"
+  },
+  {
+   "s": "projects/simulation",
+   "t": "setup/getting-started/starting-gazebo-simulation",
+   "why": "the how-to for running the project's Gazebo simulation"
+  },
+  {
+   "s": "setup/raspberry-pi/ubuntu-24-04-server",
+   "t": "setup/lab-gantry/raspi-setup",
+   "why": "the gantry's Pi is one of the Pis imaged this way"
+  },
+  {
+   "s": "setup/raspberry-pi/usb-configuration",
+   "t": "setup/raspberry-pi/pinout",
+   "why": "same Pi wiring reference"
+  },
+  {
+   "s": "setup/guides/install-source-dependencies",
+   "t": "setup/concepts/ros2-workspace",
+   "why": "source dependencies land in the workspace this concept page describes"
+  }
+ ]
+}

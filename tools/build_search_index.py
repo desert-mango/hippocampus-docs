@@ -96,16 +96,23 @@ def cap_shard(repo, rows):
     return rows, dropped
 
 
+def excerpt(md_text):
+    """First real prose paragraph of a Markdown body, links flattened, <= 220 chars.
+
+    Module level on purpose: tools/build_wiki_graph.py derives its page
+    summaries with EXACTLY this function, so the search index and the wiki
+    graph can never drift apart on what a page's first sentence is.
+    """
+    for para in md_text.split("\n\n"):
+        p = para.strip()
+        if p and not p.startswith(("#", "<", "```", "!", "-", "|", "*")):
+            return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)[:220]
+    return ""
+
+
 def build_site_shard():
     """Pages, headings, and excerpts from the content registries."""
     entries = []
-
-    def excerpt(md_text):
-        for para in md_text.split("\n\n"):
-            p = para.strip()
-            if p and not p.startswith(("#", "<", "```", "!", "-", "|", "*")):
-                return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)[:220]
-        return ""
 
     def headings(md_text):
         return [re.sub(r"^#+\s*", "", h).strip()

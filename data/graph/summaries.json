@@ -1,0 +1,378 @@
+{
+ "note": "One summary per page and index node. source 'derived' is regenerated on every run (first prose paragraph via tools/build_search_index.py excerpt(); projects and tools fall back to their tagline); source 'authored' is written by hand and is NEVER overwritten. An authored id that no longer names a node fails the build.",
+ "generated": "run tools/build_wiki_graph.py to regenerate",
+ "pages": {
+  "about": {
+   "summary": "This is the documentation home of the **HippoCampusRobotics** lab at TUHH's Institute of\nMechanics and Ocean Engineering. It brings four things into one place: setup guides\n(migrated page for page from the old Sphinx sit",
+   "source": "derived"
+  },
+  "index:home": {
+   "summary": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use.",
+   "source": "derived"
+  },
+  "index:projects": {
+   "summary": "Everything the lab builds, grouped into projects. One project can own many repositories; forks of upstream software are listed inside the project that uses them.",
+   "source": "derived"
+  },
+  "index:tools": {
+   "summary": "MCP servers are small programs that give AI agents real capabilities — renting a GPU, reading a CAD assembly — through a standard interface. These are the lab's tools. Each page will take you from nothing installed to a working agent connection.",
+   "source": "derived"
+  },
+  "projects/acoustics": {
+   "summary": "Acoustic sensing around the vehicles: the doppler velocity log (DVL) that measures\nvelocity over ground, and the message definitions for acoustic ranging and modems.",
+   "source": "derived"
+  },
+  "projects/cameras": {
+   "summary": "Image streams into ROS: the MJPEG USB camera driver the vehicles use, and the event-camera\nwork from a research collaboration.",
+   "source": "derived"
+  },
+  "projects/core-stack": {
+   "summary": "The shared ROS 2 software every lab vehicle runs: control, state estimation, the message\ndefinitions that tie nodes together, and the meta packages that pull a full system onto a\nrobot. If you contribute code to the lab,",
+   "source": "derived"
+  },
+  "projects/dev-infrastructure": {
+   "summary": "How software actually reaches robots and users: deployment configuration for onboard\ncomputers, the bot that builds Debian packages, and the dependency definitions that make\n`rosdep` work for lab packages.",
+   "source": "derived"
+  },
+  "projects/docs-and-site": {
+   "summary": "The lab's documentation about itself: the current Sphinx docs site, the org website, and\nthe org profile.",
+   "source": "derived"
+  },
+  "projects/hippocampus-vehicle": {
+   "summary": "The HippoCampus is the lab's own micro autonomous underwater vehicle: a small torpedo-shaped\nrobot sized for the institute's tank. This project collects everything that defines the\nphysical vehicle — the CAD model, the P",
+   "source": "derived"
+  },
+  "projects/holiday-fun": {
+   "summary": "`hippo-christmas` — festive hardware humor from 2022, preserved because labs that keep\ntheir jokes keep their people.",
+   "source": "derived"
+  },
+  "projects/lab-infrastructure": {
+   "summary": "The systems around the water that every experiment leans on: Qualisys motion capture for\nmillimeter ground truth, the gantry that moves equipment over the tank, and the physical\nbutton boxes wired into the safety and con",
+   "source": "derived"
+  },
+  "projects/legacy-ros1": {
+   "summary": "The pre-ROS 2 HippoCampus software stack, preserved. The lab moved to ROS 2; these repos\nstay readable for anyone revisiting old experiments or wondering why something is shaped\nthe way it is.",
+   "source": "derived"
+  },
+  "projects/localization": {
+   "summary": "Knowing where the vehicle is inside the tank. The current approach is visual: cameras on\nthe vehicle detect AprilTag markers, and an EKF fuses the detections into a pose estimate.\nEarlier acoustic and radio-frequency app",
+   "source": "derived"
+  },
+  "projects/radio-comms": {
+   "summary": "Getting data to and from vehicles without a tether: the HippoLink telemetry link over\nSi1000-family radios, the MAVLink plumbing underneath, and software-defined radio\nexperiments.",
+   "source": "derived"
+  },
+  "projects/scalar-field": {
+   "summary": "Informative path planning over scalar fields — temperature-like quantities spread over the\ntank. The vehicle maintains a belief about the field and plans where measuring next helps\nmost. This is the lab's active research",
+   "source": "derived"
+  },
+  "projects/simulation": {
+   "summary": "Run the robots in software before the tank: Gazebo worlds, the plugins that make water\nbehave like water (buoyancy, drag, thrusters), and the vehicle models.",
+   "source": "derived"
+  },
+  "projects/teaching": {
+   "summary": "The lab's teaching side: the **Formulas and Vehicles** course, where students program\nunderwater robots, and the Python onramp that gets them ready.",
+   "source": "derived"
+  },
+  "projects/uvms": {
+   "summary": "An underwater vehicle-manipulator system: a BlueROV2 Heavy carrying a Reach Robotics\nAlpha 5 arm, with an end-effector trajectory-tracking framework — the vehicle and the arm\nmove together so the gripper follows a comman",
+   "source": "derived"
+  },
+  "setup/bluerov/alpha-arm": {
+   "summary": "Not all of them are public due to licensing. Currently this applies to `alpha_arm`. Ask your favourite research associate to get access if you need it.",
+   "source": "derived"
+  },
+  "setup/bluerov/build-and-flash": {
+   "summary": "We replaced the original FCU with the Pixhawk4, which is a 5th generation board. So the build command is:",
+   "source": "derived"
+  },
+  "setup/bluerov/deploy": {
+   "summary": "Deploying either of the lab's two BlueROV2s: bluerov01 for the SEMS/FAV class and bluerov02 for the UVMS setup with the Alpha arm.",
+   "source": "authored"
+  },
+  "setup/bluerov/dvl": {
+   "summary": "For this section it is assumed, that the environment variable `VEHICLE_NAME` is set (for example in `.zshrc` or directly inside the terminal).",
+   "source": "derived"
+  },
+  "setup/bluerov/full-uvms-setup": {
+   "summary": "Add all relevant infos. Appropriate structures + titles of sections TBD.",
+   "source": "derived"
+  },
+  "setup/bluerov/servo-and-light": {
+   "summary": "The LED headlights and the camera servo are controlled via PWM signals. To get a jitter-free PWM signal, a library, supporting hardware PWM, is required. For example `pigpio`.",
+   "source": "derived"
+  },
+  "setup/concepts/colcon": {
+   "summary": "Colcon is the build tool used to build our ROS workspace. We have convenience scripts to use colcon for our typical use cases to spare us some tedious typing.",
+   "source": "derived"
+  },
+  "setup/concepts/deployment": {
+   "summary": "This section is (so far) only relevant for the old BlueROV2, `bluerov-01`. On this vehicle, we start all ROS nodes automatically at boot.",
+   "source": "derived"
+  },
+  "setup/concepts/pre-built-packages": {
+   "summary": "Simple answer: you don't. It's mere convenience to be able to install packages we would like to use via a simple `apt install` command. Alternatively, we would need to clone the source code of the packages we would like ",
+   "source": "derived"
+  },
+  "setup/concepts/ros2-repositories": {
+   "summary": "hippo_core ==================================================================",
+   "source": "derived"
+  },
+  "setup/concepts/ros2-workspace": {
+   "summary": "The following workspace structure is recommended in general, but is mandatory for shared devices (i.e. every device that is not your own computer, like Raspberry Pis or lab computers) to avoid confusion.",
+   "source": "derived"
+  },
+  "setup/contributing/debian-packages": {
+   "summary": "This section is targeted at the maintainers of our repositories and is not relevant for anyone else.",
+   "source": "derived"
+  },
+  "setup/contributing/documentation": {
+   "summary": "Go to this documentation's GitHub repository and fork it (see GitHub's documentation for details on forking if you do not know how to fork a repository).",
+   "source": "derived"
+  },
+  "setup/contributing/hippocampus": {
+   "summary": "This requires write permissions for the HippoCampus project. Hence, the instructions are only applicable for maintainers/owners of HippoCampus",
+   "source": "derived"
+  },
+  "setup/getting-started/apriltag-localization": {
+   "summary": "This page explains how to start and check the AprilTag localization setup.",
+   "source": "derived"
+  },
+  "setup/getting-started/deploying-hippocampus": {
+   "summary": "The start-everything checklist for running HippoCampus in the tank: push-button boxes first, then the remaining launch steps in order.",
+   "source": "authored"
+  },
+  "setup/getting-started/installing-qgc": {
+   "summary": "This is currently used for the real robot exclusively and is not part of the simulation. Skip this section if you are **not** preparing for the lab experiments. If in doubt ask your supervisor.",
+   "source": "derived"
+  },
+  "setup/getting-started/pre-built-packages": {
+   "summary": "For convenience, we provide our own packages as pre-built binaries at repositories.hippocampus-robotics.net. The advantage is that we do **not** need to compile the packages we are not developing actively ourselfs.",
+   "source": "derived"
+  },
+  "setup/getting-started/px4-setup": {
+   "summary": "PX4 is currently used for the real robot exclusively and is not part of the simulation. Skip this section if you are **not** preparing for the lab experiments. If in doubt ask your supervisor.",
+   "source": "derived"
+  },
+  "setup/getting-started/ros-installation": {
+   "summary": "We are moving to ROS2. This guide and the following pages are still in the process of being updated. There might be some construction works still going on here and there.",
+   "source": "derived"
+  },
+  "setup/getting-started/starting-gazebo-simulation": {
+   "summary": "Vehicle-specific nodes should be launched in namespace \"vehicle_name\", for example `uuv00` - `uuv99`.",
+   "source": "derived"
+  },
+  "setup/getting-started/workspace-setup": {
+   "summary": "In the following, we describe our ROS2 system setup.",
+   "source": "derived"
+  },
+  "setup/getting-started/workstation-quality-of-life": {
+   "summary": "Before we start, let's install some quality-of-life features to improve the user experience.",
+   "source": "derived"
+  },
+  "setup/guides/apriltag": {
+   "summary": "There is a PR for porting the good old `apriltag_ros` package to ROS2.",
+   "source": "derived"
+  },
+  "setup/guides/buttons": {
+   "summary": "While operating a real vehicle it is quit nice to have some buttons to easily control the vehicle. This includes, for example, arming and disarming (probably the most important and most used feature) the vehicle quickly ",
+   "source": "derived"
+  },
+  "setup/guides/camera-calibration": {
+   "summary": "We have a convenience launch file for camera calibration. We use the standard ROS (monocular) camera calibrator.",
+   "source": "derived"
+  },
+  "setup/guides/dvb-t": {
+   "summary": "Firmware and driver installation for the NooElec R820T2 DVB-T stick used as a software-defined radio.",
+   "source": "authored"
+  },
+  "setup/guides/informative-path-planning": {
+   "summary": "Run the informative path planner against the simulated BlueROV: launch the simulation, then start the planner.",
+   "source": "authored"
+  },
+  "setup/guides/install-source-dependencies": {
+   "summary": "Some ROS packages might have dependencies that you have to install from source. For this case, the git repository URLs are written in a `.repos` file.",
+   "source": "derived"
+  },
+  "setup/guides/misc-notes": {
+   "summary": "Miscellaneous workstation fixes, starting with GLX problems when running rviz2 over x2go.",
+   "source": "authored"
+  },
+  "setup/guides/mixers": {
+   "summary": "We have implemented different mixers in the `hippo_control` package.",
+   "source": "derived"
+  },
+  "setup/guides/path-follower": {
+   "summary": "Hub for the path-follower controller; the concept page explains how a vehicle tracks a path.",
+   "source": "authored"
+  },
+  "setup/guides/path-follower-concept": {
+   "summary": "The `path_planning` package provides a simple `path_follower` node. It loads a pre-defined path from a `yaml` file and choses the current target point based on the vehicle's current position and the configured look ahead",
+   "source": "derived"
+  },
+  "setup/guides/ros2-cheatsheet": {
+   "summary": "Hub of ROS 2 notes: miscellaneous tips and the AprilTag guide.",
+   "source": "authored"
+  },
+  "setup/guides/ros2-misc": {
+   "summary": "Symlink builds are recommended, so symbolic links to `src` are used where possible.",
+   "source": "derived"
+  },
+  "setup/hardware/acoustic-modems": {
+   "summary": "Timing definitions for the acoustic modems: poll durations, propagation and processing delays, and how they add up into one ranging cycle.",
+   "source": "authored"
+  },
+  "setup/hardware/bluerov": {
+   "summary": "Hub for the lab's two BlueROV2 vehicles — the older class vehicle and the newer UVMS vehicle carrying the Alpha arm — with links to deployment, build-and-flash, and peripheral setup.",
+   "source": "authored"
+  },
+  "setup/hardware/buttons": {
+   "summary": "Hub for the physical push-button boxes used to start and stop vehicles in the tank; the guide explains how to set them up.",
+   "source": "authored"
+  },
+  "setup/hardware/cameras": {
+   "summary": "Hub for the lab's cameras: the IP cameras, USB cameras, event cameras, and the event-camera collaboration.",
+   "source": "authored"
+  },
+  "setup/hardware/gantry": {
+   "summary": "Hub for the lab's tank gantry: general information, software installation, usage, the motor node, and the gantry's Raspberry Pi setup.",
+   "source": "authored"
+  },
+  "setup/hardware/hippocampus": {
+   "summary": "Hardware hub for the HippoCampus vehicle: links to the bring-up pages for the Afro ESCs, the motor configuration, and the flight-controller (FCU) firmware.",
+   "source": "authored"
+  },
+  "setup/hardware/marker": {
+   "summary": "Hub for the lab's 3D-printed underwater motion-capture markers: the design and how to fabricate them.",
+   "source": "authored"
+  },
+  "setup/hardware/qualisys": {
+   "summary": "Hub for the Qualisys motion-capture (MoCap) system over the tank: camera settings, calibration, and defining the bodies to track.",
+   "source": "authored"
+  },
+  "setup/hardware/rf-modules": {
+   "summary": "Hub for the lab's radio hardware; currently it points to the DVB-T software-defined-radio stick guide.",
+   "source": "authored"
+  },
+  "setup/hippocampus-bringup/afro-esc": {
+   "summary": "Flash the tgy firmware onto the Afro ESCs: build the AVRA assembler, fetch the firmware, and program each ESC.",
+   "source": "authored"
+  },
+  "setup/hippocampus-bringup/fcu-firmware": {
+   "summary": "Add instructions for different FCUs, especially PixHawk 6C",
+   "source": "derived"
+  },
+  "setup/hippocampus-bringup/motor-configuration": {
+   "summary": "The following image depicts the thruster configuration. The numbers correspond to the FCU's PWM outputs. Make sure the propellers are mounted correctly since there are two clockwise and two counterclockwise propellers.",
+   "source": "derived"
+  },
+  "setup/lab-cameras/event-camera-collaboration": {
+   "summary": "The folloing instructions are targeting ROS2 because our whole framework is implemented in ROS2. The `ros-event-camera` packages are available for ROS1 **and** ROS2, though. All following instructions have ROS1 equivalen",
+   "source": "derived"
+  },
+  "setup/lab-cameras/event-cameras": {
+   "summary": "This is a getting-started-quickly guide, more complete instructions are documented in the repository's README.",
+   "source": "derived"
+  },
+  "setup/lab-cameras/ip-cameras": {
+   "summary": "At the time of writing the IP addresses of the cameras are `192.168.0.116` and `192.168.0.148`. This might change in the future.",
+   "source": "derived"
+  },
+  "setup/lab-cameras/usb-cameras": {
+   "summary": "There is the v4l2_camera package, that provides a V4L2 camera driver using the standard `image_transport` pipeline.",
+   "source": "derived"
+  },
+  "setup/lab-gantry/general-information": {
+   "summary": "The reference point of the gantry is the edge of the z-axis spindle mount as depicted in the image below.",
+   "source": "derived"
+  },
+  "setup/lab-gantry/installation": {
+   "summary": "Clone the gantry, gantry_msgs, and gantry_gui repositories into a ROS 2 workspace and build them to install the gantry software.",
+   "source": "authored"
+  },
+  "setup/lab-gantry/motor-node": {
+   "summary": "The movement of the motor can either be controlled in position or in velocity mode. If used in position mode, the positon can be set as absolute value or as relative change of the current position target.",
+   "source": "derived"
+  },
+  "setup/lab-gantry/raspi-setup": {
+   "summary": "Modify the `usercfg.txt`, either pre-boot directly on the `/boot` partition or from the running Raspberry Pi in the `/boot/firmware` directory, and add the following lines:",
+   "source": "derived"
+  },
+  "setup/lab-gantry/usage": {
+   "summary": "On the Raspberry Pi on the gantry ( `ssh pi@gantry.local` ), run:",
+   "source": "derived"
+  },
+  "setup/lab-marker/design": {
+   "summary": "MoCap markers are used to track the position and orientation of objects in the tank. They are attached to a rigid-body. Commercial Qualisys markers are relatively expensive and not very durable, despite being specified a",
+   "source": "derived"
+  },
+  "setup/lab-marker/fabrication": {
+   "summary": "Build the custom MoCap markers: 3D-printed nut and bottom parts, reflective tape, and one M4 nut, replicating the 14 mm and 19 mm Qualisys sizes.",
+   "source": "authored"
+  },
+  "setup/lab-qualisys/calibration": {
+   "summary": "In general, the cameras should be calibrated every time they have not been used for a while. If you can be sure that the cameras have not been moved (accidentally), calibration should not be necessary (e.g. resuming expe",
+   "source": "derived"
+  },
+  "setup/lab-qualisys/camera-settings": {
+   "summary": "Qualisys camera position and orientation settings for tracking in the tank (page still a work in progress).",
+   "source": "authored"
+  },
+  "setup/lab-qualisys/defining-bodies": {
+   "summary": "How to place reflective markers on a vehicle and define it as a tracked rigid body in Qualisys.",
+   "source": "authored"
+  },
+  "setup/raspberry-pi/ethernet": {
+   "summary": "We use the T-568B Pinout for all our ethernet connectors.",
+   "source": "derived"
+  },
+  "setup/raspberry-pi/pinout": {
+   "summary": "Raspberry Pi pin assignments for the UUV, the BlueROV, the gantry, and the button boxes — one diagram per platform.",
+   "source": "authored"
+  },
+  "setup/raspberry-pi/quality-of-life": {
+   "summary": "Similarly to the setup on your desktop computer, let's also install our preferred shell, byobu etc. on all Raspberry Pis.",
+   "source": "derived"
+  },
+  "setup/raspberry-pi/uart-configuration": {
+   "summary": "By default UART0 is used as a login terminal. Do not change this, unless there is a compelling reason to do so.",
+   "source": "derived"
+  },
+  "setup/raspberry-pi/ubuntu-24-04-server": {
+   "summary": "Modify `user-data` on the `system-boot` partition to your liking. An example configuration is provided below:",
+   "source": "derived"
+  },
+  "setup/raspberry-pi/usb-configuration": {
+   "summary": "Similar to the UART configuration we can add a UDEV rule to identify the Pixracer if connected via USB and create a symlink with meaningful name.",
+   "source": "derived"
+  },
+  "setup/start/index": {
+   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md` until the org cut-over",
+   "source": "derived"
+  },
+  "setup/time-sync/client": {
+   "summary": "We define the local server as only available time server. A wrong system time can cause many problems. So make sure, the local NTP server is available.",
+   "source": "derived"
+  },
+  "setup/time-sync/overview": {
+   "summary": "Hub for keeping clocks aligned across the lab's machines: set up the time server first, then configure each client.",
+   "source": "authored"
+  },
+  "setup/time-sync/server": {
+   "summary": "Besides from the highlighted lines, the following configuration for `chrony` should be equivalent to the default configuration.",
+   "source": "derived"
+  },
+  "tools/media-uploads": {
+   "summary": "There is **no Cloudinary MCP today**. The closest existing piece is a private\n`cloudinary-upload` agent skill (upload a local image or video, get back a CDN URL) that\nlives in Kyle's agent configuration, not in a lab-sha",
+   "source": "derived"
+  },
+  "tools/onshape-mcp": {
+   "summary": "Repository: <https://github.com/kyle-nelson-berkeley/onshape-mcp> · MIT · Python.\nSecurity audit 2026-08-28: gitleaks 8.30.1 over the full git history AND working tree —\n**zero findings** (evidence: `docs/security-audit-",
+   "source": "derived"
+  },
+  "tools/runpod-mcp": {
+   "summary": "Repository: <https://github.com/kyle-nelson-berkeley/runpod-mcp> · MIT · Python.\nSecurity audit 2026-08-28: gitleaks 8.30.1 over the full git history AND working tree —\n**zero findings** (evidence: `docs/security-audit-2",
+   "source": "derived"
+  }
+ }
+}
