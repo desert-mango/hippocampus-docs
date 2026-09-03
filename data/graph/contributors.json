@@ -1,0 +1,360 @@
+{
+ "generated": "run tools/build_contributors.py to regenerate",
+ "org": "HippoCampusRobotics",
+ "note": "public GitHub data; display names as published by GitHub; logins only where no display name is set",
+ "projects": {
+  "acoustics": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 25,
+     "roster": true
+    }
+   ]
+  },
+  "cameras": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 27,
+     "roster": true
+    }
+   ]
+  },
+  "core-stack": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 735,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 57,
+     "roster": true
+    },
+    {
+     "login": "VincentTUHH",
+     "name": "Vincent Lenz",
+     "contributions": 3,
+     "roster": true
+    },
+    {
+     "login": "DanielDuecker",
+     "name": "Daniel Duecker",
+     "contributions": 1
+    }
+   ]
+  },
+  "dev-infrastructure": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 71,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 1,
+     "roster": true
+    }
+   ]
+  },
+  "docs-and-site": {
+   "contributors": [
+    {
+     "login": "mmistakes",
+     "name": "Michael Rose",
+     "contributions": 942
+    },
+    {
+     "login": "JohTobi",
+     "name": "JohTobi",
+     "contributions": 627
+    },
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 221,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 57,
+     "roster": true
+    },
+    {
+     "login": "DanielDuecker",
+     "name": "Daniel Duecker",
+     "contributions": 56
+    },
+    {
+     "login": "EugenSol",
+     "name": "EugenSol",
+     "contributions": 24
+    },
+    {
+     "login": "maxheld83",
+     "name": "Max Held",
+     "contributions": 14
+    },
+    {
+     "login": "ZenHarbinger",
+     "name": "Matthew Aguirre",
+     "contributions": 6
+    },
+    {
+     "login": "Scot3004",
+     "name": "Sergio C. Orozco Torres",
+     "contributions": 3
+    },
+    {
+     "login": "thoemmi",
+     "name": "Thomas Freudenberg",
+     "contributions": 3
+    },
+    {
+     "login": "tobie",
+     "name": "Tobie Langel",
+     "contributions": 3
+    },
+    {
+     "login": "yihangho",
+     "name": "Yihang Ho",
+     "contributions": 3
+    }
+   ],
+   "truncated": 39
+  },
+  "hippocampus-vehicle": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 184,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 7,
+     "roster": true
+    },
+    {
+     "login": "DanielDuecker",
+     "name": "Daniel Duecker",
+     "contributions": 3
+    },
+    {
+     "login": "VincentTUHH",
+     "name": "Vincent Lenz",
+     "contributions": 1,
+     "roster": true
+    }
+   ]
+  },
+  "holiday-fun": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 1,
+     "roster": true
+    }
+   ]
+  },
+  "lab-infrastructure": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 207,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 16,
+     "roster": true
+    },
+    {
+     "login": "VincentTUHH",
+     "name": "Vincent Lenz",
+     "contributions": 11,
+     "roster": true
+    }
+   ]
+  },
+  "legacy-ros1": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 110,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 40,
+     "roster": true
+    },
+    {
+     "login": "DanielDuecker",
+     "name": "Daniel Duecker",
+     "contributions": 23
+    },
+    {
+     "login": "timzarhansen",
+     "name": "Tim",
+     "contributions": 7
+    },
+    {
+     "login": "RHochdahl",
+     "name": "RHochdahl",
+     "contributions": 2
+    },
+    {
+     "login": "hippocampusmum",
+     "name": "hippocampusmum",
+     "contributions": 2
+    }
+   ]
+  },
+  "localization": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 43,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 19,
+     "roster": true
+    }
+   ]
+  },
+  "radio-comms": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 46,
+     "roster": true
+    },
+    {
+     "login": "LorenzMeier",
+     "name": "Lorenz Meier",
+     "contributions": 22
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 13,
+     "roster": true
+    }
+   ]
+  },
+  "scalar-field": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 44,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 32,
+     "roster": true
+    },
+    {
+     "login": "Latfoo",
+     "name": "Bennett Latosinszky",
+     "contributions": 3
+    }
+   ]
+  },
+  "simulation": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 129,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 57,
+     "roster": true
+    }
+   ]
+  },
+  "teaching": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 183,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 132,
+     "roster": true
+    },
+    {
+     "login": "josina1234",
+     "name": "Josina Gerdes",
+     "contributions": 72
+    },
+    {
+     "login": "DanielDuecker",
+     "name": "Daniel Duecker",
+     "contributions": 6
+    },
+    {
+     "login": "VincentTUHH",
+     "name": "Vincent Lenz",
+     "contributions": 1,
+     "roster": true
+    }
+   ]
+  },
+  "uvms": {
+   "contributors": [
+    {
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 20,
+     "roster": true
+    },
+    {
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 8,
+     "roster": true
+    },
+    {
+     "login": "VincentTUHH",
+     "name": "Vincent Lenz",
+     "contributions": 1,
+     "roster": true
+    }
+   ]
+  }
+ }
+}

@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": null,
   "outputDirectory": ".",
+  "functions": {
+    "api/librarian.js": {
+      "includeFiles": "data/graph/**",
+      "maxDuration": 15
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
