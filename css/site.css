@@ -424,3 +424,13 @@ a.person-card:hover {
 }
 .contrib-link:hover { color: var(--accent); text-decoration: underline; }
 .contrib-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- search: the librarian's picks vs the plain local index (js/search.js) ----
+   Both rules are inert on a host without the function: no picks means no
+   divider, and no notice element is rendered at all. */
+.result-divider {
+  margin: 1.4rem 0 0.1rem; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  border-top: 1px solid var(--edge-soft); padding-top: 0.9rem;
+}
+.search-notice { margin-top: 1.4rem; font-size: 0.82rem; color: var(--muted); }

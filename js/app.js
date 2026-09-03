@@ -400,32 +400,67 @@
   // ---------- search (precomputed static index; see js/search.js) ----------
   const KIND_LABEL = { page: 'page', class: 'class', fn: 'function', file: 'file', cad: 'CAD part', fork: 'fork file' };
 
+  const searchRow = (r) => `
+      <div class="result">
+        <a class="title" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(r.title)}</a>
+        <span class="where">${esc(r.where)} · ${esc(KIND_LABEL[r.kind] || r.kind)}</span>
+        <p>${esc(r.snippet)}</p>
+      </div>`;
+
+  /* Two paints, one view. The local ranking lands the moment it exists, so a
+     search is as instant as it has always been; if the librarian answers, the
+     same view is repainted with its picks on top. Both paints are guarded by
+     the route epoch, and the repaint is skipped when nothing actually changed
+     (a single-word query, or a host with no librarian at all). */
   async function viewSearch(query) {
     sidebar.innerHTML = '';
     setTitle([`Search: ${query}`]);
     content.innerHTML = '<div class="search-results"><h1>Search</h1><p class="lead">Searching…</p></div>';
     const epoch = routeEpoch;
-    let res;
-    try {
-      res = await HCSearch.query(query);
-    } catch (err) {
-      if (epoch === routeEpoch) errorPanel(err);
-      return;
-    }
-    if (epoch !== routeEpoch) return;
-    const rows = res.results.map((r) => `
-      <div class="result">
-        <a class="title" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(r.title)}</a>
-        <span class="where">${esc(r.where)} · ${esc(KIND_LABEL[r.kind] || r.kind)}</span>
-        <p>${esc(r.snippet)}</p>
-      </div>`).join('');
-    content.innerHTML = `
+    let painted = null;
+
+    const paint = (res) => {
+      if (epoch !== routeEpoch) return;             // a newer navigation owns the view
+      if (painted && painted.results === res.results
+          && painted.librarianCount === res.librarianCount
+          && painted.notice === res.notice) return;  // nothing changed: no repaint
+      const first = !painted;
+      painted = res;
+      // The librarian's picks lead; the divider marks where the plain local
+      // index takes over. Both are absent on a host with no function, which is
+      // what the GitHub Pages copy looks like — and it looks unchanged.
+      const picks = res.librarianCount > 0 ? res.results.slice(0, res.librarianCount) : [];
+      const rest = res.results.slice(picks.length);
+      // The divider is a boundary, not a heading: it only earns its place when
+      // there is actually something on the far side of it. A narrow query where
+      // the librarian picked every local hit gets no divider at all.
+      const divider = (picks.length && rest.length)
+        ? '<p class="result-divider">More from the local index</p>' : '';
+      const notice = res.notice ? `<p class="search-notice">${esc(res.notice)}</p>` : '';
+      const rows = picks.map(searchRow).join('') + divider + rest.map(searchRow).join('');
+      content.innerHTML = `
       <div class="search-results">
         <h1>Search</h1>
         <p class="lead">${res.results.length ? res.results.length : 'No'} result${res.results.length === 1 ? '' : 's'} for
         “${esc(query)}” across ${res.total.toLocaleString()} indexed pages, code symbols, CAD parts, and files.</p>
-        ${rows || '<p>Try a symbol name, a part name, a setup topic, or a project.</p>'}
+        ${res.results.length ? rows : '<p>Try a symbol name, a part name, a setup topic, or a project.</p>'}
+        ${notice}
       </div>`;
+      // This view owns its own scroll (route() skips the search route): the
+      // jump to the top belongs to the FIRST paint, so a slow librarian cannot
+      // leave fresh results sitting at the old offset — and the later repaint
+      // must NOT yank a reader who has already scrolled into the list.
+      if (first) window.scrollTo({ top: 0, behavior: 'instant' });
+    };
+
+    let res;
+    try {
+      res = await HCSearch.query(query, { onLocal: paint });
+    } catch (err) {
+      if (epoch === routeEpoch) errorPanel(err);
+      return;
+    }
+    paint(res);
   }
 
   // ---------- router ----------
@@ -449,7 +484,9 @@
         const q = new URLSearchParams(queryStr || '').get('q') || '';
         await viewSearch(q);
       } else { throw new Error(`Unknown page: ${path}`); }
-      if (!anchor) window.scrollTo({ top: 0, behavior: 'instant' });
+      // viewSearch scrolls on its own first paint, so it is excluded here —
+      // otherwise this would fire only after the optional librarian round trip.
+      if (!anchor && seg[0] !== 'search') window.scrollTo({ top: 0, behavior: 'instant' });
     } catch (err) {
       errorPanel(err);
     }
