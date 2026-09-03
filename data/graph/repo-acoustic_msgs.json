@@ -1,0 +1,1 @@
+{"repo":"acoustic_msgs","url":"https://github.com/HippoCampusRobotics/acoustic_msgs","description":"messages","language":"CMake","pushedAt":"2024-07-28T22:54:33Z","counts":{"nodes":2,"edges":1,"communities":1},"god_nodes":[{"name":"acoustic_msgs","kind":"symbol","path":"README.md","degree":1}],"communities":[{"label":"README","size":2,"top":["README.md","acoustic_msgs"]}]}

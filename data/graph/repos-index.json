@@ -1,0 +1,1340 @@
+{
+ "generated": "run tools/build_repo_graphs.py to regenerate",
+ "repos": [
+  {
+   "name": ".github",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "org profile readme",
+   "project": "docs-and-site",
+   "god_nodes": [
+    "Welcome to HippoCampus Underwater Robotics!",
+    "Contact",
+    "Documentation",
+    "Videos",
+    "Welcome to HippoCampus Robotics!"
+   ]
+  },
+  {
+   "name": "Firmware",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "PX4 Autopilot Software",
+   "project": "core-stack",
+   "god_nodes": []
+  },
+  {
+   "name": "RF_Localization",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Radio Frequency based localization (@433MHz) framework for micro underwater robots in confined tanks using software defined radio (SDR)",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "SiK",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Tools and firmware for the Si1000 - Si102x/3x",
+   "project": "radio-comms",
+   "god_nodes": []
+  },
+  {
+   "name": "TeensyST7735",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "display driver",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "DisplayManager",
+    "handle_mavlink_message",
+    "led_set_state",
+    "DisplayManager::print_battery_status",
+    "handle_message_heartbeat",
+    "led_switch_immediately",
+    "DisplayManager::print_mode",
+    "DisplayManager::print_position",
+    "DisplayManager::print_state",
+    "DisplayManager::print_uptime"
+   ]
+  },
+  {
+   "name": "UWRange_acoustic_simulator",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Python repo",
+   "project": "simulation",
+   "god_nodes": []
+  },
+  {
+   "name": "acoustic_localization",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "acoustic localization",
+   "project": "localization",
+   "god_nodes": [
+    "MeasurementModelDistances",
+    "AcousticEkf",
+    "UKF",
+    "localisationSimulation",
+    "ProcessModel",
+    "ProcessModelVelecitiesGlobal",
+    "ProcessModelVelocities",
+    "EkfParams",
+    "InitialState",
+    "InitialStateCovariance"
+   ]
+  },
+  {
+   "name": "acoustic_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "acoustics",
+   "god_nodes": [
+    "acoustic_msgs"
+   ]
+  },
+  {
+   "name": "acoustic_msgs-release",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "release automation",
+   "project": "acoustics",
+   "god_nodes": [
+    "acoustic_msgs-release"
+   ]
+  },
+  {
+   "name": "acoustic_simulator",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "acoustic ranging simulator",
+   "project": "simulation",
+   "god_nodes": [
+    "modem",
+    "acousticSimulation",
+    "SimulateAnchorMeasurementsNode",
+    "AnchorParams",
+    "AcousticParams",
+    "AnchorPosesNode",
+    "soundwave_cl",
+    "packet",
+    "read_params_recursion",
+    "AgentParams"
+   ]
+  },
+  {
+   "name": "alpha_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "Alpha arm messages",
+   "project": "uvms",
+   "god_nodes": [
+    "alpha_arm_msgs"
+   ]
+  },
+  {
+   "name": "apriltag_msgs",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "AprilTag message definitions",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "apriltag_ros",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "ROS2 node for AprilTag detection",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "apriltag_viz",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "detection visualization",
+   "project": "localization",
+   "god_nodes": [
+    "ApriltagVizNode",
+    "ApriltagVizNode::ApriltagVizNode",
+    "InitSubscriptions",
+    "OnDetections",
+    "ApriltagVizNode::OnSetParameters",
+    "OnImage",
+    "ProjectOntoImage",
+    "InitPublishers",
+    "Params",
+    "ApriltagVizNode::InitParameters"
+   ]
+  },
+  {
+   "name": "apriltags",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "tag36h11 tag sheets",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "bag2to1",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "ROS 2→1 bag converter",
+   "project": "dev-infrastructure",
+   "god_nodes": []
+  },
+  {
+   "name": "buildbot",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "package build bot",
+   "project": "dev-infrastructure",
+   "god_nodes": [
+    "success",
+    "GenerateDebSteps",
+    "create_deb_factory",
+    "deb_jobs",
+    "build_factory",
+    "filter_release_branch",
+    "is_version_string",
+    "# TODO: find out how to implement"
+   ]
+  },
+  {
+   "name": "buttons",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "physical buttons + GUI",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "PanelWidget",
+    "Strip",
+    "MonoPanelGrid",
+    "OverviewWidget",
+    "MonoPanelWidget",
+    "Buzzer",
+    "synced",
+    "add_nodes",
+    "Launch Files",
+    "MainWidget"
+   ]
+  },
+  {
+   "name": "buttons_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "buttons_msgs"
+   ]
+  },
+  {
+   "name": "camera",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "camera/barometer interfacing (ROS 1 era)",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "CameraNode",
+    "CameraOV9281",
+    "GetFormat",
+    "CameraOV9281::GetImage",
+    "CameraOV9281::SetMode",
+    "SetExposure",
+    "SetGain",
+    "SetMode",
+    "main",
+    "Capture"
+   ]
+  },
+  {
+   "name": "control",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "control (ROS 1)",
+   "project": "legacy-ros1",
+   "god_nodes": [
+    "Controller",
+    "PidNode",
+    "AttitudeControllerNode",
+    "PathFollowerNode",
+    "AttitudeController",
+    "A quite normal PID controller. PID gains can either be set on the creation of a…",
+    "A template class for PID controller nodes.",
+    "Args: name (str): The node's name.",
+    "Callback for the dynamic reconfigure service to set PID control specific…",
+    "Compute the control output. Args: error (float): Control error. dt (float):…"
+   ]
+  },
+  {
+   "name": "docs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "Sphinx docs site (being replaced by this site)",
+   "project": "docs-and-site",
+   "god_nodes": []
+  },
+  {
+   "name": "dvl",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "DVL driver",
+   "project": "acoustics",
+   "god_nodes": [
+    "DvlNode",
+    "ServiceHandler",
+    "Dvl",
+    "Cmd",
+    "get_command_id",
+    "Run",
+    "HandleCommandResponse",
+    "get_command_type",
+    "get_logger",
+    "Dvl::ReadJsonReport"
+   ]
+  },
+  {
+   "name": "dvl_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "acoustics",
+   "god_nodes": [
+    "dvl_msgs"
+   ]
+  },
+  {
+   "name": "esc",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "ESC I2C driver",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "TeensyCommander",
+    "AfroESC",
+    "ESC",
+    "SetThrottle",
+    "TeensyCommander::TeensyCommander",
+    "Coefficients",
+    "InitTimers",
+    "HandleActuatorControlsMessage",
+    "ReadSerial",
+    "Timers"
+   ]
+  },
+  {
+   "name": "esc_serial",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "ESC serial protocol",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "Packet",
+    "Message",
+    "MessageHeader",
+    "ActuatorControlsMessage",
+    "BatteryVoltageMessage",
+    "Serializer",
+    "Packet::ParseMessage",
+    "Header",
+    "array",
+    "Packet::CrcOk"
+   ]
+  },
+  {
+   "name": "event_camera_example",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "event-camera example",
+   "project": "cameras",
+   "god_nodes": [
+    "EventUpdater",
+    "ExampleNode",
+    "ExampleNode::ExampleNode",
+    "ExampleNode::OnConvertedEventPacket",
+    "ExampleNode::OnEventPacket",
+    "OnConvertedEventPacket",
+    "OnEventPacket",
+    "event_packet_callback_",
+    "decoder_",
+    "decoder_factory_"
+   ]
+  },
+  {
+   "name": "ext_auv_localization",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "ROS-package which features a multi-camera systems with EKF-based sensor fusion for micro underwater robot tracking tracking",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "fav_docs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "course documentation",
+   "project": "teaching",
+   "god_nodes": []
+  },
+  {
+   "name": "gantry",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "gantry control (current)",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "MotorNode",
+    "PathFollowerNode",
+    "Motor",
+    "GridPositionControl",
+    "MCBL2805",
+    "SendCommand",
+    "MCBL3006",
+    "MotorOkayForService",
+    "Services",
+    "Params"
+   ]
+  },
+  {
+   "name": "gantry_control",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "gantry control (ROS 1 era)",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "BaseMotor",
+    "Result",
+    "Motor",
+    "Motor",
+    "create",
+    "generate_circle",
+    "main",
+    "A base class providing an API for the Faulhaber motors of the gantry. Args:…",
+    "Gets the acceleration. Returns: (Result): Success flag and acceleration in…",
+    "Gets the current velocity. Returns: (Result): Returns success flag and current…"
+   ]
+  },
+  {
+   "name": "gantry_gui",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "gantry GUI",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "ManualControlGUI",
+    "HomingFrame",
+    "DoubleSpinboxFrame",
+    "ConfigWidget",
+    "name_prefix",
+    "ModeWidget",
+    "ServiceButton",
+    "PositionWidget",
+    "ControlPad",
+    "ConfigWidget::ConfigWidget"
+   ]
+  },
+  {
+   "name": "gantry_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "gantry_msgs"
+   ]
+  },
+  {
+   "name": "hardware",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "ROS 2 hardware bring-up",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "MS5837",
+    "Barometer",
+    "Compensation",
+    "generate_launch_description",
+    "generate_launch_description",
+    "barometer_",
+    "OnReadTimer",
+    "InitTimers",
+    "MS5837::Init",
+    "MS5837::Read"
+   ]
+  },
+  {
+   "name": "hardware_interfaces",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "sensor/actuator interfaces (ROS 1 era)",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "EscCommanderNode",
+    "Packet",
+    "MS5837",
+    "Packetize",
+    "CrcOk",
+    "Decode",
+    "WriteCrc",
+    "MS5837_02BA",
+    "MS5837_30BA",
+    "AddByte"
+   ]
+  },
+  {
+   "name": "hippo-christmas",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "festive firmware",
+   "project": "holiday-fun",
+   "god_nodes": []
+  },
+  {
+   "name": "hippo-release",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "release automation",
+   "project": "dev-infrastructure",
+   "god_nodes": [
+    "Pkg",
+    "Version",
+    "all_dependencies_built",
+    "find_package",
+    "build_package",
+    "get_packages",
+    "install_package",
+    "entrypoint.sh script"
+   ]
+  },
+  {
+   "name": "hippo_common",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "shared C++ utilities",
+   "project": "core-stack",
+   "god_nodes": [
+    "spline",
+    "LaunchArgsDict",
+    "TfPublisherVehicle",
+    "MeshPublisher",
+    "RobotMeshPublisher",
+    "band_matrix",
+    "Prefix",
+    "TagPose",
+    "declare_vehicle_name_and_sim_time",
+    "TagMarkersPublisher"
+   ]
+  },
+  {
+   "name": "hippo_common_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "core-stack",
+   "god_nodes": [
+    "hippo_common_msgs"
+   ]
+  },
+  {
+   "name": "hippo_control",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "attitude/rate/trajectory control",
+   "project": "core-stack",
+   "god_nodes": [
+    "SimpleMixer",
+    "ControlNode",
+    "MotorFailure",
+    "AttitudeControlNode",
+    "GeometricControlNode",
+    "TrackingControllerNode",
+    "RateControlNode",
+    "RateController",
+    "ActuatorMixerNode",
+    "QuaternionControlNode"
+   ]
+  },
+  {
+   "name": "hippo_control_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "core-stack",
+   "god_nodes": [
+    "hippo_control_msgs"
+   ]
+  },
+  {
+   "name": "hippo_core",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "core packages/libraries",
+   "project": "core-stack",
+   "god_nodes": [
+    "generate_launch_description",
+    "generate_launch_description",
+    "Hippo-Core",
+    "add_node",
+    "declare_launch_args",
+    "declare_launch_args",
+    "include_launch_files",
+    "Apply formatting to all files",
+    "Check for formatting errors"
+   ]
+  },
+  {
+   "name": "hippo_deployment",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "systemd services + device rules",
+   "project": "dev-infrastructure",
+   "god_nodes": [
+    "Hippo Deployment",
+    "Included services",
+    "Installing on a robot",
+    "Monitoring",
+    "Notes",
+    "Repository layout",
+    "Runtime assumptions",
+    "Verifying the setup"
+   ]
+  },
+  {
+   "name": "hippo_full",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "meta package (everything)",
+   "project": "core-stack",
+   "god_nodes": []
+  },
+  {
+   "name": "hippo_gz_plugins",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "Gazebo plugins",
+   "project": "simulation",
+   "god_nodes": [
+    "PluginPrivate",
+    "PluginPrivate",
+    "PluginPrivate",
+    "pose::PosePluginPrivate",
+    "PluginPrivate",
+    "KinematicControlPrivate",
+    "HydrodynamicsPlugin",
+    "SdfParams",
+    "SdfParams",
+    "PluginPrivate"
+   ]
+  },
+  {
+   "name": "hippo_infrastructure",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "rosdep definitions",
+   "project": "dev-infrastructure",
+   "god_nodes": []
+  },
+  {
+   "name": "hippo_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "core-stack",
+   "god_nodes": [
+    "hippo_msgs"
+   ]
+  },
+  {
+   "name": "hippo_robot",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "meta package (robot, no sim)",
+   "project": "core-stack",
+   "god_nodes": []
+  },
+  {
+   "name": "hippo_sim",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "simulation launch + models",
+   "project": "simulation",
+   "god_nodes": [
+    "Bridge",
+    "FakeVision",
+    "SimulatedBaro",
+    "main",
+    "FakeEstimatorNode",
+    "generate_launch_description",
+    "main",
+    "GeneralParams",
+    "StdDev",
+    "generate_launch_description"
+   ]
+  },
+  {
+   "name": "hippo_simulation",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "simulation resources",
+   "project": "simulation",
+   "god_nodes": [
+    "PluginPrivate",
+    "Bridge",
+    "PluginPrivate",
+    "PluginPrivate",
+    "pose::PosePluginPrivate",
+    "PluginPrivate",
+    "KinematicControlPrivate",
+    "HydrodynamicsPlugin",
+    "FakeVision",
+    "SdfParams"
+   ]
+  },
+  {
+   "name": "hippocampus_common",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "common (ROS 1)",
+   "project": "legacy-ros1",
+   "god_nodes": [
+    "TfHelper",
+    "MS5803",
+    "Node",
+    "A basic node class to start off with, when implementing a ROS node.",
+    "Abstraction of the MS5803 pressure sensor.",
+    "Args: address (hexadecimal, optional): I2C-address of the sensor. Defaults to…",
+    "Calculates the temperature based on raw sensor reading and calibration data.…",
+    "Calculates the temperature compensated pressure. Args: D1 (int): Raw pressure…",
+    "Collection of helper functions for coordinate transformation management for any…",
+    "Enters a loop (namely ``rospy.spin()``) until ROS is shut down to keep the…"
+   ]
+  },
+  {
+   "name": "hippocampus_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages (ROS 1)",
+   "project": "legacy-ros1",
+   "god_nodes": []
+  },
+  {
+   "name": "hippocampus_pcbs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "PCB designs",
+   "project": "hippocampus-vehicle",
+   "god_nodes": []
+  },
+  {
+   "name": "hippocampus_sim",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "Gazebo simulation (ROS 1)",
+   "project": "legacy-ros1",
+   "god_nodes": [
+    "BarometerWaterPlugin",
+    "BarometerWaterPlugin::Load",
+    "BarometerWaterPlugin::OnUpdate",
+    "BarometerWaterPlugin::getSdfParams",
+    "getSdfParams",
+    "standard_normal_distribution_",
+    "HippoCampus Sim",
+    "Load",
+    "OnUpdate",
+    "alt_home_"
+   ]
+  },
+  {
+   "name": "hippocampusrobotics.github.io",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "org website",
+   "project": "docs-and-site",
+   "god_nodes": [
+    "Contributing",
+    "Formulas and Vehicles - Introduction to Mobile Underwater Robotics",
+    "Merchandise",
+    "Alumni",
+    "Contact",
+    "Current Projects",
+    "Environment informations",
+    "Expected behavior",
+    "Gallery",
+    "General Information"
+   ]
+  },
+  {
+   "name": "hippolink",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "HippoLink python library",
+   "project": "radio-comms",
+   "god_nodes": [
+    "HippoLink",
+    "HippoMessageType",
+    "x25crc",
+    "HippoField",
+    "HippoXml",
+    "generate",
+    "HippoLinkError",
+    "HippoLink_bad_data",
+    "generate_python",
+    "custom_build_py"
+   ]
+  },
+  {
+   "name": "hippolink_ros",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "HippoLink ROS wrapper",
+   "project": "radio-comms",
+   "god_nodes": [
+    "TransceiverNode",
+    "FakeTransceiver",
+    "HippoLinkProcessing",
+    "RateWatcherNode",
+    "hippolink2ros_rssi",
+    "get_pose_name",
+    "hippolink2ros_path_target",
+    "main",
+    "main",
+    "main"
+   ]
+  },
+  {
+   "name": "howto",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "old how-to notes",
+   "project": "legacy-ros1",
+   "god_nodes": [
+    "callback",
+    "pathplanning",
+    "yaw_pitch_roll",
+    "change_parameter",
+    "main",
+    "rotation_matrix",
+    "Get the equivalent yaw-pitch-roll angles aka. intrinsic Tait-Bryan angles…",
+    "Hippo Physical How To",
+    "How to Drive an 8 with Hippocampus in Gazebo and Apriltag-EKF",
+    "How to Set up Raspberry OS Buster with ROS"
+   ]
+  },
+  {
+   "name": "ir_adc_read",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "IR sensor readout",
+   "project": "scalar-field",
+   "god_nodes": [
+    "ADS1115Publisher",
+    "generate_launch_description",
+    "main"
+   ]
+  },
+  {
+   "name": "ir_field_hardware",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "IR benchmark field hardware",
+   "project": "scalar-field",
+   "god_nodes": [
+    "Infrared-based Setup for Benchmarking Underwater Scalar Field Exploration"
+   ]
+  },
+  {
+   "name": "mavlink",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "git-buildpackage repository for releasing mavlink as 3-rd party library for ROS",
+   "project": "radio-comms",
+   "god_nodes": []
+  },
+  {
+   "name": "mavlink_headers",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "MAVLink headers",
+   "project": "radio-comms",
+   "god_nodes": [
+    "_mav_finalize_message_chan_send",
+    "mav_array_memcpy",
+    "mavlink_finalize_message_chan",
+    "mavlink_finalize_message",
+    "mavlink_msg_to_send_buffer",
+    "mavlink_msg_get_send_buffer_length",
+    "mavlink_test_common",
+    "_mav_put_uint8_t_array",
+    "_mav_put_char_array",
+    "_MAV_RETURN_uint8_t_array"
+   ]
+  },
+  {
+   "name": "mavros",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "MAVLink to ROS gateway with proxy for Ground Control Station",
+   "project": "radio-comms",
+   "god_nodes": []
+  },
+  {
+   "name": "mjpeg_cam",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "MJPEG USB camera driver (ROS 2)",
+   "project": "cameras",
+   "god_nodes": [
+    "Device",
+    "MjpegCam",
+    "Control",
+    "Control",
+    "xioctl",
+    "Device::Device",
+    "MjpegCam::MjpegCam",
+    "Buffer",
+    "Device::AvailableFrameSizes",
+    "Device::Init"
+   ]
+  },
+  {
+   "name": "mjpeg_cam_ros1",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "An alternative to usb_cam package for grabbing mjpeg frames from a webcam",
+   "project": "cameras",
+   "god_nodes": []
+  },
+  {
+   "name": "mu_auv_localization",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Python repo",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "multi_uuv",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "multi-vehicle experiments (ROS 1)",
+   "project": "legacy-ros1",
+   "god_nodes": [
+    "Controller",
+    "Particle",
+    "Animator",
+    "PoseDict",
+    "PoseEntry",
+    "calc_all_centers",
+    "compute_control_output",
+    "main",
+    "calc_center",
+    "calc_yaw_rate"
+   ]
+  },
+  {
+   "name": "path_planning",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "path planning",
+   "project": "scalar-field",
+   "god_nodes": [
+    "PathFollowerNode",
+    "Params",
+    "RvizHelper",
+    "Generator",
+    "OnStart",
+    "PathFollowerNode::PathFollowerNode",
+    "StartPoseBasedAxis",
+    "Vec3d",
+    "Axis",
+    "AxisCollidesWithSurface"
+   ]
+  },
+  {
+   "name": "px4_msgs",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "ROS/ROS2 messages that match the uORB messages counterparts on the PX4 Firmware",
+   "project": "core-stack",
+   "god_nodes": []
+  },
+  {
+   "name": "python-onramp",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "python introduction",
+   "project": "teaching",
+   "god_nodes": [
+    "# TODO: import numpy and use it with the alias 'np'"
+   ]
+  },
+  {
+   "name": "qualisys_bridge",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "QTM → ROS 2 odometry bridge",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "CMarkup",
+    "Bridge",
+    "Ekf",
+    "Body",
+    "CNetwork",
+    "ElemPos",
+    "TokenPos",
+    "Receive",
+    "CMarkup::x_ParseElem",
+    "CMarkup::x_AddElem"
+   ]
+  },
+  {
+   "name": "radio_firmware",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "radio firmware",
+   "project": "radio-comms",
+   "god_nodes": [
+    "radio_register_write",
+    "tdm_run",
+    "cfg_handle_cmd",
+    "radio_transmit",
+    "hardware_init",
+    "radio_configure",
+    "radio_register_read",
+    "cfg_param_is_valid",
+    "delay_millis",
+    "radio_set_mode_receive"
+   ]
+  },
+  {
+   "name": "radio_tools",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "radio tools",
+   "project": "radio-comms",
+   "god_nodes": [
+    "RadioConfiguratorWidget",
+    "FirmwareUploader",
+    "Configurator",
+    "show_error_box",
+    "Firmware",
+    "HippoLinkUploader",
+    "UploadWorker",
+    "RadioConfiguratorPlugin",
+    "ReadWriteParamsWorker",
+    "enable_all_buttons_in_group"
+   ]
+  },
+  {
+   "name": "rapid_trajectories",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "trajectory generation",
+   "project": "scalar-field",
+   "god_nodes": [
+    "SimpleTracker",
+    "SingleAxisTrajectory",
+    "Trajectory",
+    "TrajectorySettings",
+    "Simulator",
+    "RapidTrajectory",
+    "SingleAxisTrajectory",
+    "RvizHelper",
+    "Trajectory",
+    "Ball"
+   ]
+  },
+  {
+   "name": "rapid_trajectories_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "scalar-field",
+   "god_nodes": [
+    "rapid_trajectories_msgs"
+   ]
+  },
+  {
+   "name": "remote_control",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "remote control",
+   "project": "core-stack",
+   "god_nodes": [
+    "JoyStick",
+    "OnJoy",
+    "ComputeNewtonGripperCommand",
+    "ComputeThrust",
+    "ComputeTorque",
+    "Gains",
+    "JoyStick::JoyStick",
+    "JoyStick::OnGainParams",
+    "PublishNewtonGripperCommand",
+    "PublishThrust"
+   ]
+  },
+  {
+   "name": "rf_localization_ros",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "ROS package for RF localization",
+   "project": "localization",
+   "god_nodes": []
+  },
+  {
+   "name": "rqt_gantry",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "rqt plugin",
+   "project": "lab-infrastructure",
+   "god_nodes": [
+    "ManualControlPlugin",
+    "PathFollowerPlugin",
+    "get_axis_letter",
+    "PlotDataContainer",
+    "_call_trigger",
+    "HomingWorkerXY",
+    "HomingWorkerZ",
+    "call_set_home",
+    "call_disable",
+    "call_enable"
+   ]
+  },
+  {
+   "name": "scalar_field_belief",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "GP belief over a 2D field",
+   "project": "scalar-field",
+   "god_nodes": [
+    "ScalarFieldBeliefNode",
+    "ScalarFieldBelief",
+    "BeliefConfig",
+    "ExactFieldGP",
+    "TargetStandardizer",
+    "InputNormalizer2d",
+    "initialize_model_hyperparameters",
+    "make_field_pointcloud2",
+    "make_intensity_pointcloud2",
+    "Example commands"
+   ]
+  },
+  {
+   "name": "scalar_field_interfaces",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages/services",
+   "project": "scalar-field",
+   "god_nodes": []
+  },
+  {
+   "name": "scalar_field_sim",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "field measurement simulator",
+   "project": "scalar-field",
+   "god_nodes": [
+    "ScenarioGeometry",
+    "WallAwareGaussianField2D",
+    "load_field_from_toml",
+    "SimulationSourceSpec",
+    "WallSegment",
+    "load_field_sim_config",
+    "FieldSimConfig",
+    "FieldVisualizationNode",
+    "IrMeasurementSimNode",
+    "PeriodicMeasurementTriggerNode"
+   ]
+  },
+  {
+   "name": "sdr",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "software-defined radio",
+   "project": "radio-comms",
+   "god_nodes": [
+    "NooElec",
+    "SdrNode",
+    "main",
+    "create_sdr_node",
+    "live_plot_power_spectrum_density",
+    "live_plot_tx_rss",
+    "generate_launch_description",
+    "main",
+    "# TODO: woher kommt das??"
+   ]
+  },
+  {
+   "name": "sdr_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "radio-comms",
+   "god_nodes": []
+  },
+  {
+   "name": "sitl_gazebo",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Set of plugins, models and worlds to use with OSRF Gazebo Simulator in SITL and HITL.",
+   "project": "simulation",
+   "god_nodes": []
+  },
+  {
+   "name": "stabilizer",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "attitude/depth stabilizer (ROS 1 era)",
+   "project": "core-stack",
+   "god_nodes": [
+    "RollPitchStabilizerNode",
+    "main",
+    "Normalize the angle to the range [-pi, pi]."
+   ]
+  },
+  {
+   "name": "state_estimation",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "state estimation",
+   "project": "core-stack",
+   "god_nodes": [
+    "Ekf",
+    "Interface",
+    "Estimator",
+    "Settings",
+    "SensorSim",
+    "P_",
+    "Sensor",
+    "RingBuffer",
+    "VisionSample",
+    "Ekf::UpdateVisionFusion"
+   ]
+  },
+  {
+   "name": "state_estimation_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "core-stack",
+   "god_nodes": [
+    "state_estimation_msgs"
+   ]
+  },
+  {
+   "name": "switch",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "utility package (ROS 1 era)",
+   "project": "core-stack",
+   "god_nodes": [
+    "Strip",
+    "Buzzer",
+    "SwitchNode",
+    "LedNode",
+    "SoundNode",
+    "synced",
+    "ButtonHandlerNode",
+    "BatteryWatcherNode",
+    "ButtonNode",
+    "colorWipe"
+   ]
+  },
+  {
+   "name": "teensy_esc_controller",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "Teensy ESC controller",
+   "project": "hippocampus-vehicle",
+   "god_nodes": [
+    "MessageHandler",
+    "MessageHandler::HandleMessage",
+    "HandleActuatorControlsMessage",
+    "MessageHandler::HandleActuatorControlsMessage",
+    "ServoToPwm",
+    "SetPwm",
+    "HandleMessage",
+    "kTimeOutMs",
+    "t_actuator_controls_ms_"
+   ]
+  },
+  {
+   "name": "tgy",
+   "kind": "repo",
+   "fork": true,
+   "oneliner": "Turnigy/TowerPro/AfroESC/BlueSeries AVR ESC software",
+   "project": "hippocampus-vehicle",
+   "god_nodes": []
+  },
+  {
+   "name": "uvms",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "trajectory-tracking framework (paper code)",
+   "project": "uvms",
+   "god_nodes": [
+    "Bridge",
+    "UVMSKinematicCtrl",
+    "Task",
+    "KFFeedforward",
+    "TwistModelBasedInterface",
+    "Kinematics",
+    "EKF",
+    "TwistPIDInterface",
+    "UVMSTrajGenStartUp",
+    "UVMSKinematicControlNode"
+   ]
+  },
+  {
+   "name": "uvms_msgs",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "messages",
+   "project": "uvms",
+   "god_nodes": [
+    "Build Status"
+   ]
+  },
+  {
+   "name": "vision",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "vision package (ROS 1 era)",
+   "project": "localization",
+   "god_nodes": [
+    "AprilTagSimple",
+    "AprilTagSimple::OnAprilTagDetections",
+    "AprilTagSimple::OnOdometry",
+    "Params",
+    "AprilTagSimple::AprilTagSimple",
+    "AprilTagSimple::GetVisionPose",
+    "AprilTagSimple::OnAttitude",
+    "AprilTagSimple::OnLocalPosition",
+    "AprilTagSimple::OnSensorCombined",
+    "AprilTagSimple::PublishVisionPose"
+   ]
+  },
+  {
+   "name": "visual_localization",
+   "kind": "repo",
+   "fork": false,
+   "oneliner": "camera + AprilTag localization",
+   "project": "localization",
+   "god_nodes": [
+    "Px4Bridge",
+    "ExtendedKalmanFilter",
+    "MeasurementModelDistances",
+    "generate_launch_description",
+    "Ranges",
+    "generate_launch_description",
+    "ProcessModel",
+    "ImageDecoder",
+    "OnOdometry",
+    "ProcessModelVelocities"
+   ]
+  }
+ ]
+}

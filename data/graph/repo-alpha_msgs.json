@@ -1,0 +1,1 @@
+{"repo":"alpha_msgs","url":"https://github.com/HippoCampusRobotics/alpha_msgs","description":"Alpha arm messages","language":"CMake","pushedAt":"2025-05-06T08:20:13Z","counts":{"nodes":2,"edges":1,"communities":1},"god_nodes":[{"name":"alpha_arm_msgs","kind":"symbol","path":"README.md","degree":1}],"communities":[{"label":"README","size":2,"top":["README.md","alpha_arm_msgs"]}]}

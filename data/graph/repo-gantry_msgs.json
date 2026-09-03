@@ -1,0 +1,1 @@
+{"repo":"gantry_msgs","url":"https://github.com/HippoCampusRobotics/gantry_msgs","description":"messages","language":"CMake","pushedAt":"2024-07-28T22:55:46Z","counts":{"nodes":2,"edges":1,"communities":1},"god_nodes":[{"name":"gantry_msgs","kind":"symbol","path":"README.md","degree":1}],"communities":[{"label":"README","size":2,"top":["README.md","gantry_msgs"]}]}

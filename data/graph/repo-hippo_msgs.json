@@ -1,0 +1,1 @@
+{"repo":"hippo_msgs","url":"https://github.com/HippoCampusRobotics/hippo_msgs","description":"messages","language":"CMake","pushedAt":"2025-05-14T11:14:22Z","counts":{"nodes":2,"edges":1,"communities":1},"god_nodes":[{"name":"hippo_msgs","kind":"symbol","path":"README.md","degree":1}],"communities":[{"label":"README","size":2,"top":["README.md","hippo_msgs"]}]}

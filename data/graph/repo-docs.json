@@ -1,0 +1,1 @@
+{"repo":"docs","url":"https://github.com/HippoCampusRobotics/docs","description":"Sphinx docs site (being replaced by this site)","language":"Python","pushedAt":"2026-08-27T14:49:11Z","counts":{"nodes":2,"edges":0,"communities":2},"god_nodes":[],"communities":[{"label":"README","size":1,"top":["README.md"]},{"label":"conf","size":1,"top":["conf.py"]}]}

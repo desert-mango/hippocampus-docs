@@ -1,0 +1,1 @@
+{"repo":"hippo-christmas","url":"https://github.com/HippoCampusRobotics/hippo-christmas","description":"festive firmware","language":"C++","pushedAt":"2022-11-16T09:56:33Z","counts":{"nodes":3,"edges":2,"communities":1},"god_nodes":[],"communities":[{"label":"src/main","size":3,"top":["main.cpp","loop","setup"]}]}
