@@ -1,0 +1,5 @@
+# Auto-requests review from the maintainer on every PR. This file signals
+# ownership; enforcement is the branch-protection required `check` + the
+# zero-write-collaborators access model (see docs/cms-plan.md §5).
+*          @kyle-nelson-berkeley
+/.github/  @kyle-nelson-berkeley
