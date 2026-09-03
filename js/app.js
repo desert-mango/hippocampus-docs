@@ -60,6 +60,7 @@
   }
 
   function enhance(root) {
+    if (window.HCGraph) HCGraph.applyTo(root);   // cross-refs first: before anchors/tabs/buttons exist
     // heading ids + anchors (h2+; h1 is the page itself)
     const assigned = new Set();
     root.querySelectorAll('h2, h3, h4').forEach((h) => {
@@ -268,6 +269,7 @@
         </div>
       </div>`;
     $('#project-md').appendChild(renderMarkdown(md));
+    if (window.HCGraph) HCGraph.renderContributors(id, $('.aside-box'));
     scrollToAnchor(anchor);
   }
 

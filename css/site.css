@@ -337,3 +337,90 @@ a.person-card:hover {
   .card, .card:hover,
   .person-card, .person-card:hover, a.person-card:hover { transition: none; transform: none; }
 }
+
+/* ---- semantic graph: xrefs, popover, modal, contributors ---- */
+/* Appended by js/graph.js's unit — nothing above this line is modified. */
+
+/* A cross-reference is a hint, not a destination: it keeps the body colour and
+   wears a dotted underline so it never competes with a real link. */
+.xref {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+  font-weight: inherit;
+  cursor: pointer;
+}
+.xref:hover, .xref:focus-visible {
+  color: var(--heading);
+  text-decoration-color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+
+.hc-popover {
+  position: fixed; z-index: 60; max-width: 22rem; min-width: 13rem;
+  background: var(--surface); color: var(--body);
+  border: 1px solid var(--edge); border-radius: var(--radius);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.38);
+  padding: 0.75rem 0.9rem 0.85rem;
+  font-size: 0.88rem; line-height: 1.5;
+}
+[data-theme="light"] .hc-popover { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14); }
+.hc-pop-kind {
+  margin: 0; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.14em;
+  font-weight: 600; color: var(--muted);
+}
+.hc-pop-title { margin: 0.2rem 0 0; color: var(--heading); font-weight: 600; font-size: 0.98rem; }
+.hc-pop-summary { margin: 0.35rem 0 0; color: var(--body-soft); font-size: 0.84rem; }
+.hc-pop-chips { margin-top: 0.55rem; }
+.hc-pop-open {
+  display: inline-block; margin-top: 0.6rem;
+  font-size: 0.82rem; text-decoration: none; color: var(--accent);
+}
+.hc-pop-open:hover { text-decoration: underline; }
+
+.hc-modal-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.hc-modal {
+  width: 100%; max-width: 26rem;
+  background: var(--surface); border: 1px solid var(--edge); border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  padding: 1.15rem 1.3rem 1.2rem;
+}
+[data-theme="light"] .hc-modal { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18); }
+.hc-modal-title { margin: 0; font-size: 1.1rem; color: var(--heading); }
+.hc-modal-dest { margin: 0.5rem 0 0; color: var(--body-soft); font-size: 0.88rem; overflow-wrap: anywhere; }
+.hc-modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.15rem; }
+.hc-btn {
+  font: inherit; font-size: 0.9rem; cursor: pointer;
+  padding: 0.42rem 1rem; border-radius: 8px;
+  background: var(--surface-2); color: var(--body); border: 1px solid var(--edge);
+}
+.hc-btn:hover { color: var(--heading); border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); }
+.hc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hc-btn-primary {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.hc-btn-primary:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Sits inside .aside-box, so it inherits that box's <h3> and <ul> rules. */
+.hc-contributors .contrib-row { display: flex; align-items: baseline; gap: 0.5rem; }
+.contrib-name { color: var(--body); }
+.contrib-count { color: var(--muted); font-size: 0.75rem; margin-left: auto; white-space: nowrap; }
+.contrib-more { color: var(--muted); font-size: 0.75rem; margin-top: 0.15rem; }
+/* Only roster rows with a published link become buttons — everyone else is plain
+   text with no hover affordance at all. */
+.contrib-link {
+  font: inherit; font-size: 0.88rem; text-align: left;
+  background: none; border: 0; padding: 0; margin: 0;
+  color: var(--body); cursor: pointer;
+}
+.contrib-link:hover { color: var(--accent); text-decoration: underline; }
+.contrib-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
