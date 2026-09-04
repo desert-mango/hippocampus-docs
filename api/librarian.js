@@ -44,12 +44,29 @@ const ONE_LINER_CHARS = 140;
 // maxDuration: 15 (vercel.json) and inside the client's 18s abort deadline.
 const PROVIDER_TIMEOUT_MS = 5000;
 
+/* ONE GATEWAY, TWO MODELS — a real trade, recorded rather than glossed over.
+   Groq's signup was inoperable (a server-side "signup error" reproduced by
+   other users, unrelated to the account's email domain) and NVIDIA's NIM API
+   sits behind a manual verification queue with no committed turnaround.
+   OpenRouter issues a key immediately and serves BOTH models already vetted
+   here, so the librarian works today and the two-model benchmark can run at
+   all.
+
+   WHAT THAT COSTS, PLAINLY: these entries are no longer independent
+   infrastructure. A failure used to mean one of two companies was down; an
+   OpenRouter outage now takes both paths with it. The fallback below buys
+   model-level resilience — one model timing out, refusing, or answering
+   unparseably — and NOT gateway-level resilience. Do not read it as the
+   latter. The per-provider URL overrides are kept separate so one path can
+   still be broken deliberately (the preview fallback drill) and so either
+   entry can be repointed at a direct vendor endpoint the moment one becomes
+   reachable. */
 const PROVIDERS = [
   {
-    name: 'groq',
-    keyEnv: 'GROQ_API_KEY',
-    urlEnv: 'LIBRARIAN_GROQ_URL',
-    defaultUrl: 'https://api.groq.com/openai/v1/chat/completions',
+    name: 'gptoss',
+    keyEnv: 'OPENROUTER_API_KEY',
+    urlEnv: 'LIBRARIAN_GPTOSS_URL',
+    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
     // POLICY, NOT BENCHMARK: a Llama-family model is forbidden here — at any
     // tier, in any role, fallback included. That is a standing rule, so the
     // model id is deliberately NOT environment-overridable: an env var would be
@@ -58,20 +75,23 @@ const PROVIDERS = [
     modelEnv: null,
   },
   {
-    name: 'nvidia',
-    keyEnv: 'NVIDIA_API_KEY',
-    urlEnv: 'LIBRARIAN_NIM_URL',
-    defaultUrl: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    // Nemotron 3 Super, NVIDIA's hosted NIM id as published on
-    // build.nvidia.com/nvidia/nemotron-3-super-120b-a12b. Confirm it against
-    // GET https://integrate.api.nvidia.com/v1/models once a key exists — the id
-    // was read from NVIDIA's own API example, not from a live models call.
-    // Nemotron 3 is a hybrid Mamba-Transformer MoE, not a Llama derivative, so
-    // it satisfies the same policy constraint that rules Groq's model choice.
+    name: 'nemotron',
+    keyEnv: 'OPENROUTER_API_KEY',
+    urlEnv: 'LIBRARIAN_NEMOTRON_URL',
+    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    // Nemotron 3 Super, confirmed present in OpenRouter's public catalogue
+    // (GET https://openrouter.ai/api/v1/models, 2026-09-04) rather than read
+    // off a vendor example — the id in the previous revision never was. A
+    // ':free' variant exists and is deliberately NOT the default: its
+    // throttling makes a clean 15/15 run unreliable, and an availability
+    // artefact must never be readable as model quality. Nemotron 3 is a hybrid
+    // Mamba-Transformer MoE, not a Llama derivative, so it satisfies the same
+    // policy constraint as the entry above.
     model: 'nvidia/nemotron-3-super-120b-a12b',
-    modelEnv: 'LIBRARIAN_NIM_MODEL',
+    modelEnv: 'LIBRARIAN_NEMOTRON_MODEL',
   },
 ];
+
 const PROVIDER_NAMES = PROVIDERS.map((p) => p.name);
 
 const SYSTEM_PROMPT = [

@@ -124,25 +124,28 @@ function providerStub(answers) {
   return fn;
 }
 
-const BOTH_KEYS = { GROQ_API_KEY: 'groq-test-key', NVIDIA_API_KEY: 'nim-test-key' };
+/* Both provider entries read the SAME variable now — they are two models behind
+   one gateway, not two vendors. The name says "KEYS" in the plural only because
+   it is the whole key environment a call needs. */
+const KEYS = { OPENROUTER_API_KEY: 'openrouter-test-key' };
 
 // ------------------------------------------------------------ method + body --
 
 test('only POST is answered', async () => {
   for (const method of ['GET', 'PUT', 'DELETE', 'HEAD']) {
-    const r = await call(method, undefined, { env: BOTH_KEYS });
+    const r = await call(method, undefined, { env: KEYS });
     assert.equal(r.code, 405, `${method} must be 405`);
     assert.match(String(r.headers.allow || r.headers.Allow || ''), /POST/);
   }
 });
 
 test('OPTIONS is not secretly special-cased into a 2xx', async () => {
-  const r = await call('OPTIONS', undefined, { env: BOTH_KEYS });
+  const r = await call('OPTIONS', undefined, { env: KEYS });
   assert.equal(r.code, 405);
 });
 
 test('a malformed body is a 4xx, not a crash', async () => {
-  const r = await call('POST', 'this is not json{', { env: BOTH_KEYS });
+  const r = await call('POST', 'this is not json{', { env: KEYS });
   assert.ok(r.code >= 400 && r.code < 500, `expected 4xx, got ${r.code}`);
   assert.ok(r.json && r.json.error, 'the error is reported as JSON');
 });
@@ -150,14 +153,14 @@ test('a malformed body is a 4xx, not a crash', async () => {
 test('a body with no candidates array is a 4xx', async () => {
   for (const body of [{}, { q: 'two words' }, { q: 'x', candidates: 'nope' },
                       { candidates: [] }, { q: 42, candidates: [] }]) {
-    const r = await call('POST', body, { env: BOTH_KEYS });
+    const r = await call('POST', body, { env: KEYS });
     assert.ok(r.code >= 400 && r.code < 500,
       `expected 4xx for ${JSON.stringify(body)}, got ${r.code}`);
   }
 });
 
 test('an unknown provider hint is refused rather than silently ignored', async () => {
-  const r = await call('POST', Object.assign({ provider: 'openai' }, ASK), { env: BOTH_KEYS });
+  const r = await call('POST', Object.assign({ provider: 'openai' }, ASK), { env: KEYS });
   assert.ok(r.code >= 400 && r.code < 500);
 });
 
@@ -166,7 +169,7 @@ test('an unknown provider hint is refused rather than silently ignored', async (
 test('a missing catalog file is a 500 that names the file', async () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'librarian-nocatalog-'));
   try {
-    const r = await call('POST', ASK, { env: BOTH_KEYS, dataDir: empty });
+    const r = await call('POST', ASK, { env: KEYS, dataDir: empty });
     assert.equal(r.code, 500);
     assert.match(r.text, /wiki\.json/, 'the response names the missing file');
   } finally {
@@ -178,7 +181,7 @@ test('a catalog with wiki.json but no repos-index.json names the missing half', 
   const half = fs.mkdtempSync(path.join(os.tmpdir(), 'librarian-halfcatalog-'));
   try {
     fs.copyFileSync(path.join(DATA, 'wiki.json'), path.join(half, 'wiki.json'));
-    const r = await call('POST', ASK, { env: BOTH_KEYS, dataDir: half });
+    const r = await call('POST', ASK, { env: KEYS, dataDir: half });
     assert.equal(r.code, 500);
     assert.match(r.text, /repos-index\.json/);
   } finally {
@@ -207,9 +210,9 @@ test('a good provider answer is validated, filtered and capped at 8', async () =
     known[5], 'hallucinated:id', known[1], known[5], known[0], known[2], known[3],
     known[4], known[6], known[7], known[8], known[9], known[10],
   ]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'groq', 'groq is the primary');
+  assert.equal(r.json.provider, 'gptoss', 'gptoss is the primary');
   assert.ok(Array.isArray(r.json.results));
   assert.equal(r.json.results.length, 8, 'capped at 8');
   assert.equal(r.json.results[0].id, known[5]);
@@ -222,7 +225,7 @@ test('a good provider answer is validated, filtered and capped at 8', async () =
 
 test('the outgoing provider request is temperature 0 and carries the candidates', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
   const sent = fetchStub.calls[0];
   assert.equal(sent.body.temperature, 0);
@@ -232,8 +235,7 @@ test('the outgoing provider request is temperature 0 and carries the candidates'
   assert.match(sent.init.headers.authorization, /^Bearer /);
   const prompt = sent.body.messages.map((m) => m.content).join('\n');
   assert.match(prompt, /Candidate 0/, 'the candidates reach the model');
-  assert.ok(!prompt.includes('groq-test-key'), 'no key ever enters the prompt');
-  assert.ok(!prompt.includes('nim-test-key'), 'no key ever enters the prompt');
+  assert.ok(!prompt.includes('openrouter-test-key'), 'no key ever enters the prompt');
   assert.equal(typeof r.json.promptChars, 'number');
   assert.ok(r.json.promptChars > 0);
   assert.equal(r.json.temperature, 0, 'the answer reports the temperature it was produced at');
@@ -242,7 +244,7 @@ test('the outgoing provider request is temperature 0 and carries the candidates'
 test('fenced or reasoning-wrapped JSON is still parsed', async () => {
   const id = ASK.candidates[3].id;
   const wrapped = `<think>weighing the options</think>\n\`\`\`json\n{"results":[{"id":"${id}","why":"w"}]}\n\`\`\``;
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: providerStub([wrapped]) });
+  const r = await call('POST', ASK, { env: KEYS, fetch: providerStub([wrapped]) });
   assert.equal(r.code, 200);
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
 });
@@ -250,9 +252,9 @@ test('fenced or reasoning-wrapped JSON is still parsed', async () => {
 test('a provider that answers 200 with unusable content falls through', async () => {
   const id = ASK.candidates[2].id;
   const fetchStub = providerStub(['I cannot help with that.', [id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nvidia');
+  assert.equal(r.json.provider, 'nemotron');
   assert.equal(fetchStub.calls.length, 2);
 });
 
@@ -261,27 +263,31 @@ test('a provider that answers 200 with unusable content falls through', async ()
 test('a failing primary falls back to the other provider', async () => {
   const id = ASK.candidates[4].id;
   const fetchStub = providerStub([{ status: 503, text: 'groq is down' }, [id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nvidia');
+  assert.equal(r.json.provider, 'nemotron');
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
   assert.equal(fetchStub.calls.length, 2, 'exactly one retry, on the OTHER provider');
-  assert.notEqual(fetchStub.calls[0].url, fetchStub.calls[1].url);
+  assert.equal(fetchStub.calls[0].url, fetchStub.calls[1].url,
+    'same gateway by construction — see the PROVIDERS note in api/librarian.js');
+  assert.notEqual(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
+    'the retry used the OTHER entry: same endpoint, different model');
+  assert.equal(fetchStub.calls[1].body.model, 'nvidia/nemotron-3-super-120b-a12b');
 });
 
 test('both providers failing is a 502 that says why', async () => {
   const fetchStub = providerStub([{ status: 500, text: 'boom' }]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 2);
   assert.ok(Array.isArray(r.json.providers));
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['groq', 'nvidia']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['gptoss', 'nemotron']);
   for (const p of r.json.providers) assert.ok(p.reason, 'each failure carries a reason');
 });
 
 test('a thrown network error is a failure, not a crash', async () => {
   const fetchStub = providerStub([new TypeError('fetch failed')]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
 });
 
@@ -290,45 +296,54 @@ test('no keys at all is a 502 naming the missing environment variables', async (
   const r = await call('POST', ASK, { env: {}, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'never call a provider without its key');
-  assert.match(r.text, /GROQ_API_KEY/);
-  assert.match(r.text, /NVIDIA_API_KEY/);
+  assert.match(r.text, /OPENROUTER_API_KEY/);
 });
 
-test('one key means one provider is tried and the other is reported as skipped', async () => {
-  const id = ASK.candidates[1].id;
-  const fetchStub = providerStub([[id]]);
-  const r = await call('POST', ASK,
-    { env: { NVIDIA_API_KEY: 'nim-test-key' }, fetch: fetchStub });
-  assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nvidia');
-  assert.equal(fetchStub.calls.length, 1);
+/* This replaces an older test that gave ONE vendor a key and expected the other
+   entry to be skipped. That state is unreachable now: both entries read
+   OPENROUTER_API_KEY, so a missing key skips BOTH and no provider is ever
+   called. The coupling is asserted directly rather than left implicit — it is
+   the cost recorded in the PROVIDERS note, and splitting back into two vendors
+   should have to change this line on purpose. */
+test('both entries share one key, so a missing key skips every provider', async () => {
+  const providers = handler.PROVIDERS;
+  assert.equal(providers.length, 2);
+  assert.equal(providers[0].keyEnv, 'OPENROUTER_API_KEY');
+  assert.equal(providers[1].keyEnv, 'OPENROUTER_API_KEY');
+
+  const fetchStub = providerStub([[ASK.candidates[1].id]]);
+  const r = await call('POST', ASK, { env: {}, fetch: fetchStub });
+  assert.equal(r.code, 502);
+  assert.equal(fetchStub.calls.length, 0, 'no key means no provider call at all');
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['gptoss', 'nemotron']);
+  for (const p of r.json.providers) assert.match(p.reason, /OPENROUTER_API_KEY/);
 });
 
 test('a provider hint pins the request to that provider with no fallback', async () => {
   const fetchStub = providerStub([{ status: 500, text: 'boom' }]);
-  const r = await call('POST', Object.assign({ provider: 'nvidia' }, ASK),
-    { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', Object.assign({ provider: 'nemotron' }, ASK),
+    { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 1, 'pinned: no fallback to the other provider');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nvidia']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron']);
 });
 
-test('the base URLs and the NIM model id are environment-overridable', async () => {
+test('the base URLs and the nemotron model id are environment-overridable', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const env = Object.assign({}, BOTH_KEYS, {
-    LIBRARIAN_NIM_URL: 'http://127.0.0.1:9/mock/v1/chat/completions',
-    LIBRARIAN_NIM_MODEL: 'nvidia/some-other-model',
+  const env = Object.assign({}, KEYS, {
+    LIBRARIAN_NEMOTRON_URL: 'http://127.0.0.1:9/mock/v1/chat/completions',
+    LIBRARIAN_NEMOTRON_MODEL: 'nvidia/some-other-model',
   });
-  const r = await call('POST', Object.assign({ provider: 'nvidia' }, ASK), { env, fetch: fetchStub });
+  const r = await call('POST', Object.assign({ provider: 'nemotron' }, ASK), { env, fetch: fetchStub });
   assert.equal(r.code, 200);
   assert.equal(fetchStub.calls[0].url, 'http://127.0.0.1:9/mock/v1/chat/completions');
   assert.equal(fetchStub.calls[0].body.model, 'nvidia/some-other-model');
 });
 
-test('the Groq base URL is environment-overridable (this is what dev_site mocks)', async () => {
+test('the gptoss base URL is environment-overridable (this is what dev_site mocks)', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const env = Object.assign({}, BOTH_KEYS,
-    { LIBRARIAN_GROQ_URL: 'http://127.0.0.1:8131/__mock/v1/chat/completions' });
+  const env = Object.assign({}, KEYS,
+    { LIBRARIAN_GPTOSS_URL: 'http://127.0.0.1:8131/__mock/v1/chat/completions' });
   const r = await call('POST', ASK, { env, fetch: fetchStub });
   assert.equal(r.code, 200);
   assert.equal(fetchStub.calls[0].url, 'http://127.0.0.1:8131/__mock/v1/chat/completions');
@@ -343,7 +358,7 @@ test('the handler works on a bare stream/response pair with no Vercel helpers', 
   assert.equal(req.cookies, undefined, 'the stub has no req.cookies');
 
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, /* poison */ true);
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, /* poison */ true);
   assert.equal(r.code, 200, 'a poisoned res.status/json/send was never touched');
   assert.match(String(r.headers['content-type'] || ''), /application\/json/);
 });
@@ -358,7 +373,7 @@ test('the source itself references no Vercel-injected helper', () => {
 
 test('a cross-origin request is refused before any provider is called', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, false,
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, false,
     { headers: { origin: 'https://evil.example.com', host: 'docs.example.org' } });
   assert.equal(r.code, 403);
   assert.equal(fetchStub.calls.length, 0, 'no provider call, so no quota spent');
@@ -370,7 +385,7 @@ test('a cross-origin request is refused before any provider is called', async ()
 test('an opaque or unparseable Origin is refused too', async () => {
   for (const origin of ['null', 'not a url', '://nope']) {
     const fetchStub = providerStub([[ASK.candidates[0].id]]);
-    const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, false,
+    const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, false,
       { headers: { origin, host: 'docs.example.org' } });
     assert.equal(r.code, 403, `origin ${JSON.stringify(origin)} must be refused`);
     assert.equal(fetchStub.calls.length, 0);
@@ -379,7 +394,7 @@ test('an opaque or unparseable Origin is refused too', async () => {
 
 test('a same-origin request is allowed', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, false,
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, false,
     { headers: { origin: 'https://docs.example.org', host: 'docs.example.org' } });
   assert.equal(r.code, 200);
   assert.equal(fetchStub.calls.length, 1);
@@ -387,7 +402,7 @@ test('a same-origin request is allowed', async () => {
 
 test('an origin on a different port of the same host is allowed', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, false,
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, false,
     { headers: { origin: 'https://docs.example.org:8443', host: 'docs.example.org:443' } });
   assert.equal(r.code, 200);
 });
@@ -395,7 +410,7 @@ test('an origin on a different port of the same host is allowed', async () => {
 test('a localhost origin is allowed, so tools/dev_site.mjs keeps working', async () => {
   for (const origin of ['http://localhost:8131', 'http://127.0.0.1:8131', 'http://[::1]:8131']) {
     const fetchStub = providerStub([[ASK.candidates[0].id]]);
-    const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub }, false,
+    const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub }, false,
       { headers: { origin, host: 'docs.example.org' } });
     assert.equal(r.code, 200, `${origin} must be allowed`);
   }
@@ -403,7 +418,7 @@ test('a localhost origin is allowed, so tools/dev_site.mjs keeps working', async
 
 test('a request with no Origin at all is allowed', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub });
+  const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
 });
 
@@ -411,7 +426,7 @@ test('the per-key limit answers 429 with retry-after and spends no quota', async
   const limiter = handler.createLimiter({ perKey: 3, global: 1000 });
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
   const wire = { headers: { 'x-forwarded-for': '203.0.113.7, 70.41.3.18' } };
-  const deps = { env: BOTH_KEYS, fetch: fetchStub, limiter };
+  const deps = { env: KEYS, fetch: fetchStub, limiter };
 
   for (let i = 0; i < 3; i += 1) {
     const ok = await call('POST', ASK, deps, false, wire);
@@ -431,7 +446,7 @@ test('the per-key limit answers 429 with retry-after and spends no quota', async
 test('the per-instance ceiling applies even when the client key is unknown', async () => {
   const limiter = handler.createLimiter({ perKey: 1000, global: 2 });
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const deps = { env: BOTH_KEYS, fetch: fetchStub, limiter };
+  const deps = { env: KEYS, fetch: fetchStub, limiter };
   assert.equal((await call('POST', ASK, deps)).code, 200);
   assert.equal((await call('POST', ASK, deps)).code, 200);
   const blocked = await call('POST', ASK, deps);
@@ -441,7 +456,7 @@ test('the per-instance ceiling applies even when the client key is unknown', asy
 
 test('only the FIRST x-forwarded-for entry is trusted as the key', async () => {
   const limiter = handler.createLimiter({ perKey: 1, global: 1000 });
-  const deps = { env: BOTH_KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
   const first = await call('POST', ASK, deps, false,
     { headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' } });
   assert.equal(first.code, 200);
@@ -453,7 +468,7 @@ test('only the FIRST x-forwarded-for entry is trusted as the key', async () => {
 
 test('a direct loopback connection is exempt from the per-key limit', async () => {
   const limiter = handler.createLimiter({ perKey: 2, global: 1000 });
-  const deps = { env: BOTH_KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
   const wire = { socket: { remoteAddress: '127.0.0.1' } };   // no x-forwarded-for
   for (let i = 0; i < 6; i += 1) {
     const r = await call('POST', ASK, deps, false, wire);
@@ -477,7 +492,7 @@ function sentPrompt(init) {
 test('oversized candidate fields are truncated before they reach a provider', async () => {
   let sent = null;
   const stub = providerStub([['x']]);
-  const deps = { env: BOTH_KEYS, fetch: (url, init) => { sent = init; return stub(url, init); } };
+  const deps = { env: KEYS, fetch: (url, init) => { sent = init; return stub(url, init); } };
   const huge = 'A'.repeat(50000);
   const r = await call('POST', {
     q: 'thruster model',
@@ -497,7 +512,7 @@ test('oversized candidate fields are truncated before they reach a provider', as
 test('the aggregate candidate budget keeps the best-ranked prefix', async () => {
   let sent = null;
   const stub = providerStub([['c0']]);
-  const deps = { env: BOTH_KEYS, fetch: (url, init) => { sent = init; return stub(url, init); } };
+  const deps = { env: KEYS, fetch: (url, init) => { sent = init; return stub(url, init); } };
   const rows = [];
   for (let i = 0; i < 40; i += 1) {
     rows.push({
@@ -523,7 +538,7 @@ test('the aggregate candidate budget keeps the best-ranked prefix', async () => 
    so even a request presented as a direct loopback connection is throttled. */
 test('the loopback exemption is switched off on a serverless host', async () => {
   const limiter = handler.createLimiter({ perKey: 2, global: 1000 });
-  const deps = { env: BOTH_KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
   const wire = { socket: { remoteAddress: '127.0.0.1' } };   // no x-forwarded-for
   const saved = process.env.VERCEL;
   process.env.VERCEL = '1';
@@ -541,7 +556,7 @@ test('the loopback exemption is switched off on a serverless host', async () => 
 
 test('a proxied request from a loopback-looking address is NOT exempt', async () => {
   const limiter = handler.createLimiter({ perKey: 1, global: 1000 });
-  const deps = { env: BOTH_KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
   const wire = { headers: { 'x-forwarded-for': '127.0.0.1' } };
   assert.equal((await call('POST', ASK, deps, false, wire)).code, 200);
   assert.equal((await call('POST', ASK, deps, false, wire)).code, 429);
@@ -549,7 +564,7 @@ test('a proxied request from a loopback-looking address is NOT exempt', async ()
 
 test('the limiter map is hard-capped and cannot grow without bound', async () => {
   const limiter = handler.createLimiter({ perKey: 5, global: 1000000, maxKeys: 40 });
-  const deps = { env: BOTH_KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
   for (let i = 0; i < 400; i += 1) {
     await call('POST', ASK, deps, false, { headers: { 'x-forwarded-for': `198.51.100.${i}` } });
   }
@@ -572,7 +587,7 @@ test('the shared per-instance limiter is what a real deployment uses', async () 
   const wire = { headers: { 'x-forwarded-for': '203.0.113.55' } };
   let refusedAt = 0;
   for (let i = 1; i <= 20; i += 1) {
-    const r = await call('POST', ASK, { env: BOTH_KEYS, fetch: fetchStub, limiter: handler.defaultLimiter },
+    const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub, limiter: handler.defaultLimiter },
       false, wire);
     if (r.code === 429) { refusedAt = i; break; }
   }

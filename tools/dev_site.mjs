@@ -211,8 +211,8 @@ function serveStatic(req, res, urlPath) {
    its base URL from the environment at request time, but pointing it at a
    server that does not exist yet would be a race worth avoiding. */
 if (args.mock) {
-  process.env.LIBRARIAN_GROQ_URL = `http://127.0.0.1:${args.port}${MOCK_ROUTE}`;
-  process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || 'dev-site-mock-not-a-real-key';
+  process.env.LIBRARIAN_GPTOSS_URL = `http://127.0.0.1:${args.port}${MOCK_ROUTE}`;
+  process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'dev-site-mock-not-a-real-key';
 }
 
 let librarian = null;
@@ -270,7 +270,7 @@ server.listen(args.port, '127.0.0.1', () => {
   else process.stdout.write('  librarian handler absent — static only\n');
   if (handlerError) process.stdout.write(`  (import failed: ${handlerError})\n`);
   if (args.mock) {
-    process.stdout.write(`  mock provider: ${args.mock} (groq base URL points at ${MOCK_ROUTE})\n`);
+    process.stdout.write(`  mock provider: ${args.mock} (gptoss base URL points at ${MOCK_ROUTE})\n`);
   } else {
     process.stdout.write('  mock provider: off (set --mock-provider=echo|adversarial)\n');
   }

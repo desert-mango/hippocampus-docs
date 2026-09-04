@@ -2,7 +2,7 @@
 /* bench_librarian — compare the librarian's two providers on real queries.
 
      node tools/bench_librarian.mjs --base http://127.0.0.1:8131
-     node tools/bench_librarian.mjs --base https://<deployment> --provider groq
+     node tools/bench_librarian.mjs --base https://<deployment> --provider gptoss
      node tools/bench_librarian.mjs --base https://<deployment> --delay 6000
 
    PACING, AND WHY IT IS NOT OPTIONAL AGAINST A DEPLOYMENT. The function limits
@@ -31,9 +31,14 @@
    "win" by being the only one with a key configured: the zero-key run and the
    one-key run reach exactly the same verdict — no winner.
 
-   NOT A BENCHMARK OUTCOME: Groq's model (openai/gpt-oss-120b, never a
-   Llama-family model) is fixed by POLICY. No number this script prints can
-   change it; it is not on the ballot. */
+   NOT A BENCHMARK OUTCOME: the gptoss entry's model (openai/gpt-oss-120b,
+   never a Llama-family model) is fixed by POLICY. No number this script prints
+   can change it; it is not on the ballot.
+
+   BOTH ENTRIES CURRENTLY SHARE ONE GATEWAY (OpenRouter), so this compares two
+   MODELS, not two vendors. A winner here settles which model answers first, and
+   says nothing about infrastructure redundancy — see the note in
+   api/librarian.js. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -42,7 +47,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const HC = require(path.join(ROOT, 'js', 'search.js'));
 
-const PROVIDERS = ['groq', 'nvidia'];
+const PROVIDERS = ['gptoss', 'nemotron'];
 const REQUEST_TIMEOUT_MS = 30000;   // above the function's own 15s ceiling
 
 /* 15 queries. The first ten are data/search-probes.json verbatim — the standing
