@@ -3,6 +3,17 @@
 
      node tools/bench_librarian.mjs --base http://127.0.0.1:8131
      node tools/bench_librarian.mjs --base https://<deployment> --provider groq
+     node tools/bench_librarian.mjs --base https://<deployment> --delay 6000
+
+   PACING, AND WHY IT IS NOT OPTIONAL AGAINST A DEPLOYMENT. The function limits
+   one caller to 12 requests per rolling 60s window and rejects the 13th with a
+   429. Fired back-to-back, a 15-query run therefore loses its last queries to
+   the limiter on ANY hosted base — and those losses land in the error column,
+   where they are indistinguishable from a provider that actually failed. That
+   would make the harness lie in the one place it is meant to be trusted, so
+   requests to a non-loopback base are spaced out by default. A DIRECT loopback
+   request carries no x-forwarded-for and is exempt from the per-key budget, so
+   local runs against tools/dev_site.mjs stay unpaced and fast.
 
    It talks HTTP to a running site and nothing else: it never imports
    api/librarian.js, so it runs unchanged in a checkout that has no api/
@@ -52,15 +63,41 @@ const EXTRA_QUERIES = [
     note: 'the IP camera page' },
 ];
 
+// ------------------------------------------------------------------ pacing --
+
+/* 10 requests per 60s against a limiter that allows 12 — two spare slots, so
+   ordinary network jitter cannot push the run over the edge. */
+const HOSTED_MIN_INTERVAL_MS = 6000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isLoopbackBase(base) {
+  let hostname;
+  try { hostname = new URL(String(base)).hostname; } catch (e) { return false; }
+  hostname = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return hostname === 'localhost' || hostname === '::1' || hostname === '0.0.0.0'
+    || hostname.startsWith('127.');
+}
+
 // -------------------------------------------------------------------- args --
 
 function parseArgs(argv) {
-  const out = { base: null, providers: PROVIDERS.slice() };
+  const out = { base: null, providers: PROVIDERS.slice(), delay: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') { out.help = true; continue; }
     let m = arg.match(/^--base(?:=(.*))?$/);
     if (m) { out.base = m[1] !== undefined ? m[1] : argv[++i]; continue; }
+    m = arg.match(/^--delay(?:=(.*))?$/);
+    if (m) {
+      const value = m[1] !== undefined ? m[1] : argv[++i];
+      const ms = Number(value);
+      if (!Number.isFinite(ms) || ms < 0) {
+        throw new Error('--delay must be a non-negative number of milliseconds');
+      }
+      out.delay = ms;
+      continue;
+    }
     m = arg.match(/^--provider(?:=(.*))?$/);
     if (m) {
       const value = m[1] !== undefined ? m[1] : argv[++i];
@@ -161,13 +198,23 @@ function pct(n, total) {
   return total ? `${Math.round((n / total) * 100)}%` : 'n/a';
 }
 
-async function runProvider(base, provider, cases) {
+/* Module-scope so the spacing carries ACROSS providers: the limiter's window is
+   per caller, not per provider, and the second provider starts the instant the
+   first one ends. */
+let lastRequestStartedAt = 0;
+
+async function runProvider(base, provider, cases, delay) {
   const row = {
     provider, answered: 0, errors: 0, latencies: [], top1: 0, inPicks: 0,
     promptChars: [], temperatures: new Set(), models: new Set(),
     firstError: null, perQuery: [],
   };
   for (const c of cases) {
+    if (delay) {
+      const since = Date.now() - lastRequestStartedAt;
+      if (lastRequestStartedAt && since < delay) await sleep(delay - since);
+    }
+    lastRequestStartedAt = Date.now();
     const out = await ask(base, { q: c.q, candidates: c.candidates, provider });
     row.latencies.push(out.ms);
     if (!out.ok) {
@@ -217,15 +264,25 @@ try {
 }
 if (args.help || !args.base) {
   process.stdout.write(
-    'usage: node tools/bench_librarian.mjs --base <url> [--provider groq|nvidia]\n'
-    + '  --base is required; it is the site root, e.g. http://127.0.0.1:8131\n');
+    'usage: node tools/bench_librarian.mjs --base <url> [--provider groq|nvidia] [--delay <ms>]\n'
+    + '  --base is required; it is the site root, e.g. http://127.0.0.1:8131\n'
+    + '  --delay spaces requests out; it defaults to '
+    + `${HOSTED_MIN_INTERVAL_MS}ms against a hosted base and 0 against loopback,\n`
+    + '          because the deployed function 429s the 13th request in any 60s window.\n'
+    + '          Pass 0 to disable it; expect rate-limit errors if you do.\n');
   process.exit(args.help ? 0 : 1);
 }
 
 const items = loadItems();
 const cases = buildCases(items);
+const delay = args.delay !== null
+  ? args.delay
+  : (isLoopbackBase(args.base) ? 0 : HOSTED_MIN_INTERVAL_MS);
 process.stdout.write(`librarian bench — ${cases.length} queries against ${args.base}\n`);
 process.stdout.write(`  local index: ${items.length} entries\n`);
+process.stdout.write(delay
+  ? `  pacing:      ${delay}ms between requests (the function 429s the 13th in any 60s window)\n`
+  : '  pacing:      none (loopback base is exempt from the per-key budget)\n');
 const unusable = cases.filter((c) => !c.inCandidates);
 for (const c of unusable) {
   process.stdout.write(
@@ -236,7 +293,7 @@ process.stdout.write('\n');
 
 const rows = [];
 for (const provider of args.providers) {
-  rows.push(await runProvider(args.base, provider, cases));
+  rows.push(await runProvider(args.base, provider, cases, delay));
 }
 for (const row of rows) process.stdout.write(`${printProvider(row, cases.length)}\n\n`);
 
