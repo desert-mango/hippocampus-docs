@@ -247,9 +247,28 @@ function printProvider(row, total) {
   out.push(`  answered      ${row.answered}/${total}`);
   out.push(`  errors        ${row.errors}`);
   out.push(`  median ms     ${median(row.latencies) === null ? 'n/a' : median(row.latencies)}`);
+  // The tail is what a timeout has to be set against, not the median.
+  const okMs = row.perQuery.filter((q) => q.ok).map((q) => q.ms).sort((a, b) => a - b);
+  if (okMs.length) {
+    const p90 = okMs[Math.min(okMs.length - 1, Math.floor(okMs.length * 0.9))];
+    out.push(`  answered ms   p90 ${p90}  max ${okMs[okMs.length - 1]}  (successful answers only)`);
+  }
   out.push(`  top-1 hits    ${row.top1}/${total} (${pct(row.top1, total)})`);
   out.push(`  in-picks hits ${row.inPicks}/${total} (${pct(row.inPicks, total)})`);
   out.push(`  prompt chars  ${row.promptChars.length ? median(row.promptChars) : 'n/a'} (median, measured by the function)`);
+  // Every distinct failure, with a count. A single "first error" line hid the
+  // other fourteen reasons in a 0/15 run and sent the diagnosis down the wrong
+  // road; the record has to carry all of them.
+  const reasons = new Map();
+  for (const q of row.perQuery) {
+    if (q.ok) continue;
+    const key = String(q.reason).slice(0, 160);
+    reasons.set(key, (reasons.get(key) || []).concat(q.q));
+  }
+  for (const [reason, qs] of reasons) {
+    out.push(`  failure x${qs.length}   ${reason}`);
+    out.push(`                on: ${qs.map((q) => JSON.stringify(q)).join(', ')}`);
+  }
   const temps = Array.from(row.temperatures);
   out.push(`  temperature   ${temps.length ? temps.join(', ') : 'n/a'} (reported per answer; the client cannot set it)`);
   const models = Array.from(row.models);

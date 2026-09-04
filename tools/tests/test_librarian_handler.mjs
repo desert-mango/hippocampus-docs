@@ -230,6 +230,10 @@ test('the outgoing provider request is temperature 0 and carries the candidates'
   const sent = fetchStub.calls[0];
   assert.equal(sent.body.temperature, 0);
   assert.equal(sent.body.model, 'openai/gpt-oss-120b');
+  assert.deepEqual(sent.body.provider, { order: ['Groq', 'Cerebras'], allow_fallbacks: true },
+    'the upstream is pinned: default routing measured as a latency lottery');
+  assert.deepEqual(sent.body.reasoning, { effort: 'low' }, 'a re-rank is not a reasoning task');
+  assert.equal(sent.body.max_tokens, 2000, '900 truncated answers with long code ids');
   assert.ok(!/llama/i.test(sent.body.model), 'a Llama-family model is forbidden by policy');
   assert.equal(sent.init.method, 'POST');
   assert.match(sent.init.headers.authorization, /^Bearer /);
@@ -273,6 +277,10 @@ test('a failing primary falls back to the other provider', async () => {
   assert.notEqual(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'the retry used the OTHER entry: same endpoint, different model');
   assert.equal(fetchStub.calls[1].body.model, 'nvidia/nemotron-3-super-120b-a12b');
+  assert.deepEqual(fetchStub.calls[1].body.provider.order, ['DigitalOcean', 'DeepInfra'],
+    'the fallback entry carries its own upstream pin');
+  assert.deepEqual(fetchStub.calls[1].body.reasoning, { enabled: false },
+    'nemotron thinks past the deadline unless told not to');
 });
 
 test('both providers failing is a 502 that says why', async () => {

@@ -61,6 +61,10 @@ const PROVIDER_TIMEOUT_MS = 5000;
    still be broken deliberately (the preview fallback drill) and so either
    entry can be repointed at a direct vendor endpoint the moment one becomes
    reachable. */
+/* `routing` is OpenRouter's `provider` request field — an OpenRouter-only
+   extension, sent only when an entry carries it. Repoint an entry at a direct
+   vendor endpoint and drop its `routing` in the same edit: OpenAI-compatible
+   servers usually ignore unknown fields, but that is a habit, not a contract. */
 const PROVIDERS = [
   {
     name: 'gptoss',
@@ -73,6 +77,17 @@ const PROVIDERS = [
     // a way to put a Llama model back in without anyone reviewing it.
     model: 'openai/gpt-oss-120b',
     modelEnv: null,
+    // OpenRouter fans this model out to ~20 upstreams and defaults to the
+    // cheapest, which measured as a lottery: 384ms on Groq, 813ms on CoreWeave,
+    // and a 10.8s median across a 15-query run that landed on slow ones. Groq
+    // and Cerebras are the fast-inference upstreams; either is sub-second on
+    // a ~7.5k-token prompt. Pinned, with fallbacks allowed so a Groq outage
+    // degrades to slower rather than to nothing.
+    routing: { order: ['Groq', 'Cerebras'], allow_fallbacks: true },
+    // A re-rank is not a reasoning task. At default effort the model spent
+    // ~400 chars thinking per query and, on queries whose candidates carry
+    // long code ids, ran the 900-token cap out mid-JSON (4 of 15 truncated).
+    reasoning: { effort: 'low' },
   },
   {
     name: 'nemotron',
@@ -89,6 +104,13 @@ const PROVIDERS = [
     // policy constraint as the entry above.
     model: 'nvidia/nemotron-3-super-120b-a12b',
     modelEnv: 'LIBRARIAN_NEMOTRON_MODEL',
+    // Two upstreams only. DeepInfra is cheaper and is the default, and it was
+    // the one answering 429 "temporarily rate-limited upstream" for 8 of 15
+    // queries; DigitalOcean answered in ~1.2s. Prefer the one that answers.
+    routing: { order: ['DigitalOcean', 'DeepInfra'], allow_fallbacks: true },
+    // Nemotron 3 thinks by default and, on the real prompt, thought past the
+    // 5s deadline on 15 of 15 queries. Thinking off measured as sub-2s.
+    reasoning: { enabled: false },
   },
 ];
 
@@ -462,6 +484,8 @@ function providerConfig(provider, env) {
     keyEnv: provider.keyEnv,
     url: env[provider.urlEnv] || provider.defaultUrl,
     model: (provider.modelEnv && env[provider.modelEnv]) || provider.model,
+    routing: provider.routing || null,
+    reasoning: provider.reasoning || null,
   };
 }
 
@@ -475,13 +499,17 @@ async function askProvider(cfg, messages, doFetch) {
         'content-type': 'application/json',
         authorization: `Bearer ${cfg.key}`,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(Object.assign({
         model: cfg.model,
         temperature: 0,
-        max_tokens: 900,
+        // Counts reasoning tokens too. 900 truncated pretty-printed answers
+        // whose ids are long code URLs; 2000 leaves room for 8 such rows
+        // plus a short think, and a fast upstream emits it in well under 2s.
+        max_tokens: 2000,
         stream: false,
         messages,
-      }),
+      }, cfg.routing ? { provider: cfg.routing } : {},
+         cfg.reasoning ? { reasoning: cfg.reasoning } : {})),
       signal: ctrl.signal,
     });
     if (!response || !response.ok) {
@@ -493,7 +521,15 @@ async function askProvider(cfg, messages, doFetch) {
     const choice = doc && Array.isArray(doc.choices) ? doc.choices[0] : null;
     const content = choice && choice.message ? choice.message.content : null;
     const rows = parseModelJson(content);
-    if (!rows) throw new Error('answer was not the requested strict JSON');
+    if (!rows) {
+      const finish = choice && choice.finish_reason ? choice.finish_reason : '?';
+      // Quote the head of what came back: without it a parse failure is
+      // indistinguishable from an empty answer, a refusal, or a wrapper the
+      // parser does not know. It is the model's reply to the caller's own
+      // query, capped, so nothing sensitive is being surfaced.
+      const head = JSON.stringify(String(content == null ? '' : content).slice(0, 120));
+      throw new Error(`answer was not the requested strict JSON (finish: ${finish}, head: ${head})`);
+    }
     return rows;
   } finally {
     clearTimeout(timer);
