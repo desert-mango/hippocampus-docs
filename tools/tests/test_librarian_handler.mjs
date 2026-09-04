@@ -276,8 +276,8 @@ test('a failing primary falls back to the other provider', async () => {
     'same gateway by construction — see the PROVIDERS note in api/librarian.js');
   assert.notEqual(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'the retry used the OTHER entry: same endpoint, different model');
-  assert.equal(fetchStub.calls[1].body.model, 'nvidia/nemotron-3-super-120b-a12b');
-  assert.deepEqual(fetchStub.calls[1].body.provider.order, ['DigitalOcean', 'DeepInfra'],
+  assert.equal(fetchStub.calls[1].body.model, 'nvidia/nemotron-3-super-120b-a12b:free');
+  assert.deepEqual(fetchStub.calls[1].body.provider.order, ['Nvidia'],
     'the fallback entry carries its own upstream pin');
   assert.deepEqual(fetchStub.calls[1].body.reasoning, { enabled: false },
     'nemotron thinks past the deadline unless told not to');

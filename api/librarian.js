@@ -94,22 +94,21 @@ const PROVIDERS = [
     keyEnv: 'OPENROUTER_API_KEY',
     urlEnv: 'LIBRARIAN_NEMOTRON_URL',
     defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
-    // Nemotron 3 Super, confirmed present in OpenRouter's public catalogue
-    // (GET https://openrouter.ai/api/v1/models, 2026-09-04) rather than read
-    // off a vendor example — the id in the previous revision never was. A
-    // ':free' variant exists and is deliberately NOT the default: its
-    // throttling makes a clean 15/15 run unreliable, and an availability
-    // artefact must never be readable as model quality. Nemotron 3 is a hybrid
+    // Nemotron 3 Super's FREE variant, served by NVIDIA's own upstream —
+    // measured at ~550ms (523/550/574 on repeat) for the handler-shaped
+    // prompt, against a 10.6s median for the paid id on OpenRouter's GPU
+    // resellers. Free was the brief's ask; fast is why it is viable at all.
+    // What free costs: OpenRouter throttles free-tier keys (~20 req/min) and
+    // a throttled answer is an error here, which the fallback order already
+    // treats as "try the other one". The paid id stays reachable through
+    // LIBRARIAN_NEMOTRON_MODEL if that ever bites. Nemotron 3 is a hybrid
     // Mamba-Transformer MoE, not a Llama derivative, so it satisfies the same
     // policy constraint as the entry above.
-    model: 'nvidia/nemotron-3-super-120b-a12b',
+    model: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelEnv: 'LIBRARIAN_NEMOTRON_MODEL',
-    // Two upstreams only. DeepInfra is cheaper and is the default, and it was
-    // the one answering 429 "temporarily rate-limited upstream" for 8 of 15
-    // queries; DigitalOcean answered in ~1.2s. Prefer the one that answers.
-    routing: { order: ['DigitalOcean', 'DeepInfra'], allow_fallbacks: true },
-    // Nemotron 3 thinks by default and, on the real prompt, thought past the
-    // 5s deadline on 15 of 15 queries. Thinking off measured as sub-2s.
+    routing: { order: ['Nvidia'], allow_fallbacks: true },
+    // Thinking on, the paid id thought past a 5s deadline on 15 of 15 real
+    // queries. Off, it answers in ~0.5s on NVIDIA's upstream.
     reasoning: { enabled: false },
   },
 ];
