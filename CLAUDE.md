@@ -77,4 +77,23 @@ content it complains about.
   placeholders look like `<yours>`.
 - No new dependencies, no npm, no build tooling. Vendored marked stays sha256-pinned.
 - Preview: `./tools/serve.sh` → http://localhost:8130 (file:// cannot fetch content).
-- Publishing anything (GitHub repo, Pages) is Kyle-gated — build locally.
+- **Done means merged.** Work is not done until it is safely merged into `main` and
+  pushed. Kyle is the sole or primary contributor of this project (true of every project
+  so far, this one included), so an agent working for Kyle integrates through the
+  git-worktree ownership gate and pushes `main` itself at task completion — it does not
+  wait for Kyle. Every push deploys the site (Vercel + Pages), so `python3 tools/check.py`
+  must be green in the integration worktree first; that gate stays. A verified task
+  branch left unmerged "waiting on Kyle" is stranded work, not done work: say "stranded,
+  not done" and list the unmerged commits.
+  - Two paths, by who is pushing. Outside contributors and lab members use the
+    pull-request pipeline above (`.github/`, `CONTRIBUTING.md`) and never push `main`.
+    Kyle's agents push `main` with Kyle's own identity, which the branch-protection
+    design in `docs/cms-plan.md` §6 (G3: admin bypass kept, Kyle's direct push verified)
+    deliberately leaves able to push directly. If that bypass is ever removed, an agent's
+    path becomes "open the PR, get `check` green, merge it" — done still means merged,
+    never "PR opened".
+  - The one exception: when Kyle is a small contributor to someone else's project, an
+    agent never pushes that project's `main`; it opens a pull request against it
+    instead. No project has been in that mode yet, so before using it an agent must
+    verify which mode applies (repository ownership and share of commit authorship,
+    e.g. `git shortlog -sne origin/main`) and say what it checked.
