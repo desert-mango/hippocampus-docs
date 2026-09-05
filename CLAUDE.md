@@ -31,9 +31,45 @@ content it complains about.
 - People roster (About page cards): `data/people.json` — a card is name, title, optional
   photo (a manifest URL), optional link; link decisions are recorded in
   `docs/people-links.md`. Cards without a link get no hover affordance.
+- Home/About: `data/site.json` (home cards, kicker, lead) / `content/about.md` (About
+  page prose; the People roster mounts inside it).
 - After content changes, refresh the site search shard:
   `python3 tools/build_search_index.py --site-only` (plain python3; the full code
   reindex needs clones + graphify — see the script header).
+
+## Contribution pipeline
+
+- CI runs `python3 tools/check.py` VERBATIM on every pull request and every push to
+  `main` (`.github/workflows/check.yml`, job `check`) — never a copy, never a weakened
+  variant. A second job, `search-shard-advisory`, is a maintainer-only detector and is
+  never a required check.
+- `.github/` is part of the law, not contraband to tidy away: deleting or renaming the
+  workflow leaves the required `check` status permanently "expected" on protected
+  `main` and blocks ALL merges. Treat any `.github/`, `tools/` or `api/` diff as code
+  review, not content review — a PR-head workflow can redefine the gate that judges it.
+- The ONE CI-side external input is the SHA-pinned `actions/checkout` step. Nothing new
+  enters the serving path or any contributor's local path; the deployed bytes stay
+  byte-identical to the repo.
+- The edit map above is CANONICAL. `CONTRIBUTING.md` restates it for humans and
+  `README.md` carries a shorter table; when the map changes, reconcile those copies to
+  this one — never the other way around.
+- `tools/check.py` carries a required-keys dict (reader-inputs pass,
+  `READER_REQUIRED_KEYS`). The rule has four parts: a new bare key dereference in
+  any file that reads a `data/*.json` registry (today: `js/app.js`, `js/graph.js`,
+  `tools/bench_librarian.mjs`, `tools/build_contributors.py`, `tools/build_repo_graphs.py`,
+  `tools/build_search_index.py`, `tools/build_wiki_graph.py`, `tools/check.py`,
+  `tools/check_urls.py`, `tools/rst_convert.py` — re-derive the list with
+  `grep -rln "data/[a-z_-]*\.json" . --exclude-dir=.git --exclude-dir=data --exclude-dir=search`)
+  gains a `keys` entry; a new list a reader ITERATES gains a `lists` entry (or an `each` entry
+  when its items are objects) — this is the part that fails silently when forgotten,
+  because a string in a list's place is an iterable of characters, not a type error;
+  a nested object a reader dereferences into gains an `objects` entry (its child spec
+  covers the inner keys); and a value gets a `types`/`str_lists` entry ONLY when a reader crashes on the
+  wrong type or is silently wrong about it (the string `"false"` is truthy) — never
+  as a general string-ness check on titles and names. A new `data/*.json` registry
+  gets its own block (registries with their own dedicated section — the Cloudinary
+  manifest, the People roster, everything under `data/graph/` — are listed as
+  exclusions in its comment).
 
 ## Hard rules
 

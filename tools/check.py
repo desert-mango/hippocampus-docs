@@ -3,6 +3,10 @@
 
 Validates, failing loudly with actionable messages:
   1. every data/*.json registry parses (strict JSON by construction);
+  1b. reader inputs: every key the readers (every file that reads a data/*.json
+     registry — the list, and how to re-derive it, is at READER_REQUIRED_KEYS)
+     dereference without a guard is present, and every hardcoded content path
+     they open exists;
   2. setup: every manifest page file exists; every content/setup/*.md is
      referenced exactly once; ids unique;
   3. parity: the setup structure disposes of EVERY old-site page exactly once
@@ -76,6 +80,169 @@ EDGE_TYPES = ("links-to", "member", "mentions", "related")
 SUMMARY_SOURCES = ("derived", "authored")
 CONTRIB_ORG = "HippoCampusRobotics"
 CONTRIB_MAX_ROWS = 12
+
+# ---- 1b. reader inputs -----------------------------------------------------
+# Every key a READER dereferences WITHOUT a guard. A READER is any file in this
+# repo that reads a data/*.json registry — the category is the rule; the names
+# below are only today's instance of it:
+#   js/app.js, js/graph.js, tools/bench_librarian.mjs,
+#   tools/build_contributors.py, tools/build_repo_graphs.py,
+#   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
+#   tools/check_urls.py, tools/rst_convert.py
+# Re-derive that list, never trust it:
+#   grep -rln "data/[a-z_-]*\.json" . --exclude-dir=.git --exclude-dir=data \
+#     --exclude-dir=search
+# (then keep the .js/.mjs/.py hits and drop tools/tests/). A missing key is not
+# cosmetic: the browser paints "undefined" into the page and the Python readers
+# die with a KeyError. The list follows the readers, but never requires a key
+# the shipped data lacks (the rule when the two disagree is: report it, do not
+# guess).
+#
+# MAINTENANCE: a new data/*.json registry, a NEW reader, or a new bare
+# dereference inside an existing one, must gain an entry here. Re-run the grep
+# above when you add a file that reads a registry.
+#
+# Some registries are deliberately EXCLUDED, each already having its own
+# dedicated and stricter validator:
+#   data/cloudinary-manifest.json — section 6a (source/public_id/url + sha256);
+#   data/people.json              — section 6c (exact field set, photo, link);
+#   data/graph/**                 — sections 9 and 10, which LOAD every one of
+#     them (the wiki graph, the summaries, the xref terms, the authored edges,
+#     the repos index, the per-repo shards and the contributors projection) and
+#     validate them against the registries above. js/graph.js and
+#     tools/build_wiki_graph.py are the readers there, so their bare
+#     dereferences are covered by 9-10, not by an entry here.
+#
+# Spec node shape:
+#   {"keys":      (keys this object must carry,),
+#    "lists":     (keys that must hold a LIST when present; entries not walked),
+#    "types":     {key: python type its value must have when present},
+#    "str_lists": (keys whose list MEMBERS must each be a string,),
+#    "each":      {list key: spec node applied to every entry of that list},
+#    "objects":   {key: spec node applied to the nested OBJECT at that key},
+#    "entries":   spec node applied to every entry of a top-level LIST document}
+# A list named in "each" or "lists", or an object named in "objects", that is
+# absent from "keys" is optional: absent is fine, present is shape-checked.
+#
+# "objects" is the one-level-deeper twin of "each": "each" walks a LIST and
+# applies its child spec to every entry, "objects" applies its child spec to
+# the single nested OBJECT at that key. A reader that dereferences
+# doc["a"]["b"] bare needs both halves — "a" in "keys" and "b" under
+# "objects" — or the inner KeyError stays uncaught.
+#
+# Why "lists" exists as well as "each": walking a list proves it IS one, so
+# "each" keys get their shape checked for free. Lists of SCALARS are never
+# walked, and a string in place of one is the dangerous case — it is not a type
+# error to the readers, it is an iterable of characters. build_cad_shard() would
+# emit a CAD shard of 3 single-letter "parts" from "abc", and section 3's
+# set(old_pages["pages"]) would become a set of letters. Both used to pass this
+# gate. Name every scalar-entry list a reader iterates.
+#
+# "types" / "str_lists" go one level deeper: the right container, a wrong VALUE
+# type inside it. They are deliberately narrow — a value earns an entry only
+# when a reader either CRASHES on the wrong type (Path(42); sorted() over mixed
+# types) or is SILENTLY WRONG about it. The string "false" is the motivating
+# case: it is truthy, so `if not r["isFork"]` misfiles the repo as a fork and
+# build_search_index.py drops it from the code shard with no error anywhere.
+# NOT a general string-ness check on every title/name — a reader that only
+# renders a value through esc()/String() coerces it harmlessly, so 'hardware'
+# members are out of scope. 'chips' members are NOT: build_wiki_graph.py's
+# tool_repo_names() tests every chip with `n in org_names` (a set), and a
+# dict or list member raises TypeError (unhashable) there instead of being
+# reported here.
+TYPE_WORDS = {bool: "true or false", str: "a string", int: "a whole number"}
+READER_REQUIRED_KEYS = {
+    "data/site.json": {
+        "keys": ("kicker", "title", "lead", "home_cards"),
+        "each": {"home_cards": {"keys": ("href", "title", "text")}},
+    },
+    "data/setup.json": {
+        "keys": ("sections",),
+        "each": {"sections": {
+            "keys": ("title", "pages"),
+            "each": {"pages": {"keys": ("id", "title", "file"),
+                               "types": {"id": str, "file": str}}}}},
+    },
+    # tools/rst_convert.py is the second reader of this file and a stricter one
+    # than section 3: it builds every setup.json page id from g['id'] +
+    # p['slug'], titles each section from g['title'], and writes
+    # docs/setup-parity.md out of structure['source'] and
+    # structure['dropped_reason_default'] — all bare, all fatal when absent.
+    # ('source' is a nested OBJECT, so "objects" carries the spec one level in.
+    # rst_convert.py dereferences source['old_base_url'] bare six times (146,
+    # 213, 284, 531, 702, 740) and source['repo'] plus
+    # source['commit_date_cloned'] once (735); requiring the container alone
+    # would leave every one of those KeyErrors uncaught.)
+    "data/setup-structure.json": {
+        "keys": ("groups", "dropped", "source", "dropped_reason_default"),
+        "each": {"groups": {"keys": ("id", "title", "pages"),
+                            "each": {"pages": {"keys": ("old", "slug")}}},
+                 "dropped": {"keys": ("old",)}},
+        "objects": {"source": {"keys": ("old_base_url", "repo",
+                                        "commit_date_cloned")}},
+    },
+    "data/projects.json": {
+        "keys": ("projects", "intro"),
+        "each": {"projects": {
+                     "keys": ("id", "name", "tagline", "status", "file", "repos"),
+                     "types": {"id": str, "file": str},
+                     # optional; app.js renders (p.hardware || []).map(…)
+                     "lists": ("hardware",),
+                     "each": {"repos": {"keys": ("name", "url")},
+                              # 'links' is optional; when present the About-style
+                              # "See also" list dereferences both fields.
+                              "links": {"keys": ("href", "label")}}},
+                 # 'exclusions' is optional (section 4 reads it with .get()).
+                 "exclusions": {"keys": ("name",)}},
+    },
+    "data/tools.json": {
+        "keys": ("tools", "intro"),
+        "each": {"tools": {"keys": ("id", "name", "tagline", "file"),
+                           "types": {"id": str, "file": str},
+                           # optional; app.js renders (t.chips || []).map(…);
+                           # every member must be a string — build_wiki_graph.py
+                           # tool_repo_names() does `n in org_names` (a set) on
+                           # each chip, and a dict/list member is unhashable.
+                           "lists": ("chips",), "str_lists": ("chips",)}},
+    },
+    # a top-level list, not an object. isFork must be a real boolean:
+    # build_search_index.py branches on it, and "false" is truthy. 'name' must
+    # be a string: section 4 sorts org_names, and sorting mixed types raises.
+    # 'url' is dereferenced bare by the graph build in three places —
+    # build_wiki_graph.py repo_rows() (org[name]["url"]) and
+    # build_repo_graphs.py repo_meta() / build_shard() (org_row["url"]) — so a
+    # row without one aborts the build with a KeyError and no located message.
+    # It must be a string too: build_shard() hands it to ensure_clone(), which
+    # drops it straight into a git subprocess argv (build_repo_graphs.py:436),
+    # and a subprocess argv must hold strings — a number raises TypeError in
+    # the clone instead of being reported here.
+    "data/org-repos.json": {"entries": {"keys": ("name", "isFork", "url"),
+                                        "types": {"name": str,
+                                                  "isFork": bool,
+                                                  "url": str}}},
+    # section 3 does set(old_pages["pages"]) then sorts it — a non-string
+    # member makes that sort raise
+    "data/old-docs-pages.json": {"keys": ("pages",), "lists": ("pages",),
+                                 "str_lists": ("pages",)},
+    # Section 8 checks probe INTERNALS (q/expect/kind), but it reaches them via
+    # p.get(), so a non-object entry crashes it before it can complain. "each"
+    # with no required keys asks only "is every entry an object?" and leaves the
+    # fields to section 8. It subsumes "lists" here — it reports the same
+    # non-list message — so declaring both would just duplicate the error.
+    "data/search-probes.json": {"keys": ("probes",),
+                                "each": {"probes": {"keys": ()}}},
+    # build_cad_shard() iterates cad["files"] and calls Path() on each
+    "data/cad-tree.json": {"keys": ("repo", "files"), "lists": ("files",),
+                           "str_lists": ("files",)},
+}
+
+# Content files the readers open by HARDCODED name. Files reached through a
+# registry ('file' fields) are already checked by sections 2, 4 and 5.
+READER_FIXED_PATHS = {
+    "content/about.md": "js/app.js viewAbout() fetches it; "
+                        "tools/build_search_index.py build_site_shard() indexes it",
+}
+
 errors = []
 
 
@@ -131,6 +298,95 @@ def walk_json(node, path=""):
             yield from walk_json(v, f"{path}[{i}]")
     elif isinstance(node, str):
         yield path, path.rsplit(".", 1)[-1].split("[")[0], node
+
+
+def entry_label(path, entry):
+    """Locate a list entry for a human: its id or name if it has one, else index."""
+    if isinstance(entry, dict):
+        for key in ("id", "name"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"{path} ({key} '{value}')"
+    return path
+
+
+def check_reader_keys(name, node, spec, path="", label=""):
+    """Report every reader-required key `node` is missing, recursively.
+
+    `label` locates `node` inside the file ("" at the document root,
+    "projects[3] (id 'x')" for a list entry). This never raises: a shape
+    surprise (a string where a list belongs) is reported as a located error
+    instead, so a caller can stop before a later section meets it.
+    """
+    at = f"{name}: {label} " if label else f"{name}: "
+    if not isinstance(node, dict):
+        err(f"{name}: {label or 'top level'} must be a JSON object, "
+            f"got {type(node).__name__}")
+        return
+    for key in spec.get("keys", ()):
+        if key not in node:
+            err(f'{at}missing required key "{key}"')
+    # scalar-entry lists: shape only — a string here is silently iterable
+    declared_lists = spec.get("lists", ())
+    for key in declared_lists:
+        if key in node and not isinstance(node[key], list):
+            err(f'{at}"{key}" must be a list, got {type(node[key]).__name__}')
+    # value types a reader crashes on or is silently wrong about
+    for key, expected in spec.get("types", {}).items():
+        if key in node and not isinstance(node[key], expected):
+            want = TYPE_WORDS.get(expected, expected.__name__)
+            err(f'{at}"{key}" must be {want}, got {type(node[key]).__name__}')
+    for key in spec.get("str_lists", ()):
+        if key not in node:
+            continue
+        value = node[key]
+        if not isinstance(value, list):
+            # self-sufficient: a string would otherwise pass this loop happily,
+            # every "member" being a one-character string.
+            if key not in declared_lists:      # else "lists" already said so
+                err(f'{at}"{key}" must be a list, got {type(value).__name__}')
+            continue
+        for i, item in enumerate(value):
+            if not isinstance(item, str):
+                err(f'{at}"{key}"[{i}] must be a string, '
+                    f"got {type(item).__name__}")
+    for key, child in spec.get("each", {}).items():
+        if key not in node:
+            continue          # optionality is decided by "keys", not by "each"
+        value = node[key]
+        if not isinstance(value, list):
+            err(f'{at}"{key}" must be a list, got {type(value).__name__}')
+            continue
+        prefix = f"{path}.{key}" if path else key
+        for i, item in enumerate(value):
+            item_path = f"{prefix}[{i}]"
+            check_reader_keys(name, item, child, item_path,
+                              entry_label(item_path, item))
+    # nested objects: the same spec vocabulary, one level in
+    for key, child in spec.get("objects", {}).items():
+        if key not in node:
+            continue       # optionality is decided by "keys", not by "objects"
+        value = node[key]
+        if not isinstance(value, dict):
+            err(f'{at}"{key}" must be a JSON object, '
+                f"got {type(value).__name__}")
+            continue
+        child_path = f"{path}.{key}" if path else key
+        check_reader_keys(name, value, child, child_path, child_path)
+
+
+def check_reader_registry(name, doc, spec):
+    """Apply one READER_REQUIRED_KEYS spec to one loaded registry."""
+    entries = spec.get("entries")
+    if entries is None:
+        check_reader_keys(name, doc, spec)
+        return
+    if not isinstance(doc, list):
+        err(f"{name}: top level must be a JSON list, got {type(doc).__name__}")
+        return
+    for i, item in enumerate(doc):
+        path = f"[{i}]"
+        check_reader_keys(name, item, entries, path, entry_label(path, item))
 
 
 # --------------------------------------------------------------------------
@@ -639,6 +895,7 @@ def main():
     old_pages = load("data/old-docs-pages.json")
     org = load("data/org-repos.json")
     probes = load("data/search-probes.json")
+    cad = load("data/cad-tree.json")
     cloudinary = load("data/cloudinary-manifest.json")
     # the semantic layer: committed artifacts, so a missing one is an error
     wiki = load(f"{GRAPH}/wiki.json")
@@ -646,6 +903,33 @@ def main():
     xref = load(f"{GRAPH}/xref-terms.json")
     authored = load(f"{GRAPH}/edges-authored.json")
     repos_index = load(f"{GRAPH}/repos-index.json")
+    if errors:
+        report()
+
+    # ---- 1b. reader inputs: required keys + fixed content paths ----
+    # Runs before every cross-file section below, because those sections (and
+    # the site itself) dereference these keys bare. Registry -> loaded document;
+    # the deliberate exclusions are documented at READER_REQUIRED_KEYS.
+    registries = {
+        "data/site.json": site,
+        "data/setup.json": setup,
+        "data/setup-structure.json": structure,
+        "data/projects.json": projects,
+        "data/tools.json": tools,
+        "data/old-docs-pages.json": old_pages,
+        "data/org-repos.json": org,
+        "data/search-probes.json": probes,
+        "data/cad-tree.json": cad,
+    }
+    for rel in sorted(set(READER_REQUIRED_KEYS) - set(registries)):
+        err(f"{rel}: has a READER_REQUIRED_KEYS entry but no load() call in "
+            f"tools/check.py — add one so a syntax error is located too")
+    for rel, spec in READER_REQUIRED_KEYS.items():
+        if rel in registries:
+            check_reader_registry(rel, registries[rel], spec)
+    for rel, consumers in READER_FIXED_PATHS.items():
+        if not (ROOT / rel).is_file():
+            err(f"{rel}: missing — {consumers}")
     if errors:
         report()
 
@@ -1075,4 +1359,13 @@ def report(site=None):
 
 
 if __name__ == "__main__":
-    main()
+    # A traceback is never an acceptable gate result: it reads as "the tool is
+    # broken" when it usually means "the content is malformed". Exception (NOT
+    # BaseException) is deliberate — report() ends the run with sys.exit, whose
+    # SystemExit must pass through untouched.
+    try:
+        main()
+    except Exception as exc:
+        print(f"check.py: internal error while validating — a malformed entry "
+              f"or a checker bug; details: {exc!r}")
+        sys.exit(1)
