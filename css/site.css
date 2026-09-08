@@ -283,6 +283,7 @@ a.person-card:hover {
   border-radius: calc(var(--radius) - 4px); margin-bottom: 0.55rem;
 }
 .person-photo { height: auto; object-fit: cover; }
+.person-photo[src*="/people/vincent-lenz.jpg"] { object-position: center 20%; }
 .person-initials {
   display: flex; align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--body-soft) 14%, var(--surface-2));
