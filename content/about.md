@@ -1,8 +1,6 @@
-# About this site
-
-## People
-
 <div id="people-root"></div>
+
+# About this site
 
 This is the documentation home of the **HippoCampusRobotics** lab at TUHH's Institute of
 Mechanics and Ocean Engineering. It brings four things into one place: setup guides
