@@ -1,5 +1,9 @@
 # About this site
 
+## People
+
+<div id="people-root"></div>
+
 This is the documentation home of the **HippoCampusRobotics** lab at TUHH's Institute of
 Mechanics and Ocean Engineering. It brings four things into one place: setup guides
 (migrated page for page from the old Sphinx site), the team's projects (every repository
@@ -27,13 +31,6 @@ documentation for the lab's agent tools.
   own knowledge graph and adds the pages, repositories, code symbols and CAD parts the
   keywords missed, each with a one-line reason. When it is unreachable or out of free
   requests for the day, the keyword answer stands.
-
-## People
-
-The lab's members and alumni. The roster lives in `data/people.json` — edit that file to
-change a card.
-
-<div id="people-root"></div>
 
 ## Provenance
 
