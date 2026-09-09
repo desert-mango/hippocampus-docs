@@ -1,8 +1,35 @@
 # CMS plan — lab members edit the site through GitHub pull requests
 
-*2026-09-03 · consensus via /plan-review · builds later via /plan-implement, only when
-Kyle says build. This document is the entire deliverable of its planning run: nothing in it
-is implemented yet, and nothing here changes how the site serves.*
+*2026-09-03 · consensus via /plan-review. **Built and merged 2026-09-05** (commit
+`c6957ae`): the hardened gate, the `.github/` scaffolding, `CONTRIBUTING.md`, and the
+`CLAUDE.md` "Contribution pipeline" section all ship. This document is now a reconciled
+record of that plan, not a pre-build proposal — read the reconciliation note directly below
+for the three places reality diverged from the original plan.*
+
+> ## Reconciliation note — 2026-09-09
+>
+> The pipeline is merged and, on a re-audit against today's `main`, sound: the gate's
+> `READER_REQUIRED_KEYS` covers every registry reader with zero silent holes (the coverage
+> audit re-derived the reader set and traced every bare dereference; nothing was missing).
+> Three things changed after the original 2026-09-03 plan, and the body below is annotated to
+> match — the appendix changelog is preserved verbatim as the historical record:
+>
+> 1. **Branch protection was DECLINED (2026-09-06), permanently.** The §6 G3 rule and the §5
+>    "belt-and-braces" framing are **not a to-do and are never to be re-proposed** — a blocked
+>    merge state must never land on a lab member. `main` carries no branch protection; the
+>    Kyle-gate on publishing is *permissions* (no write collaborators) plus the "done means
+>    merged" law. §5, §6, and the §9 decision rows are annotated accordingly.
+> 2. **The People section shipped** (commit `15a3d91`): `data/people.json` + the About-page
+>    roster exist, the registry is covered by `check.py`'s §6c validator, and `#/about`
+>    resolves. The prerequisite **P-people** in §2 is **met** — the conditionality is closed.
+> 3. **"Done means merged" replaced the Kyle-gated-publishing line** (`CLAUDE.md`, commit
+>    `c4281f9`). Every push still deploys, but Kyle's own agents push `main` directly with his
+>    identity (there is no protection to stop them); outside contributors and lab members
+>    still go through the fork-PR pipeline below and never push `main`.
+>
+> Unchanged and re-verified: the site is still `noindex` staging (`index.html` robots meta +
+> `vercel.json` `X-Robots-Tag`), and the org cut-over remains a team decision — so Phase D's
+> staging framing stands.
 
 **Goal (Kyle's words):** future lab members can update the site as they see fit, including
 proposing edits as GitHub pull requests that get reviewed and merged.
@@ -28,7 +55,10 @@ round signed off ("I agree this plan is sound"). The changelog is at the bottom.
    `CLAUDE.md`.) The one CI-side external input is a SHA-pinned `actions/checkout` —
    named honestly here and in the `CLAUDE.md` amendment (§5, Phase B).
 2. **Any push to `main` publishes** (GitHub Pages + Vercel git auto-deploy). Therefore
-   *merge is deploy*, and merging stays Kyle-gated.
+   *merge is deploy*. *(Reconciled 2026-09-09: publishing is governed by the "done means
+   merged" law, not a branch-protection gate. Kyle's own agents push `main` directly with his
+   identity; outside contributors and lab members reach `main` only through the fork-PR
+   pipeline below, because they have no write access.)*
 3. **`tools/check.py` is the single gate command.** CI runs it verbatim — never a copy,
    never a weakened variant. Review found the current script is a *cross-file consistency*
    checker, not a schema validator: a valid-JSON registry entry with a missing key either
@@ -38,8 +68,10 @@ round signed off ("I agree this plan is sound"). The changelog is at the bottom.
 4. **The content model stays**: prose in `content/` (Markdown + the raw-HTML dialect for
    admonitions/tabs), facts in strict-JSON registries under `data/`, derived search shards
    under `search/`. The CMS adapts contributors to this model, not the model to a CMS.
-5. All repo-settings changes (branch protection, Actions, collaborators) are Kyle-gated:
-   this plan writes the exact steps (§6); it performs none of them.
+5. All repo-settings changes (Actions, collaborators) are Kyle-gated: §6 records the exact
+   steps. *(Reconciled 2026-09-09: the branch-protection step, G3, was **declined** — see §5
+   and §6. The Actions posture (G1) and empty-collaborator policy (G4) remain the live
+   repo-settings facts.)*
 
 ## 2. Who contributes, and with what access
 
@@ -51,13 +83,14 @@ Concrete personas (all real):
   `data/projects.json` field edit. The canonical JSON case.
 - **A project lead adding a project page** — a `data/projects.json` entry plus a
   `content/projects/<id>.md` body; the heaviest realistic case (two files, one PR).
-- **Nathalie curating the People roster** — *conditional persona*: the People section is
-  being built in a parallel, Kyle-approved session (2026-09-03) and does not exist at this
-  plan's base commit. Everything People-specific below (the CONTRIBUTING template, the
-  Phase D rehearsal choice) carries the explicit prerequisite **P-people**: *the People
-  surface exists in the repo, its registry is covered by the strengthened `check.py`
-  required-key pass (§4.0), and its route resolves*. If P-people is unmet at build time,
-  the fallback personas above take its place everywhere.
+- **Nathalie curating the People roster** — a live persona. *(Reconciled 2026-09-09:
+  prerequisite **P-people** is **MET**. The People surface shipped in commit `15a3d91`:
+  `data/people.json` + the About-page roster exist, `#/about` resolves, and the registry is
+  validated by `check.py`'s §6c people validator — a dedicated section, deliberately kept out
+  of the §4.0 `READER_REQUIRED_KEYS` dict. The original text carried this bullet as a
+  *conditional* persona with a P-people prerequisite and fallback personas; that
+  conditionality is now closed, and the People-specific items below — the `CONTRIBUTING.md`
+  person template, the Phase D rehearsal choice — apply unconditionally.)*
 
 **Access model (D1):** lab members contribute **from forks, with no write access** to the
 repo. GitHub's web UI makes this invisible: clicking the pencil icon on any file prompts
@@ -65,11 +98,14 @@ repo. GitHub's web UI makes this invisible: clicking the pencil icon on any file
 pull request, all in the browser (notebook q2 confirms this exact flow). Why fork-only:
 
 - Only people with write access can merge or push; with zero write collaborators, the
-  Kyle-gate on publishing is enforced by *permissions*, not just by policy. Branch
-  protection (§6) is the belt-and-braces layer on top, not the gate itself.
+  Kyle-gate on publishing is enforced by *permissions*, not just by policy. *(Reconciled
+  2026-09-09: this permissions fact — plus the "done means merged" law — **is** the gate.
+  The originally-planned branch-protection "belt-and-braces" layer, §6 G3, was declined, so
+  no protection sits on top; none is needed, because non-writers simply cannot push.)*
 - Contributors never deal with branches or clones unless they want to; the UI handles it.
-- If a specific member later earns direct write access, that is a Kyle decision paired
-  with the branch-protection rules in §6, which then become the effective gate.
+- If a specific member later earns direct write access, that is a Kyle decision. *(It would
+  reopen the branch-protection question §6 G3 settled as declined — that reopening is Kyle's
+  call alone, not an agent's; nothing here re-proposes it.)*
 
 **The no-edit path counts too:** anyone can file a content-fix **issue** (template in
 Phase B: page URL + what is wrong + suggested wording) instead of a PR. For a genuinely
@@ -171,7 +207,11 @@ weakening):
      its `repo` and `files`, so it is a real reader input even though the `--site-only`
      path skips it), plus the People registry under P-people. Failure message in the
      existing located style: `data/projects.json: projects[12] (id 'newproj') missing
-     required key "name"`.
+     required key "name"`. *(Reconciled 2026-09-09: `data/people.json` did not land in this
+     required-key dict after all — it shipped under `check.py`'s own §6c validator, a stricter
+     dedicated section, and is a deliberate EXCLUSION from `READER_REQUIRED_KEYS`. The other
+     registries listed here are covered exactly as planned; the 2026-09-09 audit confirmed the
+     dict covers every non-excluded registry reader with zero holes.)*
    - *A fixed-path existence pass* for every hardcoded content path the readers open —
      today just `content/about.md` (round 3 proved deleting it passes green while the
      live `#/about` route 404s and the shard rebuild crashes) — same located style.
@@ -315,12 +355,14 @@ job's to report). CONTRIBUTING states it plainly: *the only check that is yours 
   ```
 
   Its value here is **auto-requesting Kyle as reviewer** on every PR and signalling
-  ownership of the scaffolding — *not* enforcement. The "Require review from Code Owners"
-  branch-protection toggle is deliberately **left off** (review finding): with zero write
-  collaborators it enforces nothing that permissions don't already, GitHub never requests
-  review from a PR's own author, so it would deadlock every PR Kyle opens himself (e.g.
-  Phase E) into an admin-bypass — training a bypass reflex on the one control that should
-  feel deliberate. Per-section owners (e.g. Nathalie for People data) stay future work:
+  ownership of the scaffolding — *not* enforcement. *(Reconciled 2026-09-09: the
+  "Require review from Code Owners" toggle discussion below is moot — there is no branch
+  protection at all (§6 G3 declined), so there is no toggle to leave off. The reasoning still
+  documents why code-owner enforcement would have been wrong here: with zero write
+  collaborators it enforces nothing that permissions don't already, and GitHub never requests
+  review from a PR's own author, so it would have deadlocked every PR Kyle opens himself into
+  an admin-bypass. The CODEOWNERS **file** is kept purely for auto-request and ownership
+  signalling.)* Per-section owners (e.g. Nathalie for People data) stay future work:
   a code owner without write access triggers nothing (q3 gotcha).
 - **PR template** (`.github/pull_request_template.md`), short: what changed + why; which
   content type (setup page / project / tools / data registry); "I previewed my change
@@ -337,39 +379,47 @@ job's to report). CONTRIBUTING states it plainly: *the only check that is yours 
   the advisory job flagged it; (3) squash-merge.
 - **Merge method**: squash-merge as the default (one site change = one commit on `main`;
   keeps the deploy history readable).
-- **Branch protection on `main`** (Kyle-gated settings, exact steps in §6): require PR
-  before merging with required approvals **0** (a nonzero count would deadlock the sole
-  maintainer, who cannot approve his own PRs — q3); require the `check` status check (NOT
-  "require branches up to date" — friction without benefit at this velocity, q3); code
-  owners toggle off (above); leave **"Do not allow bypassing the above settings"
-  unchecked** (D3): on a personal-account repo there are no per-actor bypass lists, and
-  Kyle's existing direct-push flows (his agent sessions, the shard fallback, the
-  People-section work) must keep working. The protections bind exactly whom they need to
-  bind — everyone else has no write access at all — while acting as a guardrail for Kyle.
-- **Block force pushes / deletions** on `main` (protection defaults stay on).
-- **`CLAUDE.md` amendment (part of Phase B, review finding):** the law file gains a short
-  "Contribution pipeline" section: CI runs `tools/check.py` verbatim on every PR;
-  `.github/` is part of the law, not contraband to be tidied away (a deleted workflow
-  would leave the required `check` permanently "expected" and block *all* merges); the
-  one CI dependency is SHA-pinned `actions/checkout` (nothing in the serving or local
-  path); `CONTRIBUTING.md` and `README.md` restate the edit map from `CLAUDE.md`, which
-  stays canonical. Phase B acceptance includes "the three edit-map copies agree".
+- **Branch protection on `main` — DECLINED (2026-09-06), never to be re-proposed.** Kyle
+  ruled it out permanently: a lab member (ME) must never hit a blocked merge state, and with
+  zero write collaborators the permissions layer plus "done means merged" already provides the
+  Kyle-gate. `main` therefore carries **no** protection rule. *(The original plan specified
+  one — require PR before merging with required approvals 0, require the `check` status check,
+  code-owners toggle off, "Do not allow bypassing" left unchecked so Kyle's direct pushes keep
+  working. That specification is preserved in §6 G3 as the declined design, for the record
+  only. See §9 D1/D3.)*
+- **`CLAUDE.md` amendment (part of Phase B, review finding) — shipped:** the law file gained
+  a short "Contribution pipeline" section: CI runs `tools/check.py` verbatim on every PR;
+  `.github/` is part of the law, not contraband to be tidied away; the one CI dependency is
+  SHA-pinned `actions/checkout` (nothing in the serving or local path); `CONTRIBUTING.md` and
+  `README.md` restate the edit map from `CLAUDE.md`, which stays canonical. The three edit-map
+  copies **agree** (re-verified 2026-09-09). *(One residual: the `CLAUDE.md` clause framing a
+  deleted workflow as blocking "all merges" on protected `main` assumes a branch-protection
+  rule that was later declined; since `check` is not a required status check, that specific
+  consequence does not apply today. Flagged for Kyle — this reconciliation does not edit the
+  law file's branch-protection prose.)*
 
 ## 6. Kyle-gated repo-settings actions — exact manual steps
 
-This plan performs none of these. Ordering matters (rounds 2–3 fixed sequencing bugs):
-**G0 + G1 happen BEFORE the Phase B push** (both are read/confirm steps — the Actions
-posture must be right before the first workflow ever runs), then the Phase B push, then
-**G2a → G3 → G4** without waiting on any PR (G2b, the fork rehearsal, runs with Phase
-C1's probe or Phase D — it needs a second identity and must not leave `main` unprotected
-in the meantime). Phase C in §8 splits accordingly (C0 = G0+G1, C1 = G2a+G3+G4+G2b). All
-are on the public repo `kyle-nelson-berkeley/hippocampus-docs`; every
-feature below is free on public repos (q3). GitHub's UI wording drifts; steps are written
-against the September-2026 UI, and each *intent* line is what to preserve if buttons have
-moved.
+> **Reconciled 2026-09-09 — G3 (branch protection) is DECLINED (2026-09-06), permanently.** What remains
+> live from this section is the Actions posture (G1) and the empty-collaborator policy (G4);
+> G2a (make `check` a required status check) and G2b (fork rehearsal of the required-check
+> flow) are **moot** because there is no required check, and G3 is kept below **only as the
+> declined design, for the record**. Nothing here is to be performed as a to-do or
+> re-proposed. Reopening branch protection is Kyle's call alone (§2, §9 D1/D3).
 
-**G0 — inventory the identities that write to `main` today** *(intent: branch protection
-must not silently break an existing write path)*
+This plan performs none of these. Ordering (as originally written, rounds 2–3 fixed
+sequencing bugs): **G0 + G1 happen BEFORE the Phase B push** (both are read/confirm steps —
+the Actions posture must be right before the first workflow ever runs), then the Phase B
+push, then G4. *(The original ordering threaded G2a → G3 through here; with G3 declined and
+G2a moot, only G1 and G4 remain live.)* All are on the public repo
+`kyle-nelson-berkeley/hippocampus-docs`; every feature below is free on public repos (q3).
+GitHub's UI wording drifts; steps are written against the September-2026 UI, and each
+*intent* line is what to preserve if buttons have moved.
+
+**G0 — inventory the identities that write to `main` today** *(original intent: branch
+protection must not silently break an existing write path. Reconciled 2026-09-09: with G3
+declined there is no protection to break a write path, so this is now good hygiene only —
+knowing who can push `main` — not a pre-flight for a protection rule.)*
 1. Known writers at plan time: Kyle's own git credentials (admin — bypasses protections
    with D3's setting), and the **`hippo-site` MCP server** from the private
    `hippocampus-team-onboarding` repo, which agents use for site edits (`README.md`).
@@ -396,23 +446,32 @@ conscious policy)*
    and approve pull requests" **unchecked**.
 5. Click **Save** in each changed section.
 
-**G2a — confirm the check has reported** *(intent: a required check can only be selected
-after it has reported at least once — q3 gotcha; the workflow's `push` trigger means the
-Phase B push to `main` itself produces that first run, so G3 need not wait for any PR)*
-1. With the Phase B0+B commit pushed (per Phase B), open the repo's Actions tab and
-   confirm the `check` run on `main` is green. The name `check` is now selectable as a
-   required status check — proceed to G3 immediately; `main` should not sit unprotected
-   waiting for a fork probe.
+**G2a — confirm the check has reported** — **MOOT (G3 declined):** selecting a required
+status check only matters if there is a protection rule to attach it to, and there is not.
+The `check` workflow still runs on every push and PR; it is simply never *required*. *(Kept
+for the record: a required check can only be selected after it has reported at least once
+— q3 gotcha — and the workflow's `push` trigger means the Phase B push to `main` produced
+that first run.)*
 
 **G2b — fork-PR rehearsal** *(intent: exercise the "Approve and run" flow and Vercel's
-per-PR fork authorization; runs with Phase C1's probe or Phase D, NOT as a gate on G3 —
-Kyle cannot fork his own repo, so this needs a lab member or second account)*
+per-PR fork authorization — still relevant to the outside-contributor path even without a
+required check; it is simply no longer tied to G3. Kyle cannot fork his own repo, so this
+needs a lab member or second account)*
 1. A non-collaborator account opens a probe PR **from a fork** — e.g. a one-word
    `README.md` edit via the web UI — Kyle presses "Approve and run" if prompted, and
    `check` reports on the PR. Close the probe PR unmerged if it was only a probe.
 
-**G3 — add the branch protection rule** *(intent: no merge to `main` without a PR and a
-green `check`; Kyle keeps admin bypass)*
+**G3 — add the branch protection rule — DECLINED 2026-09-06 (never performed, never to be
+re-proposed).** Kyle ruled branch protection out permanently: a lab member must never hit a
+blocked merge state, and the permissions layer plus "done means merged" is the gate. The
+admin-bypass toggle the design below leaves unchecked is therefore **moot — there is no
+protection to bypass; Kyle's direct push to `main` works because `main` has no branch
+protection at all.** The steps below are retained **only as the declined design**, so that
+`CLAUDE.md`'s cross-reference to "§6 G3" resolves to a coherent record — they are not a
+to-do.
+
+*(Declined design, for the record — do not execute.)* Original intent: no merge to `main`
+without a PR and a green `check`; Kyle keeps admin bypass.
 1. Open `https://github.com/kyle-nelson-berkeley/hippocampus-docs/settings/branches`.
 2. Click **Add branch protection rule** (classic rules; if only the newer Rulesets are
    offered, mirror the same intent there).
@@ -472,8 +531,11 @@ rendered fallback.
 ## 8. Phases — acceptance criteria and verification each
 
 Build happens via `/plan-implement` (or `/review-implement`) when Kyle says build; each
-phase is a small, separately verifiable change. Local commits throughout; **every push is
-Kyle-gated because every push deploys.**
+phase is a small, separately verifiable change. Local commits throughout; **every push
+deploys, so `check.py` must be green before every push.** *(Reconciled 2026-09-09: under
+"done means merged", Kyle's own agents push `main` directly with his identity rather than
+waiting on Kyle — the deploy consequence is unchanged, but the gate is the green `check.py`,
+not a Kyle sign-off.)*
 
 - **Phase B0 — harden `tools/check.py`** (§4.0; runs first — the gate must be
   trustworthy before PRs rely on it).
@@ -528,19 +590,17 @@ Kyle-gated because every push deploys.**
   first workflow run happens under the intended policy.
   *Acceptance:* G0's identity question answered and recorded; G1's radio buttons match §6.
   *Verification:* screenshots or a settings read-back match the G1 selections.
-- **Phase C1 — post-push settings batch (Kyle).** Execute §6 G2a → G3 → G4 in order
-  (immediately after Phase B's push-to-`main` workflow run), then G2b's fork rehearsal
-  when a second identity is available.
-  *Acceptance:* protection rule exists exactly as §5 specifies; collaborator list clean.
-  *Verification (restated in round 3 as observable facts — under D3 Kyle-as-admin can
-  always bypass, so "merging without green is impossible" is true for no one who can see
-  the button):* a probe PR **from a fork** reaches a reported `check` (after at most one
-  "Approve and run" click) and its merge box lists **"Required — check"**; while `check`
-  is not green, the merge control shows the bypass-warning state, not the normal green
-  state (non-writers are blocked by permissions, and Kyle's bypass remains available by
-  design, D3); Kyle's direct push to `main` still works; the `hippo-site` MCP write path
-  still works (or its re-routing decision is applied) — both probed at the settings page
-  per G3 step 9.
+- **Phase C1 — post-push settings (Kyle).** *(Reconciled 2026-09-09: with G3 declined and
+  G2a moot, this reduces to §6 G4 — confirm the collaborator list is empty — plus, optionally,
+  G2b's fork rehearsal when a second identity is available to exercise "Approve and run" and
+  Vercel's per-PR fork authorization.)*
+  *Acceptance:* collaborator list clean (Kyle as owner only).
+  *Verification:* a probe PR **from a fork** reaches a reported `check` (after at most one
+  "Approve and run" click); non-writers cannot merge because they have no write access
+  (permissions, not a protection rule); Kyle's direct push to `main` works because `main`
+  carries no protection. *(The original C1 verified a "Required — check" merge box and a
+  bypass-warning state — both artifacts of the declined branch-protection rule, so neither is
+  observable today.)*
 - **Phase D — end-to-end dress rehearsal.** One real lab member goes pencil-to-merged
   with no help beyond `CONTRIBUTING.md` — a People-roster edit if P-people is met,
   otherwise a setup-page prose fix — while Kyle exercises "Approve and run", review,
@@ -574,12 +634,12 @@ merge window.
 
 | # | Decision | Call |
 |---|---|---|
-| D1 | Contributor access model | Fork-based PRs, zero write collaborators; permissions enforce the Kyle-gate; branch protection is belt-and-braces |
+| D1 | Contributor access model | Fork-based PRs, zero write collaborators; **permissions + "done means merged" ARE the gate.** Branch protection (originally "belt-and-braces") **DECLINED 2026-09-06** — a lab member must never hit a blocked merge state |
 | D2 | Search-shard freshness | Advisory CI detector + Kyle's **pre-merge** refresh on the PR branch (post-merge push only as fallback); never a required check, never contributor-owned |
-| D3 | Admin bypass on `main` | Bypass stays available (box unchecked); protections bind non-writers, guardrail Kyle; G0 verifies the MCP write path first |
+| D3 | Admin bypass on `main` | **MOOT (branch protection declined 2026-09-06)** — there is no protection rule to bypass; Kyle's direct push to `main` works unconditionally. G0's MCP-write-path inventory remains good hygiene but has no rule to verify against |
 | D4 | CI vs "no build tooling" law | Compatible: CI reviews, serving stays byte-identical; one named CI-side input (SHA-pinned checkout); `CLAUDE.md` amended so future agents read the workflow as law |
-| D5 | Code-owners enforcement toggle | OFF — CODEOWNERS file kept for auto-request/signalling; the toggle would deadlock the sole maintainer's own PRs |
-| D6 | Gate trustworthiness | Phase B0 hardens `check.py` (required keys + crash-proofing) before any PR relies on it |
+| D5 | Code-owners enforcement toggle | **MOOT (no branch protection, so no toggle)** — the CODEOWNERS **file** is kept for auto-request/signalling; the reasoning (the toggle would deadlock the sole maintainer's own PRs) is why enforcement was never wanted here |
+| D6 | Gate trustworthiness | Phase B0 hardened `check.py` (required keys + crash-proofing) before any PR relied on it; a 2026-09-09 re-audit confirmed the `READER_REQUIRED_KEYS` pass covers every registry reader with zero silent holes |
 
 ## Appendix — review changelog (what the /plan-review debate changed)
 
