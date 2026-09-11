@@ -87,11 +87,10 @@ content it complains about.
   not done" and list the unmerged commits.
   - Two paths, by who is pushing. Outside contributors and lab members use the
     pull-request pipeline above (`.github/`, `CONTRIBUTING.md`) and never push `main`.
-    Kyle's agents push `main` with Kyle's own identity, which the branch-protection
-    design in `docs/cms-plan.md` §6 (G3: admin bypass kept, Kyle's direct push verified)
-    deliberately leaves able to push directly. If that bypass is ever removed, an agent's
-    path becomes "open the PR, get `check` green, merge it" — done still means merged,
-    never "PR opened".
+    Kyle's agents push `main` directly with Kyle's own identity: `main` has no branch
+    protection (declined 2026-09-06, `docs/cms-plan.md` §6 — never re-propose it), so a
+    direct push just works. If protection is ever added, an agent's path becomes "open the
+    PR, get `check` green, merge it" — done still means merged, never "PR opened".
   - The one exception: when Kyle is a small contributor to someone else's project, an
     agent never pushes that project's `main`; it opens a pull request against it
     instead. No project has been in that mode yet, so before using it an agent must
