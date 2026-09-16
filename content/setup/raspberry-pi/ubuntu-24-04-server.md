@@ -107,7 +107,7 @@ The three lines create three buses on the GPIO header:
 | `dtoverlay=i2c6,pins_22_23` | `/dev/i2c-6` | GPIO22 (SDA) / GPIO23 (SCL) |
 | `dtoverlay=i2c4,pins_6_7` | `/dev/i2c-4` | GPIO6 (SDA) / GPIO7 (SCL), the ESC bus on the UUV (see [Pinout](#/setup/raspberry-pi/pinout)) |
 
-`dtparam=i2c_arm=on` is a base device-tree parameter, so it must come before any `dtoverlay=` line. If `config.txt` already contains it, do not add it a second time. After a reboot, `ls /dev/i2c-*` should list `i2c-1`, `i2c-4` and `i2c-6` (plus the GPU-internal `i2c-20` and `i2c-21`).
+`dtparam=i2c_arm=on` is a base device-tree parameter, so it must come before any `dtoverlay=` line. The stock Ubuntu 24.04 `config.txt` already has `dtparam=i2c_arm=on` in the right place, near the top. On a fresh image, add only the two `dtoverlay=` lines, and do not add the `dtparam` line a second time at the end of the file. After a reboot, `ls /dev/i2c-*` should list `i2c-1`, `i2c-4` and `i2c-6` (plus the GPU-internal `i2c-20` and `i2c-21`).
 
 ### UART
 
