@@ -69,8 +69,20 @@ See [the documentation](https://github.com/raspberrypi/firmware/blob/master/boot
 
 
 ```ini
+dtparam=i2c_arm=on
+dtoverlay=i2c6,pins_22_23
 dtoverlay=i2c4,pins_6_7
 ```
+
+The three lines create three buses on the GPIO header:
+
+| Line | Device | Pins |
+|---|---|---|
+| `dtparam=i2c_arm=on` | `/dev/i2c-1` | GPIO2 (SDA) / GPIO3 (SCL) |
+| `dtoverlay=i2c6,pins_22_23` | `/dev/i2c-6` | GPIO22 (SDA) / GPIO23 (SCL) |
+| `dtoverlay=i2c4,pins_6_7` | `/dev/i2c-4` | GPIO6 (SDA) / GPIO7 (SCL), the ESC bus on the UUV (see [Pinout](#/setup/raspberry-pi/pinout)) |
+
+`dtparam=i2c_arm=on` is a base device-tree parameter, so it must come before any `dtoverlay=` line. If `config.txt` already contains it, do not add it a second time. After a reboot, `ls /dev/i2c-*` should list `i2c-1`, `i2c-4` and `i2c-6` (plus the GPU-internal `i2c-20` and `i2c-21`).
 
 ### UART
 
