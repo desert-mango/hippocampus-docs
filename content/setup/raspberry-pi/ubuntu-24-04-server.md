@@ -34,6 +34,7 @@ package_update: true
 package_upgrade: true
 packages:
     - avahi-daemon
+    - chrony
 
 power_state: 
     mode: reboot
@@ -46,6 +47,12 @@ power_state:
 Make sure to connect the Raspberry Pi with the Internet via Ethernet before booting the first time.
 
 
+
+</div>
+
+<div class="adm adm-attention"><p class="adm-title">Attention</p>
+
+A Raspberry Pi has no battery-backed clock. On the first boot the system time can be months in the past. apt then rejects every repository as "not valid yet", and cloud-init finishes with `status: error` without installing its `packages:`. This is not a broken image. Check the clock with `timedatectl` and `sudo cloud-init status --long`; once the time is synchronized, run the installs again and they succeed. `chrony` keeps the clock right from then on; to use the lab's NTP server, see [Time Synchronization: Client](#/setup/time-sync/client).
 
 </div>
 
