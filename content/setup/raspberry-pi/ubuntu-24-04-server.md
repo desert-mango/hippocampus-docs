@@ -56,6 +56,24 @@ A Raspberry Pi has no battery-backed clock. On the first boot the system time ca
 
 </div>
 
+## First Boot: Let the Automatic Upgrade Finish
+
+Right after the first boot, Ubuntu's `unattended-upgrades` upgrades a large part of the fresh image (on an SD card this can take 10 to 30 minutes, including the kernel). It holds the dpkg lock the whole time, so any `apt` or `dpkg` command you start fails with `dpkg frontend lock was locked by another process`.
+
+Do **not** kill it and never delete the lock file. Stopping `dpkg` in the middle of a transaction can corrupt the package database. Let apt wait for the lock instead:
+
+```console
+$ sudo apt-get -o DPkg::Lock::Timeout=3600 install -y <packages>
+```
+
+To see whether the lock is still held (`pgrep unattended-upgrade` does not work, because the process name is truncated):
+
+```console
+$ sudo fuser -v /var/lib/dpkg/lock-frontend
+```
+
+No output means the lock is free. Do not power off the Pi while apt is running. If it was interrupted anyway, run `sudo dpkg --audit` and `sudo dpkg --configure -a` before any other apt command.
+
 ## Boot Config
 
 On the `system-boot` partition of the SD Card prepared for the Pi, edit `config.txt` and append the required lines for the specific setup.
