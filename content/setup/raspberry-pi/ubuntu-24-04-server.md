@@ -52,7 +52,7 @@ Make sure to connect the Raspberry Pi with the Internet via Ethernet before boot
 
 <div class="adm adm-attention"><p class="adm-title">Attention</p>
 
-A Raspberry Pi has no battery-backed clock. On the first boot the system time can be months in the past. apt then rejects every repository as "not valid yet", and cloud-init finishes with `status: error` without installing its `packages:`. This is not a broken image. Check the clock with `timedatectl` and `sudo cloud-init status --long`; once the time is synchronized, run the installs again and they succeed. `chrony` keeps the clock right from then on; to use the lab's NTP server, see [Time Synchronization: Client](#/setup/time-sync/client).
+A Raspberry Pi has no battery-backed clock. On the first boot the system time can be months in the past. apt then rejects every repository as "not valid yet", and cloud-init finishes with `status: error` without installing its `packages:`. This is not a broken image. Listing `chrony` under `packages:` does not prevent this, because `chrony` is one of the packages that fail to install. Check the clock with `timedatectl` and `sudo cloud-init status --long`. The built-in time service sets the clock soon after the network comes up (`System clock synchronized: yes`). Then run `sudo apt-get update` first, and after it the installs from your `packages:` list; they succeed. Skipping the `update` gives `404 Not Found` errors, because apt still has the old package lists. `chrony` keeps the clock right from then on; to use the lab's NTP server, see [Time Synchronization: Client](#/setup/time-sync/client).
 
 </div>
 
@@ -72,7 +72,7 @@ To see whether the lock is still held (`pgrep unattended-upgrade` does not work,
 $ sudo fuser -v /var/lib/dpkg/lock-frontend
 ```
 
-No output means the lock is free. Do not power off the Pi while apt is running. If it was interrupted anyway, run `sudo dpkg --audit` and `sudo dpkg --configure -a` before any other apt command.
+No output means the lock is free. Do not power off the Pi while apt is running. While apt upgrades `openssh-server`, new SSH connections are refused (`Connection refused`) for a few minutes; the Pi still answers `ping`. Wait for apt to finish. If it was interrupted anyway, run `sudo dpkg --audit` and `sudo dpkg --configure -a` before any other apt command.
 
 ## Boot Config
 
