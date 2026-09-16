@@ -119,6 +119,21 @@ dtoverlay=uart4
 dtoverlay=uart5
 ```
 
+### Wifi and Bluetooth
+
+The lab's robot Pis switch both radios off in the device tree:
+
+```ini
+dtoverlay=disable-wifi
+dtoverlay=disable-bt
+```
+
+<div class="adm adm-warning"><p class="adm-title">Warning</p>
+
+With these two lines, **Ethernet is the only way into the Pi**. Before you add them, make sure the Pi is reachable over its Ethernet connection, and keep a fallback ready (an HDMI monitor and a USB keyboard, or a 3.3 V USB-serial adapter on GPIO14/GPIO15, which `enable_uart=1` keeps active). A bad cable then looks exactly like a Pi that has lost its network for good.
+
+</div>
+
 ## Disable Interactive Upgrade
 
 
