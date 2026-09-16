@@ -27,6 +27,7 @@ and append the `dtoverlay=` lines for the required UARTs.
 
 ```sh
 dtoverlay=uart2
+dtoverlay=uart3
 dtoverlay=uart4
 dtoverlay=uart5
 ```
