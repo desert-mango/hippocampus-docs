@@ -35,7 +35,7 @@
    "source": "derived"
   },
   "projects/docs-and-site": {
-   "summary": "The lab's documentation about itself: the current Sphinx docs site, the org website, and\nthe org profile.",
+   "summary": "The lab's public reference: setup guides, a map of every organization repository,\nin-browser search over documentation and code, and the tools that keep those views in\nstep. The site is served directly from committed fil",
    "source": "derived"
   },
   "projects/hippocampus-vehicle": {
@@ -48,6 +48,10 @@
   },
   "projects/lab-infrastructure": {
    "summary": "The systems around the water that every experiment leans on: Qualisys motion capture for\nmillimeter ground truth, the gantry that moves equipment over the tank, and the physical\nbutton boxes wired into the safety and con",
+   "source": "derived"
+  },
+  "projects/learning-to-swim": {
+   "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
    "source": "derived"
   },
   "projects/legacy-ros1": {
@@ -72,6 +76,10 @@
   },
   "projects/teaching": {
    "summary": "The lab's teaching side: the **Formulas and Vehicles** course, where students program\nunderwater robots, and the Python onramp that gets them ready.",
+   "source": "derived"
+  },
+  "projects/underwater-localization": {
+   "summary": "Known-map localization and environment-change mapping for underwater robots, followed by\na temperature-guided exploration phase. The shared Python core matches range observations\nagainst a fixed tank map and records pers",
    "source": "derived"
   },
   "projects/uvms": {

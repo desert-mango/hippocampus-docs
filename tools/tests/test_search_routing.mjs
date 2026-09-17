@@ -1,3 +1,8 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 5 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Test librarian routing and preserve the local search ranking contract.
 /* Unit tests for the librarian routing inside js/search.js.
 
    Two things are under test here:

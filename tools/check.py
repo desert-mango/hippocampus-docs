@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 17 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Validate site content and dispatch the deterministic attribution-header check.
 """The check gate. Run before every commit:  python3 tools/check.py
 
 Validates, failing loudly with actionable messages:
@@ -51,6 +56,7 @@ Never weaken a check to make it pass — fix the content it is complaining about
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -1342,6 +1348,17 @@ def main():
     else:
         for msg in check_contributors(contributors, projects):
             err(msg)
+
+    checker = ROOT / "tools" / "check_attribution_headers.py"
+    result = subprocess.run(
+        [sys.executable, str(checker), "--root", str(ROOT)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode:
+        output = (result.stdout + result.stderr).strip()
+        err(f"attribution header inventory failed:\n{output}")
 
     report(site)
 

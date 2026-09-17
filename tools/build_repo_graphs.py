@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Build compact semantic graph shards from the organization's non-fork repositories.
 """Build the committed semantic-graph shards for the org's repositories.
 
 Run under graphify's interpreter (its AST extraction does the code parsing):

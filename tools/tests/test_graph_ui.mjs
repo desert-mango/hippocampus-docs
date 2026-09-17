@@ -1,3 +1,8 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 3 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Test semantic graph link matching, previews, routes, and contributor helpers.
 /* Unit tests for the pure helpers inside js/graph.js (the semantic-graph UI layer).
    No dependencies, no DOM: js/graph.js must load cleanly under plain node, which is
    also the smoke test that its browser wiring is properly guarded.

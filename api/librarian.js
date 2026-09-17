@@ -1,3 +1,8 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 5 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Answer documentation queries through a bounded serverless search of the site's graphs.
 /* The librarian: a serverless search agent that walks this site's own graphs.
 
    It no longer re-ranks a list the browser found — it SEARCHES. A free chat

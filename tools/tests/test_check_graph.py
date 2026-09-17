@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 17 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Test graph parity and contributor validation in the site quality gate.
 """Unit tests for the graph half of the check gate (tools/check.py, checks 9-10).
 
 Run from the repo root with plain python3 (no pytest, no network):
@@ -693,10 +698,10 @@ class TestRealTree(unittest.TestCase):
         self.assertEqual(check.check_contributors(self.contributors, self.projects), [])
 
     def test_the_real_enumeration_is_the_expected_size(self):
-        # 71 setup pages + 15 projects + 3 tools + about
+        # 71 setup pages + 17 projects + 3 tools + about
         rows = check.enumerate_page_nodes(self.setup, self.projects, self.tools)
-        self.assertEqual(len(rows), 90)
-        self.assertEqual(len({r for r, _ in rows}), 90)
+        self.assertEqual(len(rows), 92)
+        self.assertEqual(len({r for r, _ in rows}), 92)
 
 
 if __name__ == "__main__":

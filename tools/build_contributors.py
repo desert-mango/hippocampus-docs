@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Project public GitHub contribution counts into privacy-filtered project summaries.
 """Build data/graph/contributors.json — the per-project contributor lists.
 
 Run it with plain python3 from the repo root (needs the `gh` CLI, logged in):

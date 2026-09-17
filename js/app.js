@@ -1,3 +1,8 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 5 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Route and render the documentation site's pages from JSON registries and Markdown.
 /* HippoCampus Robotics docs — hash router + renderers.
    Zero-build: this file, marked.min.js (vendored, MIT), and JSON/Markdown content.
    Slug rule mirrors tools/rst_convert.py slugify() — keep them in sync. */

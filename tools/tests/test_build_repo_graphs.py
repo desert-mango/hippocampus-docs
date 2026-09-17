@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Test repository graph condensation, resolution, size limits, and index construction.
 """Unit tests for the PURE half of tools/build_repo_graphs.py.
 
 Run from the repo root with plain python3 (no pytest, no graphify, no network):

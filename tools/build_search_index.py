@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Build documentation, code, fork, and CAD search shards for browser queries.
 """Build the static search index (phase 2).
 
 Run under graphify's interpreter (its AST extraction does the code parsing):

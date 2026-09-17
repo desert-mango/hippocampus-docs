@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Check referenced image URLs and public people-card links for liveness.
 """The liveness gate — the ONLINE twin of tools/check.py.
 
   python3 tools/check_urls.py            # image URLs fatal, people links advisory

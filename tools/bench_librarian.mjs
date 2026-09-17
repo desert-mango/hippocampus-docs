@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 5 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Measure rendered librarian search answers and request latency over HTTP.
 /* bench_librarian — measure the librarian over HTTP, in two modes.
 
    PROBE MODE — what a browser would actually render, per probe:

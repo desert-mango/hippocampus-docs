@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Test wiki graph construction and overlays against isolated fixture sites.
 """Unit tests for tools/build_wiki_graph.py.
 
 Run from the repo root with plain python3 (no pytest, no graphify, no network):

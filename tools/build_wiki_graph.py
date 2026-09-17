@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Build page and repository graph nodes, summaries, and cross-reference terms.
 """Build the wiki graph: one node per page, index view, and org repo.
 
     python3 tools/build_wiki_graph.py [--allow-empty-summaries]

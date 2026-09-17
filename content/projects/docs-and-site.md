@@ -1,17 +1,22 @@
 ## What it is
 
-The lab's documentation about itself: the current Sphinx docs site, the org website, and
-the org profile.
+The lab's public reference: setup guides, a map of every organization repository,
+in-browser search over documentation and code, and the tools that keep those views in
+step. The site is served directly from committed files with no framework or build step.
 
 ## The pieces
 
-- **`docs`** — the Sphinx documentation this site's Setup section replaces, page for page.
-  The migration mapping (every page: migrated where, or dropped why) is recorded in
-  `docs/setup-parity.md` in this site's repository.
+- **This site** — the current public documentation, project registry, knowledge graph,
+  search index, and offline validation gate.
+- **`docs`** — the earlier Sphinx documentation that supplied the Setup section. Its
+  page-for-page migration record is preserved with the site tooling.
 - **`hippocampusrobotics.github.io`** — the organization website.
 - **`.github`** — the org profile readme shown on GitHub.
 
 ## Where it stands
 
-The Sphinx site is still the live reference until the team decides the cut-over to this
-site. Until then, both exist; every migrated page here footnotes its old-site source.
+This zero-build site is live at
+[hippocampus-docs.vercel.app](https://hippocampus-docs.vercel.app). Its offline gate checks
+registry coverage, content links, search probes, graph parity, contributor projections,
+and vendored-source integrity before a change is published. Migrated setup pages retain
+their earlier Sphinx source notes.
