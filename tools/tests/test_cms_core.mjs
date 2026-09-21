@@ -10,10 +10,16 @@
    pencil link, and the parent side of the preview bridge (js/source.js's
    protocol, whose frame side tools/tests/test_preview_bridge.mjs pins).
 
-   The last section runs js/cms.js itself in a vm context over a fake DOM, to
+   The Review tab (U8) has its own section: badges, the gate's check run ->
+   status, annotations -> "file, line, what to fix", the Undo-on-GitHub URL,
+   the review actions' exact requests and what their answers mean, and the
+   client's write allowlist.
+
+   The last sections run js/cms.js itself in a vm context over a fake DOM, to
    pin what only the page can get wrong: a GitHub answer for a session that
-   has since ended or been replaced changes nothing, and "Recently merged"
-   pages the closed PRs.
+   has since ended or been replaced changes nothing, "Recently merged" pages
+   the closed PRs, and the Review tab lists, shows, previews and acts (each
+   button sends exactly its one request to a fake GitHub).
 
    No browser, no network: every window, popup, frame and fetch is a FAKE, and
    every token below is an obvious placeholder.
@@ -536,7 +542,7 @@ test('session: malformed, empty or unreadable storage is "signed out", never a t
 
 // ------------------------------------------------- the one-repo API client --
 
-test('GitHub client: only /user and this repository, GET only', () => {
+test('GitHub client: only /user and this repository', () => {
   for (const ok of ['/user', C.REPO_API_PATH, `${C.REPO_API_PATH}/pulls?state=open`,
     `${C.REPO_API_PATH}/contents/content/about.md?ref=${SHA}`,
     `${C.REPO_API_PATH}/contents/content/about.md?ref=cms%2Fkyle%2Ffix-typo`]) {
@@ -571,7 +577,9 @@ test('GitHub client: get() sends the bearer token and parses JSON; errors are st
   assert.deepEqual(await client.get(`${C.REPO_API_PATH}/pulls/1`), { ok: false, status: 0, data: null });
   await assert.rejects(client.get('/repos/someone/else'), /this site's repository/);
   assert.equal(gh.calls.length, 4, 'the refused path never reached fetch');
-  assert.deepEqual(C.createGitHubClient({ fetch: gh.fetch, token: TOKEN }).methods, ['GET']);
+  // GET, plus the verbs of the write allowlist (each scoped to exact paths)
+  assert.deepEqual([...C.createGitHubClient({ fetch: gh.fetch, token: TOKEN }).methods],
+    ['GET', 'POST', 'PUT', 'PATCH']);
 });
 
 // ------------------------------------------------ page id -> file on GitHub --
@@ -794,23 +802,411 @@ test('draftFetcher: draft files first, a null draft entry is deleted, the rest f
   assert.deepEqual(await alone('content/b.md'), { ok: false, status: 404, text: '' });
 });
 
+// ---------------------------------------------------- the Review tab (U8) --
+
+/* Shapes cut down from the real API, read-only, 2026-09-21: PR #1's head
+   825bab4 (its `check` run is green) and GET /pulls/1/files. */
+const HEAD_1 = '825bab4fa43bfb10964621d1e4d8476b5971dc78';
+const RUN_URL = 'https://github.com/desert-mango/hippocampus-docs/actions/runs/35633224472/job/106444242358';
+const ACTIONS_APP = { id: 15368, slug: 'github-actions', name: 'GitHub Actions' };
+function gateRun(extra) {
+  return Object.assign({
+    id: 106444242358, name: 'check', head_sha: HEAD_1, status: 'completed', conclusion: 'success',
+    html_url: RUN_URL, details_url: RUN_URL,
+    started_at: '2026-09-21T17:37:49Z', completed_at: '2026-09-21T17:37:56Z',
+    output: { title: null, summary: null, text: null, annotations_count: 0,
+      annotations_url: `${REPO_API}/check-runs/106444242358/annotations` },
+    app: ACTIONS_APP,
+  }, extra || {});
+}
+const runs = (...rs) => ({ total_count: rs.length, check_runs: rs });
+const fileRow = (filename, extra) => Object.assign({ sha: 'b'.repeat(40), filename, status: 'modified',
+  additions: 1, deletions: 1, changes: 2, patch: '@@ -1 +1 @@\n-old\n+new' }, extra || {});
+const PR1_FILES = ['concepts/colcon', 'concepts/pre-built-packages', 'getting-started/px4-setup',
+  'getting-started/ros-installation', 'lab-cameras/event-cameras', 'raspberry-pi/ethernet',
+  'raspberry-pi/uart-configuration', 'raspberry-pi/ubuntu-24-04-server', 'raspberry-pi/usb-configuration']
+  .map((id) => fileRow(`content/setup/${id}.md`))
+  .concat([fileRow('search/manifest.json'), fileRow('search/site.json')]);
+const REAL_SETUP = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'setup.json'), 'utf8'));
+
+test('badges: "machinery" for the site\'s code and gate, "derived files" for search/ and data/graph/', () => {
+  const b = (...names) => C.pullBadges(names.map((n) => fileRow(n))).map((x) => x.key);
+  for (const p of ['js/app.js', 'css/site.css', 'tools/check.py', 'api/auth.js', 'cms/index.html',
+    '.github/workflows/check.yml', 'index.html', 'vercel.json']) {
+    assert.deepEqual(b('content/about.md', p), ['machinery'], p);
+  }
+  assert.deepEqual(b('search/site.json'), ['derived']);
+  assert.deepEqual(b('data/graph/wiki.json'), ['derived']);
+  assert.deepEqual(b('js/app.js', 'search/site.json'), ['machinery', 'derived']);
+  for (const p of ['content/about.md', 'data/tools.json', 'data/people.json', 'content/index.html',
+    'jsx/app.js', 'tools.md', 'data/graphs.json', 'searches/x.json', 'docs/index.html', 'assets/vercel.json']) {
+    assert.deepEqual(b(p), [], p);
+  }
+  // a rename counts on its old name too: moving the gate out of tools/ is machinery
+  assert.deepEqual(C.pullBadges([fileRow('content/x.md', { status: 'renamed', previous_filename: 'tools/check.py' })])
+    .map((x) => x.key), ['machinery']);
+  assert.deepEqual(C.pullBadges(PR1_FILES).map((x) => x.key), ['derived']);
+  const [m] = C.pullBadges([fileRow('js/cms.js')]);
+  assert.deepEqual(m, { key: 'machinery', label: 'machinery', text: 'needs a code review by Desert Mango' });
+  for (const junk of [null, 'js/app.js', [null, 42, { filename: 7 }], {}]) assert.deepEqual(C.pullBadges(junk), []);
+});
+
+test('preview scope: "content only" when a change is outside what the frame reads from the PR head', () => {
+  // the frame runs the site's CURRENT code; only content/, data/ and search/ come from the head (D3)
+  const s = (...names) => C.previewScope(names.map((n) => fileRow(n)));
+  const full = { contentOnly: false, heading: 'Preview', text: null };
+  assert.deepEqual(s('content/about.md', 'data/tools.json', 'search/site.json', 'data/graph/wiki.json'), full);
+  assert.deepEqual(C.previewScope(PR1_FILES), full);
+  assert.deepEqual(C.previewScope([]), full);
+  for (const p of ['js/app.js', 'css/site.css', 'index.html', 'cms/index.html', 'vercel.json', 'api/auth.js',
+    'tools/check.py', '.github/workflows/check.yml', 'assets/hippo.svg']) {
+    assert.deepEqual(s('content/about.md', p),
+      { contentOnly: true, heading: 'Preview (content only)', text: C.PREVIEW_CONTENT_ONLY_TEXT }, p);
+  }
+  // a removed or renamed-away code file changes the site too
+  assert.equal(C.previewScope([fileRow('js/old.js', { status: 'removed' })]).contentOnly, true);
+  assert.equal(C.previewScope([fileRow('content/x.md', { status: 'renamed', previous_filename: 'css/x.css' })])
+    .contentOnly, true);
+  // GitHub would not list the files: nobody knows what the frame misses, so say so
+  for (const unknown of [null, undefined, 'js/app.js', {}]) {
+    assert.deepEqual(C.previewScope(unknown),
+      { contentOnly: true, heading: 'Preview (content only)', text: C.PREVIEW_UNLISTED_TEXT }, String(unknown));
+  }
+  assert.equal(C.PREVIEW_CONTENT_ONLY_TEXT, 'Content only: this preview shows the proposal\'s pages and data '
+    + 'on the site\'s current code. Its changes to code, styles or files are not shown here; read them under '
+    + '"Files changed".');
+  assert.equal(C.PREVIEW_UNLISTED_TEXT, 'Content only: this preview shows the proposal\'s pages and data '
+    + 'on the site\'s current code. GitHub did not list the changed files, so a change to code, styles or files '
+    + 'would not show here.');
+});
+
+test('changed files: paged 100 at a time until a short page, GET only, this repository only', async () => {
+  const page1 = Array.from({ length: 100 }, (_, i) => fileRow(`content/setup/p${i}.md`));
+  const gh = fakeFetch((url) => (/&page=1$/.test(url) ? reply(200, page1)
+    : reply(200, [fileRow('js/app.js'), 'junk'])));
+  const client = C.createGitHubClient({ fetch: gh.fetch, token: TOKEN });
+  const get = async (p) => (await client.get(p)).data;
+  const files = await C.loadPullFiles(get, 7);
+  assert.equal(files.length, 101, 'the junk row is dropped');
+  assert.deepEqual(gh.calls.map((c) => [c.init.method, c.url]), [1, 2].map((k) =>
+    ['GET', `${REPO_API}/pulls/7/files?per_page=100&page=${k}`]));
+  await assert.rejects(C.loadPullFiles(get, 0), /PR number/);
+  await assert.rejects(C.loadPullFiles(async () => { throw new Error('HTTP 502'); }, 7), /HTTP 502/);
+});
+
+test('age: minutes, hours, then days since the proposal was opened', () => {
+  const now = Date.parse('2026-09-21T12:00:00Z');
+  const ago = (ms) => C.ageText(new Date(now - ms).toISOString(), now);
+  assert.equal(ago(20e3), 'just now');
+  assert.equal(ago(60e3), '1 minute ago');
+  assert.equal(ago(59 * 60e3), '59 minutes ago');
+  assert.equal(ago(3600e3), '1 hour ago');
+  assert.equal(ago(47 * 3600e3), '47 hours ago');
+  assert.equal(ago(5 * 86400e3), '5 days ago');
+  assert.equal(C.ageText('2026-09-16T10:44:36Z', now), '5 days ago');
+  assert.equal(C.ageText('not a date', now), '');
+  assert.equal(C.ageText(null, now), '');
+});
+
+test('check status: the gate\'s run (named "check", by GitHub Actions) -> pass / fail / still checking', () => {
+  const pass = C.checkStatus(runs(gateRun()));
+  assert.deepEqual(pass, { state: 'pass', text: 'site rules pass', conclusion: 'success',
+    runId: 106444242358, runUrl: RUN_URL });
+  for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+    const s = C.checkStatus(runs(gateRun({ conclusion })));
+    assert.equal(s.state, 'fail', conclusion);
+    assert.equal(s.text, 'site rules fail', conclusion);
+  }
+  // only success is green: a completed run that ended any other way is red, and says how
+  const odd = C.checkStatus(runs(gateRun({ conclusion: 'action_required' })));
+  assert.equal(odd.state, 'fail');
+  assert.match(odd.text, /^site rules fail \(the check ended "action_required"\)$/);
+  for (const status of ['queued', 'in_progress', 'waiting', 'pending', 'requested']) {
+    const s = C.checkStatus(runs(gateRun({ status, conclusion: null })));
+    assert.deepEqual([s.state, s.text], ['checking', 'still checking'], status);
+  }
+  for (const none of [runs(), {}, null, 'x', { check_runs: 'x' }]) {
+    assert.equal(C.checkStatus(none).state, 'checking', JSON.stringify(none));
+  }
+});
+
+test('check status: other runs never stand in for the gate; the newest gate run wins; URLs are guarded', () => {
+  const vercel = gateRun({ id: 9e11, name: 'Vercel', app: { slug: 'vercel' } });
+  const impostor = gateRun({ id: 9e11 + 1, conclusion: 'success', app: { slug: 'some-app' } });
+  const advisory = gateRun({ id: 9e11 + 2, name: 'search-shard-advisory' });
+  assert.equal(C.checkStatus(runs(vercel, impostor, advisory)).state, 'checking');
+  assert.equal(C.checkStatus(runs(gateRun({ conclusion: 'failure' }), impostor)).state, 'fail');
+  const older = gateRun({ id: 5, conclusion: 'failure' });
+  const newer = gateRun({ id: 6, status: 'in_progress', conclusion: null });
+  assert.equal(C.checkStatus(runs(newer, older)).state, 'checking');
+  assert.equal(C.checkStatus(runs(older, newer)).runId, 6);
+  const foreign = C.checkStatus(runs(gateRun({ html_url: 'javascript:alert(1)', details_url: 'https://evil.example/x' })));
+  assert.equal(foreign.runUrl, null);
+  const detailsOnly = C.checkStatus(runs(gateRun({ html_url: null })));
+  assert.equal(detailsOnly.runUrl, RUN_URL);
+});
+
+test('annotations: "file, line, what to fix", and an annotation without a line still shows', () => {
+  const rows = C.annotationRows([
+    { path: 'data/tools.json', start_line: 12, end_line: 12, start_column: null, end_column: null,
+      annotation_level: 'failure', title: null, message: 'Expecting property name enclosed in double quotes', raw_details: null },
+    { path: 'content/setup/start/index.md', start_line: null, annotation_level: 'failure', message: 'no heading' },
+    { path: '.github', start_line: 0, annotation_level: 'failure', message: '', title: 'Process completed with exit code 1.' },
+    null, 'junk',
+  ]);
+  assert.deepEqual(rows, [
+    { file: 'data/tools.json', line: 12, message: 'Expecting property name enclosed in double quotes' },
+    { file: 'content/setup/start/index.md', line: null, message: 'no heading' },
+    { file: '.github', line: null, message: 'Process completed with exit code 1.' },
+  ]);
+  assert.deepEqual(rows.map(C.annotationText), [
+    'data/tools.json, line 12: Expecting property name enclosed in double quotes',
+    'content/setup/start/index.md: no heading',
+    '.github: Process completed with exit code 1.',
+  ]);
+  assert.deepEqual(C.annotationRows({ message: 'not a list' }), []);
+});
+
+test('annotations: every page is read (100 to a page) until a short one, GET only', async () => {
+  const note = (i) => ({ path: `content/p${i}.md`, start_line: i + 1, annotation_level: 'failure', message: `m${i}` });
+  const pages = [Array.from({ length: 100 }, (_, i) => note(i)), Array.from({ length: 100 }, (_, i) => note(100 + i)),
+    [note(200), 'junk']];
+  const gh = fakeFetch((url) => reply(200, pages[Number(/&page=(\d+)$/.exec(url)[1]) - 1] || []));
+  const client = C.createGitHubClient({ fetch: gh.fetch, token: TOKEN });
+  const get = async (p) => (await client.get(p)).data;
+  const rows = await C.loadAnnotations(get, 222);
+  assert.equal(rows.length, 201);
+  assert.deepEqual(rows[200], { file: 'content/p200.md', line: 201, message: 'm200' });
+  assert.deepEqual(gh.calls.map((c) => [c.init.method, c.url]), [1, 2, 3].map((k) =>
+    ['GET', `${REPO_API}/check-runs/222/annotations?per_page=100&page=${k}`]));
+  await assert.rejects(C.loadAnnotations(get, 'x'), /check run id/);
+  await assert.rejects(C.loadAnnotations(async () => { throw new Error('HTTP 403'); }, 222), /HTTP 403/);
+});
+
+test('Undo on GitHub: the merged PR\'s own page, where GitHub\'s Revert button is', () => {
+  assert.equal(C.undoOnGitHubUrl(1), 'https://github.com/desert-mango/hippocampus-docs/pull/1');
+  assert.equal(C.undoOnGitHubUrl(4321), 'https://github.com/desert-mango/hippocampus-docs/pull/4321');
+  assert.equal(C.UNDO_TEXT, 'Undo on GitHub');
+  for (const bad of [0, -1, 1.5, '1', NaN, null, 1e10]) {
+    assert.throws(() => C.undoOnGitHubUrl(bad), /PR number/, String(bad));
+  }
+});
+
+test('Vercel\'s preview comment: a link to the bot\'s comment on this repository, or none', () => {
+  const bot = { user: { login: 'vercel[bot]' },
+    html_url: 'https://github.com/desert-mango/hippocampus-docs/pull/1#issuecomment-5696197254' };
+  assert.equal(C.vercelCommentUrl([{ user: { login: 'kyle' }, html_url: bot.html_url.replace('5696', '1111') }, bot]),
+    bot.html_url);
+  assert.equal(C.vercelCommentUrl([{ user: { login: 'vercel' }, html_url: bot.html_url }]), null, 'a person named vercel');
+  assert.equal(C.vercelCommentUrl([{ user: { login: 'vercel[bot]' }, html_url: 'https://evil.example/x' }]), null);
+  assert.equal(C.vercelCommentUrl([]), null);
+  assert.equal(C.vercelCommentUrl(null), null);
+});
+
+test('actions by role: Read-only none, Editor no Merge, Maintainer and Admin all; merged -> Undo only', () => {
+  const open = { state: 'open', merged: false, merged_at: null };
+  const role = (perms) => C.roleFromPermissions(perms);
+  assert.deepEqual(C.reviewActionsFor(role({ pull: true }), open), []);
+  assert.deepEqual(C.reviewActionsFor(null, open), []);
+  assert.deepEqual(C.reviewActionsFor(role({ push: true }), open), ['approve', 'request-changes', 'update', 'close']);
+  const all = ['approve', 'request-changes', 'merge', 'update', 'close'];
+  assert.deepEqual(C.reviewActionsFor(role({ maintain: true, push: true }), open), all);
+  assert.deepEqual(C.reviewActionsFor(role({ admin: true }), open), all);
+  const merged = { state: 'closed', merged: true, merged_at: '2026-09-20T10:00:00Z' };
+  assert.deepEqual(C.reviewActionsFor(role({ admin: true }), merged), ['undo']);
+  assert.deepEqual(C.reviewActionsFor(role({ pull: true }), merged), []);
+  assert.deepEqual(C.reviewActionsFor(role({ admin: true }), { state: 'closed', merged: false, merged_at: null }), []);
+});
+
+test('action requests: one exact write each, pinned to the head sha that was shown', () => {
+  const ctx = { number: 7, sha: HEAD_1, comment: '  Please fix the heading.  ', checkState: 'pass' };
+  const P = '/repos/desert-mango/hippocampus-docs/pulls/7';
+  assert.deepEqual(C.reviewRequest('approve', ctx),
+    { method: 'POST', path: `${P}/reviews`, body: { event: 'APPROVE', commit_id: HEAD_1 } });
+  assert.deepEqual(C.reviewRequest('request-changes', ctx), { method: 'POST', path: `${P}/reviews`,
+    body: { event: 'REQUEST_CHANGES', body: 'Please fix the heading.', commit_id: HEAD_1 } });
+  assert.deepEqual(C.reviewRequest('merge', ctx),
+    { method: 'PUT', path: `${P}/merge`, body: { merge_method: 'squash', sha: HEAD_1 } });
+  assert.deepEqual(C.reviewRequest('update', ctx),
+    { method: 'PUT', path: `${P}/update-branch`, body: { expected_head_sha: HEAD_1 } });
+  assert.deepEqual(C.reviewRequest('close', ctx), { method: 'PATCH', path: P, body: { state: 'closed' } });
+  assert.throws(() => C.reviewRequest('request-changes', Object.assign({}, ctx, { comment: '   ' })), /what should change/);
+  for (const a of ['approve', 'merge', 'update']) {
+    assert.throws(() => C.reviewRequest(a, { number: 7, sha: 'main', checkState: 'pass' }), /head commit/, a);
+  }
+  assert.throws(() => C.reviewRequest('merge', { number: 0, sha: HEAD_1, checkState: 'pass' }), /number/);
+  // not green: a merge needs one explicit confirmation (never a lock: confirmed, it goes)
+  for (const checkState of ['fail', 'checking', 'unknown', undefined]) {
+    assert.equal(C.mergeNeedsConfirm(checkState), true, String(checkState));
+    assert.throws(() => C.reviewRequest('merge', { number: 7, sha: HEAD_1, checkState }), /needs your confirmation/,
+      String(checkState));
+    assert.deepEqual(C.reviewRequest('merge', { number: 7, sha: HEAD_1, checkState, confirmed: true }),
+      { method: 'PUT', path: '/repos/desert-mango/hippocampus-docs/pulls/7/merge',
+        body: { merge_method: 'squash', sha: HEAD_1 } }, String(checkState));
+  }
+  assert.equal(C.mergeNeedsConfirm('pass'), false);
+  assert.equal(C.MERGE_CONFIRM_TEXT, 'Site rules do not pass on this commit (or are still checking). '
+    + 'A merge deploys nothing until main is green. Merge anyway?');
+  assert.equal(C.reviewRequest('approve', { number: 7, sha: HEAD_1, checkState: 'fail' }).method, 'POST',
+    'reviewing a red proposal is fine; only merging waits');
+  assert.throws(() => C.reviewRequest('delete', ctx), /no such action/);
+});
+
+test('write allowlist: the client sends a write verb only to the exact paths listed', async () => {
+  const gh = fakeFetch(() => reply(200, {}));
+  const client = C.createGitHubClient({ fetch: gh.fetch, token: TOKEN });
+  assert.deepEqual([...client.methods], ['GET', 'POST', 'PUT', 'PATCH']);
+  assert.ok(C.WRITE_METHODS.every((w) => w.unit && w.path instanceof RegExp));
+  const R = C.REPO_API_PATH;
+  for (const [m, p] of [['POST', `${R}/pulls/7/reviews`], ['PUT', `${R}/pulls/7/merge`],
+    ['PUT', `${R}/pulls/123456789/update-branch`], ['PATCH', `${R}/pulls/7`]]) {
+    assert.equal(C.isAllowedWrite(m, p), true, `${m} ${p}`);
+    await client.send(m, p, { body: { x: 1 } });
+  }
+  const refused = [
+    ['POST', `${R}/pulls`], ['POST', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/7/reviews`],
+    ['PATCH', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/07/merge`], ['PUT', `${R}/pulls/7/merge/`],
+    ['PUT', `${R}/pulls/7/merge?x=1`], ['PATCH', `${R}/pulls/0`], ['PATCH', `${R}`],
+    ['PUT', `${R}/contents/content/about.md`], ['POST', `${R}/git/refs`], ['POST', `${R}/issues/7/comments`],
+    ['PATCH', `${R}/issues/7`], ['POST', `${R}/merges`], ['PUT', `${R}/pulls/1234567890/merge`],
+    ['POST', '/user'], ['PUT', '/repos/desert-mango/other/pulls/7/merge'],
+    ['PUT', `${R}/pulls/7/../../other/pulls/7/merge`], ['POST', `${R}/pulls/7/reviews#x`],
+  ];
+  for (const [m, p] of refused) {
+    assert.equal(C.isAllowedWrite(m, p), false, `${m} ${p}`);
+    await assert.rejects(client.send(m, p, { body: {} }), /does not send|this site's repository/, `${m} ${p}`);
+  }
+  for (const m of ['DELETE', 'get', 'OPTIONS']) {
+    await assert.rejects(client.send(m, `${R}/pulls/7`), /does not send/, m);
+  }
+  await assert.rejects(client.get(`${R}/pulls/7`, { body: {} }), /no body/);
+  assert.equal(gh.calls.length, 4, 'only the four allowed writes reached fetch');
+  const merge = gh.calls[1];
+  assert.equal(merge.init.method, 'PUT');
+  assert.equal(merge.init.headers['Content-Type'], 'application/json');
+  assert.equal(merge.init.headers.Authorization, `Bearer ${TOKEN}`);
+  assert.equal(merge.init.body, '{"x":1}');
+});
+
+test('action outcomes: self-approval 422, merge 409, update conflict 422 in the tab\'s words', () => {
+  const res = (status, data) => ({ ok: status >= 200 && status < 300, status, data });
+  const self = res(422, { message: 'Unprocessable Entity',
+    errors: ['Review Can not approve your own pull request'], status: '422' });
+  assert.equal(C.actionOutcome('approve', self, {}).message, 'GitHub does not let you approve your own proposal.');
+  assert.equal(C.actionOutcome('approve', res(422, { message: 'Unprocessable Entity' }), { isAuthor: true }).message,
+    'GitHub does not let you approve your own proposal.');
+  assert.equal(C.actionOutcome('request-changes', res(422, { message: 'Unprocessable Entity',
+    errors: ['Review Can not request changes on your own pull request'] }), {}).message,
+  'GitHub does not let you request changes on your own proposal.');
+  assert.equal(C.actionOutcome('merge', res(409, { message: 'Head branch was modified. Review and try the merge again.' }))
+    .message, 'Not merged: it changed since you looked, reload.');
+  assert.equal(C.actionOutcome('update', res(422, { message: 'merge conflict between base and head' })).message,
+    'This branch needs a human — ask Desert Mango.');
+  assert.equal(C.actionOutcome('update', res(422, { message: 'expected head sha didn’t match current head ref.' }))
+    .message, 'Not updated: it changed since you looked, reload.');
+  assert.match(C.actionOutcome('merge', res(405, { message: 'Pull Request is not mergeable' })).message,
+    /^GitHub cannot merge this proposal: Pull Request is not mergeable$/);
+  assert.match(C.actionOutcome('close', res(403, { message: 'Resource not accessible by integration' })).message,
+    /^GitHub says you may not do this: Resource not accessible by integration$/);
+  assert.match(C.actionOutcome('approve', res(422, { message: 'Pull request is closed' }), {}).message,
+    /^GitHub refused \(HTTP 422\): Pull request is closed$/);
+  assert.equal(C.actionOutcome('merge', res(200, { merged: true })).ok, true);
+  assert.equal(C.actionOutcome('merge', res(200, { merged: true })).message, 'Merged.');
+  assert.equal(C.actionOutcome('update', res(202, { message: 'Updating pull request branch.' })).ok, true);
+  assert.match(C.actionOutcome('merge', { ok: false, status: 0, data: null }).message, /could not be reached/);
+  // GitHub's words arrive as text, one line, bounded
+  const long = C.actionOutcome('close', res(500, { message: `a\nb${'x'.repeat(900)}` })).message;
+  assert.ok(!long.includes('\n') && long.length < 340);
+});
+
+test('runReviewAction: an unbuildable request sends nothing; a sent one reports GitHub\'s answer', async () => {
+  const gh = fakeFetch((url, init) => (init.method === 'PUT' ? reply(409, { message: 'Head branch was modified.' })
+    : reply(200, { id: 1 })));
+  const client = C.createGitHubClient({ fetch: gh.fetch, token: TOKEN });
+  const empty = await C.runReviewAction(client, 'request-changes', { number: 7, sha: HEAD_1, comment: '' });
+  assert.deepEqual([empty.ok, empty.sent], [false, false]);
+  assert.match(empty.message, /^Nothing was sent: write what should change/);
+  assert.equal(gh.calls.length, 0);
+  const red = await C.runReviewAction(client, 'merge', { number: 7, sha: HEAD_1, checkState: 'fail' });
+  assert.deepEqual([red.ok, red.sent], [false, false]);
+  assert.match(red.message, /^Nothing was sent: a merge while site rules do not pass needs your confirmation/);
+  assert.equal(gh.calls.length, 0);
+  const merged = await C.runReviewAction(client, 'merge', { number: 7, sha: HEAD_1, checkState: 'fail', confirmed: true });
+  assert.deepEqual([merged.ok, merged.status, merged.sent], [false, 409, true]);
+  assert.equal(merged.message, 'Not merged: it changed since you looked, reload.');
+  const approved = await C.runReviewAction(client, 'approve', { number: 7, sha: HEAD_1 });
+  assert.deepEqual([approved.ok, approved.message], [true, 'Approved.']);
+  assert.deepEqual(gh.calls.map((c) => [c.init.method, c.url, JSON.parse(c.init.body)]), [
+    ['PUT', `${REPO_API}/pulls/7/merge`, { merge_method: 'squash', sha: HEAD_1 }],
+    ['POST', `${REPO_API}/pulls/7/reviews`, { event: 'APPROVE', commit_id: HEAD_1 }],
+  ]);
+});
+
+test('preview pages: changed files -> the site routes that show them, via the PR head\'s registries', () => {
+  const regs = { setup: REAL_SETUP,
+    projects: { projects: [{ id: 'uvms', name: 'UVMS', file: 'content/projects/uvms.md' }] },
+    tools: { tools: [{ id: 'runpod-mcp', name: 'runpod-mcp', file: 'content/tools/runpod-mcp.md' }] } };
+  const pr1 = C.previewPages(PR1_FILES, regs);
+  assert.equal(pr1.length, 9, 'nine changed setup pages; search/ shows no page');
+  assert.deepEqual(pr1[0], { route: '/setup/concepts/colcon', label: 'Colcon', file: 'content/setup/concepts/colcon.md' });
+  const mixed = C.previewPages([fileRow('js/app.js'), fileRow('content/projects/uvms.md'),
+    fileRow('content/tools/gone.md', { status: 'removed' }), fileRow('content/tools/runpod-mcp.md'),
+    fileRow('data/people.json'), fileRow('content/about.md'), fileRow('data/site.json'),
+    fileRow('content/setup/not-in-registry.md')], regs);
+  assert.deepEqual(mixed.map((x) => x.route), ['/projects/uvms', '/tools/runpod-mcp', '/about', '/']);
+  // a PR's registries are not checked yet: every shape is guarded
+  for (const bad of [null, {}, { setup: 'x', projects: { projects: 'abc' }, tools: { tools: [null, 7] } },
+    { setup: { sections: [{ pages: [{ id: '../x', file: 'content/setup/concepts/colcon.md' }] }] } },
+    { projects: { projects: [{ id: 'a/b', file: 'content/projects/uvms.md' }] } }]) {
+    assert.deepEqual(C.previewPages([fileRow('content/setup/concepts/colcon.md'),
+      fileRow('content/projects/uvms.md')], bad), [], JSON.stringify(bad));
+  }
+  assert.deepEqual(C.previewPages('junk', regs), []);
+});
+
+test('head registries: only those a changed content file needs, read through the fetcher; broken is null', async () => {
+  const asked = [];
+  const fetcher = async (p) => {
+    asked.push(p);
+    if (p === 'data/setup.json') return { ok: true, status: 200, text: JSON.stringify(REAL_SETUP) };
+    if (p === 'data/projects.json') return { ok: true, status: 200, text: '{"projects": [,]}' };
+    return { ok: false, status: 404, text: '' };
+  };
+  const regs = await C.loadHeadRegistries(fetcher, PR1_FILES);
+  assert.deepEqual(asked, ['data/setup.json']);
+  assert.equal(regs.setup.sections.length, REAL_SETUP.sections.length);
+  const more = await C.loadHeadRegistries(fetcher, [fileRow('content/projects/x.md'), fileRow('content/tools/y.md')]);
+  assert.deepEqual(more, { setup: null, projects: null, tools: null });
+  assert.deepEqual(await C.loadHeadRegistries(async () => { throw new Error('x'); }, PR1_FILES),
+    { setup: null, projects: null, tools: null });
+});
+
 // -------------------------------------------------- source-level promises --
 
-test('js/cms.js reaches GitHub only through cms-core and writes nothing anywhere', () => {
+test('js/cms.js reaches GitHub only through cms-core; every write is an allowlisted review action', () => {
   const ui = fs.readFileSync(path.join(ROOT, 'js', 'cms.js'), 'utf8');
   assert.ok(!ui.includes('api.github.com'), 'the UI never builds an API URL itself');
-  assert.ok(!/\b(POST|PUT|PATCH|DELETE)\b/.test(ui), 'the UI sends no write verb');
+  assert.ok(!/\b(POST|PUT|PATCH|DELETE)\b/.test(ui),
+    'the UI names no write verb: writes are HCCore.runReviewAction, through the allowlist');
+  assert.ok(!/\.send\s*\(/.test(ui), 'the UI never calls client.send() itself');
   // one wrapper hands window.fetch to the client and the sign-in; no other call
   const WRAPPER = 'const netFetch = (url, init) => window.fetch(url, init);';
   assert.equal(ui.split(WRAPPER).length, 2, 'exactly one fetch wrapper');
   assert.ok(!/\bfetch\s*\(/.test(ui.replace(WRAPPER, '').replace(/HC\.fetch(JSON|Text)\(/g, '')),
     'the UI calls no bare fetch (the client and the sign-in own the network)');
-  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 4,
-    'netFetch goes only to the sign-in and the GitHub clients');
+  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 5,
+    'netFetch goes only to the sign-in, the GitHub clients and the PR-head preview fetcher');
   const core = fs.readFileSync(path.join(ROOT, 'js', 'cms-core.js'), 'utf8');
   const verbs = core.match(/method:\s*'[A-Z]+'/g) || [];
-  assert.deepEqual([...new Set(verbs)].sort(), ["method: 'GET'", "method: 'POST'"]);
-  assert.equal((core.match(/method:\s*'POST'/g) || []).length, 1, 'one POST: the sign-in exchange');
+  assert.deepEqual([...new Set(verbs)].sort(),
+    ["method: 'GET'", "method: 'PATCH'", "method: 'POST'", "method: 'PUT'"]);
+  assert.ok(!/\bDELETE\b/.test(core), 'nothing in the CMS deletes');
+  // the write verbs appear only in the allowlist and the review requests it admits
+  const allow = core.slice(core.indexOf('const WRITE_METHODS'), core.indexOf('function isAllowedWrite'));
+  const review = core.slice(core.indexOf('function reviewRequest'), core.indexOf('const DONE_TEXT'));
+  const rest = core.replace(allow, '').replace(review, '');
+  assert.deepEqual((rest.match(/method:\s*'(POST|PUT|PATCH)'/g) || []), ["method: 'POST'"],
+    'outside them, one POST: the sign-in exchange to /api/auth');
   for (const src of [ui, core]) {
     // (a repository name may hold dots, but never ends in one: that is a full stop)
     const repos = src.match(/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]*[A-Za-z0-9_-]/g) || [];
@@ -895,6 +1291,7 @@ function openCms(opts) {
     C.writeSession(storage, C.makeSession(token, null, login, Date.now()));
   if (opts.session) putSession(opts.session.token, opts.session.login);
   const calls = [];
+  const listeners = {};
   const win = vm.createContext({
     document: {
       getElementById: (id) => els[id] || null,
@@ -904,14 +1301,14 @@ function openCms(opts) {
     },
     sessionStorage: storage,
     localStorage: memoryStorage(),
-    location: { origin: ORIGIN, hash: '#/' },
+    location: { origin: ORIGIN, hash: opts.hash || '#/' },
     crypto: { getRandomValues: fakeRandom },
     fetch: (url, init) => {
       calls.push({ url: String(url), init: init || {} });
       return opts.github(String(url), init || {});
     },
     open: () => null,
-    addEventListener: () => {},
+    addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     setInterval, clearInterval, setTimeout, clearTimeout,
   });
   win.window = win;
@@ -919,7 +1316,7 @@ function openCms(opts) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', f), 'utf8'), win, { filename: f });
   }
   return {
-    els, storage, calls, win, putSession,
+    els, storage, calls, win, putSession, listeners,
     main: () => els['cms-main'].textContent,
     who: () => els['cms-who'].textContent,
     notice: () => els['cms-notice'].textContent,
@@ -1017,4 +1414,295 @@ test('js/cms.js: "Recently merged" finds a merge on the second page of closed PR
   assert.doesNotMatch(page.main(), /Nothing merged recently/);
   assert.deepEqual(page.calls.filter((c) => c.url.includes('state=closed')).map((c) => c.url),
     pagePaths(2).map((p) => `https://api.github.com${p}`));
+});
+
+// ------------------------------------------ js/cms.js: the Review tab (U8) --
+
+/* Every element under `node` (itself included) that passes `pred`. */
+function findAll(node, pred, out = []) {
+  if (node && node.tagName && pred(node)) out.push(node);
+  for (const c of (node && node.childNodes) || []) findAll(c, pred, out);
+  return out;
+}
+const actionButtons = (page) => findAll(page.els['cms-main'], (e) => e.attrs['data-action'] !== undefined);
+const actionButton = (page, key) => actionButtons(page).find((e) => e.attrs['data-action'] === key);
+const writes = (page) => page.calls.filter((c) => (c.init.method || 'GET') !== 'GET');
+const HOURS = 3600e3;
+
+/* GitHub for the Review tab: `login` signed in with `perms` on this
+   repository; `pulls` maps number -> {pull, files, runs, annotations,
+   comments}; `contents` maps "<path>@<sha>" -> text; `onWrite(method, url,
+   body)` answers every write (a 200 by default). */
+function reviewGithub(o) {
+  return (url, init) => {
+    const method = init.method || 'GET';
+    if (method !== 'GET') return o.onWrite ? o.onWrite(method, url, JSON.parse(init.body)) : reply(200, {});
+    if (url === 'https://api.github.com/user') return reply(200, { login: o.login });
+    if (url === REPO_API) return reply(200, { permissions: o.perms });
+    const rest = url.slice(REPO_API.length);
+    if (rest.startsWith('/pulls?state=open')) return reply(200, Object.values(o.pulls).map((x) => x.pull));
+    if (rest.startsWith('/pulls?state=closed')) return reply(200, o.closed || []);
+    let m = /^\/pulls\/(\d+)(\/files\?.*)?$/.exec(rest);
+    if (m && o.pulls[m[1]]) return reply(200, m[2] ? o.pulls[m[1]].files : o.pulls[m[1]].pull);
+    m = /^\/commits\/([0-9a-f]{40})\/check-runs\?/.exec(rest);
+    if (m) {
+      const hit = Object.values(o.pulls).find((x) => x.pull.head.sha === m[1]);
+      return reply(200, (hit && hit.runs) || runs());
+    }
+    m = /^\/check-runs\/(\d+)\/annotations\?/.exec(rest);
+    if (m) {
+      const hit = Object.values(o.pulls).find((x) => x.runs && x.runs.check_runs.some((r) => String(r.id) === m[1]));
+      return reply(200, (hit && hit.annotations) || []);
+    }
+    m = /^\/issues\/(\d+)\/comments\?/.exec(rest);
+    if (m) return reply(200, (o.pulls[m[1]] && o.pulls[m[1]].comments) || []);
+    m = /^\/contents\/(.+)\?ref=([0-9a-f]{40})$/.exec(rest);
+    if (m && o.contents && o.contents[`${m[1]}@${m[2]}`] !== undefined) return reply(200, o.contents[`${m[1]}@${m[2]}`]);
+    return reply(404, { message: 'Not Found' });
+  };
+}
+
+function openPull(number, login, sha, extra) {
+  return Object.assign({ number, state: 'open', merged: false, merged_at: null, title: `Proposal ${number}`,
+    user: { login }, created_at: new Date(Date.now() - 3 * 24 * HOURS).toISOString(),
+    head: { sha, ref: `cms/${login}/fix-${number}` }, base: { ref: 'main' }, html_url: C.undoOnGitHubUrl(number) },
+  extra || {});
+}
+
+test('js/cms.js Review list: mine first, author, age, files count, both badges; a title stays text', async () => {
+  const pulls = {
+    5: { pull: openPull(5, 'alice', 'c'.repeat(40), { title: '<script>alert(1)</script> fix the nav' }),
+      files: [fileRow('js/app.js')] },
+    6: { pull: openPull(6, 'bob', 'd'.repeat(40)), files: [fileRow('content/about.md'), fileRow('search/site.json')] },
+  };
+  const page = openCms({ session: { token: TOKEN_B, login: 'bob' }, hash: '#/review',
+    github: reviewGithub({ login: 'bob', perms: { push: true }, pulls }) });
+  await settle();
+  const text = page.main();
+  assert.ok(text.indexOf('#6') < text.indexOf('#5'), 'my proposal first');
+  assert.match(text, /#6Proposal 6yoursby bob, opened 3 days ago2 filesderived files/);
+  assert.match(text, /#5<script>alert\(1\)<\/script> fix the navby alice, opened 3 days ago1 filemachinery/);
+  const badges = findAll(page.els['cms-main'], (e) => /cms-badge-/.test(e.className));
+  assert.deepEqual(badges.map((e) => [e.textContent, e.attrs.title]), [
+    ['derived files', C.DERIVED_TEXT], ['machinery', 'needs a code review by Desert Mango']]);
+  assert.equal(findAll(page.els['cms-main'], (e) => e.tagName === 'SCRIPT').length, 0, 'the title is text');
+  assert.deepEqual(writes(page), []);
+  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/pulls/5/files?per_page=100&page=1`));
+});
+
+function greenPr1(extra) {
+  return { pull: openPull(1, 'kyle-nelson-berkeley', HEAD_1), files: PR1_FILES, runs: runs(gateRun()),
+    comments: [{ user: { login: 'vercel[bot]' }, html_url: `${C.undoOnGitHubUrl(1)}#issuecomment-5696197254` }],
+    ...extra };
+}
+const PR1_CONTENTS = { [`data/setup.json@${HEAD_1}`]: JSON.stringify(REAL_SETUP),
+  [`content/setup/concepts/colcon.md@${HEAD_1}`]: '# Colcon\n\nThe fixed text.' };
+
+test('js/cms.js Review PR: green ✓, the diff as text, Vercel\'s comment, and the preview at the PR head', async () => {
+  const page = openCms({ session: { token: TOKEN_A, login: 'desert-mango-robotics' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'desert-mango-robotics', perms: { admin: true, push: true },
+      pulls: { 1: greenPr1() }, contents: PR1_CONTENTS }) });
+  await settle();
+  const text = page.main();
+  assert.match(text, /✓site rules pass/);
+  assert.match(text, /content\/setup\/concepts\/colcon\.md/);
+  assert.match(text, /-old\n\+new/, 'the patch is shown as text');
+  assert.match(text, /derived files/);
+  assert.deepEqual(findAll(page.els['cms-main'], (e) => e.tagName === 'H2').map((e) => e.textContent)
+    .filter((t) => /^Preview/.test(t)), ['Preview'], 'a content-only proposal: the preview shows every change');
+  assert.doesNotMatch(text, /content only/i);
+  const vercel = findAll(page.els['cms-main'], (e) => e.tagName === 'A' && /issuecomment/.test(e.attrs.href || ''));
+  assert.equal(vercel.length, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']),
+    ['approve', 'request-changes', 'merge', 'update', 'close']);
+  assert.equal(actionButton(page, 'merge').attrs.disabled, undefined, 'green: Merge is live');
+  assert.doesNotMatch(page.main(), /Merge anyway/, 'green asks no confirmation');
+  // the preview: the first changed page, at the PR head, in a sandboxed frame
+  const [frame] = findAll(page.els['cms-main'], (e) => e.tagName === 'IFRAME');
+  assert.equal(frame.attrs.sandbox, 'allow-scripts allow-popups');
+  const m = /^\.\.\/index\.html#preview=([0-9a-f]{32})&route=(.+)$/.exec(frame.src);
+  assert.ok(m, frame.src);
+  assert.equal(decodeURIComponent(m[2]), '/setup/concepts/colcon');
+  const posted = [];
+  frame.contentWindow = { postMessage: (msg) => posted.push(msg) };
+  for (const fn of page.listeners.message) {
+    fn({ source: frame.contentWindow, origin: 'null',
+      data: { type: 'hc-fetch', nonce: m[1], id: 1, path: 'content/setup/concepts/colcon.md' } });
+  }
+  await settle();
+  assert.equal(posted.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[0])), { type: 'hc-file', nonce: m[1], id: 1, ok: true, status: 200,
+    text: '# Colcon\n\nThe fixed text.' });
+  assert.ok(!JSON.stringify(posted).includes(TOKEN_A), 'the token never reaches the frame');
+  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/contents/content/setup/concepts/colcon.md?ref=${HEAD_1}`));
+  // navigable: another changed page re-loads the frame there with a fresh nonce
+  const pick = findAll(page.els['cms-main'], (e) => e.attrs['data-route'] === '/setup/raspberry-pi/ethernet')[0];
+  pick.click();
+  const m2 = /#preview=([0-9a-f]{32})&route=(.+)$/.exec(frame.src);
+  assert.notEqual(m2[1], m[1]);
+  assert.equal(decodeURIComponent(m2[2]), '/setup/raspberry-pi/ethernet');
+  assert.deepEqual(writes(page), [], 'looking writes nothing');
+});
+
+test('js/cms.js Review PR: a proposal that changes the site\'s code labels its preview "content only"', async () => {
+  const files = PR1_FILES.concat([fileRow('js/app.js')]);
+  const page = openCms({ session: { token: TOKEN_A, login: 'desert-mango-robotics' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'desert-mango-robotics', perms: { admin: true, push: true },
+      pulls: { 1: greenPr1({ files }) }, contents: PR1_CONTENTS }) });
+  await settle();
+  const heads = findAll(page.els['cms-main'], (e) => e.tagName === 'H2').map((e) => e.textContent);
+  assert.ok(heads.includes('Preview (content only)'), heads.join(' | '));
+  assert.ok(!heads.includes('Preview'));
+  const [area] = findAll(page.els['cms-main'], (e) => e.attrs.id === 'cms-preview-area');
+  assert.ok(area.textContent.startsWith(C.PREVIEW_CONTENT_ONLY_TEXT), 'the note leads the preview area');
+  // still a preview of the head's content, in the same sandboxed frame: no proposal code runs
+  const [frame] = findAll(area, (e) => e.tagName === 'IFRAME');
+  assert.match(frame.src, /^\.\.\/index\.html#preview=[0-9a-f]{32}&route=/);
+  assert.deepEqual(writes(page), []);
+});
+
+test('js/cms.js Review PR: red ✗ with each annotation as "file, line, what to fix" and a link to the run', async () => {
+  const red = greenPr1({ runs: runs(gateRun({ conclusion: 'failure' })), annotations: [
+    { path: 'data/tools.json', start_line: 12, annotation_level: 'failure', message: 'trailing comma' },
+    { path: 'content/about.md', start_line: null, annotation_level: 'failure', message: 'no title line' }] });
+  const page = openCms({ session: { token: TOKEN_A, login: 'nathalie' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'nathalie', perms: { maintain: true, push: true }, pulls: { 1: red },
+      contents: PR1_CONTENTS }) });
+  await settle();
+  const text = page.main();
+  assert.match(text, /✗site rules fail/);
+  assert.match(text, /data\/tools\.json, line 12: trailing comma/);
+  assert.match(text, /content\/about\.md: no title line/);
+  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/check-runs/106444242358/annotations?per_page=100&page=1`));
+  assert.equal(findAll(page.els['cms-main'], (e) => e.tagName === 'A' && e.attrs.href === RUN_URL).length, 1);
+  await confirmThenMerge(page, HEAD_1);
+});
+
+/* Red or still checking: Merge is live; the first click sends nothing and
+   asks once; "Merge anyway" sends exactly the one PUT, pinned to the sha. */
+async function confirmThenMerge(page, sha) {
+  const merge = actionButton(page, 'merge');
+  assert.equal(merge.attrs.disabled, undefined, 'Merge is never disabled');
+  assert.doesNotMatch(page.main(), /Merge anyway/);
+  merge.click();
+  await settle();
+  assert.deepEqual(writes(page), [], 'the first click sends nothing');
+  assert.match(page.main(), new RegExp(C.MERGE_CONFIRM_TEXT.replace(/[.()?]/g, '\\$&')));
+  const anyway = actionButton(page, 'merge-anyway');
+  assert.equal(anyway.textContent, 'Merge anyway');
+  anyway.click();
+  await settle();
+  assert.deepEqual(writes(page).map((c) => [c.init.method, c.url, JSON.parse(c.init.body)]),
+    [['PUT', `${REPO_API}/pulls/1/merge`, { merge_method: 'squash', sha }]]);
+}
+
+test('js/cms.js Review PR: no finished run yet is "still checking", and asks for no annotations', async () => {
+  const waiting = greenPr1({ runs: runs(gateRun({ status: 'in_progress', conclusion: null })) });
+  const page = openCms({ session: { token: TOKEN_A, login: 'nathalie' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'nathalie', perms: { push: true }, pulls: { 1: waiting }, contents: PR1_CONTENTS }) });
+  await settle();
+  assert.match(page.main(), /still checking/);
+  const boss = openCms({ session: { token: TOKEN_A, login: 'nathalie' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'nathalie', perms: { maintain: true, push: true }, pulls: { 1: waiting },
+      contents: PR1_CONTENTS }) });
+  await settle();
+  await confirmThenMerge(boss, HEAD_1);
+  assert.ok(!page.calls.some((c) => c.url.includes('/annotations')));
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']),
+    ['approve', 'request-changes', 'update', 'close'], 'an Editor gets no Merge button');
+});
+
+test('js/cms.js Review PR: Merge sends exactly one PUT pinned to the shown sha; a 409 says reload', async () => {
+  const pr = greenPr1();
+  const seen = [];
+  const page = openCms({ session: { token: TOKEN_A, login: 'desert-mango-robotics' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'desert-mango-robotics', perms: { admin: true, push: true }, pulls: { 1: pr },
+      contents: PR1_CONTENTS,
+      onWrite: (method, url, body) => { seen.push({ method, url, body }); return reply(409, { message: 'Head branch was modified.' }); } }) });
+  await settle();
+  const before = page.calls.filter((c) => c.url === `${REPO_API}/pulls/1`).length;
+  actionButton(page, 'merge').click();                    // green: one click, one PUT
+  await settle();
+  assert.deepEqual(seen, [{ method: 'PUT', url: `${REPO_API}/pulls/1/merge`, body: { merge_method: 'squash', sha: HEAD_1 } }]);
+  assert.equal(actionButton(page, 'merge-anyway'), undefined, 'no confirmation step on green');
+  assert.equal(writes(page).length, 1);
+  assert.equal(bearer(writes(page)[0].init), TOKEN_A);
+  assert.match(page.main(), /Not merged: it changed since you looked, reload\./);
+  assert.equal(page.calls.filter((c) => c.url === `${REPO_API}/pulls/1`).length, before + 1, 'the view was refreshed');
+});
+
+test('js/cms.js Review PR: approving your own proposal shows GitHub\'s refusal in the tab\'s words', async () => {
+  const page = openCms({ session: { token: TOKEN_A, login: 'kyle-nelson-berkeley' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'kyle-nelson-berkeley', perms: { admin: true, push: true }, pulls: { 1: greenPr1() },
+      contents: PR1_CONTENTS,
+      onWrite: () => reply(422, { message: 'Unprocessable Entity', errors: ['Review Can not approve your own pull request'] }) }) });
+  await settle();
+  actionButton(page, 'approve').click();
+  await settle();
+  assert.deepEqual(writes(page).map((c) => [c.init.method, c.url, JSON.parse(c.init.body)]),
+    [['POST', `${REPO_API}/pulls/1/reviews`, { event: 'APPROVE', commit_id: HEAD_1 }]]);
+  assert.match(page.main(), /GitHub does not let you approve your own proposal\./);
+});
+
+test('js/cms.js Review PR: request changes needs a comment; close and update send their one write', async () => {
+  const seen = [];
+  const page = openCms({ session: { token: TOKEN_A, login: 'nathalie' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'nathalie', perms: { maintain: true, push: true }, pulls: { 1: greenPr1() },
+      contents: PR1_CONTENTS,
+      onWrite: (method, url, body) => { seen.push([method, url.slice(REPO_API.length), body]); return reply(200, {}); } }) });
+  await settle();
+  actionButton(page, 'request-changes').click();
+  await settle();
+  assert.deepEqual(seen, [], 'no comment, nothing sent');
+  assert.match(page.main(), /write what should change/);
+  const [box] = findAll(page.els['cms-main'], (e) => e.tagName === 'TEXTAREA');
+  box.value = 'Please keep the old heading.';
+  actionButton(page, 'request-changes').click();
+  await settle();
+  assert.match(page.main(), /Changes requested\./);
+  actionButton(page, 'update').click();
+  await settle();
+  actionButton(page, 'close').click();
+  await settle();
+  assert.deepEqual(seen, [
+    ['POST', '/pulls/1/reviews', { event: 'REQUEST_CHANGES', body: 'Please keep the old heading.', commit_id: HEAD_1 }],
+    ['PUT', '/pulls/1/update-branch', { expected_head_sha: HEAD_1 }],
+    ['PATCH', '/pulls/1', { state: 'closed' }],
+  ]);
+});
+
+test('js/cms.js Review PR: Read-only sees the proposal and its preview, and no button at all', async () => {
+  const page = openCms({ session: { token: TOKEN_A, login: 'visitor' }, hash: '#/review/1',
+    github: reviewGithub({ login: 'visitor', perms: { pull: true }, pulls: { 1: greenPr1() }, contents: PR1_CONTENTS }) });
+  await settle();
+  assert.match(page.main(), /site rules pass/);
+  assert.deepEqual(actionButtons(page), []);
+  assert.equal(findAll(page.els['cms-main'], (e) => e.tagName === 'IFRAME').length, 1);
+  assert.deepEqual(writes(page), []);
+});
+
+test('js/cms.js Review PR: a merged proposal offers one button, Undo on GitHub, and nothing else', async () => {
+  const merged = { pull: openPull(3, 'alice', 'e'.repeat(40),
+    { state: 'closed', merged: true, merged_at: '2026-09-20T10:00:00Z' }), files: [fileRow('content/about.md')] };
+  const page = openCms({ session: { token: TOKEN_A, login: 'nathalie' }, hash: '#/review/3',
+    github: reviewGithub({ login: 'nathalie', perms: { maintain: true, push: true }, pulls: { 3: merged } }) });
+  await settle();
+  const undo = actionButtons(page);
+  assert.deepEqual(undo.map((b) => [b.tagName, b.attrs['data-action'], b.textContent, b.attrs.href]),
+    [['A', 'undo', 'Undo on GitHub', 'https://github.com/desert-mango/hippocampus-docs/pull/3']]);
+  assert.equal(undo[0].attrs.rel, 'noopener noreferrer');
+  assert.match(page.main(), /Revert/);
+  assert.ok(!page.calls.some((c) => c.url.includes('/check-runs')));
+  assert.deepEqual(writes(page), []);
+});
+
+test('js/cms.js home: each recently merged proposal links to its Review page (where Undo is)', async () => {
+  const closed = [openPull(3, 'alice', 'e'.repeat(40), { state: 'closed', merged: true,
+    merged_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-20T10:00:00Z', title: 'Fix the nav' })];
+  const page = openCms({ session: { token: TOKEN_A, login: 'nathalie' },
+    github: reviewGithub({ login: 'nathalie', perms: { push: true }, pulls: {}, closed }) });
+  await settle();
+  assert.match(page.main(), /Recently merged#3Fix the nav/);
+  const links = findAll(page.els['cms-main'], (e) => e.tagName === 'A' && e.attrs.href === '#/review/3');
+  assert.equal(links.length, 1);
 });

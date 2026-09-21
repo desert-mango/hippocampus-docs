@@ -99,3 +99,63 @@
   .cms-header .header-actions { margin-left: 0; flex-wrap: wrap; }
   .cms-list .cms-gh { margin-left: 0; }
 }
+
+/* ---------- the Review tab ---------- */
+.cms-badge {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  border-radius: 999px; padding: 0.05rem 0.5rem; border: 1px solid var(--edge); white-space: nowrap;
+}
+.cms-badge-machinery { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.cms-badge-derived { color: var(--body-soft); }
+.cms-badge-notes { list-style: none; margin: 0.6rem 0; padding: 0; }
+.cms-badge-notes li { margin: 0.3rem 0; color: var(--heading); }
+.cms-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-weight: 600; color: var(--heading); }
+.cms-check-mark { font-size: 1.15rem; }
+.cms-check-pass .cms-check-mark { color: var(--ok); }
+.cms-check-fail .cms-check-mark { color: var(--danger); }
+.cms-check-checking .cms-check-mark, .cms-check-unknown .cms-check-mark { color: var(--muted); }
+.cms-check .cms-meta { font-weight: 400; color: var(--muted); font-size: 0.86rem; }
+.cms-annotations { margin: 0.4rem 0 1rem; padding-left: 1.2rem; }
+.cms-annotations li { margin: 0.25rem 0; font-family: var(--mono, ui-monospace, monospace); font-size: 0.86rem; overflow-wrap: anywhere; }
+.cms-actions { margin: 1.2rem 0; }
+.cms-comment {
+  display: block; width: 100%; box-sizing: border-box; font: inherit; font-size: 0.92rem;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+  padding: 0.5rem 0.7rem; margin-bottom: 0.6rem; resize: vertical;
+}
+.cms-action-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.cms-btn[disabled] { opacity: 0.55; cursor: progress; }
+a.cms-btn { display: inline-block; text-decoration: none; }
+.cms-action-result {
+  padding: 0.5rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--edge);
+  background: var(--surface); color: var(--heading);
+}
+.cms-action-result[hidden] { display: none; }
+.cms-action-result.is-ok { border-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+.cms-action-result.is-error { border-color: var(--danger); }
+.cms-preview-pages { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-bottom: 0.8rem; }
+.cms-files { list-style: none; margin: 0; padding: 0; }
+.cms-files li { margin: 0 0 1rem; }
+.cms-file-head { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: baseline; margin-bottom: 0.3rem; }
+.cms-file-head code { color: var(--heading); overflow-wrap: anywhere; }
+.cms-diff {
+  margin: 0; padding: 0.6rem 0.8rem; max-height: 28rem; overflow: auto;
+  border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface);
+  font-size: 0.8rem; line-height: 1.45; white-space: pre;
+}
+.cms-diff span { display: block; min-height: 1em; }
+.cms-diff-add { color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+.cms-diff-del { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.cms-diff-hunk { color: var(--muted); }
+.cms-merge-confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; margin: 0.8rem 0 0;
+  padding: 0.5rem 0.8rem; border-radius: var(--radius); color: var(--heading);
+  border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+}
+.cms-merge-confirm[hidden] { display: none; }
+.cms-preview-scope {
+  margin: 0 0 0.8rem; padding: 0.5rem 0.8rem; border-radius: var(--radius); color: var(--heading);
+  border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+}

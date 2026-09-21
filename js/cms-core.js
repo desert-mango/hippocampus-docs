@@ -12,16 +12,22 @@
    paths under /repos/desert-mango/hippocampus-docs, and throws on anything
    else before fetch is ever called.
 
-   READ-ONLY IN THIS UNIT (U7a). The GitHub client sends GET only (its
-   `methods` list). The one POST in this file is the sign-in exchange to this
-   site's own /api/auth. Seams for the next units:
-     - U8 (Review) and U7b (Edit) add their write verbs to WRITE_METHODS in
-       createGitHubClient and call client.send(); the path guard stays.
+   WRITES ARE AN ALLOWLIST OF EXACT PATHS. The GitHub client sends GET to
+   any path assertRepoPath() passes, and a write verb ONLY to a path shape
+   listed in WRITE_METHODS (method + path under this repository, no query).
+   U8 (Review) listed its five: approve / request changes, merge, update from
+   main, close — all on /pulls/<n>. U7b adds its Git Data API calls there;
+   every other write throws before fetch is called. The other POST in this
+   file is the sign-in exchange to this site's own /api/auth.
+   Seams:
      - U8 fills the preview area with createPreviewHost + refFetcher(token,
        <PR head sha>); U7b uses draftFetcher(files, refFetcher(token, <main
        sha>)) for the in-memory draft.
      - The route table ROUTES names each route's owner; the views live in
        js/cms.js's VIEWS map.
+     - The Review tab's logic (badges, check status, annotations, the action
+       requests and what their answers mean, the Undo-on-GitHub URL, the
+       changed page -> preview route map) is the "review" section below.
 
    THE PREVIEW HOST is the parent side of js/source.js's bridge protocol (read
    the comment block there; it is the contract). In short: the frame is
@@ -377,16 +383,47 @@
   }
 
   const READ_METHODS = Object.freeze(['GET']);
-  // U8 and U7b add their verbs here ('POST', 'PUT'); nothing in U7a writes.
-  const WRITE_METHODS = Object.freeze([]);
+
+  /* Every write the CMS may send: a verb and the exact shape of the path it
+     may go to, relative to /repos/desert-mango/hippocampus-docs, with no
+     query string. <n> is a pull request number. U7b adds its own rows. */
+  const PULL_N = '[1-9][0-9]{0,8}';
+  const WRITE_METHODS = Object.freeze([
+    // U8: approve, or request changes (the review's `event` says which)
+    { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/reviews$`), unit: 'U8' },
+    // U8: merge (squash, pinned to the head sha the reviewer saw)
+    { method: 'PUT', path: new RegExp(`^/pulls/${PULL_N}/merge$`), unit: 'U8' },
+    // U8: update from main
+    { method: 'PUT', path: new RegExp(`^/pulls/${PULL_N}/update-branch$`), unit: 'U8' },
+    // U8: close ({state: "closed"})
+    { method: 'PATCH', path: new RegExp(`^/pulls/${PULL_N}$`), unit: 'U8' },
+  ].map((w) => Object.freeze(w)));
+
+  /* True only for a write WRITE_METHODS lists: the method, and a path under
+     this repository whose rest matches the row exactly (assertRepoPath has
+     already refused dot segments, encodings and other repositories). */
+  function isAllowedWrite(method, p) {
+    if (typeof p !== 'string' || p.indexOf('?') >= 0) return false;
+    if (p.indexOf(`${REPO_API_PATH}/`) !== 0) return false;
+    const rest = p.slice(REPO_API_PATH.length);
+    return WRITE_METHODS.some((w) => w.method === method && w.path.test(rest));
+  }
 
   function createGitHubClient(deps) {
     const d = deps || {};
-    const methods = Object.freeze(READ_METHODS.concat(WRITE_METHODS));
+    const writeVerbs = WRITE_METHODS.map((w) => w.method)
+      .filter((m, i, all) => all.indexOf(m) === i);
+    const methods = Object.freeze(READ_METHODS.concat(writeVerbs));
 
+    /* opts: accept (media type), raw (resolve the body as text), body (a
+       value sent as JSON; writes only). */
     async function send(method, p, opts) {
       if (methods.indexOf(method) < 0) throw new Error(`the CMS does not send ${method}`);
       assertRepoPath(p);
+      const isWrite = READ_METHODS.indexOf(method) < 0;
+      if (isWrite && !isAllowedWrite(method, p)) {
+        throw new Error(`the CMS does not send ${method} to ${String(p).slice(0, 80)}`);
+      }
       const o = opts || {};
       const init = {
         method,
@@ -396,6 +433,11 @@
         },
         cache: 'no-store',
       };
+      if (o.body !== undefined) {
+        if (!isWrite) throw new Error(`the CMS sends no body with ${method}`);
+        init.headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(o.body);
+      }
       let res;
       try {
         res = await d.fetch(API_ROOT + p, init);
@@ -614,6 +656,387 @@
     });
   }
 
+  // ------------------------------------------------------ review (U8) ---
+
+  /* The words the Review tab shows. docs/maintainer-protocols.md quotes the
+     same strings; keep them verbatim (a reconcile greps for drift). */
+  const MACHINERY_TEXT = 'needs a code review by Desert Mango';
+  const DERIVED_TEXT = 'carries search/ or data/graph/ files, which the site regenerates after a merge';
+  const CHECK_TEXT = Object.freeze({
+    pass: 'site rules pass',
+    fail: 'site rules fail',
+    checking: 'still checking',
+    unknown: 'could not read the site rules check',
+  });
+  const SELF_APPROVE_TEXT = 'GitHub does not let you approve your own proposal';
+  const SELF_REQUEST_TEXT = 'GitHub does not let you request changes on your own proposal';
+  const STALE_TEXT = 'changed since you looked, reload';
+  const NEEDS_HUMAN_TEXT = 'needs a human — ask Desert Mango';
+  const UNDO_TEXT = 'Undo on GitHub';
+  const MERGE_CONFIRM_TEXT = 'Site rules do not pass on this commit (or are still checking). '
+    + 'A merge deploys nothing until main is green. Merge anyway?';
+
+  /* The badges. "machinery": the site's code and the gate that judges it
+     (plan §5: a PR may redefine its own gate, so it needs a code review);
+     "derived files": what derive.yml regenerates. A rename counts on both
+     its old and its new name. */
+  const MACHINERY_DIRS = Object.freeze(['js/', 'css/', 'tools/', 'api/', 'cms/', '.github/']);
+  const MACHINERY_FILES = Object.freeze(['index.html', 'vercel.json']);
+  const DERIVED_DIRS = Object.freeze(['search/', 'data/graph/']);
+  const startsWithAny = (p, dirs) => dirs.some((d) => p.indexOf(d) === 0);
+  const isMachineryPath = (p) => typeof p === 'string'
+    && (startsWithAny(p, MACHINERY_DIRS) || MACHINERY_FILES.indexOf(p) >= 0);
+  const isDerivedPath = (p) => typeof p === 'string' && startsWithAny(p, DERIVED_DIRS);
+
+  const isFileRow = (f) => Boolean(f) && typeof f === 'object' && typeof f.filename === 'string';
+  const namesOf = (f) => [f.filename].concat(typeof f.previous_filename === 'string' ? [f.previous_filename] : []);
+
+  /* files = GET /pulls/{n}/files rows. -> [{key, label, text}] */
+  function pullBadges(files) {
+    const rows = listOf(files).filter(isFileRow);
+    const names = [].concat(...rows.map(namesOf));
+    const out = [];
+    if (names.some(isMachineryPath)) out.push({ key: 'machinery', label: 'machinery', text: MACHINERY_TEXT });
+    if (names.some(isDerivedPath)) out.push({ key: 'derived', label: 'derived files', text: DERIVED_TEXT });
+    return out;
+  }
+
+  /* The preview's scope. The sandboxed frame runs the site's CURRENT code;
+     only content/, data/ and search/ reads come from the PR head through the
+     bridge (plan D3: a preview never runs proposal code). So a proposal that
+     also changes code, styles or other served files is previewed "content
+     only", and the page says so. Files GitHub would not list: the same
+     label, since nobody can say what the frame misses. -> {contentOnly,
+     heading, text}. */
+  const PREVIEW_CONTENT_ONLY_TEXT = 'Content only: this preview shows the proposal\'s pages and data '
+    + 'on the site\'s current code. Its changes to code, styles or files are not shown here; read them under '
+    + '"Files changed".';
+  const PREVIEW_UNLISTED_TEXT = 'Content only: this preview shows the proposal\'s pages and data '
+    + 'on the site\'s current code. GitHub did not list the changed files, so a change to code, styles or files '
+    + 'would not show here.';
+  const isUnpreviewedPath = (p) => isMachineryPath(p) || (typeof p === 'string' && p.indexOf('assets/') === 0);
+
+  function previewScope(files) {
+    const partial = (text) => ({ contentOnly: true, heading: 'Preview (content only)', text });
+    if (!Array.isArray(files)) return partial(PREVIEW_UNLISTED_TEXT);
+    const names = [].concat(...files.filter(isFileRow).map(namesOf));
+    return names.some(isUnpreviewedPath) ? partial(PREVIEW_CONTENT_ONLY_TEXT)
+      : { contentOnly: false, heading: 'Preview', text: null };
+  }
+
+  const FILES_PAGE_SIZE = 100;
+  const FILES_PAGE_CAP = 30;                // GitHub lists at most 3000 files
+
+  /* Every changed file of PR n, paged 100 at a time. get(path) resolves to
+     the parsed JSON of a GET (js/cms.js's api()); a rejection is passed on. */
+  async function loadPullFiles(get, n) {
+    if (!Number.isInteger(n) || n < 1) throw new Error('loadPullFiles: n must be a PR number');
+    const out = [];
+    for (let page = 1; page <= FILES_PAGE_CAP; page += 1) {
+      const rows = await get(`${REPO_API_PATH}/pulls/${n}/files?per_page=${FILES_PAGE_SIZE}&page=${page}`);
+      const list = Array.isArray(rows) ? rows : [];
+      out.push(...list.filter(isFileRow));
+      if (list.length < FILES_PAGE_SIZE) break;
+    }
+    return out;
+  }
+
+  /* "opened 3 days ago" for a PR's created_at. */
+  function ageText(iso, now) {
+    const t = Date.parse(iso);
+    if (typeof iso !== 'string' || !Number.isFinite(t) || !Number.isFinite(now)) return '';
+    const mins = Math.max(0, Math.floor((now - t) / 60000));
+    const say = (k, unit) => `${k} ${unit}${k === 1 ? '' : 's'} ago`;
+    if (mins < 1) return 'just now';
+    if (mins < 60) return say(mins, 'minute');
+    const hours = Math.floor(mins / 60);
+    if (hours < 48) return say(hours, 'hour');
+    return say(Math.floor(hours / 24), 'day');
+  }
+
+  /* A github.com page of THIS repository, or null: check runs and comments
+     carry URLs that end up in an href. */
+  const ownWebUrl = (u) => (typeof u === 'string' && u.indexOf(`${GITHUB_WEB}/`) === 0
+    && !/[\s"'<>\\]/.test(u) ? u : null);
+
+  /* The gate's run in GET /commits/{sha}/check-runs: the job `check` of
+     .github/workflows/check.yml, i.e. a run named "check" made by GitHub
+     Actions (another App's run of the same name is not the gate). When the
+     sha carries several, the newest (highest id) wins. */
+  function gateRunOf(payload) {
+    const runs = listOf(payload && payload.check_runs).filter((r) => r && typeof r === 'object'
+      && r.name === 'check' && Number.isInteger(r.id)
+      && r.app && typeof r.app === 'object' && r.app.slug === 'github-actions');
+    return runs.sort((a, b) => b.id - a.id)[0] || null;
+  }
+
+  const RED_CONCLUSIONS = ['failure', 'cancelled', 'timed_out'];
+
+  /* -> {state, text, conclusion, runId, runUrl}. state: 'pass' (completed,
+     success), 'fail' (completed with any other conclusion — failure,
+     cancelled, timed_out and also the rarer neutral/skipped/stale/
+     action_required: only success is green), 'checking' (queued, in
+     progress, or no run yet). */
+  function checkStatus(payload) {
+    const run = gateRunOf(payload);
+    if (!run) return { state: 'checking', text: CHECK_TEXT.checking, conclusion: null, runId: null, runUrl: null };
+    const runUrl = ownWebUrl(run.html_url) || ownWebUrl(run.details_url);
+    const base = { conclusion: typeof run.conclusion === 'string' ? run.conclusion : null, runId: run.id, runUrl };
+    if (run.status !== 'completed') return Object.assign({ state: 'checking', text: CHECK_TEXT.checking }, base);
+    if (run.conclusion === 'success') return Object.assign({ state: 'pass', text: CHECK_TEXT.pass }, base);
+    const why = RED_CONCLUSIONS.indexOf(run.conclusion) >= 0 || !base.conclusion ? ''
+      : ` (the check ended "${base.conclusion.replace(/[^a-z_]/g, '')}")`;
+    return Object.assign({ state: 'fail', text: CHECK_TEXT.fail + why }, base);
+  }
+
+  /* GET /check-runs/{id}/annotations -> [{file, line, message}]: the `✗`
+     lines check.yml re-emits. line is null when the annotation has none. */
+  function annotationRows(list) {
+    return listOf(list).filter((a) => a && typeof a === 'object').map((a) => {
+      const message = [a.message, a.title].find((v) => typeof v === 'string' && v.trim()) || '';
+      return {
+        file: typeof a.path === 'string' && a.path ? a.path : '(no file)',
+        line: Number.isInteger(a.start_line) && a.start_line > 0 ? a.start_line : null,
+        message: message.trim(),
+      };
+    });
+  }
+
+  const NOTES_PAGE_SIZE = 100;
+  const NOTES_PAGE_CAP = 10;
+
+  /* Every annotation of check run `id`, paged 100 at a time until a short
+     page (at most NOTES_PAGE_CAP pages), as annotationRows. get(path)
+     resolves to the parsed JSON of a GET; a rejection is passed on. */
+  async function loadAnnotations(get, id) {
+    if (!Number.isInteger(id) || id < 1) throw new Error('loadAnnotations: a check run id is needed');
+    const out = [];
+    for (let page = 1; page <= NOTES_PAGE_CAP; page += 1) {
+      const rows = await get(`${REPO_API_PATH}/check-runs/${id}/annotations?per_page=${NOTES_PAGE_SIZE}&page=${page}`);
+      const list = Array.isArray(rows) ? rows : [];
+      out.push(...annotationRows(list));
+      if (list.length < NOTES_PAGE_SIZE) break;
+    }
+    return out;
+  }
+
+  /* "file, line, what to fix" as one line of text. */
+  function annotationText(row) {
+    const r = row || {};
+    return r.line ? `${r.file}, line ${r.line}: ${r.message}` : `${r.file}: ${r.message}`;
+  }
+
+  /* Rollback (D8): GitHub's own Revert button on the merged PR's page. */
+  function undoOnGitHubUrl(n) {
+    if (!Number.isInteger(n) || n < 1 || n > 999999999) throw new Error('undoOnGitHubUrl: n must be a PR number');
+    return `${GITHUB_WEB}/pull/${n}`;
+  }
+
+  /* The Vercel bot's preview comment on the PR, as a link to the comment
+     itself (never a URL lifted out of its body). */
+  function vercelCommentUrl(comments) {
+    const c = listOf(comments).find((x) => x && typeof x === 'object'
+      && x.user && x.user.login === 'vercel[bot]' && ownWebUrl(x.html_url));
+    return c ? c.html_url : null;
+  }
+
+  /* Which buttons a role gets (D8). Read-only: none. Write ("Editor"):
+     review, update and close, but the Merge button is hidden. Maintain and
+     Admin: all. A merged PR offers only Undo on GitHub (Revert needs write,
+     [S89]); a closed one nothing. */
+  function reviewActionsFor(role, pull) {
+    const r = role || {};
+    const p = pull || {};
+    if (r.canPush !== true) return [];
+    if (p.merged === true || typeof p.merged_at === 'string') return ['undo'];
+    if (p.state !== 'open') return [];
+    const out = ['approve', 'request-changes', 'update', 'close'];
+    if (r.key === 'maintain' || r.key === 'admin') out.splice(2, 0, 'merge');
+    return out;
+  }
+
+  const isSha = (s) => typeof s === 'string' && /^([0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
+
+  /* Merge on anything but a green gate asks once (MERGE_CONFIRM_TEXT), then
+     goes. Never a lock — Kyle's rule is no merge-blocking anything (plan D8)
+     — and a red main deploys nothing anyway: the host re-runs check.py
+     before every deploy (U1). */
+  const mergeNeedsConfirm = (checkState) => checkState !== 'pass';
+
+  /* The one write for each action. ctx: {number, sha (the head sha the
+     reviewer saw), comment (request changes), checkState (checkStatus's
+     state for that sha), confirmed (the person said "Merge anyway")}.
+     Throws, in words a person can act on, when ctx cannot make a request.
+     The merge is pinned to the sha shown, so a newer head answers 409. */
+  function reviewRequest(action, ctx) {
+    const c = ctx || {};
+    const n = c.number;
+    if (!Number.isInteger(n) || n < 1 || n > 999999999) throw new Error('no proposal number');
+    const pull = `${REPO_API_PATH}/pulls/${n}`;
+    const needSha = () => {
+      if (!isSha(c.sha)) throw new Error('the proposal\'s head commit is unknown — reload');
+      return c.sha;
+    };
+    switch (action) {
+      case 'approve':
+        return { method: 'POST', path: `${pull}/reviews`, body: { event: 'APPROVE', commit_id: needSha() } };
+      case 'request-changes': {
+        const text = typeof c.comment === 'string' ? c.comment.trim() : '';
+        if (!text) throw new Error('write what should change before you request changes');
+        return { method: 'POST', path: `${pull}/reviews`,
+          body: { event: 'REQUEST_CHANGES', body: text, commit_id: needSha() } };
+      }
+      case 'merge':
+        if (mergeNeedsConfirm(c.checkState) && c.confirmed !== true) {
+          throw new Error('a merge while site rules do not pass needs your confirmation');
+        }
+        return { method: 'PUT', path: `${pull}/merge`, body: { merge_method: 'squash', sha: needSha() } };
+      case 'update':
+        return { method: 'PUT', path: `${pull}/update-branch`, body: { expected_head_sha: needSha() } };
+      case 'close':
+        return { method: 'PATCH', path: pull, body: { state: 'closed' } };
+      default:
+        throw new Error(`no such action: ${String(action).slice(0, 40)}`);
+    }
+  }
+
+  const DONE_TEXT = Object.freeze({
+    approve: 'Approved.',
+    'request-changes': 'Changes requested.',
+    merge: 'Merged.',
+    update: 'Updating from main: GitHub is bringing this branch up to date. Reload in a moment to see it.',
+    close: 'Closed.',
+  });
+
+  /* GitHub's own words from an error body (message + errors[]), as plain
+     text, short. */
+  function githubWords(data) {
+    const d = data && typeof data === 'object' ? data : {};
+    const parts = [];
+    if (typeof d.message === 'string') parts.push(d.message);
+    for (const e of listOf(d.errors)) {
+      if (typeof e === 'string') parts.push(e);
+      else if (e && typeof e.message === 'string') parts.push(e.message);
+    }
+    return parts.join(' — ').replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 300);
+  }
+
+  /* What an action's answer means, in the tab's words. res = the client's
+     {ok, status, data}; ctx.isAuthor = the signed-in person opened the PR. */
+  function actionOutcome(action, res, ctx) {
+    const r = res || {};
+    const c = ctx || {};
+    const status = Number.isInteger(r.status) ? r.status : 0;
+    const words = githubWords(r.data);
+    const said = words ? `: ${words}` : '';
+    const out = (ok, message) => ({ ok, status, message });
+    if (r.ok === true) return out(true, DONE_TEXT[action] || 'Done.');
+    if (status === 0) return out(false, 'GitHub could not be reached. Reload to see whether it happened.');
+    if (status === 401) return out(false, 'Your sign-in has ended. Please sign in again.');
+    if (status === 422 && (action === 'approve' || action === 'request-changes')
+      && (c.isAuthor === true || /own pull request/i.test(words))) {
+      return out(false, `${action === 'approve' ? SELF_APPROVE_TEXT : SELF_REQUEST_TEXT}.`);
+    }
+    if (action === 'merge' && status === 409) return out(false, `Not merged: it ${STALE_TEXT}.`);
+    if (action === 'merge' && status === 405) return out(false, `GitHub cannot merge this proposal${said}`);
+    if (action === 'update' && status === 422) {
+      if (/expected[_ ]head[_ ]sha|head sha/i.test(words)) return out(false, `Not updated: it ${STALE_TEXT}.`);
+      return out(false, `This branch ${NEEDS_HUMAN_TEXT}.`);
+    }
+    if (status === 403) return out(false, `GitHub says you may not do this${said}`);
+    return out(false, `GitHub refused (HTTP ${status})${said}`);
+  }
+
+  /* Sends one review action through the one-repo client and says what came
+     of it: {ok, status, message}. A request that cannot be built (no sha, no
+     comment) sends nothing and says why. */
+  async function runReviewAction(client, action, ctx) {
+    let req;
+    try {
+      req = reviewRequest(action, ctx);
+    } catch (e) {
+      return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
+    }
+    let res;
+    try {
+      res = await client.send(req.method, req.path, { body: req.body });
+    } catch (e) {
+      return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
+    }
+    return Object.assign(actionOutcome(action, res, ctx), { sent: true });
+  }
+
+  /* Changed files -> the site routes that show them, for the preview: the
+     inverse of editPath, through the PR head's registries (regs = {setup,
+     projects, tools}, each the parsed JSON or null — a PR's registry is not
+     yet checked, so every read is guarded). Removed files show nothing.
+     -> [{route, label, file}] in the PR's file order, one per route. */
+  const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+  const DATA_ROUTES = Object.freeze({
+    'data/site.json': { route: '/', label: 'Home' },
+    'data/setup.json': { route: '/setup', label: 'Setup' },
+    'data/projects.json': { route: '/projects', label: 'Projects' },
+    'data/tools.json': { route: '/tools', label: 'Tools' },
+    'data/people.json': { route: '/about', label: 'About' },
+  });
+  const textOr = (v, fallback) => (typeof v === 'string' && v.trim() ? v.trim() : fallback);
+
+  function pageForFile(file, regs) {
+    const r = regs || {};
+    if (file === 'content/about.md') return { route: '/about', label: 'About' };
+    if (Object.prototype.hasOwnProperty.call(DATA_ROUTES, file)) return DATA_ROUTES[file];
+    const byFile = (list) => listOf(list).find((x) => x && typeof x === 'object' && x.file === file);
+    if (file.indexOf('content/setup/') === 0) {
+      for (const s of listOf(r.setup && r.setup.sections)) {
+        const pg = byFile(s && s.pages);
+        if (pg && typeof pg.id === 'string' && PAGE_ID_RE.test(pg.id)) {
+          return { route: `/setup/${pg.id}`, label: textOr(pg.title, `/setup/${pg.id}`) };
+        }
+      }
+      return null;
+    }
+    const inList = (list, prefix) => {
+      const x = byFile(list);
+      return x && typeof x.id === 'string' && SLUG_RE.test(x.id)
+        ? { route: `${prefix}/${x.id}`, label: textOr(x.name, `${prefix}/${x.id}`) } : null;
+    };
+    if (file.indexOf('content/projects/') === 0) return inList(r.projects && r.projects.projects, '/projects');
+    if (file.indexOf('content/tools/') === 0) return inList(r.tools && r.tools.tools, '/tools');
+    return null;
+  }
+
+  function previewPages(files, regs) {
+    const out = [];
+    for (const f of listOf(files).filter(isFileRow)) {
+      if (f.status === 'removed') continue;
+      const pg = pageForFile(f.filename, regs);
+      if (pg && !out.some((x) => x.route === pg.route)) out.push({ route: pg.route, label: pg.label, file: f.filename });
+    }
+    return out;
+  }
+
+  /* The registries previewPages needs for these files, read at the PR head
+     through `fetcher` (refFetcher(token, sha)): only the ones a changed
+     content file needs; a missing or broken one is null. */
+  const REGISTRY_FOR = Object.freeze([
+    ['content/setup/', 'setup', 'data/setup.json'],
+    ['content/projects/', 'projects', 'data/projects.json'],
+    ['content/tools/', 'tools', 'data/tools.json'],
+  ]);
+
+  async function loadHeadRegistries(fetcher, files) {
+    const names = listOf(files).filter(isFileRow).map((f) => f.filename);
+    const regs = { setup: null, projects: null, tools: null };
+    await Promise.all(REGISTRY_FOR.map(async ([prefix, key, file]) => {
+      if (!names.some((p) => p.indexOf(prefix) === 0)) return;
+      try {
+        const res = await fetcher(file);
+        if (res && res.ok === true && typeof res.text === 'string') regs[key] = JSON.parse(res.text);
+      } catch (e) { /* a registry that cannot be read maps no page */ }
+    }));
+    return regs;
+  }
+
   const api = Object.freeze({
     REPO_OWNER, REPO_NAME, REPO_FULL, API_ROOT, REPO_API_PATH, GITHUB_WEB,
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
@@ -622,9 +1045,16 @@
     roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges,
     createGeneration, randomHex, authorizeUrl, createSignIn,
     makeSession, readSession, writeSession, clearSession,
-    assertRepoPath, createGitHubClient,
+    assertRepoPath, createGitHubClient, READ_METHODS, WRITE_METHODS, isAllowedWrite,
     editPath, pencilUrl, placeholderLink,
     isBridgePath, previewFragment, refFetcher, draftFetcher, createPreviewHost,
+    MACHINERY_TEXT, DERIVED_TEXT, CHECK_TEXT, SELF_APPROVE_TEXT, SELF_REQUEST_TEXT,
+    STALE_TEXT, NEEDS_HUMAN_TEXT, UNDO_TEXT, MERGE_CONFIRM_TEXT, mergeNeedsConfirm,
+    isMachineryPath, isDerivedPath, pullBadges, loadPullFiles, ageText,
+    PREVIEW_CONTENT_ONLY_TEXT, PREVIEW_UNLISTED_TEXT, previewScope,
+    gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
+    vercelCommentUrl, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
+    previewPages, loadHeadRegistries,
   });
 
   if (typeof window !== 'undefined') window.HCCore = api;

@@ -6,30 +6,35 @@
 /* The editor's page (cms/index.html). Logic lives in js/cms-core.js
    (HCCore, node-tested); this file is the DOM around it.
 
-   What it does today (unit U7a): sign in with GitHub in a popup, show who is
-   signed in and their role on desert-mango/hippocampus-docs, list open and
-   recently merged proposals, and draw the hash routes. It only READS from
-   GitHub, and only this one repository (HCCore's client refuses any other
-   path). The token lives in sessionStorage and in the client's closure; it is
-   never put into the page, the preview frame, or a message.
+   What it does (units U7a and U8): sign in with GitHub in a popup, show who
+   is signed in and their role on desert-mango/hippocampus-docs, list open and
+   recently merged proposals, draw the hash routes, and run the Review tab
+   (badges, the gate's status and located messages, the preview of the PR
+   head's content, approve / request changes / merge / update from main / close, and
+   Undo on GitHub for a merged proposal). It talks to this one repository
+   only (HCCore's client refuses any other path), and its only writes are the
+   review actions HCCore.runReviewAction sends through the client's exact-path
+   allowlist. The token lives in sessionStorage and in the client's and the
+   preview fetcher's closures; it is never put into the page, the preview
+   frame, or a message.
 
    Seams for the next units (build on these, do not fork them):
-     VIEWS              route name -> view function (route, epoch). U8 replaces
-                        'review' and 'review-pr'; U7b 'edit' and 'new'; U9
+     VIEWS              route name -> view function (route, epoch). U8 built
+                        'review' and 'review-pr'; U7b replaces 'edit' and 'new'; U9
                         'media'; U10 'private'. Until then the last four draw
                         the one-line github.com placeholder.
      api(path)          a GET through the signed-in client; a 401 ends the
                         session, and an answer for a session that has since
                         ended or been replaced is dropped (sessionGen).
-                        U8/U7b add their write calls through
-                        HCCore.createGitHubClient's send() (see cms-core.js).
+                        Writes go through HCCore (U8: runReviewAction); a
+                        new write path is a row in HCCore's WRITE_METHODS.
      mountPreview(el, {route, fetcher})
                         puts the real site in a sandboxed frame under el and
                         answers its file requests through `fetcher` (HCCore
                         .refFetcher(token, sha) for a PR, .draftFetcher(files,
                         fallback) for a draft). Returns {load(route, fetcher),
                         destroy(), frame}. Every load gets a fresh nonce.
-     #cms-preview-area  the empty area on #/review/<n> that U8 fills.
+     #cms-preview-area  the preview area on #/review/<n> (U8 fills it).
      window.HCCms       {mountPreview, refresh} — mountPreview is also how the
                         preview host is driven by hand from DevTools. */
 (function () {
@@ -327,7 +332,8 @@
       merged.length
         ? h('ul', { class: 'cms-list' }, ...merged.map((p) => h('li', null,
           h('span', { class: 'cms-num', text: `#${p.number}` }),
-          h('span', { class: 'cms-title', text: String(p.title || '(no title)') }),
+          // its Review page offers Undo on GitHub
+          link(`#/review/${p.number}`, String(p.title || '(no title)'), 'cms-title'),
           h('span', { class: 'cms-meta', text: `by ${loginOf(p)}, merged ${day(p.merged_at)}` }),
           link(prLink(p.number), 'on GitHub', 'cms-gh'))))
         : h('p', { class: 'cms-muted', text: 'Nothing merged recently.' }),
@@ -336,19 +342,237 @@
     ]);
   }
 
-  // U8 replaces this view with the Review tab.
+  // ------------------------------------------------------ the Review tab ---
+  /* U8. #/review lists the open proposals with their badges; #/review/<n>
+     shows one: the gate's status (and, when red, its located messages), the
+     buttons the role allows, the rendered preview of the PR head's content
+     (labelled "content only" when the proposal also changes code), and the
+     files with their text diffs. A merged proposal offers Undo on GitHub.
+     Every write is HCCore.runReviewAction: the client's allowlist admits only
+     the review paths, and the answer comes back in the tab's words. */
+
+  let flash = null;             // {number, text, ok}: an action's outcome, shown once after the refresh
+  let acting = false;           // one action at a time
+
+  const filesWord = (k) => `${k} file${k === 1 ? '' : 's'}`;
+  const badge = (b) => h('span', { class: `cms-badge cms-badge-${b.key}`, title: b.text }, b.label);
+
+  /* Every changed file of PR n, or null when GitHub would not list them
+     (the page still shows the rest; a stale or signed-out answer is passed on). */
+  async function filesOrNull(n) {
+    try {
+      return await C.loadPullFiles(api, n);
+    } catch (e) {
+      if (e && (e.message === STALE || e.message === 'signed out')) throw e;
+      return null;
+    }
+  }
+
+  function reviewRow(p, files, login) {
+    const mine = login && loginOf(p).toLowerCase() === login.toLowerCase();
+    const age = C.ageText(p.created_at, Date.now());
+    return h('li', null,
+      h('span', { class: 'cms-num', text: `#${p.number}` }),
+      link(`#/review/${p.number}`, String(p.title || '(no title)'), 'cms-title'),
+      mine ? h('span', { class: 'cms-mine', text: 'yours' }) : null,
+      h('span', { class: 'cms-meta', text: `by ${loginOf(p)}${age ? `, opened ${age}` : ''}` }),
+      h('span', { class: 'cms-meta', text: files ? filesWord(files.length) : 'files unknown' }),
+      ...(files ? C.pullBadges(files) : []).map(badge),
+      link(prLink(p.number), 'on GitHub', 'cms-gh'));
+  }
+
   async function viewReview(r, epoch) {
     paint(epoch, [h('h1', { text: 'Review' }), h('p', { class: 'cms-muted', text: 'Loading proposals…' })]);
     const login = state.session && state.session.login;
-    const open = await openPulls();
+    const open = C.orderOpenPulls(await openPulls(), login);
+    // the badges need each proposal's file list, so it is read here, eagerly
+    const files = await Promise.all(open.map((p) => filesOrNull(p.number)));
     paint(epoch, [
       h('h1', { text: 'Review' }),
-      h('p', { class: 'cms-muted', text: 'Open proposals, yours first. Pick one to see it.' }),
-      pullList(C.orderOpenPulls(open, login), login, 'No open proposals.'),
+      h('p', { class: 'cms-muted', text: 'Open proposals, yours first. Pick one to see it, preview it and review it.' }),
+      open.length
+        ? h('ul', { class: 'cms-list' }, ...open.map((p, i) => reviewRow(p, files[i], login)))
+        : h('p', { class: 'cms-muted', text: 'No open proposals.' }),
     ]);
   }
 
-  // U8 replaces this view; #cms-preview-area is where its preview goes.
+  function takeFlash(n) {
+    const f = flash;
+    flash = null;
+    if (!f || f.number !== n) return null;
+    return h('p', { class: `cms-action-result ${f.ok ? 'is-ok' : 'is-error'}`, role: 'status', text: f.text });
+  }
+
+  function prFacts(p, n, files) {
+    const merged = p.merged === true || typeof p.merged_at === 'string';
+    const age = C.ageText(p.created_at, Date.now());
+    let count = '?';
+    if (files) count = String(files.length);
+    else if (Number.isInteger(p.changed_files)) count = String(p.changed_files);
+    return h('dl', { class: 'cms-facts' },
+      h('dt', { text: 'Proposal' }), h('dd', null, link(prLink(n), `#${n} on GitHub`)),
+      h('dt', { text: 'State' }), h('dd', { text: merged ? `merged ${day(p.merged_at)}` : String(p.state || 'unknown') }),
+      h('dt', { text: 'Author' }), h('dd', { text: loginOf(p) }),
+      age ? h('dt', { text: 'Opened' }) : null, age ? h('dd', { text: age }) : null,
+      h('dt', { text: 'Files changed' }), h('dd', { text: count }));
+  }
+
+  function badgeNotes(files) {
+    if (!files) {
+      return h('p', { class: 'cms-muted', text: 'GitHub did not list the changed files, so the badges are unknown. '
+        + 'Look at the files on GitHub before you merge.' });
+    }
+    const badges = C.pullBadges(files);
+    if (!badges.length) return null;
+    return h('ul', { class: 'cms-badge-notes' }, ...badges.map((b) => h('li', null, badge(b), ` ${b.text}`)));
+  }
+
+  const MARK = { pass: '✓', fail: '✗', checking: '…', unknown: '?' };
+
+  function statusBlock(status, notes) {
+    const out = [h('p', { class: `cms-check cms-check-${status.state}`, role: 'status' },
+      h('span', { class: 'cms-check-mark', 'aria-hidden': 'true', text: MARK[status.state] || '?' }),
+      h('span', { text: status.text }),
+      status.runUrl ? h('span', { class: 'cms-meta' }, ' · ', link(status.runUrl, 'the full report')) : null)];
+    if (status.state !== 'fail') return out;
+    if (notes === null) {
+      out.push(h('p', { class: 'cms-muted', text: 'The located messages could not be read; the full report has them.' }));
+    } else if (!notes.length) {
+      out.push(h('p', { class: 'cms-muted', text: 'The check left no located messages; the full report has the text.' }));
+    } else {
+      out.push(h('p', { text: 'What to fix (file, line, message):' }),
+        h('ul', { class: 'cms-annotations' }, ...notes.map((row) => h('li', { text: C.annotationText(row) }))));
+    }
+    return out;
+  }
+
+  const ACTION_LABEL = { approve: 'Approve', 'request-changes': 'Request changes', merge: 'Merge',
+    update: 'Update from main', close: 'Close' };
+
+  function actionsBlock(p, n, sha, epoch, status) {
+    const keys = C.reviewActionsFor(state.role, p);
+    if (!keys.length) {
+      return h('p', { class: 'cms-muted', text: 'You can read this proposal. Reviewing it needs write access to this site\'s repository.' });
+    }
+    const login = (state.session && state.session.login) || '';
+    const isAuthor = loginOf(p).toLowerCase() === login.toLowerCase();
+    const box = keys.indexOf('request-changes') >= 0
+      ? h('textarea', { class: 'cms-comment', rows: 3, 'aria-label': 'What should change',
+        placeholder: 'What should change? (needed to request changes)' })
+      : null;
+    const result = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
+    // Merge while the gate is not green: the first click asks once, "Merge anyway" merges
+    const confirm = h('p', { class: 'cms-merge-confirm', role: 'alert', hidden: true });
+    const buttons = keys.map((k) => h('button', { type: 'button', 'data-action': k,
+      class: k === 'merge' ? 'cms-btn cms-btn-primary' : 'cms-btn' }, ACTION_LABEL[k]));
+    const ctx = (extra) => Object.assign({ number: n, sha, comment: box ? box.value : '', isAuthor,
+      checkState: status.state }, extra);
+    const ui = { epoch, buttons, result };
+    buttons.forEach((b, i) => b.addEventListener('click', () => {
+      if (keys[i] === 'merge' && C.mergeNeedsConfirm(status.state)) {
+        askToMerge(confirm, () => act('merge', ctx({ confirmed: true }), ui), ui);
+        return;
+      }
+      act(keys[i], ctx(), ui);
+    }));
+    return h('section', { class: 'cms-actions', 'aria-label': 'Review actions' },
+      h('h2', { text: 'Your review' }), box, h('div', { class: 'cms-action-row' }, ...buttons),
+      confirm, result);
+  }
+
+  /* The one confirmation before a merge on a gate that is not green. Its
+     button joins the action buttons, so it is disabled while one runs. */
+  function askToMerge(confirm, onYes, ui) {
+    if (confirm.dataset.asked === 'yes') return;           // asked once already
+    confirm.dataset.asked = 'yes';
+    const yes = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'merge-anyway' },
+      'Merge anyway');
+    yes.addEventListener('click', onYes);
+    confirm.replaceChildren(document.createTextNode(`${C.MERGE_CONFIRM_TEXT} `), yes);
+    confirm.hidden = false;
+    ui.buttons.push(yes);
+  }
+
+  /* One review action. Nothing sent (no comment, no sha) -> say why here and
+     keep what was typed. Sent -> refresh the proposal and show the outcome
+     on it. An answer for a session that has since ended changes nothing. */
+  async function act(action, ctx, ui) {
+    if (acting || !state.client) return;
+    acting = true;
+    ui.buttons.forEach((b) => { b.disabled = true; });
+    const gen = sessionGen.current();
+    let out;
+    try {
+      out = await C.runReviewAction(state.client, action, ctx);
+    } catch (e) {
+      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
+    } finally {
+      acting = false;
+    }
+    if (!sessionGen.isCurrent(gen)) return;
+    if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
+    if (!out.sent) {
+      ui.buttons.forEach((b) => { b.disabled = false; });
+      ui.result.textContent = out.message;
+      ui.result.hidden = false;
+      ui.result.classList.toggle('is-error', true);
+      return;
+    }
+    if (ui.epoch !== routeEpoch) { say(out.message, out.ok ? null : 'error'); return; }
+    flash = { number: ctx.number, text: out.message, ok: out.ok };
+    route();
+  }
+
+  function mergedPanel(p, n) {
+    const keys = C.reviewActionsFor(state.role, p);
+    return h('section', { class: 'cms-panel cms-undo' },
+      h('p', { text: `This proposal was merged ${day(p.merged_at)}.` }),
+      keys.indexOf('undo') >= 0
+        ? h('p', null, h('a', { class: 'cms-btn cms-btn-primary', 'data-action': 'undo', href: C.undoOnGitHubUrl(n),
+          target: '_blank', rel: 'noopener noreferrer' }, C.UNDO_TEXT))
+        : null,
+      h('p', { class: 'cms-muted', text: 'To undo it: GitHub opens this proposal, and its Revert button makes a new '
+        + 'proposal that undoes the merge. That proposal then comes back here to be reviewed and merged.' }));
+  }
+
+  const diffClass = (line) => {
+    if (line.indexOf('@@') === 0) return 'cms-diff-hunk';
+    if (line.charAt(0) === '+') return 'cms-diff-add';
+    if (line.charAt(0) === '-') return 'cms-diff-del';
+    return null;
+  };
+
+  function filesBlock(files) {
+    if (!files) return h('p', { class: 'cms-muted', text: 'GitHub did not list the changed files.' });
+    if (!files.length) return h('p', { class: 'cms-muted', text: 'No files changed.' });
+    return h('ul', { class: 'cms-files' }, ...files.map((f) => {
+      const moved = typeof f.previous_filename === 'string' ? ` from ${f.previous_filename}` : '';
+      const counts = Number.isInteger(f.additions) && Number.isInteger(f.deletions) ? `, +${f.additions} −${f.deletions}` : '';
+      return h('li', null,
+        h('div', { class: 'cms-file-head' }, h('code', { text: f.filename }),
+          h('span', { class: 'cms-meta', text: `${String(f.status || 'changed')}${moved}${counts}` })),
+        typeof f.patch === 'string' && f.patch
+          ? h('pre', { class: 'cms-diff' }, ...f.patch.split('\n').map((line) =>
+            h('span', { class: diffClass(line), text: `${line}\n` })))
+          : h('p', { class: 'cms-muted', text: 'No text diff (a binary file, or too large to show here).' }));
+    }));
+  }
+
+  /* The preview: the PR head's content on the site's current code (D3), on
+     the first changed page, plus a button per changed page to open it there
+     (the frame's own links navigate too). A proposal that also changes code
+     says so first (HCCore.previewScope). */
+  function fillPreview(area, pages, fetcher, scope) {
+    if (scope.text) area.appendChild(h('p', { class: 'cms-preview-scope', text: scope.text }));
+    const buttons = pages.map((pg) => h('button', { type: 'button', class: 'cms-btn', 'data-route': pg.route,
+      title: pg.file }, pg.label));
+    area.appendChild(h('div', { class: 'cms-preview-pages' },
+      h('span', { class: 'cms-muted', text: pages.length ? 'Changed pages:' : 'No changed page to open; this is the home page.' }),
+      ...buttons));
+    const pv = mountPreview(area, { route: pages.length ? pages[0].route : '/', fetcher });
+    buttons.forEach((b, i) => b.addEventListener('click', () => pv.load(pages[i].route)));
+  }
+
   async function viewReviewPr(r, epoch) {
     const n = r.params.number;
     paint(epoch, [h('h1', { text: `Proposal #${n}` }), h('p', { class: 'cms-muted', text: 'Loading…' })]);
@@ -360,20 +584,57 @@
     }
     if (!res.ok || !res.data) throw new Error(res.status ? `GitHub answered HTTP ${res.status}` : 'GitHub could not be reached');
     const p = res.data;
-    const status = p.merged_at ? `merged ${day(p.merged_at)}` : String(p.state || 'unknown');
-    paint(epoch, [
-      h('h1', { text: String(p.title || `Proposal #${n}`) }),
-      h('dl', { class: 'cms-facts' },
-        h('dt', { text: 'Proposal' }), h('dd', null, link(prLink(n), `#${n} on GitHub`)),
-        h('dt', { text: 'State' }), h('dd', { text: status }),
-        h('dt', { text: 'Author' }), h('dd', { text: loginOf(p) }),
-        h('dt', { text: 'Files changed' }),
-        h('dd', { text: Number.isInteger(p.changed_files) ? String(p.changed_files) : '?' })),
-      h('section', { id: 'cms-preview-area', class: 'cms-preview-area', 'data-seam': 'U8',
-        'aria-label': 'Preview' },
-      h('p', { class: 'cms-muted', text: 'The rendered preview of this proposal will appear here.' })),
-      h('p', null, link('#/review', '← All proposals')),
+    const note = takeFlash(n);
+    const title = h('h1', { text: String(p.title || `Proposal #${n}`) });
+    const back = h('p', null, link('#/review', '← All proposals'));
+    if (p.merged === true || typeof p.merged_at === 'string') {
+      paint(epoch, [title, note, prFacts(p, n, null), mergedPanel(p, n), back]);
+      return;
+    }
+    if (p.state !== 'open') {
+      paint(epoch, [title, note, prFacts(p, n, null),
+        h('p', { text: 'This proposal was closed without merging.' }), back]);
+      return;
+    }
+    const sha = p.head && /^[0-9a-f]{40}$/.test(String(p.head.sha)) ? p.head.sha : null;
+    const [files, checks, comments] = await Promise.all([
+      filesOrNull(n),
+      sha ? apiResponse(`${C.REPO_API_PATH}/commits/${sha}/check-runs?check_name=check&per_page=100`) : null,
+      apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100`),
     ]);
+    let status = { state: 'unknown', text: `${C.CHECK_TEXT.unknown} (the head commit is unknown)`, runUrl: null };
+    if (checks && checks.ok) status = C.checkStatus(checks.data);
+    else if (checks) status = { state: 'unknown', runUrl: null,
+      text: `${C.CHECK_TEXT.unknown} (${checks.status ? `GitHub answered HTTP ${checks.status}` : 'GitHub could not be reached'})` };
+    let notes = [];
+    if (status.state === 'fail' && status.runId) {
+      try {
+        notes = await C.loadAnnotations(api, status.runId);   // every page of them
+      } catch (e) {
+        if (e && (e.message === STALE || e.message === 'signed out')) throw e;
+        notes = null;
+      }
+    }
+    // the PR head's files, for the preview; the token stays in this closure
+    const fetcher = sha ? C.refFetcher(state.session.token, sha, netFetch) : null;
+    const pages = files && fetcher ? C.previewPages(files, await C.loadHeadRegistries(fetcher, files)) : [];
+    const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
+    const scope = C.previewScope(files);
+    const heading = fetcher ? scope.heading : 'Preview';
+    const area = h('section', { id: 'cms-preview-area', class: 'cms-preview-area', 'data-seam': 'U8',
+      'aria-label': heading });
+    const painted = paint(epoch, [
+      title, note, prFacts(p, n, files), badgeNotes(files),
+      ...statusBlock(status, notes),
+      vercel ? h('p', null, link(vercel, 'Vercel\'s preview comment'), ' (a deploy preview, when Vercel made one)') : null,
+      actionsBlock(p, n, sha, epoch, status),
+      h('h2', { text: heading }), area,
+      h('h2', { text: 'Files changed' }), filesBlock(files),
+      back,
+    ]);
+    if (!painted) return;
+    if (fetcher) fillPreview(area, pages, fetcher, scope);
+    else area.appendChild(h('p', { class: 'cms-muted', text: 'No preview: GitHub did not say which commit this proposal is at.' }));
   }
 
   function viewHelp(r, epoch) {
