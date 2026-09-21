@@ -108,7 +108,7 @@
         "author": "Kyle Nelson",
         "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host."
+        "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
     },
@@ -123,7 +123,7 @@
         "author": "Kyle Nelson",
         "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes and the preview frame."
+        "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor."
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
     },
@@ -491,6 +491,21 @@
         "purpose": "Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host."
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_cms_editor.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d589ee6be082ecdcc2c9fd738c45ac24446ea4b975fbda319ec907dbd6cf0e3d",
+        "commit": "b9d7cbefbba0e7bdf10186d2c294dc9e29895e88"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS editor: page tree, raw-JSON registry guards, drafts, snippets, live preview, Propose."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7b); the baseline is the file as introduced, on top of the recorded parent commit."
     },
     "tools/tests/test_derive.py": {
       "classification": "included",

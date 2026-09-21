@@ -142,10 +142,11 @@ test('routes: anything else is not-found, never a guessed page', () => {
 test('routes: a query after the route is ignored, and the table names every owner', () => {
   assert.equal(C.parseRoute('#/review?x=1').name, 'review');
   const names = C.ROUTES.map((r) => r.name);
-  assert.deepEqual(names, ['home', 'review', 'review-pr', 'help', 'edit', 'new', 'media', 'private']);
+  assert.deepEqual(names, ['home', 'review', 'review-pr', 'help', 'pages', 'edit', 'new', 'media', 'private']);
   for (const r of C.ROUTES) assert.match(r.owner, /^U(7a|7b|8|9|10)$/, r.name);
-  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name),
-    ['edit', 'new', 'media', 'private']);
+  // U7b built the editor (#/pages, #/edit/…, #/new/…); Media and Private wait for U9 and U10
+  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name), ['media', 'private']);
+  assert.deepEqual(C.parseRoute('#/pages'), { name: 'pages', params: {} });
 });
 
 // -------------------------------------------------------------- PR lists --
@@ -1058,16 +1059,27 @@ test('write allowlist: the client sends a write verb only to the exact paths lis
   assert.deepEqual([...client.methods], ['GET', 'POST', 'PUT', 'PATCH']);
   assert.ok(C.WRITE_METHODS.every((w) => w.unit && w.path instanceof RegExp));
   const R = C.REPO_API_PATH;
-  for (const [m, p] of [['POST', `${R}/pulls/7/reviews`], ['PUT', `${R}/pulls/7/merge`],
-    ['PUT', `${R}/pulls/123456789/update-branch`], ['PATCH', `${R}/pulls/7`]]) {
+  const allowed = [['POST', `${R}/pulls/7/reviews`], ['PUT', `${R}/pulls/7/merge`],
+    ['PUT', `${R}/pulls/123456789/update-branch`], ['PATCH', `${R}/pulls/7`],
+    // U7b Propose: blobs, one tree, one commit, a new ref, a fast-forward of MY cms/ branch, the PR
+    ['POST', `${R}/git/blobs`], ['POST', `${R}/git/trees`], ['POST', `${R}/git/commits`], ['POST', `${R}/git/refs`],
+    ['PATCH', `${R}/git/refs/heads/cms/bob/fix-typo-260921`], ['PATCH', `${R}/git/refs/heads/cms/bob/a.b/c_d-2`],
+    ['POST', `${R}/pulls`]];
+  for (const [m, p] of allowed) {
     assert.equal(C.isAllowedWrite(m, p), true, `${m} ${p}`);
     await client.send(m, p, { body: { x: 1 } });
   }
   const refused = [
-    ['POST', `${R}/pulls`], ['POST', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/7/reviews`],
+    ['POST', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/7/reviews`],
     ['PATCH', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/07/merge`], ['PUT', `${R}/pulls/7/merge/`],
     ['PUT', `${R}/pulls/7/merge?x=1`], ['PATCH', `${R}/pulls/0`], ['PATCH', `${R}`],
-    ['PUT', `${R}/contents/content/about.md`], ['POST', `${R}/git/refs`], ['POST', `${R}/issues/7/comments`],
+    ['PUT', `${R}/contents/content/about.md`], ['POST', `${R}/issues/7/comments`],
+    // never main, never a ref outside refs/heads/cms/<login>/…, never a tag or an update of a blob
+    ['PATCH', `${R}/git/refs/heads/main`], ['PATCH', `${R}/git/refs/heads/cms`], ['PATCH', `${R}/git/refs/heads/cms/bob`],
+    ['PATCH', `${R}/git/refs/heads/feature/x`], ['PATCH', `${R}/git/refs/tags/cms/bob/x`], ['POST', `${R}/git/refs/heads/cms/bob/x`],
+    ['PUT', `${R}/git/refs/heads/cms/bob/x`], ['PATCH', `${R}/git/refs/heads/cms/bob/x?force=true`],
+    ['PATCH', `${R}/git/refs/heads/cms/bob/%2e%2e/main`], ['POST', `${R}/git/tags`], ['POST', `${R}/git/blobs/abc`],
+    ['PATCH', `${R}/git/blobs`], ['POST', `${R}/pulls/`], ['POST', `${R}/forks`],
     ['PATCH', `${R}/issues/7`], ['POST', `${R}/merges`], ['PUT', `${R}/pulls/1234567890/merge`],
     ['POST', '/user'], ['PUT', '/repos/desert-mango/other/pulls/7/merge'],
     ['PUT', `${R}/pulls/7/../../other/pulls/7/merge`], ['POST', `${R}/pulls/7/reviews#x`],
@@ -1080,7 +1092,7 @@ test('write allowlist: the client sends a write verb only to the exact paths lis
     await assert.rejects(client.send(m, `${R}/pulls/7`), /does not send/, m);
   }
   await assert.rejects(client.get(`${R}/pulls/7`, { body: {} }), /no body/);
-  assert.equal(gh.calls.length, 4, 'only the four allowed writes reached fetch');
+  assert.equal(gh.calls.length, allowed.length, 'only the allowed writes reached fetch');
   const merge = gh.calls[1];
   assert.equal(merge.init.method, 'PUT');
   assert.equal(merge.init.headers['Content-Type'], 'application/json');
@@ -1183,28 +1195,30 @@ test('head registries: only those a changed content file needs, read through the
 
 // -------------------------------------------------- source-level promises --
 
-test('js/cms.js reaches GitHub only through cms-core; every write is an allowlisted review action', () => {
+test('js/cms.js reaches GitHub only through cms-core; every write is an allowlisted review or Propose request', () => {
   const ui = fs.readFileSync(path.join(ROOT, 'js', 'cms.js'), 'utf8');
   assert.ok(!ui.includes('api.github.com'), 'the UI never builds an API URL itself');
   assert.ok(!/\b(POST|PUT|PATCH|DELETE)\b/.test(ui),
-    'the UI names no write verb: writes are HCCore.runReviewAction, through the allowlist');
+    'the UI names no write verb: writes are HCCore.runReviewAction / runPropose, through the allowlist');
   assert.ok(!/\.send\s*\(/.test(ui), 'the UI never calls client.send() itself');
   // one wrapper hands window.fetch to the client and the sign-in; no other call
   const WRAPPER = 'const netFetch = (url, init) => window.fetch(url, init);';
   assert.equal(ui.split(WRAPPER).length, 2, 'exactly one fetch wrapper');
   assert.ok(!/\bfetch\s*\(/.test(ui.replace(WRAPPER, '').replace(/HC\.fetch(JSON|Text)\(/g, '')),
     'the UI calls no bare fetch (the client and the sign-in own the network)');
-  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 5,
-    'netFetch goes only to the sign-in, the GitHub clients and the PR-head preview fetcher');
+  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 6,
+    'netFetch goes only to the sign-in, the GitHub clients, the PR-head preview fetcher and the draft preview\'s base');
   const core = fs.readFileSync(path.join(ROOT, 'js', 'cms-core.js'), 'utf8');
   const verbs = core.match(/method:\s*'[A-Z]+'/g) || [];
   assert.deepEqual([...new Set(verbs)].sort(),
     ["method: 'GET'", "method: 'PATCH'", "method: 'POST'", "method: 'PUT'"]);
   assert.ok(!/\bDELETE\b/.test(core), 'nothing in the CMS deletes');
-  // the write verbs appear only in the allowlist and the review requests it admits
+  // the write verbs appear only in the allowlist and the review / Propose requests it admits
   const allow = core.slice(core.indexOf('const WRITE_METHODS'), core.indexOf('function isAllowedWrite'));
   const review = core.slice(core.indexOf('function reviewRequest'), core.indexOf('const DONE_TEXT'));
-  const rest = core.replace(allow, '').replace(review, '');
+  const propose = core.slice(core.indexOf('function proposeRequest'), core.indexOf('function proposeFailure'));
+  assert.ok(allow && review && propose);
+  const rest = core.replace(allow, '').replace(review, '').replace(propose, '');
   assert.deepEqual((rest.match(/method:\s*'(POST|PUT|PATCH)'/g) || []), ["method: 'POST'"],
     'outside them, one POST: the sign-in exchange to /api/auth');
   for (const src of [ui, core]) {

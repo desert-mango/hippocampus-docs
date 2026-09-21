@@ -159,3 +159,46 @@ a.cms-btn { display: inline-block; text-decoration: none; }
   border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent);
   background: color-mix(in srgb, var(--warn) 8%, var(--bg));
 }
+
+/* ---- the editor (U7b): page tree, text, snippets, problems, Propose ---- */
+.cms-tree { list-style: none; margin: 0 0 1rem; padding: 0; columns: 2 18rem; column-gap: 2rem; }
+.cms-tree li { padding: 0.18rem 0; break-inside: avoid; }
+.cms-tree .cms-meta { color: var(--muted); font-size: 0.8rem; margin-left: 0.5rem; }
+.cms-new-links { font-weight: 600; }
+.cms-snippets { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.8rem 0 0.5rem; }
+.cms-link-picker {
+  font: inherit; font-size: 0.88rem; max-width: 18rem; padding: 0.3rem 0.4rem;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+}
+.cms-editor-text {
+  display: block; width: 100%; box-sizing: border-box; min-height: 22rem; resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88rem; line-height: 1.5;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+  padding: 0.7rem 0.8rem; tab-size: 2;
+}
+.cms-editor-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cms-editor-text[readonly] { opacity: 0.85; }
+.cms-problem {
+  margin: 0.6rem 0 0; padding: 0.55rem 0.8rem; border-radius: 8px; font-size: 0.9rem;
+  border: 1px solid var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--bg)); color: var(--heading);
+}
+.cms-locked { font-size: 0.86rem; color: var(--body-soft); }
+.cms-draft-state { margin: 0.5rem 0; font-size: 0.88rem; }
+.cms-form { display: grid; gap: 0.7rem; max-width: 46rem; }
+.cms-form label { display: grid; gap: 0.25rem; font-size: 0.9rem; color: var(--heading); }
+.cms-form input, .cms-form select, .cms-form textarea {
+  font: inherit; font-size: 0.92rem; padding: 0.4rem 0.6rem; box-sizing: border-box; width: 100%;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+}
+.cms-form .cms-hint { color: var(--muted); font-size: 0.8rem; }
+.cms-propose { margin-top: 1rem; }
+.cms-propose input { width: 100%; box-sizing: border-box; font: inherit; padding: 0.4rem 0.6rem;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px; }
+.cms-propose label { display: grid; gap: 0.25rem; font-size: 0.9rem; color: var(--heading); }
+.cms-propose ul { margin: 0.3rem 0 0.6rem; padding-left: 1.2rem; font-size: 0.9rem; }
+.cms-propose ul.cms-problem { padding-left: 1.8rem; }
+.cms-base { margin: 0.6rem 0; font-size: 0.9rem; }
+.cms-base-picker {
+  font: inherit; font-size: 0.88rem; max-width: 100%; padding: 0.3rem 0.4rem;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+}

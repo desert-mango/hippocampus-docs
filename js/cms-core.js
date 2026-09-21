@@ -2,7 +2,7 @@
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
 // Last substantive modification: 21 September 2026
 // Affiliation: TUHH HippoCampus Robotics
-// Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host.
+// Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test
    it (tools/tests/test_cms_core.mjs). js/cms.js is the DOM glue around it.
 
@@ -16,8 +16,10 @@
    any path assertRepoPath() passes, and a write verb ONLY to a path shape
    listed in WRITE_METHODS (method + path under this repository, no query).
    U8 (Review) listed its five: approve / request changes, merge, update from
-   main, close — all on /pulls/<n>. U7b adds its Git Data API calls there;
-   every other write throws before fetch is called. The other POST in this
+   main, close — all on /pulls/<n>. U7b (Propose) listed its six: blobs,
+   trees, commits, a new ref, a fast-forward of a refs/heads/cms/… ref, and
+   the PR — all built by proposeRequest(), which never names main; every
+   other write throws before fetch is called. The other POST in this
    file is the sign-in exchange to this site's own /api/auth.
    Seams:
      - U8 fills the preview area with createPreviewHost + refFetcher(token,
@@ -84,8 +86,9 @@
     { name: 'review', re: /^\/review\/?$/, keys: [], owner: 'U8' },
     { name: 'review-pr', re: /^\/review\/([1-9][0-9]{0,8})\/?$/, keys: ['number'], owner: 'U8' },
     { name: 'help', re: /^\/help\/?$/, keys: [], owner: 'U7a' },
-    { name: 'edit', re: /^\/edit\/(.+)$/, keys: ['pageId'], owner: 'U7b', placeholder: true },
-    { name: 'new', re: /^\/new\/([a-z][a-z-]*)\/?$/, keys: ['kind'], owner: 'U7b', placeholder: true },
+    { name: 'pages', re: /^\/pages\/?$/, keys: [], owner: 'U7b' },
+    { name: 'edit', re: /^\/edit\/(.+)$/, keys: ['pageId'], owner: 'U7b' },
+    { name: 'new', re: /^\/new\/([a-z][a-z-]*)\/?$/, keys: ['kind'], owner: 'U7b' },
     { name: 'media', re: /^\/media\/?$/, keys: [], owner: 'U9', placeholder: true },
     { name: 'private', re: /^\/private\/?$/, keys: [], owner: 'U10', placeholder: true },
   ].map((r) => Object.freeze(r)));
@@ -386,7 +389,7 @@
 
   /* Every write the CMS may send: a verb and the exact shape of the path it
      may go to, relative to /repos/desert-mango/hippocampus-docs, with no
-     query string. <n> is a pull request number. U7b adds its own rows. */
+     query string. <n> is a pull request number. */
   const PULL_N = '[1-9][0-9]{0,8}';
   const WRITE_METHODS = Object.freeze([
     // U8: approve, or request changes (the review's `event` says which)
@@ -395,8 +398,18 @@
     { method: 'PUT', path: new RegExp(`^/pulls/${PULL_N}/merge$`), unit: 'U8' },
     // U8: update from main
     { method: 'PUT', path: new RegExp(`^/pulls/${PULL_N}/update-branch$`), unit: 'U8' },
-    // U8: close ({state: "closed"})
+    // U8: close ({state: "closed"}); U7b: the review link in a new PR's body
     { method: 'PATCH', path: new RegExp(`^/pulls/${PULL_N}$`), unit: 'U8' },
+    // U7b Propose (Git Data API): one blob per changed file, one tree, one commit
+    { method: 'POST', path: /^\/git\/blobs$/, unit: 'U7b' },
+    { method: 'POST', path: /^\/git\/trees$/, unit: 'U7b' },
+    { method: 'POST', path: /^\/git\/commits$/, unit: 'U7b' },
+    // U7b: a new proposal branch (proposeRequest names only refs/heads/cms/…)
+    { method: 'POST', path: /^\/git\/refs$/, unit: 'U7b' },
+    // U7b: move MY proposal's branch to the added commit (fast-forward only)
+    { method: 'PATCH', path: /^\/git\/refs\/heads\/cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/, unit: 'U7b' },
+    // U7b: open the proposal
+    { method: 'POST', path: /^\/pulls$/, unit: 'U7b' },
   ].map((w) => Object.freeze(w)));
 
   /* True only for a write WRITE_METHODS lists: the method, and a path under
@@ -565,8 +578,12 @@
       && !/\/$|\.lock$|\/\./.test(ref);
   }
 
-  /* The fetcher for a PR or a branch: GET /contents/<path>?ref=<ref> with
-     the raw media type (the file body itself, up to 100 MB). */
+  /* GET /contents/<path>?ref=<ref> with the raw media type answers the file
+     body itself (up to 100 MB). */
+  const RAW_MEDIA = 'application/vnd.github.raw+json';
+  const contentsPath = (p, ref) => `${REPO_API_PATH}/contents/${encodePath(p)}?ref=${encodeURIComponent(ref)}`;
+
+  /* The fetcher for a PR or a branch, through contentsPath. */
   function refFetcher(token, ref, fetchImpl) {
     if (!isRef(ref)) throw new Error('refFetcher: ref must be a sha or a branch name');
     const client = createGitHubClient({
@@ -575,9 +592,7 @@
     });
     return async function fetchAtRef(p) {
       if (!isBridgePath(p)) return refused();
-      const res = await client.get(
-        `${REPO_API_PATH}/contents/${encodePath(p)}?ref=${encodeURIComponent(ref)}`,
-        { accept: 'application/vnd.github.raw+json', raw: true });
+      const res = await client.get(contentsPath(p, ref), { accept: RAW_MEDIA, raw: true });
       if (!res.ok) return { ok: false, status: res.status || 502, text: '' };
       return { ok: true, status: res.status, text: res.data };
     };
@@ -1037,6 +1052,653 @@
     return regs;
   }
 
+  // ------------------------------------------------------- editor (U7b) ---
+
+  /* The words the editor shows. docs/maintainer-protocols.md quotes them;
+     keep them verbatim. ID_RULE_TEXT carries the gate's own clause
+     (tools/check.py's overlay rule: "renaming or removing an existing id
+     needs Desert Mango"). */
+  const ID_RULE_TEXT = 'renaming or removing an existing id needs Desert Mango — open an issue';
+  const STRICT_JSON_TEXT = 'strict JSON — no trailing commas, double quotes';
+  const LEAVE_TEXT = 'This page has changes that are not proposed yet. They stay as a draft in this tab '
+    + 'until you close it. Leave the page?';
+  const DISCARD_TEXT = 'Throw away your changes to this page?';
+
+  /* The registries the editor offers as raw JSON (form editors come after
+     the handoff). data/setup.json is not one: tools/rst_convert.py owns it. */
+  const RAW_REGISTRIES = Object.freeze(['data/people.json', 'data/projects.json', 'data/site.json',
+    'data/tools.json']);
+  const isRawRegistry = (f) => RAW_REGISTRIES.indexOf(f) >= 0;
+
+  /* 'page' for a content page, 'registry' for a raw-JSON registry, null for
+     anything the editor does not open. */
+  function editKind(pageId) {
+    if (typeof pageId !== 'string') return null;
+    if (/^data\//.test(pageId)) return isRawRegistry(`${pageId}.json`) ? 'registry' : null;
+    return /^(about|setup\/.+|project\/.+|tool\/.+)$/.test(pageId) ? 'page' : null;
+  }
+
+  const pageRow = (pageId, title, file, route) => Object.freeze({ pageId, title, file, route });
+
+  /* The editor's page tree, from the registries the way js/app.js builds
+     its routes: one group per setup section, then projects, tools, About,
+     and the raw-JSON registries. An entry whose id or file does not map
+     (editPath) is left out, never guessed. -> [{key, title, pages}] */
+  function pageTree(regs) {
+    const r = regs || {};
+    const out = [];
+    for (const s of listOf(r.setup && r.setup.sections)) {
+      const pages = listOf(s && s.pages).filter((p) => p && typeof p.id === 'string'
+        && PAGE_ID_RE.test(p.id) && editPath(`setup/${p.id}`, r) === p.file)
+        .map((p) => pageRow(`setup/${p.id}`, textOr(p.title, p.id), p.file, `/setup/${p.id}`));
+      out.push({ key: 'setup', title: `Setup — ${textOr(s && s.title, 'section')}`, pages });
+    }
+    const listed = (list, prefix, route) => listOf(list).filter((x) => x && typeof x.id === 'string'
+      && SLUG_RE.test(x.id) && editPath(`${prefix}/${x.id}`, r) === x.file)
+      .map((x) => pageRow(`${prefix}/${x.id}`, textOr(x.name, x.id), x.file, `${route}/${x.id}`));
+    out.push({ key: 'projects', title: 'Projects', pages: listed(r.projects && r.projects.projects, 'project', '/projects') });
+    out.push({ key: 'tools', title: 'Agent tools', pages: listed(r.tools && r.tools.tools, 'tool', '/tools') });
+    out.push({ key: 'about', title: 'About', pages: [pageRow('about', 'About', 'content/about.md', '/about')] });
+    out.push({ key: 'registries', title: 'Registries (raw JSON)', pages: RAW_REGISTRIES.map((f) => pageRow(
+      f.slice(0, -5), f, f, DATA_ROUTES[f].route)) });
+    return out;
+  }
+
+  /* Every content page of the tree, flat (the link picker's list). */
+  function pageList(regs) {
+    return [].concat(...pageTree(regs).filter((g) => g.key !== 'registries').map((g) => g.pages));
+  }
+
+  /* file -> page id (editPath's inverse), and page id -> the site route the
+     preview opens. null when the registries do not name it. */
+  function pageIdForFile(file, regs) {
+    if (isRawRegistry(file)) return file.slice(0, -5);
+    const hit = pageList(regs).find((p) => p.file === file);
+    return hit ? hit.pageId : null;
+  }
+
+  function routeForPage(pageId, regs) {
+    if (editKind(pageId) === 'registry') return DATA_ROUTES[`${pageId}.json`].route;
+    const hit = pageList(regs).find((p) => p.pageId === pageId);
+    return hit ? hit.route : null;
+  }
+
+  /* ---- strict JSON, located. JSON.parse decides; when it refuses, this
+     scanner finds WHERE, in the same words in every browser (Safari's
+     message carries no position at all). -> null | {line, column, message} */
+  function lineCol(text, pos) {
+    const before = text.slice(0, pos);
+    const line = before.split('\n').length;
+    return { line, column: pos - before.lastIndexOf('\n') };
+  }
+
+  function scanJson(s) {
+    let i = 0;
+    const fail = (pos, message) => { throw Object.assign(new Error(message), { pos }); };
+    const what = (c) => (c === undefined ? 'the end of the text' : `'${c}'`);
+    const ws = () => { while (i < s.length && ' \t\n\r'.indexOf(s[i]) >= 0) i += 1; };
+    function str() {
+      i += 1;
+      for (;;) {
+        const c = s[i];
+        if (c === undefined) fail(i, 'the text ends inside a string (a missing closing ")');
+        if (c === '"') { i += 1; return; }
+        if (c === '\n') fail(i, 'a line break inside a string (a missing closing ")');
+        if (c < ' ') fail(i, 'a control character inside a string');
+        if (c === '\\') {
+          const e = s[i + 1];
+          if (e === 'u' && /^[0-9a-fA-F]{4}$/.test(s.slice(i + 2, i + 6))) { i += 6; continue; }
+          if ('"\\/bfnrt'.indexOf(e) < 0 || e === undefined) fail(i, 'a backslash that starts no known escape');
+          i += 2;
+          continue;
+        }
+        i += 1;
+      }
+    }
+    function value() {
+      ws();
+      const c = s[i];
+      if (c === '{') return obj();
+      if (c === '[') return arr();
+      if (c === '"') return str();
+      if (c === '\'') fail(i, 'a single quote — JSON strings need double quotes');
+      const num = /-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/y;
+      num.lastIndex = i;
+      if (num.exec(s)) { i = num.lastIndex; return undefined; }
+      for (const w of ['true', 'false', 'null']) {
+        if (s.startsWith(w, i)) { i += w.length; return undefined; }
+      }
+      return fail(i, c === undefined ? 'the text ends where a value should be'
+        : `${what(c)} where a value should be`);
+    }
+    function items(close, one) {
+      i += 1;
+      ws();
+      if (s[i] === close) { i += 1; return; }
+      for (;;) {
+        one();
+        ws();
+        if (s[i] === ',') {
+          const comma = i;
+          i += 1;
+          ws();
+          if (s[i] === close) fail(comma, `a trailing comma before '${close}' — JSON allows none`);
+          continue;
+        }
+        if (s[i] === close) { i += 1; return; }
+        fail(i, `expected ',' or '${close}', found ${what(s[i])}`);
+      }
+    }
+    function obj() {
+      items('}', () => {
+        ws();
+        if (s[i] === '\'') fail(i, 'a single quote — names need double quotes');
+        if (s[i] !== '"') fail(i, `expected a name in double quotes, found ${what(s[i])}`);
+        str();
+        ws();
+        if (s[i] !== ':') fail(i, `expected ':' after the name, found ${what(s[i])}`);
+        i += 1;
+        value();
+      });
+    }
+    function arr() { items(']', value); }
+    try {
+      value();
+      ws();
+      if (i < s.length) fail(i, `${what(s[i])} after the end of the JSON value`);
+      return null;
+    } catch (e) {
+      return Number.isInteger(e.pos) ? Object.assign(lineCol(s, e.pos), { message: e.message }) : null;
+    }
+  }
+
+  function jsonProblem(text) {
+    if (typeof text !== 'string') return { line: 1, column: 1, message: 'there is no text' };
+    try { JSON.parse(text); return null; } catch (e) { /* located below */ }
+    return scanJson(text) || { line: 1, column: 1, message: 'this is not valid JSON' };
+  }
+
+  function jsonProblemText(file, p) {
+    return `${file}, line ${p.line}, column ${p.column}: ${p.message} (${STRICT_JSON_TEXT})`;
+  }
+
+  /* The ids a registry's pages and links hang on (R1-F4): read-only in the
+     editor. site.json has none. */
+  const ID_LISTS = Object.freeze({
+    'data/projects.json': 'projects', 'data/tools.json': 'tools', 'data/people.json': 'groups',
+  });
+
+  function lockedIds(file, doc) {
+    const key = ID_LISTS[file];
+    if (!key || !doc || typeof doc !== 'object') return [];
+    return listOf(doc[key]).filter((x) => x && typeof x === 'object' && typeof x.id === 'string')
+      .map((x) => x.id);
+  }
+
+  /* A raw-JSON draft's first problem, or null: strict JSON (located), then
+     the locked ids — an id of the original that the draft no longer has
+     was removed or renamed — then an id used twice (a copied entry keeps
+     its old id; a new entry needs a new one).
+     -> {kind: 'json'|'id', message, line?, column?} */
+  function registryDraftProblem(file, originalText, draftText) {
+    const p = jsonProblem(draftText);
+    if (p) return Object.assign({ kind: 'json' }, p, { message: jsonProblemText(file, p) });
+    let before;
+    try { before = JSON.parse(originalText); } catch (e) { return null; }
+    const now = lockedIds(file, JSON.parse(draftText));
+    const gone = lockedIds(file, before).find((id) => now.indexOf(id) < 0);
+    if (gone !== undefined) return { kind: 'id', message: `${file}: '${gone}' was removed or renamed — ${ID_RULE_TEXT}` };
+    const twice = now.find((id, i) => now.indexOf(id) !== i);
+    return twice === undefined ? null
+      : { kind: 'id', message: `${file}: the id '${twice}' is used twice — a new entry needs a new id` };
+  }
+
+  /* Re-serialise a registry the way its file is written (the indent of its
+     first indented line, a final newline when it had one), so a form's
+     added entry is the whole diff. */
+  function formatLike(originalText, value) {
+    const t = typeof originalText === 'string' ? originalText : '';
+    const m = /\n( +)\S/.exec(t);
+    return JSON.stringify(value, null, m ? m[1].length : 2) + (/\n$/.test(t) || !t ? '\n' : '');
+  }
+
+  /* ---- snippets, in the site's Markdown dialect (content/*.md). */
+  const SNIPPETS = Object.freeze({
+    note: Object.freeze({ label: 'Note box',
+      before: '<div class="adm adm-note"><p class="adm-title">Note</p>\n\n',
+      placeholder: 'Your note.', after: '\n\n</div>\n' }),
+    warning: Object.freeze({ label: 'Warning',
+      before: '<div class="adm adm-warning"><p class="adm-title">Warning</p>\n\n',
+      placeholder: 'What to watch out for.', after: '\n\n</div>\n' }),
+    tabs: Object.freeze({ label: 'Tabs',
+      before: '<div class="tabs">\n\n<div class="tab" data-label="First">\n\n',
+      placeholder: 'What the first tab says.',
+      after: '\n\n</div>\n\n<div class="tab" data-label="Second">\n\nWhat the second tab says.\n\n</div>\n\n</div>\n' }),
+  });
+
+  /* The block snippet `kind` at [start, end) of text, on its own lines; the
+     selection (or the placeholder) goes inside and comes back selected.
+     -> {text, selStart, selEnd} */
+  function insertSnippet(text, start, end, kind) {
+    if (!Object.prototype.hasOwnProperty.call(SNIPPETS, kind)) throw new Error(`no such snippet: ${String(kind).slice(0, 20)}`);
+    const sn = SNIPPETS[kind];
+    const t = String(text || '');
+    const a = Math.max(0, Math.min(start, t.length));
+    const b = Math.max(a, Math.min(end, t.length));
+    const head = t.slice(0, a);
+    let lead = '';
+    if (head && !/\n\n$/.test(head)) lead = /\n$/.test(head) ? '\n' : '\n\n';
+    const inner = b > a ? t.slice(a, b) : sn.placeholder;
+    const tail = t.slice(b);
+    const trail = tail && !/^\n/.test(tail) ? '\n' : '';
+    const selStart = head.length + lead.length + sn.before.length;
+    return { text: head + lead + sn.before + inner + sn.after + trail + tail,
+      selStart, selEnd: selStart + inner.length };
+  }
+
+  /* An internal link to a page of the tree: [label](#<route>). */
+  function linkMarkdown(page, selected) {
+    const label = textOr(typeof selected === 'string' ? selected.replace(/[[\]]/g, '') : '',
+      String(page.title).replace(/[[\]]/g, ''));
+    return `[${label}](#${page.route})`;
+  }
+
+  /* ---- drafts: in memory and in sessionStorage (this tab only), keyed by
+     page. A draft = {key, label, route, files: {path: text},
+     originals: {path: text | null (a new file)}, base: {ref, sha, number}}:
+     the text each file had at `base` (main's head, or my proposal's branch
+     head) when it was opened. Every storage access is guarded. */
+  const DRAFTS_KEY = 'hc-cms-drafts';
+  const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+  function validDraft(d) {
+    if (!isObj(d) || typeof d.key !== 'string' || !d.key || !isObj(d.files) || !isObj(d.originals)) return false;
+    const paths = Object.keys(d.files);
+    if (!paths.length || paths.some((p) => typeof d.files[p] !== 'string'
+      || !Object.prototype.hasOwnProperty.call(d.originals, p)
+      || (d.originals[p] !== null && typeof d.originals[p] !== 'string'))) return false;
+    const b = d.base;
+    return isObj(b) && isRef(b.ref) && isSha(b.sha) && (b.number === null || Number.isInteger(b.number));
+  }
+
+  const isDirty = (d) => Object.keys(d.files).some((p) => d.files[p] !== d.originals[p]);
+
+  function createDraftStore(storage) {
+    const map = new Map();
+    try {
+      const raw = storage ? storage.getItem(DRAFTS_KEY) : null;
+      const list = raw ? JSON.parse(raw) : [];
+      for (const d of Array.isArray(list) ? list : []) if (validDraft(d)) map.set(d.key, d);
+    } catch (e) { /* unreadable: start empty */ }
+    function persist() {
+      try {
+        if (!storage) return false;
+        storage.setItem(DRAFTS_KEY, JSON.stringify([...map.values()]));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    return Object.freeze({
+      get: (key) => map.get(key) || null,
+      put(d) {
+        if (!validDraft(d)) throw new Error('not a draft');
+        map.set(d.key, d);
+        return persist();
+      },
+      remove(key) { map.delete(key); return persist(); },
+      list: () => [...map.values()],
+      dirty: () => [...map.values()].filter(isDirty),
+    });
+  }
+
+  /* ---- new project, new person: a form -> the registry text of a draft. */
+  const PROJECT_STATUSES = Object.freeze(['active', 'maintained', 'legacy', 'archive']);
+  const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,59}$/;
+  const REPO_NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
+  const ORG_WEB = 'https://github.com/HippoCampusRobotics';
+  const trimmed = (v) => (typeof v === 'string' ? v.trim() : '');
+
+  /* A registry's text parsed, with `key` a list — or the located problem. */
+  function parsedRegistry(file, text, key) {
+    const p = jsonProblem(text);
+    if (p) return { problem: jsonProblemText(file, p) };
+    const doc = JSON.parse(text);
+    if (!isObj(doc) || !Array.isArray(doc[key])) return { problem: `${file}: '${key}' must be a list — fix the registry first` };
+    return { doc };
+  }
+
+  /* form = {id, name, status, tagline, repos (one name per line), story}.
+     -> {problem, id, files}: files = exactly data/projects.json (the entry
+     appended, keys id,name,status,tagline,file,repos) and the story at
+     content/projects/<id>.md. A repository already in a project (or in the
+     exclusions) is refused: check.py wants each org repo in exactly one. */
+  function newProjectDraft(form, projectsText) {
+    const f = form || {};
+    const fail = (problem) => ({ problem, id: null, files: null });
+    const id = trimmed(f.id);
+    if (!PROJECT_ID_RE.test(id)) {
+      return fail(`the id '${id.slice(0, 60)}' must be lowercase letters, digits and dashes (it is the page's address, /projects/<id>)`);
+    }
+    const name = trimmed(f.name);
+    if (!name) return fail('the project needs a name');
+    const status = trimmed(f.status);
+    if (PROJECT_STATUSES.indexOf(status) < 0) return fail(`the status must be one of ${PROJECT_STATUSES.join(', ')}`);
+    const tagline = trimmed(f.tagline);
+    if (!tagline) return fail('the project needs a tagline (the one line under its name)');
+    const names = String(typeof f.repos === 'string' ? f.repos : '').split('\n').map((s) => s.trim()).filter(Boolean);
+    const odd = names.find((n) => !REPO_NAME_RE.test(n));
+    if (odd !== undefined) return fail(`'${odd.slice(0, 60)}' is not a repository name (one per line, as on github.com/HippoCampusRobotics)`);
+    const dup = names.find((n, i) => names.indexOf(n) !== i);
+    if (dup !== undefined) return fail(`the repository '${dup}' is listed twice`);
+    const reg = parsedRegistry('data/projects.json', projectsText, 'projects');
+    if (reg.problem) return fail(reg.problem);
+    const projects = reg.doc.projects.filter(isObj);
+    if (projects.some((p) => p.id === id)) return fail(`a project with the id '${id}' already exists — pick another id`);
+    const owner = new Map();
+    for (const p of projects) {
+      for (const r of listOf(p.repos)) {
+        if (isObj(r) && typeof r.name === 'string' && r.external !== true) owner.set(r.name, `project '${p.id}'`);
+      }
+    }
+    for (const x of listOf(reg.doc.exclusions)) {
+      if (isObj(x) && typeof x.name === 'string') owner.set(x.name, 'the exclusions list');
+    }
+    const taken = names.find((n) => owner.has(n));
+    if (taken !== undefined) {
+      return fail(`the repository '${taken}' is already listed in ${owner.get(taken)} — each repository belongs to exactly one project`);
+    }
+    const file = `content/projects/${id}.md`;
+    reg.doc.projects.push({ id, name, status, tagline, file,
+      repos: names.map((n) => ({ name: n, url: `${ORG_WEB}/${n}` })) });
+    const story = String(typeof f.story === 'string' ? f.story : '').replace(/\s+$/, '');
+    return { problem: null, id, files: { 'data/projects.json': formatLike(projectsText, reg.doc), [file]: `${story}\n` } };
+  }
+
+  /* The groups of a people.json text -> [{id, title}] ([] when unreadable). */
+  function personGroups(text) {
+    let doc;
+    try { doc = JSON.parse(text); } catch (e) { return []; }
+    return listOf(isObj(doc) ? doc.groups : null).filter((g) => isObj(g) && typeof g.id === 'string')
+      .map((g) => ({ id: g.id, title: textOr(g.title, g.id) }));
+  }
+
+  /* person = {group, name, title, photo, link} -> {problem, text}: one
+     person, exactly name/title/photo/link (check.py 6c), appended to the
+     group; an empty photo or link is null. */
+  function addPersonText(peopleText, person) {
+    const f = person || {};
+    const fail = (problem) => ({ problem, text: null });
+    const reg = parsedRegistry('data/people.json', peopleText, 'groups');
+    if (reg.problem) return fail(reg.problem);
+    const group = reg.doc.groups.find((g) => isObj(g) && g.id === f.group && Array.isArray(g.people));
+    if (!group) return fail(`pick a group: ${personGroups(peopleText).map((g) => g.id).join(', ') || 'the registry has none'}`);
+    const name = trimmed(f.name);
+    if (!name) return fail('the person needs a name');
+    const photo = trimmed(f.photo) || null;
+    if (photo && !/^https:\/\/\S+$/.test(photo)) {
+      return fail('the photo must be an https:// address from the site\'s image list (data/cloudinary-manifest.json), or empty');
+    }
+    const link = trimmed(f.link) || null;
+    if (link && !/^https?:\/\/\S+$/.test(link)) return fail('the link must start with http:// or https://, or be empty');
+    if (group.people.some((p) => isObj(p) && p.name === name)) return fail(`'${name}' is already in ${textOr(group.title, group.id)}`);
+    group.people.push({ name, title: trimmed(f.title), photo, link });
+    return { problem: null, text: formatLike(peopleText, reg.doc) };
+  }
+
+  /* ---- Propose (R1-F14): one commit per proposal, through the Git Data
+     API — blobs -> one tree on the base's tree -> one commit -> a new
+     branch cms/<login>/<slug>-<yymmdd> and a PR, or (adding to my own open
+     proposal) a fast-forward of its branch. Never main, never the machinery
+     or the files the site regenerates. */
+  const STALE_DRAFT_TEXT = 'changed on GitHub since you opened it. Your draft is kept: copy your text somewhere, '
+    + 'press "Discard changes", open the page again and put your change back in';
+  const REF_TRIES = 5;
+  const PROPOSAL_BRANCH_RE = /^cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/;
+  const isProposalBranch = (b) => isRef(b) && PROPOSAL_BRANCH_RE.test(b);
+  const PROPOSE_PATH_RE = /^(content\/[A-Za-z0-9_./-]+\.md|data\/[A-Za-z0-9_./-]+\.json)$/;
+
+  /* Lowercase letters, digits and single dashes, at most `max` (40) long;
+     ß -> ss, accents stripped. '' when nothing is left. */
+  function slugify(text, max) {
+    const n = Number.isInteger(max) && max > 0 ? max : 40;
+    return String(typeof text === 'string' ? text : '').toLowerCase().replace(/ß/g, 'ss').normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '')
+      .slice(0, n).replace(/-+$/, '');
+  }
+
+  /* cms/<login>/<slug of the summary>-<yymmdd, UTC>. */
+  function proposalBranch(login, summary, now) {
+    const who = String(typeof login === 'string' ? login : '').toLowerCase().replace(/[^a-z0-9-]/g, '')
+      .replace(/^-+|-+$/g, '');
+    if (!who) throw new Error('no GitHub login to name the branch after');
+    const t = new Date(Number.isFinite(now) ? now : Date.now());
+    return `cms/${who}/${slugify(summary) || 'edit'}-${t.toISOString().slice(2, 10).replace(/-/g, '')}`;
+  }
+
+  /* null, or why the editor will not write `p`: only content/…/*.md and
+     data/*.json, never the machinery or the derived files. */
+  function proposalPathProblem(p) {
+    if (typeof p !== 'string' || !p) return 'a change without a file path';
+    const shown = p.replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 120);
+    if (isMachineryPath(p) || isDerivedPath(p)) {
+      return `${shown}: the site editor never writes js/, css/, tools/, api/, cms/, .github/, search/, data/graph/, `
+        + 'index.html or vercel.json';
+    }
+    if (p.indexOf('\\') >= 0 || p.split('/').some((s) => s === '' || s === '.' || s === '..') || !PROPOSE_PATH_RE.test(p)) {
+      return `${shown}: the site editor writes only content/…/*.md and data/*.json files`;
+    }
+    return null;
+  }
+
+  /* {path: blob sha} -> the one tree's entries, sorted by path. Throws on a
+     path the editor never writes or a missing sha. */
+  function treeEntries(blobs) {
+    const paths = Object.keys(isObj(blobs) ? blobs : {}).sort();
+    if (!paths.length) throw new Error('nothing to propose');
+    return paths.map((p) => {
+      const why = proposalPathProblem(p);
+      if (why) throw new Error(why);
+      if (!isSha(blobs[p])) throw new Error(`${p}: GitHub gave no blob sha`);
+      return { path: p, mode: '100644', type: 'blob', sha: blobs[p] };
+    });
+  }
+
+  const reviewUrl = (origin, n) => `${origin}/cms/#/review/${n}`;
+
+  /* The PR body: the summary, the pages, where it was made, and (once the
+     number is known) the link to it in the editor's Review tab. */
+  function prBody(o) {
+    const x = o || {};
+    const lines = [trimmed(x.summary), '', 'Pages:'];
+    for (const p of listOf(x.pages)) if (isObj(p)) lines.push(`- ${p.label} (\`${p.file}\`)`);
+    lines.push('', 'Made in the site editor.');
+    if (typeof x.reviewUrl === 'string' && x.reviewUrl) lines.push(`Review it in the editor: ${x.reviewUrl}`);
+    return `${lines.join('\n')}\n`;
+  }
+
+  /* My open proposals I can add to: open, opened by me, on a cms/<login>/
+     branch of THIS repository, based on main. -> [{number, title, branch}] */
+  function ownProposals(pulls, login) {
+    const me = typeof login === 'string' ? login.toLowerCase() : '';
+    if (!me) return [];
+    return listOf(pulls).filter((p) => isPull(p) && p.state === 'open' && loginOf(p) === me
+      && isObj(p.head) && isProposalBranch(p.head.ref) && p.head.ref.indexOf(`cms/${me}/`) === 0
+      && isObj(p.head.repo) && p.head.repo.full_name === REPO_FULL && isObj(p.base) && p.base.ref === 'main')
+      .map((p) => ({ number: p.number, title: String(p.title || ''), branch: p.head.ref }));
+  }
+
+  /* The dirty drafts that go into one proposal -> {changes: [{path, text,
+     original, baseSha}], pages: [{label, file}], problems: [text]}. Refused:
+     one path changed in two drafts, a registry draft with a problem, a path
+     the editor never writes. */
+  function collectProposal(list) {
+    const changes = [];
+    const pages = [];
+    const problems = [];
+    const owner = new Map();
+    for (const d of listOf(list)) {
+      if (!validDraft(d)) continue;
+      for (const p of Object.keys(d.files).sort()) {
+        const text = d.files[p];
+        const original = d.originals[p];
+        if (text === original) continue;
+        if (owner.has(p)) {
+          problems.push(`${p} is changed in two drafts (${owner.get(p)} and ${d.label}): propose one first, or discard one`);
+          continue;
+        }
+        owner.set(p, d.label);
+        const why = proposalPathProblem(p);
+        const bad = !why && isRawRegistry(p) ? registryDraftProblem(p, original, text) : null;
+        if (why || bad) { problems.push(why || bad.message); continue; }
+        changes.push({ path: p, text, original, baseSha: d.base.sha });
+        pages.push({ label: d.label, file: p });
+      }
+    }
+    if (!changes.length && !problems.length) problems.push('Nothing to propose: no page has changes');
+    return { changes, pages, problems };
+  }
+
+  /* The one builder for every write Propose sends (the allowlist admits
+     them; this refuses any ref that is not a proposal branch — never main). */
+  function proposeRequest(step, ctx) {
+    const c = ctx || {};
+    const R = REPO_API_PATH;
+    const branch = () => {
+      if (!isProposalBranch(c.branch)) throw new Error(`not a proposal branch: ${String(c.branch).slice(0, 80)}`);
+      return c.branch;
+    };
+    const sha = (s, what) => {
+      if (!isSha(s)) throw new Error(`GitHub gave no ${what} sha`);
+      return s;
+    };
+    switch (step) {
+      case 'blob':
+        if (typeof c.content !== 'string') throw new Error('a blob needs text');
+        return { method: 'POST', path: `${R}/git/blobs`, body: { content: c.content, encoding: 'utf-8' } };
+      case 'tree':
+        return { method: 'POST', path: `${R}/git/trees`, body: { base_tree: sha(c.baseTree, 'base tree'), tree: treeEntries(c.blobs) } };
+      case 'commit':
+        return { method: 'POST', path: `${R}/git/commits`,
+          body: { message: String(c.message), tree: sha(c.tree, 'tree'), parents: [sha(c.parent, 'parent commit')] } };
+      case 'ref':
+        return { method: 'POST', path: `${R}/git/refs`, body: { ref: `refs/heads/${branch()}`, sha: sha(c.sha, 'commit') } };
+      case 'move':
+        return { method: 'PATCH', path: `${R}/git/refs/heads/${branch()}`, body: { sha: sha(c.sha, 'commit'), force: false } };
+      case 'pull':
+        return { method: 'POST', path: `${R}/pulls`, body: { title: String(c.title), head: branch(), base: 'main', body: String(c.body) } };
+      case 'pull-body':
+        if (!Number.isInteger(c.number) || c.number < 1) throw new Error('no proposal number');
+        return { method: 'PATCH', path: `${R}/pulls/${c.number}`, body: { body: String(c.body) } };
+      default:
+        throw new Error(`no such step: ${String(step).slice(0, 40)}`);
+    }
+  }
+
+  /* A step's failure in words. */
+  function proposeFailure(what, res) {
+    const words = githubWords(res.data);
+    const said = words ? ` (GitHub: ${words})` : '';
+    if (!res.status) return `Stopped while ${what}: GitHub could not be reached${said}.`;
+    return `Stopped while ${what}: GitHub answered HTTP ${res.status}${said}.`;
+  }
+
+  /* Sends one proposal. opts: {login, summary, now, origin (for the review
+     link), target: null (a new proposal from main) | {branch, number} (my
+     open proposal), changes (collectProposal's), pages}.
+     -> {ok: true, number, branch, added, message, signedOut?} | {ok: false, status, message}
+     (signedOut: the PR opened, then GitHub answered 401 to the review-link edit).
+     Before any write, each file opened at an older base commit is read at
+     the base's head now and refused when it differs from the text the draft
+     started from. A 401 stops at once (status 401: the page ends the session). */
+  async function runPropose(client, opts) {
+    const o = opts || {};
+    const fail = (status, message) => ({ ok: false, status, message });
+    const changes = listOf(o.changes);
+    if (!changes.length) return fail(0, 'Nothing was sent: nothing to propose.');
+    for (const ch of changes) {
+      const why = proposalPathProblem(ch && ch.path);
+      if (why) return fail(0, `Nothing was sent: ${why}.`);
+      if (typeof ch.text !== 'string') return fail(0, `Nothing was sent: ${ch.path} has no text.`);
+    }
+    const own = o.target || null;
+    if (own && (!isProposalBranch(own.branch) || !Number.isInteger(own.number))) {
+      return fail(0, `Nothing was sent: not a proposal branch: ${String(own.branch).slice(0, 80)}.`);
+    }
+    const summary = textOr(o.summary, 'Edit pages').slice(0, 120);
+    let branch = null;
+    if (!own) {
+      try { branch = proposalBranch(o.login, summary, o.now); } catch (e) { return fail(0, `Nothing was sent: ${e.message}.`); }
+    }
+    const stop = (status, message) => { throw Object.assign(new Error(message), { proposeStop: fail(status, message) }); };
+    async function send(method, p, options) {
+      let res;
+      try {
+        res = method === 'GET' ? await client.get(p, options) : await client.send(method, p, options);
+      } catch (e) {
+        return stop(0, `Stopped: ${e.message}.`);
+      }
+      if (res.status === 401) stop(401, 'Your sign-in has ended. Please sign in again.');
+      return res;
+    }
+    const write = (req) => send(req.method, req.path, { body: req.body });
+    const need = (res, what) => (res.ok ? res.data : stop(res.status, proposeFailure(what, res)));
+    const R = REPO_API_PATH;
+    try {
+      const baseRef = own ? own.branch : 'main';
+      const ref = need(await send('GET', `${R}/git/ref/heads/${baseRef}`), `reading ${baseRef}`);
+      const head = ref && ref.object && ref.object.sha;
+      if (!isSha(head)) stop(502, `Stopped: GitHub did not say where ${baseRef} is.`);
+      const commit = need(await send('GET', `${R}/git/commits/${head}`), `reading ${baseRef}'s commit`);
+      const baseTree = commit && commit.tree && commit.tree.sha;
+      for (const ch of changes) {
+        if (ch.baseSha === head) continue;
+        const res = await send('GET', contentsPath(ch.path, head), { accept: RAW_MEDIA, raw: true });
+        const now = res.status === 404 ? null : need(res, `reading ${ch.path}`);
+        if (now !== ch.original) stop(409, `Not proposed: ${ch.path} ${STALE_DRAFT_TEXT}.`);
+      }
+      const blobs = {};
+      for (const ch of changes.slice().sort((a, b) => (a.path < b.path ? -1 : 1))) {
+        const b = need(await write(proposeRequest('blob', { content: ch.text })), `saving ${ch.path}`);
+        blobs[ch.path] = b && b.sha;
+      }
+      const tree = need(await write(proposeRequest('tree', { baseTree, blobs })), 'making the tree');
+      const made = need(await write(proposeRequest('commit', { message: `${summary}\n\nMade in the site editor.`,
+        tree: tree && tree.sha, parent: head })), 'making the commit');
+      const sha = made && made.sha;
+      if (own) {
+        need(await write(proposeRequest('move', { branch: own.branch, sha })), `adding to your proposal #${own.number}`);
+        return { ok: true, number: own.number, branch: own.branch, added: true, message: `Added to your proposal #${own.number}.` };
+      }
+      let name = null;
+      for (let i = 1; i <= REF_TRIES && !name; i += 1) {
+        const tryName = i === 1 ? branch : `${branch}-${i}`;
+        const res = await write(proposeRequest('ref', { branch: tryName, sha }));
+        if (res.ok) name = tryName;
+        else if (!(res.status === 422 && /already exists/i.test(githubWords(res.data)))) need(res, 'making the branch');
+      }
+      if (!name) stop(422, `Not proposed: the branch names ${branch} to -${REF_TRIES} are all taken. Change the summary and try again.`);
+      const pages = listOf(o.pages);
+      const pull = need(await write(proposeRequest('pull', { branch: name, title: summary, body: prBody({ summary, pages }) })),
+        `opening the proposal (the branch ${name} is on GitHub)`);
+      const n = pull && pull.number;
+      if (!Number.isInteger(n)) stop(502, `Stopped: GitHub opened the proposal for ${name} but gave no number.`);
+      const done = { ok: true, number: n, branch: name, added: false, message: `Proposed as #${n}.` };
+      if (typeof o.origin === 'string' && o.origin) {
+        try {
+          await write(proposeRequest('pull-body', { number: n, body: prBody({ summary, pages, reviewUrl: reviewUrl(o.origin, n) }) }));
+        } catch (e) {
+          // the proposal stands without the link; a 401 still ends the session
+          if (e && e.proposeStop && e.proposeStop.status === 401) done.signedOut = true;
+        }
+      }
+      return done;
+    } catch (e) {
+      if (e && e.proposeStop) return e.proposeStop;
+      return fail(0, `Stopped: ${(e && e.message) || e}.`);
+    }
+  }
+
   const api = Object.freeze({
     REPO_OWNER, REPO_NAME, REPO_FULL, API_ROOT, REPO_API_PATH, GITHUB_WEB,
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
@@ -1047,7 +1709,7 @@
     makeSession, readSession, writeSession, clearSession,
     assertRepoPath, createGitHubClient, READ_METHODS, WRITE_METHODS, isAllowedWrite,
     editPath, pencilUrl, placeholderLink,
-    isBridgePath, previewFragment, refFetcher, draftFetcher, createPreviewHost,
+    isBridgePath, previewFragment, refFetcher, draftFetcher, createPreviewHost, RAW_MEDIA, contentsPath,
     MACHINERY_TEXT, DERIVED_TEXT, CHECK_TEXT, SELF_APPROVE_TEXT, SELF_REQUEST_TEXT,
     STALE_TEXT, NEEDS_HUMAN_TEXT, UNDO_TEXT, MERGE_CONFIRM_TEXT, mergeNeedsConfirm,
     isMachineryPath, isDerivedPath, pullBadges, loadPullFiles, ageText,
@@ -1055,6 +1717,13 @@
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
     vercelCommentUrl, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
+    ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, SNIPPETS,
+    editKind, pageTree, pageList, pageIdForFile, routeForPage,
+    jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
+    insertSnippet, linkMarkdown, createDraftStore, isDirty,
+    PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText,
+    STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
+    ownProposals, collectProposal, proposeRequest, runPropose,
   });
 
   if (typeof window !== 'undefined') window.HCCore = api;

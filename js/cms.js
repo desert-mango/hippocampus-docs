@@ -2,31 +2,36 @@
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
 // Last substantive modification: 21 September 2026
 // Affiliation: TUHH HippoCampus Robotics
-// Purpose: Draw the CMS signed-in area: sign-in popup, role badge, hash routes and the preview frame.
+// Purpose: Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor.
 /* The editor's page (cms/index.html). Logic lives in js/cms-core.js
    (HCCore, node-tested); this file is the DOM around it.
 
-   What it does (units U7a and U8): sign in with GitHub in a popup, show who
+   What it does (units U7a, U8 and U7b): sign in with GitHub in a popup, show who
    is signed in and their role on desert-mango/hippocampus-docs, list open and
    recently merged proposals, draw the hash routes, and run the Review tab
    (badges, the gate's status and located messages, the preview of the PR
    head's content, approve / request changes / merge / update from main / close, and
-   Undo on GitHub for a merged proposal). It talks to this one repository
+   Undo on GitHub for a merged proposal), and the editor (U7b: the page tree,
+   drafts, snippets, the live preview of a draft, raw-JSON registry editors,
+   New project / New person, and Propose). It talks to this one repository
    only (HCCore's client refuses any other path), and its only writes are the
-   review actions HCCore.runReviewAction sends through the client's exact-path
-   allowlist. The token lives in sessionStorage and in the client's and the
+   review actions HCCore.runReviewAction sends — and, from U7b's second
+   half, the proposal HCCore.runPropose sends — through the client's
+   exact-path allowlist. The token lives in sessionStorage and in the client's and the
    preview fetcher's closures; it is never put into the page, the preview
    frame, or a message.
 
    Seams for the next units (build on these, do not fork them):
      VIEWS              route name -> view function (route, epoch). U8 built
-                        'review' and 'review-pr'; U7b replaces 'edit' and 'new'; U9
-                        'media'; U10 'private'. Until then the last four draw
-                        the one-line github.com placeholder.
+                        'review' and 'review-pr'; U7b 'pages', 'edit' and 'new';
+                        U9 'media'; U10 'private'. Until then the last two draw
+                        the one-line github.com placeholder. The editor's
+                        "Image from Media" button (data-seam="U9") waits for U9.
      api(path)          a GET through the signed-in client; a 401 ends the
                         session, and an answer for a session that has since
                         ended or been replaced is dropped (sessionGen).
-                        Writes go through HCCore (U8: runReviewAction); a
+                        Writes go through HCCore (U8: runReviewAction, U7b:
+                        runPropose); a
                         new write path is a row in HCCore's WRITE_METHODS.
      mountPreview(el, {route, fetcher})
                         puts the real site in a sandboxed frame under el and
@@ -134,10 +139,10 @@
      been replaced, it is dropped (thrown as STALE, which route() swallows),
      so an old 401 never ends a newer session. A 401 for the current session
      (an expired or revoked token) ends it. */
-  async function apiResponse(p) {
+  async function apiResponse(p, opts) {
     if (!state.client) throw new Error('not signed in');
     const gen = sessionGen.current();
-    const res = await state.client.get(p);
+    const res = await state.client.get(p, opts);
     if (!sessionGen.isCurrent(gen)) throw new Error(STALE);
     if (res.status === 401) {
       endSession('Your sign-in has ended. Please sign in again.');
@@ -317,7 +322,8 @@
     const login = state.session && state.session.login;
     const helpLinks = [
       h('li', null, link(C.PROTOCOLS_URL, 'Maintainer protocols'), ' — who reviews and merges, and how'),
-      h('li', null, 'Edit any page on github.com: ',
+      h('li', null, link('#/pages', 'Edit a page here'), ' — a draft, a live preview, then Propose'),
+      h('li', null, 'Or edit any page on github.com: ',
         link(`${C.GITHUB_WEB}/tree/main/content`, 'open its file'), ' and click the pencil'),
     ];
     if (state.role && state.role.key === 'admin') {
@@ -648,7 +654,9 @@
         h('dt', { text: 'Editor' }), h('dd', { text: 'edits pages and proposes changes' }),
         h('dt', { text: 'Read-only' }), h('dd', { text: 'reads proposals and previews' })),
       h('p', null, 'How proposals are reviewed and merged: ', link(C.PROTOCOLS_URL, 'the maintainer protocols'), '.'),
-      h('p', null, 'Editing in this page arrives soon. Until then, every page can be edited on github.com: ',
+      h('p', null, 'Edit a page here: pick it from ', link('#/pages', 'the page list'), ', change it, '
+        + 'watch the preview, then Propose. Your changes stay a draft in this browser tab until you propose them. '
+        + 'Every page can also be edited on github.com: ',
         link(`${C.GITHUB_WEB}/tree/main/content`, 'open its file and click the pencil'), '.'),
       h('p', null, link('../', 'Back to the site')),
     ]);
@@ -665,7 +673,520 @@
     return state.regs;
   }
 
-  // #/edit/…, #/new/…, #/media, #/private until U7b, U9 and U10 ship.
+  // ------------------------------------------------------------ the editor ---
+  /* U7b. #/pages is the page tree (the registries' pages, as js/app.js
+     routes them, plus the four raw-JSON registries). #/edit/<page> is the
+     editor: the file's text at the head of main (or of my own open
+     proposal), snippet buttons, and the live preview — the sandboxed site
+     served the draft through the bridge, reloaded with a fresh nonce a moment
+     after each change. A draft lives in memory and in this tab's
+     sessionStorage, keyed by page (HCCore.createDraftStore); leaving a page
+     whose draft is not proposed asks first. Read-only people get the same
+     page, view-only, with the github.com pencil link. */
+
+  const drafts = C.createDraftStore(store());
+  let editing = null;            // {key, hash}: the edit page on screen, for the leave question
+  let restoringTo = null;        // the hash a cancelled leave puts back
+  let previewTimer = null;
+  const PREVIEW_DELAY_MS = 600;
+  const MAIN_BASE = Object.freeze({ ref: 'main', number: null });
+  const chosenBase = new Map();  // page key -> {number}: my proposal picked as the base, not yet changed
+  let proposing = false;         // one proposal at a time
+
+  const canEdit = () => Boolean(state.role && state.role.canPush === true);
+
+  /* Leaving an edit page whose draft is not proposed: ask; on "cancel" put
+     the page's hash back (route() skips the hashchange that causes). */
+  function leaveOk() {
+    const d = drafts.get(editing.key);
+    if (!d || !C.isDirty(d) || window.confirm(C.LEAVE_TEXT)) return true;
+    restoringTo = editing.hash;
+    window.location.hash = editing.hash;
+    return false;
+  }
+
+  /* The commit a branch of this repository points at. */
+  async function headOf(ref) {
+    const data = await api(`${C.REPO_API_PATH}/git/ref/heads/${ref}`);
+    const sha = data && data.object && data.object.sha;
+    if (!/^[0-9a-f]{40}$/.test(String(sha))) throw new Error(`GitHub did not say where ${ref} is`);
+    return sha;
+  }
+
+  /* A new draft: each file's text at the head of `target.ref` (null = the
+     file does not exist there yet). */
+  async function loadDraft(key, meta, files, target) {
+    const sha = await headOf(target.ref);
+    const originals = {};
+    for (const p of files) {
+      const res = await apiResponse(C.contentsPath(p, sha), { accept: C.RAW_MEDIA, raw: true });
+      if (res.status === 404) originals[p] = null;
+      else if (!res.ok) throw new Error(`GitHub answered HTTP ${res.status} for ${p}`);
+      else originals[p] = res.data;
+    }
+    const current = {};
+    for (const p of files) current[p] = originals[p] === null ? '' : originals[p];
+    return { key, label: meta.label, route: meta.route, files: current, originals,
+      base: { ref: target.ref, sha, number: target.number } };
+  }
+
+  const sameBase = (a, b) => a.base.ref === b.base.ref;
+
+  /* What the preview frame reads: this draft's files, over the other
+     not-yet-proposed drafts on the same base, over the base commit. */
+  function fetcherFor(d) {
+    const files = {};
+    for (const o of drafts.dirty()) if (o.key !== d.key && sameBase(o, d)) Object.assign(files, o.files);
+    Object.assign(files, d.files);
+    return C.draftFetcher(files, C.refFetcher(state.session.token, d.base.sha, netFetch));
+  }
+
+  async function viewPages(r, epoch) {
+    const tree = C.pageTree(await registries());
+    const pending = canEdit() ? drafts.dirty() : [];
+    const pageLinks = (pages) => h('ul', { class: 'cms-tree' },
+      ...pages.map((pg) => h('li', null, link(`#/edit/${pg.pageId}`, pg.title),
+        pg.title === pg.file ? null : h('span', { class: 'cms-meta', text: pg.file }))));
+    paint(epoch, [
+      h('h1', { text: 'Edit a page' }),
+      h('p', { class: 'cms-muted', text: canEdit()
+        ? 'Pick a page. Your changes stay a draft in this browser tab until you propose them.'
+        : 'You can open every page and its preview. Changing them needs write access to this site\'s repository.' }),
+      canEdit() ? h('p', { class: 'cms-new-links' }, link('#/new/project', 'New project'), ' · ',
+        link('#/new/person', 'New person')) : null,
+      pending.length ? h('section', { class: 'cms-panel' }, h('h2', { text: 'Your drafts, not proposed yet' }),
+        h('ul', null, ...pending.map((d) => h('li', null,
+          link(d.key.indexOf('new/') === 0 ? `#/${d.key}` : `#/edit/${d.key}`, d.label, 'cms-draft-link'),
+          d.base.number ? h('span', { class: 'cms-meta', text: ` for proposal #${d.base.number}` }) : null)))) : null,
+      ...[].concat(...tree.map((g) => [h('h2', { text: g.title }), pageLinks(g.pages)])),
+    ]);
+  }
+
+  function cannotEdit(epoch, pageId) {
+    paint(epoch, [h('h1', { text: 'Not editable here' }),
+      h('p', null, `The editor has no page "${pageId}". `, link('#/pages', 'Pick one from the page list'),
+        ', or ', link(`${C.GITHUB_WEB}/tree/main`, 'edit the repository on github.com'), '.')]);
+  }
+
+  async function viewEdit(r, epoch) {
+    const pageId = r.params.pageId;
+    const kind = C.editKind(pageId);
+    const regs = await registries();
+    const file = kind ? C.editPath(pageId, regs) : null;
+    const route = kind ? C.routeForPage(pageId, regs) : null;
+    if (!file || !route) { cannotEdit(epoch, pageId); return; }
+    const meta = { label: kind === 'registry' ? file
+      : (C.pageList(regs).find((pg) => pg.pageId === pageId) || {}).title || pageId, route };
+    paint(epoch, [h('h1', { text: `Edit: ${meta.label}` }), h('p', { class: 'cms-muted', text: 'Loading the page…' })]);
+    const editable = canEdit();
+    let d = editable ? drafts.get(pageId) : null;
+    // an unchanged draft is not kept: the page opens at the base's newest head
+    if (d && !C.isDirty(d)) { drafts.remove(pageId); d = null; }
+    const own = editable ? await myProposals() : [];
+    if (!d) d = await loadDraft(pageId, meta, [file], baseFor(pageId, own));
+    if (d.originals[file] === null) throw new Error(`${file} is not on ${d.base.ref}`);
+    if (!paint(epoch, editorPage(d, file, kind, editable, epoch, own))) return;
+    editing = { key: pageId, hash: window.location.hash };
+  }
+
+  /* My open proposals I may add to (HCCore.ownProposals); [] when GitHub
+     does not answer — then every change starts a new proposal. */
+  async function myProposals() {
+    const res = await apiResponse(`${C.REPO_API_PATH}/pulls?state=open&per_page=100`);
+    return res.ok ? C.ownProposals(res.data, state.session.login) : [];
+  }
+
+  /* The base a page without a draft opens at: my proposal when I picked
+     one that is still open, else main. */
+  function baseFor(key, own) {
+    const pick = chosenBase.get(key);
+    const hit = pick && own.find((p) => p.number === pick.number);
+    return hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE;
+  }
+
+  /* The editor's DOM for draft d; wires input, snippets, validation, the
+     base picker, Propose and the preview. Returns the nodes for paint(). */
+  function editorPage(d, file, kind, editable, epoch, own) {
+    const ta = h('textarea', { class: 'cms-editor-text', 'data-editor': '', rows: 24, spellcheck: 'true',
+      'aria-label': `Text of ${file}` });
+    ta.value = d.files[file];
+    ta.readOnly = !editable;
+    const problem = h('p', { class: 'cms-problem', 'data-problem': '', role: 'alert', hidden: true });
+    const stateLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status' });
+    const proposeBtn = editable ? h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'propose' },
+      'Propose…') : null;
+    const discardBtn = editable ? h('button', { type: 'button', class: 'cms-btn', 'data-action': 'discard' },
+      'Discard changes') : null;
+    const area = h('section', { id: 'cms-preview-area', class: 'cms-preview-area', 'aria-label': 'Preview' });
+    let bad = null;
+
+    function check() {
+      bad = kind === 'registry' ? C.registryDraftProblem(file, d.originals[file], ta.value) : null;
+      problem.textContent = bad ? bad.message : '';
+      problem.hidden = !bad;
+      const dirty = C.isDirty(d);
+      stateLine.textContent = !editable ? 'View only.'
+        : (dirty ? 'Changed — kept as a draft in this tab, not proposed yet.' : 'No changes yet.');
+      if (proposeBtn) proposeBtn.disabled = Boolean(bad) || !dirty;
+    }
+
+    let pv = null;
+    function schedulePreview() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        if (epoch !== routeEpoch || !pv || bad) return;   // a broken registry is not previewed
+        pv.load(d.route, fetcherFor(d));
+      }, PREVIEW_DELAY_MS);
+    }
+
+    function changed() {
+      d.files[file] = ta.value;
+      if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
+      check();
+      schedulePreview();
+    }
+    ta.addEventListener('input', changed);
+
+    function replaceText(next, selStart, selEnd) {
+      ta.value = next;
+      ta.focus();
+      ta.setSelectionRange(selStart, selEnd);
+      changed();
+    }
+
+    const tools = editable && kind === 'page' ? snippetBar(ta, replaceText) : null;
+    if (discardBtn) {
+      discardBtn.addEventListener('click', () => {
+        if (C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) return;
+        drafts.remove(d.key);
+        editing = null;
+        route();
+      });
+    }
+    const slot = h('div', { id: 'cms-propose-slot' });
+    if (proposeBtn) proposeBtn.addEventListener('click', () => openPropose(d, epoch, slot, own));
+    check();
+    const isNew = d.originals[file] === null;
+
+    const ids = kind === 'registry' ? C.lockedIds(file, safeParse(d.originals[file])) : [];
+    const nodes = [
+      h('h1', { text: d.key.indexOf('new/') === 0 ? d.label : `Edit: ${d.label}` }),
+      isNew ? h('p', { class: 'cms-meta' }, h('code', { text: file }), ' · a new file')
+        : h('p', { class: 'cms-meta' }, h('code', { text: file }), ' · ', link(`../#${d.route}`, 'open on the site'),
+          ' · ', link(C.pencilUrl(file), 'edit on github.com instead')),
+      editable && own.length && d.key.indexOf('new/') !== 0 ? basePicker(d, own) : null,
+      d.base.number ? h('p', { class: 'cms-muted', text: `Building on your proposal #${d.base.number}.` }) : null,
+      !editable ? h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
+        + 'repository. You can still ', link(C.pencilUrl(file), 'propose a change on github.com'), '.') : null,
+      kind === 'registry' ? h('p', { class: 'cms-locked', 'data-locked': '' }, ids.length
+        ? `Locked ids (${ids.length}): ${ids.join(', ')} — ${C.ID_RULE_TEXT}.`
+        : 'This registry has no ids.') : null,
+      tools, ta, problem, stateLine,
+      editable ? h('div', { class: 'cms-action-row' }, proposeBtn, discardBtn) : null,
+      slot,
+      h('h2', { text: 'Preview' }), area,
+    ];
+    // the frame is mounted once the nodes are on the page (paint)
+    Promise.resolve().then(() => {
+      if (epoch !== routeEpoch) return;
+      pv = mountPreview(area, { route: d.route, fetcher: fetcherFor(d) });
+    });
+    return nodes;
+  }
+
+  function safeParse(text) {
+    try { return JSON.parse(text); } catch (e) { return null; }
+  }
+
+  /* Note box, warning, tabs, an internal link picked from the page tree,
+     and the "image from Media" seam (U9 fills it). */
+  function snippetBar(ta, replaceText) {
+    const btn = (kind, label) => h('button', { type: 'button', class: 'cms-btn', 'data-snippet': kind }, label);
+    const buttons = Object.keys(C.SNIPPETS).map((k) => btn(k, C.SNIPPETS[k].label));
+    buttons.forEach((b) => b.addEventListener('click', () => {
+      const out = C.insertSnippet(ta.value, ta.selectionStart, ta.selectionEnd, b.getAttribute('data-snippet'));
+      replaceText(out.text, out.selStart, out.selEnd);
+    }));
+    const pages = C.pageList(state.regs);
+    const picker = h('select', { class: 'cms-link-picker', 'data-link-picker': '', 'aria-label': 'Page to link to' },
+      ...pages.map((pg) => h('option', { value: pg.pageId }, pg.title)));
+    if (pages.length) picker.value = pages[0].pageId;
+    const linkBtn = btn('link', 'Insert link');
+    linkBtn.addEventListener('click', () => {
+      const pg = pages.find((x) => x.pageId === picker.value);
+      if (!pg) return;
+      const a = ta.selectionStart;
+      const b = ta.selectionEnd;
+      const md = C.linkMarkdown(pg, ta.value.slice(a, b));
+      replaceText(ta.value.slice(0, a) + md + ta.value.slice(b), a + md.length, a + md.length);
+    });
+    const media = h('button', { type: 'button', class: 'cms-btn', 'data-seam': 'U9', disabled: true,
+      title: 'Arrives with the Media tab' }, 'Image from Media');
+    media.disabled = true;
+    return h('div', { class: 'cms-snippets', role: 'toolbar', 'aria-label': 'Insert' },
+      ...buttons, picker, linkBtn, media);
+  }
+
+  /* "Start from": the live site (a new proposal) or one of my open
+     proposals (one more commit on its branch). Switching reloads the page's
+     text from that head; changes not proposed are thrown away first, after
+     asking. */
+  function basePicker(d, own) {
+    const sel = h('select', { class: 'cms-base-picker', 'data-base': '', 'aria-label': 'Start from' },
+      h('option', { value: '' }, 'the live site (a new proposal)'),
+      ...own.map((p) => h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`)));
+    const current = d.base.number ? String(d.base.number) : '';
+    sel.value = current;
+    sel.addEventListener('change', () => {
+      if (C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) { sel.value = current; return; }
+      const hit = own.find((p) => String(p.number) === sel.value);
+      drafts.remove(d.key);
+      if (hit) chosenBase.set(d.key, { number: hit.number }); else chosenBase.delete(d.key);
+      editing = null;
+      route();
+    });
+    return h('p', { class: 'cms-base' }, h('label', null, 'Start from: ', sel));
+  }
+
+  /* The Propose panel under the editor: a summary (the PR title), the
+     drafts that go in (every changed draft on the same base), what refuses
+     them, and one button — "Propose" (a new branch and PR) or "Add to
+     proposal #n" (one more commit on my proposal's branch). */
+  function openPropose(d, epoch, slot, own) {
+    const group = () => drafts.dirty().filter((o) => sameBase(o, d));
+    const plan = C.collectProposal(group());
+    const problems = plan.problems.concat(stillOpen(d, own) ? [] : [closedText(d)]);
+    const box = h('input', { type: 'text', 'data-field': 'summary', maxlength: 120,
+      'aria-label': 'What this proposal does' });
+    box.value = d.key.indexOf('new/') === 0 ? d.label : `Edit ${d.label}`;
+    const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'send-proposal' },
+      d.base.number ? `Add to proposal #${d.base.number}` : 'Propose');
+    go.disabled = problems.length > 0;
+    const result = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
+    go.addEventListener('click', () => sendProposal(d, { box, go, result, group, own, epoch }));
+    const n = plan.changes.length;
+    slot.replaceChildren(h('section', { class: 'cms-propose cms-panel', 'aria-label': 'Propose' },
+      h('h2', { text: d.base.number ? `Add to your proposal #${d.base.number}` : 'Propose these changes' }),
+      h('label', null, 'What does this change do? (the proposal\'s title on GitHub)', box),
+      h('p', { text: `What goes in (${n} file${n === 1 ? '' : 's'}):` }),
+      h('ul', null, ...plan.pages.map((pg) => h('li', null, `${pg.label} — `, h('code', { text: pg.file })))),
+      problems.length ? h('ul', { class: 'cms-problem', role: 'alert' }, ...problems.map((t) => h('li', { text: t }))) : null,
+      h('p', { class: 'cms-muted', text: d.base.number
+        ? 'This adds one commit to your proposal. Its reviewers see the change there.'
+        : 'This makes one commit on a new branch and opens a proposal on GitHub. Someone with write access reviews it and merges it.' }),
+      h('div', { class: 'cms-action-row' }, go), result));
+  }
+
+  const stillOpen = (d, own) => !d.base.number || own.some((p) => p.number === d.base.number);
+  const closedText = (d) => `Your proposal #${d.base.number} is no longer open: discard these changes and start `
+    + 'from the live site.';
+
+  async function sendProposal(d, ui) {
+    if (proposing || !state.client) return;
+    const plan = C.collectProposal(ui.group());       // the text as it is now
+    const problems = plan.problems.concat(stillOpen(d, ui.own) ? [] : [closedText(d)]);
+    const show = (text) => {
+      ui.result.textContent = text;
+      ui.result.hidden = false;
+      ui.result.classList.toggle('is-error', true);
+    };
+    if (problems.length) { show(`Nothing was sent: ${problems.join(' ')}`); return; }
+    proposing = true;
+    ui.go.disabled = true;
+    const gen = sessionGen.current();
+    let out;
+    try {
+      out = await C.runPropose(state.client, {
+        login: state.session.login, summary: ui.box.value, now: Date.now(), origin: window.location.origin,
+        target: d.base.number ? { branch: d.base.ref, number: d.base.number } : null,
+        changes: plan.changes, pages: plan.pages,
+      });
+    } catch (e) {
+      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}` };
+    } finally {
+      proposing = false;
+    }
+    if (!sessionGen.isCurrent(gen)) return;
+    if (out.status === 401) { endSession(out.message); return; }
+    if (!out.ok) { ui.go.disabled = false; show(out.message); return; }
+    for (const o of ui.group()) { drafts.remove(o.key); chosenBase.delete(o.key); }
+    editing = null;
+    if (out.signedOut) {
+      // the proposal is open; only the sign-in ended (after the PR opened)
+      window.location.hash = `#/review/${out.number}`;
+      endSession(`${out.message} Your sign-in has ended. Please sign in again.`);
+      return;
+    }
+    if (ui.epoch !== routeEpoch) { say(out.message); return; }
+    flash = { number: out.number, text: out.message, ok: true };
+    window.location.hash = `#/review/${out.number}`;
+  }
+
+  // #/new/project and #/new/person.
+  async function viewNew(r, epoch) {
+    if (r.params.kind !== 'project' && r.params.kind !== 'person') { viewNotFound(r, epoch); return; }
+    const what = r.params.kind;
+    if (!canEdit()) {
+      paint(epoch, [h('h1', { text: `New ${what}` }), h('p', { class: 'cms-muted' },
+        `View only: adding a ${what} needs write access to this site's repository. You can still `,
+        link(C.pencilUrl(what === 'project' ? 'data/projects.json' : 'data/people.json'),
+          'propose a change on github.com'), '.')]);
+      return;
+    }
+    const regs = await registries();
+    if (what === 'project') await newProjectPage(epoch); else await newPersonPage(epoch, regs);
+  }
+
+  const field = (tag, k, attrs) => h(tag, Object.assign({ 'data-field': k }, tag === 'input' ? { type: 'text' } : {}, attrs));
+  const labelled = (text, el, hint) => h('label', null, text, el, hint ? h('span', { class: 'cms-hint', text: hint }) : null);
+  const problemLine = () => h('p', { class: 'cms-problem', 'data-problem': '', role: 'alert', hidden: true });
+  const showProblem = (el, text) => { el.textContent = text || ''; el.hidden = !text; };
+
+  /* A new project: the form, then (once it makes a draft) the story in the
+     editor with its preview and Propose. One draft, two files. */
+  async function newProjectPage(epoch) {
+    const d = drafts.get('new/project');
+    if (d && C.isDirty(d)) {
+      const md = Object.keys(d.files).find((p) => p !== 'data/projects.json');
+      const own = d.base.number ? await myProposals() : [];   // is my proposal still open?
+      if (!paint(epoch, [h('p', { class: 'cms-muted', text: `This draft adds ${md} and one entry to `
+        + 'data/projects.json. To change the entry, discard it and fill the form again.' })]
+        .concat(editorPage(d, md, 'page', true, epoch, own)))) return;
+      editing = { key: d.key, hash: window.location.hash };
+      return;
+    }
+    const own = await myProposals();
+    const f = {
+      base: field('select', 'base', { 'aria-label': 'Start from' }),
+      id: field('input', 'id', { autocomplete: 'off' }), name: field('input', 'name'),
+      status: field('select', 'status', null, null),
+      tagline: field('input', 'tagline'), repos: field('textarea', 'repos', { rows: 3 }),
+      story: field('textarea', 'story', { rows: 10 }),
+    };
+    f.base.appendChild(h('option', { value: '' }, 'the live site (a new proposal)'));
+    for (const p of own) f.base.appendChild(h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`));
+    f.base.value = '';
+    for (const s of C.PROJECT_STATUSES) f.status.appendChild(h('option', { value: s }, s));
+    f.status.value = 'active';
+    f.story.value = '## What it is\n\n';
+    const problem = problemLine();
+    const make = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'make-draft' },
+      'Make the draft');
+    make.addEventListener('click', () => makeProjectDraft(f, own, problem, make, epoch));
+    paint(epoch, [
+      h('h1', { text: 'New project' }),
+      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json and one page of Markdown. '
+        + 'The draft stays in this browser tab until you propose it.' }),
+      h('div', { class: 'cms-form' },
+        own.length ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
+        labelled('Id', f.id, 'The page address, /projects/<id>: lowercase letters, digits and dashes. It cannot be changed later.'),
+        labelled('Name', f.name), labelled('Status', f.status),
+        labelled('Tagline', f.tagline, 'One line under the name.'),
+        labelled('Repositories', f.repos, 'One name per line, as on github.com/HippoCampusRobotics. Each repository belongs to one project.'),
+        labelled('Story (Markdown)', f.story), problem, h('div', { class: 'cms-action-row' }, make)),
+    ]);
+  }
+
+  async function makeProjectDraft(f, own, problem, make, epoch) {
+    const form = {};
+    for (const k of Object.keys(f)) form[k] = f[k].value;
+    const hit = own.find((p) => String(p.number) === form.base);
+    const id = String(form.id).trim();
+    make.disabled = true;
+    try {
+      const files = ['data/projects.json'].concat(C.PROJECT_ID_RE.test(id) ? [`content/projects/${id}.md`] : []);
+      const d = await loadDraft('new/project', { label: `New project: ${String(form.name).trim() || id}`,
+        route: `/projects/${id}` }, files, hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
+      const out = C.newProjectDraft(form, d.originals['data/projects.json']);
+      const md = `content/projects/${out.id}.md`;
+      if (out.problem) { showProblem(problem, out.problem); return; }
+      if (d.originals[md] !== null) { showProblem(problem, `${md} already exists on the site — pick another id`); return; }
+      if (epoch !== routeEpoch) return;
+      d.files = out.files;
+      drafts.put(d);
+      route();
+    } catch (e) {
+      if (e && (e.message === 'signed out' || e.message === STALE)) return;
+      showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
+    } finally {
+      make.disabled = false;
+    }
+  }
+
+  /* A new person: one entry added to the data/people.json draft. With no
+     changed people draft, "Start from" picks the live site (a new proposal)
+     or one of my open proposals (one more commit on its branch), like New
+     project; a changed draft already open decides the base itself. */
+  async function newPersonPage(epoch, regs) {
+    const FILE = 'data/people.json';
+    const key = 'data/people';
+    const meta = { label: FILE, route: C.routeForPage(key, regs) };
+    let d = drafts.get(key);
+    const open = Boolean(d && C.isDirty(d));
+    const own = open ? [] : await myProposals();
+    if (!open) d = await loadDraft(key, meta, [FILE], baseFor(key, own));
+    const groups = C.personGroups(d.files[FILE]);
+    const f = { group: field('select', 'group') };
+    for (const g of groups) f.group.appendChild(h('option', { value: g.id }, g.title));
+    if (groups.length) f.group.value = groups[0].id;
+    for (const k of ['name', 'title', 'link']) f[k] = field('input', k);
+    if (!open && own.length) {
+      f.base = field('select', 'base', { 'aria-label': 'Start from' });
+      f.base.appendChild(h('option', { value: '' }, 'the live site (a new proposal)'));
+      for (const p of own) f.base.appendChild(h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`));
+      f.base.value = d.base.number ? String(d.base.number) : '';
+    }
+    // a photo must be in the site's image list (check.py 6c): U9's Media tab picks it
+    const media = h('button', { type: 'button', class: 'cms-btn', 'data-seam': 'U9', disabled: true,
+      title: 'Arrives with the Media tab' }, 'Photo from Media');
+    media.disabled = true;
+    const problem = problemLine();
+    const add = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'add-person' },
+      'Add to the people draft');
+    add.addEventListener('click', () => addPerson(f, d, own, meta, problem, add, epoch));
+    const where = open ? (d.base.number ? `your people draft for proposal #${d.base.number}`
+      : 'your people draft (a new proposal)') : 'the data/people.json draft';
+    paint(epoch, [
+      h('h1', { text: 'New person' }),
+      h('p', { class: 'cms-muted', text: `A person is one card on the About page. This adds them to ${where}; `
+        + 'you see it, and propose it, on the next page.' }),
+      h('div', { class: 'cms-form' },
+        f.base ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
+        labelled('Group', f.group), labelled('Name', f.name), labelled('Title', f.title, 'For example "Research Associate". May be empty.'),
+        labelled('Photo (optional)', media, 'Picked from the site\'s images once the Media tab ships. Until then the card '
+          + 'shows no photo; Desert Mango can add one later.'),
+        labelled('Link (optional)', f.link, 'Their page, http:// or https://.'),
+        problem, h('div', { class: 'cms-action-row' }, add)),
+    ]);
+  }
+
+  /* Adds the form's person to draft d — first reloading data/people.json
+     at my proposal's head when "Start from" picked a different base. */
+  async function addPerson(f, d, own, meta, problem, add, epoch) {
+    const FILE = 'data/people.json';
+    add.disabled = true;
+    try {
+      if (f.base && f.base.value !== (d.base.number ? String(d.base.number) : '')) {
+        const hit = own.find((p) => String(p.number) === f.base.value);
+        d = await loadDraft(d.key, meta, [FILE], hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
+        if (epoch !== routeEpoch) return;
+      }
+      const out = C.addPersonText(d.files[FILE], { group: f.group.value, name: f.name.value, title: f.title.value,
+        photo: null, link: f.link.value });
+      if (out.problem) { showProblem(problem, out.problem); return; }
+      d.files[FILE] = out.text;
+      drafts.put(d);
+      if (d.base.number) chosenBase.set(d.key, { number: d.base.number }); else chosenBase.delete(d.key);
+      window.location.hash = `#/edit/${d.key}`;
+    } catch (e) {
+      if (e && (e.message === 'signed out' || e.message === STALE)) return;
+      showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
+    } finally {
+      add.disabled = false;
+    }
+  }
+
+  // #/media and #/private until U9 and U10 ship.
   async function viewPlaceholder(r, epoch) {
     const regs = r.name === 'edit' ? await registries() : {};
     const words = C.PLACEHOLDER_TEXT.split(': ');
@@ -683,23 +1204,34 @@
     review: viewReview,
     'review-pr': viewReviewPr,
     help: viewHelp,
-    edit: viewPlaceholder,
-    new: viewPlaceholder,
+    pages: viewPages,
+    edit: viewEdit,
+    new: viewNew,
     media: viewPlaceholder,
     private: viewPlaceholder,
     'not-found': viewNotFound,
   };
-  const NEEDS_SIGN_IN = new Set(['home', 'review', 'review-pr']);
+  const NEEDS_SIGN_IN = new Set(['home', 'review', 'review-pr', 'pages', 'edit', 'new']);
 
   // --------------------------------------------------------------- router ---
 
   async function route() {
+    if (restoringTo !== null) {
+      // the hashchange of a cancelled leave: the editor is still on screen
+      const back = restoringTo === window.location.hash;
+      restoringTo = null;
+      if (back) return;
+    }
+    if (editing && window.location.hash !== editing.hash && !leaveOk()) return;
+    editing = null;
+    clearTimeout(previewTimer);
     routeEpoch += 1;
     const epoch = routeEpoch;
     clearPreviews();
     const r = C.parseRoute(window.location.hash);
     for (const a of nav.querySelectorAll('a[data-nav]')) {
-      const on = a.dataset.nav === r.name || (a.dataset.nav === 'review' && r.name === 'review-pr');
+      const on = a.dataset.nav === r.name || (a.dataset.nav === 'review' && r.name === 'review-pr')
+        || (a.dataset.nav === 'pages' && (r.name === 'edit' || r.name === 'new'));
       a.classList.toggle('active', on);
     }
     if (state.access === 'no-access') {
@@ -779,10 +1311,16 @@
         document.documentElement.dataset.theme = 'light';
       }
     } catch (e) { /* the site's theme choice is a courtesy */ }
+    nav.appendChild(h('a', { href: '#/pages', 'data-nav': 'pages' }, 'Edit'));
     signInBtn.addEventListener('click', onSignInClick);
     signOutBtn.addEventListener('click', onSignOutClick);
     window.addEventListener('message', onMessage);
     window.addEventListener('hashchange', route);
+    window.addEventListener('beforeunload', (e) => {
+      if (!drafts.dirty().length) return;
+      e.preventDefault();
+      e.returnValue = '';            // the browser asks before the tab's drafts go
+    });
     refresh();
   }
 
