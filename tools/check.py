@@ -103,7 +103,8 @@ CONTRIB_MAX_ROWS = 12
 # Every key a READER dereferences WITHOUT a guard. A READER is any file in this
 # repo that reads a data/*.json registry — the category is the rule; the names
 # below are only today's instance of it:
-#   js/app.js, js/cms-core.js, js/cms.js, js/graph.js,
+#   api/media.js (manifest only: it reads data/cloudinary-manifest.json,
+#   which section 6a covers), js/app.js, js/cms-core.js, js/cms.js, js/graph.js,
 #   tools/bench_librarian.mjs, tools/build_contributors.py,
 #   tools/build_repo_graphs.py, tools/build_search_index.py,
 #   tools/build_wiki_graph.py, tools/check.py, tools/check_urls.py,
