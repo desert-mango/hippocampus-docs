@@ -52,6 +52,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "api/media.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d1560f3432ad81f4adea35af2e31bd2e4f59cde446fadb6853f4994910a9d3d6",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Cloudinary gateway for the CMS: sign uploads, list, and guarded delete/rename under hippocampus-docs/."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "js/app.js": {
       "classification": "included",
       "evidence": {
@@ -519,6 +534,21 @@
         "last_substantive_modification": "5 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test serverless librarian request handling, provider calls, and safe failure responses."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_media_handler.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "410559635f8951b5834b77fb9c3c0bcb07900a9f4bb8b5cab256096dccfae02a",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the Cloudinary gateway: caller check, signing, listing, guarded delete and rename."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
