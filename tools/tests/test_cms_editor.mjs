@@ -455,8 +455,8 @@ test('js/cms.js editor: snippet buttons and the internal link picker insert into
   page.byData('snippet', 'link').click();
   await settle();
   assert.ok(ta.value.startsWith('[DVL](#/setup/bluerov/dvl)') || /^\[[^\]]+\]\(#\/setup\/bluerov\/dvl\)/.test(ta.value));
-  const media = page.byData('seam', 'U9');
-  assert.ok(media && media.disabled, 'image from Media waits for U9');
+  const media = page.byData('action', 'media-open');
+  assert.ok(media && !media.disabled, 'Image from Media is live (U9; tools/tests/test_cms_media.mjs covers it)');
   assert.ok(C.createDraftStore(page.storage).get(`setup/${SETUP_PAGE.id}`).files[SETUP_FILE].includes('adm-note'));
 });
 
@@ -915,8 +915,8 @@ test('js/cms.js New person: the form adds one person to the people draft and ope
   assert.deepEqual(field('group').childNodes.map((o) => o.attrs.value), ['active', 'alumni']);
   // a photo must be in the site's image list (check.py 6c): it is picked from Media (U9), never typed
   assert.equal(field('photo'), undefined);
-  const seam = page.byData('seam', 'U9');
-  assert.ok(seam && seam.disabled, 'photo from Media waits for U9');
+  const seam = page.byData('action', 'media-open');
+  assert.ok(seam && !seam.disabled, 'Photo from Media is live (U9; tools/tests/test_cms_media.mjs covers it)');
   field('group').value = 'alumni';
   field('name').value = 'Ada Example';
   field('title').value = 'Student';

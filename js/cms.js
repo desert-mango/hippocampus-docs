@@ -1,19 +1,20 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 22 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor.
 /* The editor's page (cms/index.html). Logic lives in js/cms-core.js
    (HCCore, node-tested); this file is the DOM around it.
 
-   What it does (units U7a, U8 and U7b): sign in with GitHub in a popup, show who
+   What it does (units U7a, U8, U7b and U9): sign in with GitHub in a popup, show who
    is signed in and their role on desert-mango/hippocampus-docs, list open and
    recently merged proposals, draw the hash routes, and run the Review tab
    (badges, the gate's status and located messages, the preview of the PR
    head's content, approve / request changes / merge / update from main / close, and
    Undo on GitHub for a merged proposal), and the editor (U7b: the page tree,
    drafts, snippets, the live preview of a draft, raw-JSON registry editors,
-   New project / New person, and Propose). It talks to this one repository
+   New project / New person, and Propose), and Media (U9: the site's images
+   on Cloudinary through this site's /api/media). It talks to this one repository
    only (HCCore's client refuses any other path), and its only writes are the
    review actions HCCore.runReviewAction sends — and, from U7b's second
    half, the proposal HCCore.runPropose sends — through the client's
@@ -24,9 +25,14 @@
    Seams for the next units (build on these, do not fork them):
      VIEWS              route name -> view function (route, epoch). U8 built
                         'review' and 'review-pr'; U7b 'pages', 'edit' and 'new';
-                        U9 'media'; U10 'private'. Until then the last two draw
-                        the one-line github.com placeholder. The editor's
-                        "Image from Media" button (data-seam="U9") waits for U9.
+                        U9 'media'; U10 'private'. Until then 'private' draws
+                        the one-line github.com placeholder.
+     mediaPanel(opts)   U9's image chooser (upload, or pick a site image),
+                        opened by the editor's "Image from Media" and New
+                        person's "Photo from Media". A new image is one entry
+                        of the data/cloudinary-manifest.json draft
+                        (HCCore.MANIFEST_KEY) on the page's base, so Propose
+                        sends the page and the image list together.
      api(path)          a GET through the signed-in client; a 401 ends the
                         session, and an answer for a session that has since
                         ended or been replaced is dropped (sessionGen).
@@ -756,7 +762,8 @@
         link('#/new/person', 'New person')) : null,
       pending.length ? h('section', { class: 'cms-panel' }, h('h2', { text: 'Your drafts, not proposed yet' }),
         h('ul', null, ...pending.map((d) => h('li', null,
-          link(d.key.indexOf('new/') === 0 ? `#/${d.key}` : `#/edit/${d.key}`, d.label, 'cms-draft-link'),
+          link(d.key === C.MANIFEST_KEY ? '#/media' : (d.key.indexOf('new/') === 0 ? `#/${d.key}` : `#/edit/${d.key}`),
+            d.label, 'cms-draft-link'),
           d.base.number ? h('span', { class: 'cms-meta', text: ` for proposal #${d.base.number}` }) : null)))) : null,
       ...[].concat(...tree.map((g) => [h('h2', { text: g.title }), pageLinks(g.pages)])),
     ]);
@@ -854,7 +861,7 @@
       changed();
     }
 
-    const tools = editable && kind === 'page' ? snippetBar(ta, replaceText) : null;
+    const tools = editable && kind === 'page' ? snippetBar(ta, replaceText, d) : null;
     if (discardBtn) {
       discardBtn.addEventListener('click', () => {
         if (C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) return;
@@ -899,8 +906,9 @@
   }
 
   /* Note box, warning, tabs, an internal link picked from the page tree,
-     and the "image from Media" seam (U9 fills it). */
-  function snippetBar(ta, replaceText) {
+     and "Image from Media" (U9): the chooser opens under the toolbar and
+     "Insert into page" writes ![alt](url) at the cursor of draft d's text. */
+  function snippetBar(ta, replaceText, d) {
     const btn = (kind, label) => h('button', { type: 'button', class: 'cms-btn', 'data-snippet': kind }, label);
     const buttons = Object.keys(C.SNIPPETS).map((k) => btn(k, C.SNIPPETS[k].label));
     buttons.forEach((b) => b.addEventListener('click', () => {
@@ -920,11 +928,14 @@
       const md = C.linkMarkdown(pg, ta.value.slice(a, b));
       replaceText(ta.value.slice(0, a) + md + ta.value.slice(b), a + md.length, a + md.length);
     });
-    const media = h('button', { type: 'button', class: 'cms-btn', 'data-seam': 'U9', disabled: true,
-      title: 'Arrives with the Media tab' }, 'Image from Media');
-    media.disabled = true;
-    return h('div', { class: 'cms-snippets', role: 'toolbar', 'aria-label': 'Insert' },
-      ...buttons, picker, linkBtn, media);
+    const slot = h('div', { class: 'cms-media-slot' });
+    const media = mediaToggle('Image from Media', slot, () => mediaPanel({ mode: 'insert', baseOf: () => d.base,
+      onInsert(md) {
+        const out = C.insertText(ta.value, ta.selectionStart, ta.selectionEnd, md);
+        replaceText(out.text, out.selStart, out.selEnd);
+      } }));
+    return h('div', null, h('div', { class: 'cms-snippets', role: 'toolbar', 'aria-label': 'Insert' },
+      ...buttons, picker, linkBtn, media), slot);
   }
 
   /* "Start from": the live site (a new proposal) or one of my open
@@ -1136,10 +1147,22 @@
       for (const p of own) f.base.appendChild(h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`));
       f.base.value = d.base.number ? String(d.base.number) : '';
     }
-    // a photo must be in the site's image list (check.py 6c): U9's Media tab picks it
-    const media = h('button', { type: 'button', class: 'cms-btn', 'data-seam': 'U9', disabled: true,
-      title: 'Arrives with the Media tab' }, 'Photo from Media');
-    media.disabled = true;
+    // a photo must be in the site's image list (check.py 6c): it is picked from Media, never typed
+    f.photo = { value: null };
+    const photoLine = h('span', { class: 'cms-hint', 'data-photo': '', text: 'No photo: the card shows none.' });
+    const mediaSlot = h('div', { class: 'cms-media-slot' });
+    const personBase = () => {
+      if (!f.base) return d.base;
+      const hit = own.find((p) => String(p.number) === f.base.value);
+      return hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE;
+    };
+    const media = mediaToggle('Photo from Media', mediaSlot, (close) => mediaPanel({ mode: 'photo', folder: 'people',
+      baseOf: personBase,
+      onUse(entry) {
+        f.photo.value = entry.url;
+        photoLine.textContent = `Photo: ${entry.public_id}`;
+        close();
+      } }));
     const problem = problemLine();
     const add = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'add-person' },
       'Add to the people draft');
@@ -1153,8 +1176,8 @@
       h('div', { class: 'cms-form' },
         f.base ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
         labelled('Group', f.group), labelled('Name', f.name), labelled('Title', f.title, 'For example "Research Associate". May be empty.'),
-        labelled('Photo (optional)', media, 'Picked from the site\'s images once the Media tab ships. Until then the card '
-          + 'shows no photo; Desert Mango can add one later.'),
+        h('div', { class: 'cms-photo' }, h('span', { class: 'cms-label', text: 'Photo (optional)' }), media, photoLine),
+        mediaSlot,
         labelled('Link (optional)', f.link, 'Their page, http:// or https://.'),
         problem, h('div', { class: 'cms-action-row' }, add)),
     ]);
@@ -1171,8 +1194,10 @@
         d = await loadDraft(d.key, meta, [FILE], hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
         if (epoch !== routeEpoch) return;
       }
+      const photoProblem = f.photo.value ? await photoBaseProblem(f.photo.value, d.base) : null;
+      if (photoProblem) { showProblem(problem, photoProblem); return; }
       const out = C.addPersonText(d.files[FILE], { group: f.group.value, name: f.name.value, title: f.title.value,
-        photo: null, link: f.link.value });
+        photo: f.photo.value, link: f.link.value });
       if (out.problem) { showProblem(problem, out.problem); return; }
       d.files[FILE] = out.text;
       drafts.put(d);
@@ -1186,7 +1211,360 @@
     }
   }
 
-  // #/media and #/private until U9 and U10 ship.
+  // ------------------------------------------------------------- media ---
+  /* U9. #/media lists the site's images on Cloudinary (thumbnails, a next
+     page), uploads, and renames or deletes an image only when the live site
+     does not use it. The token goes to this site's /api/media only
+     (HCCore.createMediaClient); an upload goes straight to Cloudinary with
+     the signed parameters (HCCore.runUpload). A new image is one entry of
+     the data/cloudinary-manifest.json draft, on the same base as the page
+     that uses it, so Propose sends both in one proposal. */
+
+  const MANIFEST_META = Object.freeze({ label: C.MANIFEST_LABEL, route: '/' });
+  const whereOf = (base) => (base.number ? `your proposal #${base.number}` : 'the live site');
+
+  /* The live site's image list, as the site serves it (the gateway's guard reads the same). */
+  async function liveAssets() {
+    return C.manifestAssets(await HC.fetchJSON('../data/cloudinary-manifest.json'));
+  }
+
+  const openManifestDraft = () => {
+    const d = drafts.get(C.MANIFEST_KEY);
+    return d && C.isDirty(d) ? d : null;
+  };
+  const draftAssets = () => {
+    const d = openManifestDraft();
+    return d ? C.manifestAssets(C.parseManifest(d.files[C.MANIFEST_FILE])) : [];
+  };
+
+  /* The image-list draft on `base`: the changed one when it is on the same
+     base, else a fresh one at that base's head. -> {d} | {problem} */
+  async function manifestDraftOn(base) {
+    const open = openManifestDraft();
+    if (open) {
+      if (open.base.ref === base.ref) return { d: open };
+      return { problem: `Your image-list draft builds on ${whereOf(open.base)}, and this page on ${whereOf(base)}. `
+        + 'Propose or discard one of them first (the Media tab can discard the image-list draft).' };
+    }
+    return { d: await loadDraft(C.MANIFEST_KEY, MANIFEST_META, [C.MANIFEST_FILE], { ref: base.ref, number: base.number }) };
+  }
+
+  /* The images a page on `base` may use: my changed image-list draft when
+     it is on that base; else the manifest at the base's head — the live
+     site's for main, the branch's for my open proposal (it may hold images
+     proposed there earlier). */
+  async function baseAssets(base) {
+    const open = openManifestDraft();
+    if (open && open.base.ref === base.ref) return draftAssets();
+    if (!base.number) return liveAssets();
+    const res = await apiResponse(C.contentsPath(C.MANIFEST_FILE, await headOf(base.ref)), { accept: C.RAW_MEDIA, raw: true });
+    if (!res.ok) throw new Error(`GitHub answered HTTP ${res.status} for ${C.MANIFEST_FILE}`);
+    return C.manifestAssets(C.parseManifest(res.data));
+  }
+
+  const mediaClient = () => C.createMediaClient({ fetch: netFetch, token: state.session.token });
+
+  /* A gateway answer for this session: dropped when the session changed
+     meanwhile; a 401 ends the session. */
+  function checked(gen, out) {
+    if (!sessionGen.isCurrent(gen)) throw new Error(STALE);
+    if (out.status === 401) {
+      endSession('Your sign-in has ended. Please sign in again.');
+      throw new Error('signed out');
+    }
+    return out;
+  }
+  async function mediaCall(action, ...args) {
+    const gen = sessionGen.current();
+    return checked(gen, await mediaClient()[action](...args));
+  }
+  const quiet = (e) => Boolean(e) && (e.message === 'signed out' || e.message === STALE);
+
+  /* A person's photo must be an image of the people draft's base (the live
+     site, my open proposal, or my changed image-list draft on that base). */
+  async function photoBaseProblem(url, base) {
+    if ((await baseAssets(base)).some((a) => a.url === url)) return null;
+    const md = openManifestDraft();
+    return md && md.base.ref !== base.ref && draftAssets().some((a) => a.url === url)
+      ? `The photo is in your image-list draft for ${whereOf(md.base)}: start from the same place, or pick another photo.`
+      : 'The photo is not an image of the site or of your image-list draft any more: pick it again.';
+  }
+
+  /* A button that opens make(close) into slot, and closes it again. */
+  function mediaToggle(label, slot, make) {
+    const btn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-open', 'aria-expanded': 'false' }, label);
+    let panel = null;
+    const close = () => {
+      if (panel) panel.remove();
+      panel = null;
+      btn.setAttribute('aria-expanded', 'false');
+    };
+    btn.addEventListener('click', () => {
+      if (panel) { close(); return; }
+      panel = make(close);
+      slot.appendChild(panel);
+      btn.setAttribute('aria-expanded', 'true');
+    });
+    return btn;
+  }
+
+  /* The image chooser. opts: {mode: 'insert' (alt text + "Insert into
+     page" -> onInsert(markdown)) | 'photo' ("Use as photo" -> onUse(entry))
+     | 'library' (upload only), baseOf() -> the base a new image's manifest
+     entry goes on, folder (the preselected one), onUploaded()}. */
+  function mediaPanel(opts) {
+    const status = h('p', { class: 'cms-media-status', role: 'status', hidden: true });
+    const problem = problemLine();
+    const tell = (text) => { status.textContent = text || ''; status.hidden = !text; };
+    const folder = field('select', 'media-folder', { 'aria-label': 'Folder' });
+    for (const s of C.MEDIA_SUBFOLDERS) folder.appendChild(h('option', { value: s }, s));
+    folder.value = opts.folder || 'setup';
+    const file = h('input', { type: 'file', 'data-field': 'media-file', accept: C.MEDIA_TYPES.join(','), 'aria-label': 'Image file' });
+    const up = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-upload' }, 'Upload');
+    const pick = field('select', 'media-pick', { 'aria-label': 'An image the site has' });
+    const chosenBox = h('div', { class: 'cms-media-chosen', hidden: true });
+    let chosen = null;
+    let known = [];
+
+    function choose(entry) {
+      chosen = entry;
+      const thumb = C.thumbUrl(entry.url);
+      chosenBox.replaceChildren(thumb ? h('img', { class: 'cms-media-thumb', src: thumb, alt: '' }) : null,
+        h('code', { text: entry.url }));
+      chosenBox.hidden = false;
+      showProblem(problem, '');
+    }
+
+    async function fillPick() {
+      const [all, live] = await Promise.all([baseAssets(opts.baseOf()), liveAssets()]);
+      const onSite = new Set(live.map((a) => a.public_id));
+      known = all.filter((a) => typeof a.url === 'string');
+      pick.replaceChildren(h('option', { value: '' }, 'pick an image the site has…'),
+        ...known.map((a) => h('option', { value: a.url }, onSite.has(a.public_id) ? a.public_id
+          : `${a.public_id} (new: not on the live site yet)`)));
+      pick.value = chosen ? chosen.url : '';
+    }
+    pick.addEventListener('change', () => {
+      const hit = known.find((a) => a.url === pick.value);
+      if (hit) { choose(hit); tell(''); }
+    });
+
+    up.addEventListener('click', async () => {
+      showProblem(problem, '');
+      tell('');
+      const f = file.files && file.files[0];
+      const bad = C.mediaFileProblem(f);
+      if (bad) { showProblem(problem, bad); return; }
+      up.disabled = true;
+      tell('Uploading…');
+      try {
+        const md = await manifestDraftOn(opts.baseOf());
+        if (md.problem) { tell(''); showProblem(problem, md.problem); return; }
+        const live = await liveAssets();
+        const gen = sessionGen.current();
+        const out = checked(gen, await C.runUpload({ media: mediaClient(), fetch: netFetch, FormData: window.FormData,
+          subtle: window.crypto.subtle }, { file: f, subfolder: folder.value, live, draftText: md.d.files[C.MANIFEST_FILE] }));
+        if (out.kind === 'problem') { tell(''); showProblem(problem, out.message); return; }
+        if (out.kind === 'duplicate') {
+          choose(out.entry);
+          tell(`This image is already ${out.where === 'site' ? 'on the site' : 'in your image-list draft'}: `
+            + `${out.entry.url}. Use that one; nothing was uploaded.`);
+        } else {
+          md.d.files[C.MANIFEST_FILE] = out.text;
+          drafts.put(md.d);
+          choose(out.entry);
+          tell(`Uploaded: ${out.entry.url}. It is in your image-list draft (${C.MANIFEST_FILE}), which goes into `
+            + 'the same proposal as the page that uses it.' + (opts.mode === 'library'
+            ? ' To show it on a page, open the page under Edit and press "Image from Media".' : ''));
+        }
+        await fillPick();
+        if (opts.onUploaded) opts.onUploaded();
+      } catch (e) {
+        if (quiet(e)) return;
+        tell('');
+        showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
+      } finally {
+        up.disabled = false;
+      }
+    });
+
+    let useRow = null;
+    if (opts.mode === 'insert') {
+      const alt = field('input', 'media-alt', { autocomplete: 'off' });
+      const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-insert' }, 'Insert into page');
+      go.addEventListener('click', () => {
+        const out = C.imageMarkdown(alt.value, chosen && chosen.url);
+        if (out.problem) { showProblem(problem, out.problem); return; }
+        showProblem(problem, '');
+        opts.onInsert(out.text);
+      });
+      useRow = h('div', { class: 'cms-form' }, labelled('Describe the image (alt text)', alt,
+        'What it shows, for people who cannot see it. Required.'), h('div', { class: 'cms-action-row' }, go));
+    } else if (opts.mode === 'photo') {
+      const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-use' }, 'Use as photo');
+      go.addEventListener('click', () => {
+        if (!chosen) { showProblem(problem, 'Pick an image first.'); return; }
+        opts.onUse(chosen);
+      });
+      useRow = h('div', { class: 'cms-action-row' }, go);
+    }
+
+    fillPick().catch((e) => { if (!quiet(e)) showProblem(problem, `The site's image list could not be read: ${(e && e.message) || e}`); });
+    return h('section', { class: 'cms-media-panel cms-panel', 'aria-label': 'Media' },
+      h('p', { class: 'cms-media-row' }, h('label', null, 'Upload to ', folder), ' ', file, ' ', up),
+      h('p', { class: 'cms-hint', text: C.SIZE_HINT_TEXT }),
+      opts.mode === 'library' ? null : h('p', { class: 'cms-media-row' }, h('label', null, 'Or use one the site has: ', pick)),
+      chosenBox, status, problem, useRow);
+  }
+
+  function sizeText(b) {
+    if (!Number.isInteger(b) || b <= 0) return '';
+    return b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+  }
+
+  /* One image of the list: thumbnail, name, size, whether the site uses
+     it, and Rename / Delete (only for an image the live site does not use:
+     otherwise the line says to remove it from the page first). */
+  function assetTile(asset, live) {
+    let a = asset;
+    const tile = h('figure', { class: 'cms-media-tile' });
+    const line = h('p', { class: 'cms-problem', role: 'alert', hidden: true });
+    const renameBox = h('div', { class: 'cms-media-rename' });
+    const refusal = () => C.mediaChangeProblem(a.public_id, live, draftAssets());
+
+    async function remove() {
+      const why = refusal();
+      if (why) { showProblem(line, why); return; }
+      if (!window.confirm(`Delete ${a.public_id} from Cloudinary? This cannot be undone.`)) return;
+      try {
+        const out = await mediaCall('destroy', a.public_id);
+        if (!out.ok) { showProblem(line, out.message); return; }
+        tile.remove();
+      } catch (e) {
+        if (!quiet(e)) showProblem(line, `Something went wrong: ${(e && e.message) || e}`);
+      }
+    }
+
+    function openRename() {
+      const why = refusal();
+      if (why) { showProblem(line, why); return; }
+      const box = field('input', 'media-new-name', { autocomplete: 'off', 'aria-label': 'New name' });
+      box.value = a.public_id.split('/').pop();
+      const save = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-rename-save' }, 'Save the name');
+      save.addEventListener('click', async () => {
+        const slug = String(box.value).trim();
+        if (!C.MEDIA_SLUG_RE.test(slug)) { showProblem(line, 'A name is lowercase letters, digits and dashes (at most 80).'); return; }
+        const to = `${a.public_id.slice(0, a.public_id.lastIndexOf('/'))}/${slug}`;
+        if (to === a.public_id) { showProblem(line, 'That is its name already.'); return; }
+        save.disabled = true;
+        try {
+          const out = await mediaCall('rename', a.public_id, to);
+          if (!out.ok) { showProblem(line, out.message); return; }
+          a = Object.assign({}, a, { public_id: typeof out.data.public_id === 'string' ? out.data.public_id : to,
+            url: typeof out.data.url === 'string' ? out.data.url : a.url });
+          showProblem(line, '');
+          renameBox.replaceChildren();
+          draw();
+        } catch (e) {
+          if (!quiet(e)) showProblem(line, `Something went wrong: ${(e && e.message) || e}`);
+        } finally {
+          save.disabled = false;
+        }
+      });
+      showProblem(line, '');
+      renameBox.replaceChildren(h('label', null, 'New name: ', box), save);
+    }
+
+    function draw() {
+      const inUse = live.some((x) => x.public_id === a.public_id);
+      const inDraft = !inUse && draftAssets().some((x) => x.public_id === a.public_id);
+      const thumb = C.thumbUrl(a.url);
+      const ren = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-rename' }, 'Rename');
+      const del = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-delete' }, 'Delete');
+      ren.addEventListener('click', openRename);
+      del.addEventListener('click', remove);
+      const dims = Number.isInteger(a.width) && Number.isInteger(a.height) ? ` · ${a.width}×${a.height}` : '';
+      tile.setAttribute('data-asset', a.public_id);
+      tile.replaceChildren(
+        thumb ? h('img', { class: 'cms-media-thumb', src: thumb, alt: '', loading: 'lazy' })
+          : h('div', { class: 'cms-media-thumb cms-muted', text: 'no preview' }),
+        h('figcaption', null, h('code', { text: a.public_id }), h('span', { class: 'cms-meta',
+          text: `${sizeText(a.bytes)}${dims} · ${inUse ? 'on the site' : (inDraft ? 'in your image-list draft' : 'not used by the site')}` })),
+        h('div', { class: 'cms-action-row' }, ren, del), renameBox, line);
+    }
+    draw();
+    return tile;
+  }
+
+  async function viewMedia(r, epoch) {
+    if (!canEdit()) {
+      paint(epoch, [h('h1', { text: 'Media' }), h('p', { class: 'cms-muted', text: 'View only: managing the site\'s '
+        + 'images needs write access to this site\'s repository.' })]);
+      return;
+    }
+    const live = await liveAssets();
+    const grid = h('div', { class: 'cms-media-grid' });
+    const more = h('div', { class: 'cms-action-row' });
+    const listNote = h('p', { class: 'cms-muted', text: 'Loading the images…' });
+    const draftBox = h('div');
+
+    function renderDraft() {
+      const d = openManifestDraft();
+      if (!d) { draftBox.replaceChildren(); return; }
+      const before = new Set(C.manifestAssets(C.parseManifest(d.originals[C.MANIFEST_FILE])).map((a) => a.public_id));
+      const added = draftAssets().filter((a) => !before.has(a.public_id));
+      const discard = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-discard' }, 'Discard the image-list draft');
+      discard.addEventListener('click', () => {
+        if (!window.confirm('Throw away your image-list draft? The images stay on Cloudinary, unused; you can delete them here.')) return;
+        drafts.remove(C.MANIFEST_KEY);
+        renderDraft();
+      });
+      draftBox.replaceChildren(h('section', { class: 'cms-panel', 'data-manifest-draft': '' },
+        h('h2', { text: 'Your image-list draft, not proposed yet' }),
+        d.base.number ? h('p', { class: 'cms-muted', text: `Building on your proposal #${d.base.number}.` }) : null,
+        h('ul', null, ...added.map((a) => h('li', null, h('code', { text: a.public_id })))),
+        h('p', { class: 'cms-muted', text: 'Use each new image on a page in the same proposal: the site\'s rules refuse '
+          + 'an image nothing uses. Open the page under Edit, press "Image from Media" and pick it.' }),
+        h('div', { class: 'cms-action-row' }, discard)));
+    }
+
+    async function loadPage(cursor) {
+      const out = await mediaCall('list', cursor);
+      if (epoch !== routeEpoch) return;
+      if (!out.ok) { showProblem(listNote, out.message); return; }
+      const assets = Array.isArray(out.data.assets) ? out.data.assets : [];
+      for (const a of assets) {
+        if (a && typeof a === 'object' && typeof a.public_id === 'string') grid.appendChild(assetTile(a, live));
+      }
+      listNote.textContent = grid.childNodes.length ? '' : 'No images on Cloudinary yet.';
+      listNote.hidden = !listNote.textContent;
+      more.replaceChildren();
+      const next = out.data.next_cursor;
+      if (typeof next === 'string' && next) {
+        const btn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-more' }, 'More images');
+        btn.addEventListener('click', () => {
+          btn.disabled = true;
+          loadPage(next).catch((e) => { if (!quiet(e)) { btn.disabled = false; showProblem(listNote, `Something went wrong: ${(e && e.message) || e}`); } });
+        });
+        more.appendChild(btn);
+      }
+    }
+
+    if (!paint(epoch, [
+      h('h1', { text: 'Media' }),
+      h('p', { class: 'cms-muted', text: 'The site\'s images, stored on Cloudinary. A new image goes into your image-list '
+        + 'draft and is proposed together with the page that uses it.' }),
+      draftBox,
+      h('h2', { text: 'Upload' }),
+      mediaPanel({ mode: 'library', baseOf: () => (openManifestDraft() || { base: MAIN_BASE }).base, onUploaded: renderDraft }),
+      h('h2', { text: 'On Cloudinary' }),
+      listNote, grid, more,
+    ])) return;
+    renderDraft();
+    await loadPage(null);
+  }
+
+  // #/private until U10 ships.
   async function viewPlaceholder(r, epoch) {
     const regs = r.name === 'edit' ? await registries() : {};
     const words = C.PLACEHOLDER_TEXT.split(': ');
@@ -1207,11 +1585,11 @@
     pages: viewPages,
     edit: viewEdit,
     new: viewNew,
-    media: viewPlaceholder,
+    media: viewMedia,
     private: viewPlaceholder,
     'not-found': viewNotFound,
   };
-  const NEEDS_SIGN_IN = new Set(['home', 'review', 'review-pr', 'pages', 'edit', 'new']);
+  const NEEDS_SIGN_IN = new Set(['home', 'review', 'review-pr', 'pages', 'edit', 'new', 'media']);
 
   // --------------------------------------------------------------- router ---
 
@@ -1312,6 +1690,7 @@
       }
     } catch (e) { /* the site's theme choice is a courtesy */ }
     nav.appendChild(h('a', { href: '#/pages', 'data-nav': 'pages' }, 'Edit'));
+    nav.appendChild(h('a', { href: '#/media', 'data-nav': 'media' }, 'Media'));
     signInBtn.addEventListener('click', onSignInClick);
     signOutBtn.addEventListener('click', onSignOutClick);
     window.addEventListener('message', onMessage);

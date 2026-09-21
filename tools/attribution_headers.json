@@ -106,7 +106,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "22 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
       },
@@ -121,7 +121,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "22 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor."
       },
@@ -506,6 +506,21 @@
         "purpose": "Test the CMS editor: page tree, raw-JSON registry guards, drafts, snippets, live preview, Propose."
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7b); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_cms_media.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "2c77855c75342de500b8af357edbb95eee652507a3061962558e7dd4e45619f5",
+        "commit": "05d1e131b8f45d86437ce42744ffaa0815332ae0"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "22 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS Media tab: signed uploads, the manifest entry, duplicates, the in-use guard, image insertion."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U9); the baseline is the file as introduced, on top of the recorded parent commit."
     },
     "tools/tests/test_derive.py": {
       "classification": "included",

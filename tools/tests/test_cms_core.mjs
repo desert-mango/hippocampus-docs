@@ -144,8 +144,8 @@ test('routes: a query after the route is ignored, and the table names every owne
   const names = C.ROUTES.map((r) => r.name);
   assert.deepEqual(names, ['home', 'review', 'review-pr', 'help', 'pages', 'edit', 'new', 'media', 'private']);
   for (const r of C.ROUTES) assert.match(r.owner, /^U(7a|7b|8|9|10)$/, r.name);
-  // U7b built the editor (#/pages, #/edit/…, #/new/…); Media and Private wait for U9 and U10
-  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name), ['media', 'private']);
+  // U7b built the editor (#/pages, #/edit/…, #/new/…), U9 Media; Private waits for U10
+  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name), ['private']);
   assert.deepEqual(C.parseRoute('#/pages'), { name: 'pages', params: {} });
 });
 
@@ -1206,8 +1206,9 @@ test('js/cms.js reaches GitHub only through cms-core; every write is an allowlis
   assert.equal(ui.split(WRAPPER).length, 2, 'exactly one fetch wrapper');
   assert.ok(!/\bfetch\s*\(/.test(ui.replace(WRAPPER, '').replace(/HC\.fetch(JSON|Text)\(/g, '')),
     'the UI calls no bare fetch (the client and the sign-in own the network)');
-  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 6,
-    'netFetch goes only to the sign-in, the GitHub clients, the PR-head preview fetcher and the draft preview\'s base');
+  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 8,
+    'netFetch goes only to the sign-in, the GitHub clients, the PR-head preview fetcher, the draft preview\'s base, '
+    + 'and (U9) the /api/media client and the signed direct upload to Cloudinary');
   const core = fs.readFileSync(path.join(ROOT, 'js', 'cms-core.js'), 'utf8');
   const verbs = core.match(/method:\s*'[A-Z]+'/g) || [];
   assert.deepEqual([...new Set(verbs)].sort(),
@@ -1218,7 +1219,13 @@ test('js/cms.js reaches GitHub only through cms-core; every write is an allowlis
   const review = core.slice(core.indexOf('function reviewRequest'), core.indexOf('const DONE_TEXT'));
   const propose = core.slice(core.indexOf('function proposeRequest'), core.indexOf('function proposeFailure'));
   assert.ok(allow && review && propose);
-  const rest = core.replace(allow, '').replace(review, '').replace(propose, '');
+  // U9: the media section POSTs twice and never to GitHub — to this site's
+  // /api/media (the gateway client) and to the signed upload URL (Cloudinary)
+  const media = core.slice(core.indexOf('const MEDIA_FUNCTION'), core.indexOf('function imageMarkdown'));
+  assert.ok(media);
+  assert.deepEqual(media.match(/method:\s*'(POST|PUT|PATCH)'/g), ["method: 'POST'", "method: 'POST'"]);
+  assert.deepEqual(media.match(/\bfetch\((\w|\.)+,/g), ['fetch(MEDIA_FUNCTION,', 'fetch(plan.url,']);
+  const rest = core.replace(allow, '').replace(review, '').replace(propose, '').replace(media, '');
   assert.deepEqual((rest.match(/method:\s*'(POST|PUT|PATCH)'/g) || []), ["method: 'POST'"],
     'outside them, one POST: the sign-in exchange to /api/auth');
   for (const src of [ui, core]) {

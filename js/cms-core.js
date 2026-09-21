@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 22 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test
@@ -19,8 +19,10 @@
    main, close — all on /pulls/<n>. U7b (Propose) listed its six: blobs,
    trees, commits, a new ref, a fast-forward of a refs/heads/cms/… ref, and
    the PR — all built by proposeRequest(), which never names main; every
-   other write throws before fetch is called. The other POST in this
-   file is the sign-in exchange to this site's own /api/auth.
+   other write throws before fetch is called. The other POSTs in this
+   file go to no GitHub path: the sign-in exchange to this site's own
+   /api/auth, and (U9, Media) this site's own /api/media and the signed
+   direct upload to Cloudinary, which carries no token.
    Seams:
      - U8 fills the preview area with createPreviewHost + refFetcher(token,
        <PR head sha>); U7b uses draftFetcher(files, refFetcher(token, <main
@@ -89,7 +91,7 @@
     { name: 'pages', re: /^\/pages\/?$/, keys: [], owner: 'U7b' },
     { name: 'edit', re: /^\/edit\/(.+)$/, keys: ['pageId'], owner: 'U7b' },
     { name: 'new', re: /^\/new\/([a-z][a-z-]*)\/?$/, keys: ['kind'], owner: 'U7b' },
-    { name: 'media', re: /^\/media\/?$/, keys: [], owner: 'U9', placeholder: true },
+    { name: 'media', re: /^\/media\/?$/, keys: [], owner: 'U9' },
     { name: 'private', re: /^\/private\/?$/, keys: [], owner: 'U10', placeholder: true },
   ].map((r) => Object.freeze(r)));
 
@@ -1699,6 +1701,273 @@
     }
   }
 
+  /* ---- Media (U9): the site's images on Cloudinary, through this site's
+     own /api/media (api/media.js). The token goes ONLY to that same-origin
+     function, as the caller's identity proof. The upload goes straight from
+     the browser to Cloudinary carrying exactly what the function signed
+     (its `params`, plus api_key, signature and the file) — never the token.
+     Every call takes an injected fetch, so the tests use fakes.
+     A new image becomes one entry of the data/cloudinary-manifest.json
+     draft, {source: null, folder, public_id, url, bytes, sha256} (check.py
+     6a), and is proposed together with the page that uses it: 6a refuses
+     an entry nothing references and a reference with no entry. */
+  const MEDIA_FUNCTION = '/api/media';
+  const MEDIA_ROOT = 'hippocampus-docs/';
+  const MEDIA_SUBFOLDERS = Object.freeze(['setup', 'people', 'projects', 'tools', 'brand']);
+  const MANIFEST_FILE = 'data/cloudinary-manifest.json';
+  const MANIFEST_KEY = 'data/cloudinary-manifest';
+  const MANIFEST_LABEL = 'Site image list';
+  const MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+  const MEDIA_TYPES = Object.freeze(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+  const SIZE_HINT_TEXT = 'Images only (PNG, JPEG, GIF or WebP). Keep images under 5 MB.';
+  const REMOVE_FIRST_TEXT = 'remove it from the page first, merge, then delete';
+  const IN_USE_TEXT = `The site uses this image: ${REMOVE_FIRST_TEXT}.`;
+  const IN_DRAFT_TEXT = 'This image is in your image-list draft: propose it with the page that uses it, '
+    + 'or discard that draft first.';
+  const THUMB_TRANSFORM = 'c_limit,w_240';
+  const CLOUD_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  const MEDIA_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+  const SIGNED_KEYS = Object.freeze(['asset_folder', 'folder', 'overwrite', 'public_id', 'timestamp']);
+  const DELIVERY_URL_RE = /^https:\/\/res\.cloudinary\.com\/[A-Za-z0-9_-]+\/image\/upload\/[^\s()<>"'\\]+$/;
+
+  /* A delivery URL with the thumbnail transformation inserted after
+     /image/upload/ (check.py matches on the public_id, so it still
+     resolves); null for anything that is not a Cloudinary image URL. */
+  function thumbUrl(url) {
+    if (typeof url !== 'string' || !DELIVERY_URL_RE.test(url)) return null;
+    const at = url.indexOf('/image/upload/') + '/image/upload/'.length;
+    return `${url.slice(0, at)}${THUMB_TRANSFORM}/${url.slice(at)}`;
+  }
+
+  /* The manifest's text -> its object, or null when it is not one. */
+  function parseManifest(text) {
+    try {
+      const doc = JSON.parse(text);
+      return isObj(doc) && Array.isArray(doc.assets) ? doc : null;
+    } catch (e) { return null; }
+  }
+
+  /* The entries of a manifest object (or null), each with a string public_id. */
+  const manifestAssets = (doc) => listOf(isObj(doc) ? doc.assets : null)
+    .filter((a) => isObj(a) && typeof a.public_id === 'string');
+
+  const findBySha = (assets, sha) => listOf(assets).find((a) => isObj(a) && a.sha256 === sha) || null;
+
+  /* Why an asset may not be renamed or deleted, or null when it may: only
+     ids under hippocampus-docs/ that the live site does not use (the
+     gateway enforces the same; this says it before any call), and not an
+     image of my own unproposed image-list draft. */
+  function mediaChangeProblem(publicId, liveAssets, draftAssets) {
+    if (typeof publicId !== 'string' || publicId.indexOf(MEDIA_ROOT) !== 0) {
+      return `This image is outside the site's folder (${MEDIA_ROOT}); the editor does not change it.`;
+    }
+    if (listOf(liveAssets).some((a) => isObj(a) && a.public_id === publicId)) return IN_USE_TEXT;
+    if (listOf(draftAssets).some((a) => isObj(a) && a.public_id === publicId)) return IN_DRAFT_TEXT;
+    return null;
+  }
+
+  /* A file chosen for upload: an image type, not empty, under 5 MB. */
+  function mediaFileProblem(file) {
+    if (!file || typeof file.size !== 'number' || typeof file.arrayBuffer !== 'function') return 'Choose an image file first.';
+    const name = String(file.name || 'the file');
+    if (MEDIA_TYPES.indexOf(file.type) < 0) return `${name} is not a PNG, JPEG, GIF or WebP image.`;
+    if (file.size <= 0) return `${name} is empty.`;
+    if (file.size > MEDIA_MAX_BYTES) {
+      return `${name} is ${(file.size / 1048576).toFixed(1)} MB. Keep images under 5 MB: make it smaller and choose it again.`;
+    }
+    return null;
+  }
+
+  const hexOf = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+
+  /* The words for a gateway answer that is not a success. */
+  function mediaFailure(status, data) {
+    const said = isObj(data) && typeof data.error === 'string' ? data.error.slice(0, 200) : '';
+    if (status === 409) return IN_USE_TEXT;
+    if (status === 401) return 'Your sign-in has ended. Please sign in again.';
+    if (status === 429) return 'Too many image requests: wait a minute and try again.';
+    if (status === 400 && /not configured/.test(said)) {
+      return 'Media is not set up on this site yet (its Cloudinary keys are missing). Ask Desert Mango.';
+    }
+    if (!status) return 'The media service could not be reached.';
+    return `The media service answered HTTP ${status}${said ? ` (${said})` : ''}.`;
+  }
+
+  /* The client of /api/media: POST {action, …} with the bearer, same
+     origin only. Each call -> {ok, status, data, message}. */
+  function createMediaClient(deps) {
+    const d = deps || {};
+    if (typeof d.fetch !== 'function') throw new Error('media client: fetch is required');
+    if (typeof d.token !== 'string' || !d.token) throw new Error('media client: a token is required');
+    async function call(body) {
+      let res;
+      try {
+        res = await d.fetch(MEDIA_FUNCTION, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { authorization: `Bearer ${d.token}`, 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        return { ok: false, status: 0, data: null, message: mediaFailure(0, null) };
+      }
+      const data = await readJson(res);
+      const ok = Boolean(res.ok) && isObj(data);
+      return { ok, status: Number(res.status) || 0, data: ok ? data : null,
+        message: ok ? '' : mediaFailure(Number(res.status) || 0, data) };
+    }
+    return Object.freeze({
+      sign: (subfolder, filename) => call({ action: 'sign', subfolder, filename }),
+      list: (cursor) => call(cursor ? { action: 'list', cursor } : { action: 'list' }),
+      destroy: (publicId) => call({ action: 'destroy', public_id: publicId }),
+      rename: (from, to) => call({ action: 'rename', from, to }),
+    });
+  }
+
+  /* The gateway's `sign` answer -> the upload: {url, fields: [[name,
+     value]], cloud, folder, expectedId} or {problem}. `fields` is exactly
+     the signed params (timestamp included), then api_key and signature;
+     the file is appended by the caller. The answer is checked before any
+     byte leaves: the folder it signed is the one picked, overwrite=false,
+     no unknown parameter. */
+  function uploadPlan(signed, subfolder) {
+    const fail = (problem) => ({ problem });
+    if (!isObj(signed) || !isObj(signed.params)) return fail('The media service sent no upload parameters.');
+    const p = signed.params;
+    const cloud = signed.cloud_name;
+    if (typeof cloud !== 'string' || !CLOUD_NAME_RE.test(cloud)) return fail('The media service sent no Cloudinary account name.');
+    const key = typeof signed.api_key === 'number' ? String(signed.api_key) : signed.api_key;
+    if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(key)) return fail('The media service sent no API key.');
+    if (typeof signed.signature !== 'string' || !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(signed.signature)) {
+      return fail('The media service sent no signature.');
+    }
+    const names = Object.keys(p);
+    if (names.some((k) => SIGNED_KEYS.indexOf(k) < 0 || typeof p[k] !== 'string')) {
+      return fail('The media service signed parameters the editor does not know; nothing was uploaded.');
+    }
+    const folder = `${MEDIA_ROOT}${subfolder}`;
+    let expectedId = null;
+    if (p.folder === folder && !('asset_folder' in p) && MEDIA_SLUG_RE.test(String(p.public_id))) {
+      expectedId = `${folder}/${p.public_id}`;                                   // fixed folder mode
+    } else if (p.asset_folder === folder && !('folder' in p)
+      && new RegExp(`^${folder}/[a-z0-9-]{1,80}$`).test(String(p.public_id))) {
+      expectedId = p.public_id;                                                  // dynamic folder mode
+    }
+    if (MEDIA_SUBFOLDERS.indexOf(subfolder) < 0 || !expectedId) {
+      return fail(`The media service signed another place than ${folder}; nothing was uploaded.`);
+    }
+    if (p.overwrite !== 'false') return fail('The upload must never replace an existing image; nothing was uploaded.');
+    const ts = 'timestamp' in p ? p.timestamp : String(signed.timestamp);
+    if (!/^[0-9]{1,12}$/.test(ts) || (signed.timestamp !== undefined && String(signed.timestamp) !== ts)) {
+      return fail('The media service sent a bad timestamp.');
+    }
+    const fields = names.sort().map((k) => [k, p[k]]);
+    if (!('timestamp' in p)) fields.push(['timestamp', ts]);
+    fields.push(['api_key', key], ['signature', signed.signature]);
+    return { problem: null, url: `https://api.cloudinary.com/v1_1/${cloud}/image/upload`, fields, cloud, folder, expectedId };
+  }
+
+  /* Cloudinary's upload answer -> the manifest entry, keys in the
+     manifest's own order: {source: null, folder, public_id, url, bytes,
+     sha256}. The image must have landed where it was signed to, as a new
+     image (overwrite=false answers an existing one with existing: true). */
+  function manifestEntry(res, plan, sha) {
+    const fail = (problem) => ({ problem, entry: null });
+    if (!isObj(res)) return fail('Cloudinary sent no answer.');
+    if (res.existing === true) {
+      return fail(`An image named ${plan.expectedId.split('/').pop()} is already in ${plan.folder}. Rename your file and choose it again.`);
+    }
+    if (res.public_id !== plan.expectedId) return fail('Cloudinary stored the image under another name than was signed.');
+    const url = res.secure_url;
+    if (typeof url !== 'string' || !DELIVERY_URL_RE.test(url)
+      || url.indexOf(`https://res.cloudinary.com/${plan.cloud}/image/upload/`) !== 0) {
+      return fail('Cloudinary sent no usable https address for the image.');
+    }
+    if (!Number.isInteger(res.bytes) || res.bytes <= 0) return fail('Cloudinary did not say how big the image is.');
+    if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) return fail('The image has no sha256.');
+    return { problem: null,
+      entry: { source: null, folder: plan.folder, public_id: plan.expectedId, url, bytes: res.bytes, sha256: sha } };
+  }
+
+  /* One entry appended to the manifest text, written the way the file is. */
+  function addManifestEntry(text, entry) {
+    const doc = parseManifest(text);
+    if (!doc) return { problem: `${MANIFEST_FILE} could not be read.`, text: null };
+    for (const k of ['public_id', 'url', 'sha256']) {
+      if (doc.assets.some((a) => isObj(a) && a[k] === entry[k])) {
+        return { problem: `${MANIFEST_FILE} already has an image with this ${k}.`, text: null };
+      }
+    }
+    doc.assets.push(entry);
+    return { problem: null, text: formatLike(text, doc) };
+  }
+
+  /* Upload one image. deps: {media (createMediaClient), fetch (Cloudinary's
+     side), FormData, subtle (crypto.subtle)}; o: {file, subfolder, live
+     (the live manifest's assets), draftText (the manifest draft's text)}.
+     -> {kind: 'problem', message, status?} | {kind: 'duplicate', entry,
+     where: 'site'|'draft'} (nothing uploaded) | {kind: 'uploaded', entry,
+     text (the manifest draft with the entry)}. Order: file check -> sha256
+     -> duplicate check -> sign -> the plan check -> the direct upload. */
+  async function runUpload(deps, o) {
+    const problem = (message, status) => ({ kind: 'problem', message, status: status || 0 });
+    if (MEDIA_SUBFOLDERS.indexOf(o.subfolder) < 0) return problem(`Pick a folder: ${MEDIA_SUBFOLDERS.join(', ')}.`);
+    const bad = mediaFileProblem(o.file);
+    if (bad) return problem(bad);
+    const draft = parseManifest(o.draftText);
+    if (!draft) return problem(`${MANIFEST_FILE} could not be read.`);
+    const sha = hexOf(await deps.subtle.digest('SHA-256', await o.file.arrayBuffer()));
+    const onSite = findBySha(o.live, sha);
+    if (onSite) return { kind: 'duplicate', entry: onSite, where: 'site' };
+    const inDraft = findBySha(manifestAssets(draft), sha);
+    if (inDraft) return { kind: 'duplicate', entry: inDraft, where: 'draft' };
+    const signed = await deps.media.sign(o.subfolder, String(o.file.name || 'image'));
+    if (!signed.ok) return problem(signed.message, signed.status);
+    const plan = uploadPlan(signed.data, o.subfolder);
+    if (plan.problem) return problem(plan.problem);
+    if (typeof draft.cloud === 'string' && draft.cloud !== plan.cloud) {
+      return problem(`The media service signs for Cloudinary account '${plan.cloud}', but the site's images are on '${draft.cloud}'.`);
+    }
+    const form = new deps.FormData();
+    for (const [k, v] of plan.fields) form.append(k, v);
+    form.append('file', o.file);
+    let res;
+    try {
+      res = await deps.fetch(plan.url, { method: 'POST', body: form });
+    } catch (e) {
+      return problem('Cloudinary could not be reached; nothing was uploaded.');
+    }
+    const data = await readJson(res);
+    if (!res.ok) {
+      const said = isObj(data) && isObj(data.error) && typeof data.error.message === 'string'
+        ? ` (${data.error.message.slice(0, 200)})` : '';
+      return problem(`Cloudinary refused the upload: HTTP ${res.status}${said}.`);
+    }
+    const made = manifestEntry(data, plan, sha);
+    if (made.problem) return problem(made.problem);
+    const added = addManifestEntry(o.draftText, made.entry);
+    if (added.problem) return problem(added.problem);
+    return { kind: 'uploaded', entry: made.entry, text: added.text };
+  }
+
+  /* `![alt](url)` for a site image. The alt text is asked for and never
+     empty; brackets and line breaks are taken out of it. */
+  function imageMarkdown(alt, url) {
+    const text = typeof alt === 'string' ? alt.replace(/[[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    if (typeof url !== 'string' || !DELIVERY_URL_RE.test(url)) return { problem: 'Pick an image first.', text: null };
+    if (!text) return { problem: 'Describe the image first: its alt text says what it shows.', text: null };
+    return { problem: null, text: `![${text}](${url})` };
+  }
+
+  /* `insert` put in place of the selection [start, end); the cursor ends after it. */
+  function insertText(text, start, end, insert) {
+    const t = String(text || '');
+    const a = Math.max(0, Math.min(Number(start) || 0, t.length));
+    const b = Math.max(a, Math.min(Number(end) || 0, t.length));
+    const at = a + insert.length;
+    return { text: t.slice(0, a) + insert + t.slice(b), selStart: at, selEnd: at };
+  }
+
   const api = Object.freeze({
     REPO_OWNER, REPO_NAME, REPO_FULL, API_ROOT, REPO_API_PATH, GITHUB_WEB,
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
@@ -1724,6 +1993,10 @@
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     ownProposals, collectProposal, proposeRequest, runPropose,
+    MEDIA_FUNCTION, MEDIA_ROOT, MEDIA_SUBFOLDERS, MANIFEST_FILE, MANIFEST_KEY, MANIFEST_LABEL, MEDIA_MAX_BYTES,
+    MEDIA_TYPES, SIZE_HINT_TEXT, REMOVE_FIRST_TEXT, IN_USE_TEXT, IN_DRAFT_TEXT, THUMB_TRANSFORM, MEDIA_SLUG_RE,
+    thumbUrl, parseManifest, manifestAssets, findBySha, mediaChangeProblem, mediaFileProblem, mediaFailure,
+    createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
   });
 
   if (typeof window !== 'undefined') window.HCCore = api;

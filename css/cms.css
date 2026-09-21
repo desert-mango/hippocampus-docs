@@ -202,3 +202,32 @@ a.cms-btn { display: inline-block; text-decoration: none; }
   font: inherit; font-size: 0.88rem; max-width: 100%; padding: 0.3rem 0.4rem;
   background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
 }
+
+/* ---------- media (U9) ---------- */
+.cms-media-slot:empty { display: none; }
+.cms-media-panel { margin: 0.6rem 0 1rem; display: grid; gap: 0.6rem; }
+.cms-media-panel p { margin: 0; }
+.cms-media-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.9rem; }
+.cms-media-row select, .cms-media-rename input {
+  font: inherit; font-size: 0.88rem; max-width: 100%; padding: 0.3rem 0.4rem;
+  background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 8px;
+}
+.cms-media-panel .cms-hint, .cms-photo .cms-hint { color: var(--muted); font-size: 0.8rem; }
+.cms-media-status { font-size: 0.88rem; color: var(--body-soft); overflow-wrap: anywhere; }
+.cms-media-chosen { display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; font-size: 0.82rem; overflow-wrap: anywhere; }
+.cms-media-chosen[hidden] { display: none; }
+.cms-media-thumb {
+  display: block; width: 100%; max-width: 240px; height: auto; max-height: 180px; object-fit: contain;
+  border-radius: 6px; background: var(--surface); border: 1px solid var(--edge);
+}
+.cms-media-chosen .cms-media-thumb { width: auto; max-width: 160px; max-height: 120px; }
+.cms-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.9rem; margin: 0.6rem 0 1rem; }
+.cms-media-tile {
+  margin: 0; padding: 0.6rem; display: grid; gap: 0.45rem; align-content: start;
+  border: 1px solid var(--edge); border-radius: 10px; background: var(--surface);
+}
+.cms-media-tile figcaption { display: grid; gap: 0.15rem; font-size: 0.8rem; overflow-wrap: anywhere; }
+.cms-media-tile .cms-problem { margin: 0; font-size: 0.82rem; }
+.cms-media-rename:empty { display: none; }
+.cms-media-rename { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; font-size: 0.85rem; }
+.cms-photo { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.9rem; color: var(--heading); }
