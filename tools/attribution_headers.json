@@ -233,7 +233,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "17 September 2026",
+        "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Validate site content and dispatch the deterministic attribution-header check."
       },
@@ -402,6 +402,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/test_check_content_safety.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "67172813c3f7e1c8f074a3d7b44598bd90bc98199f5d1a02f4c19a917cb30c3f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the content-safety, manifest, CMS-shell and authored-overlay rules of the site gate."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/tests/test_check_graph.py": {
       "classification": "included",
       "evidence": {
@@ -411,7 +426,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "17 September 2026",
+        "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test graph parity and contributor validation in the site quality gate."
       },

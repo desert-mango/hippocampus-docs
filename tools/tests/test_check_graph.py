@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 17 September 2026
+# Last substantive modification: 21 September 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Test graph parity and contributor validation in the site quality gate.
 """Unit tests for the graph half of the check gate (tools/check.py, checks 9-10).
@@ -557,9 +557,32 @@ class TestContributors(GraphTestCase):
         self.w.contributors["projects"]["ghost"] = {"contributors": []}
         self.assertRed(self.w.contribs(), "'ghost' is not a project id")
 
-    def test_missing_project_key_is_red(self):
+    def test_missing_project_bucket_is_green(self):
+        # "never built yet": a PR that adds a project cannot have its bucket —
+        # build_contributors.py is network-bound and runs only after merge
+        # (derive.yml), so the gate must not demand it.
         del self.w.contributors["projects"]["core"]
-        self.assertRed(self.w.contribs(), "no entry for project 'core'")
+        self.assertEqual(self.w.contribs(), [])
+
+    def test_new_project_without_bucket_is_green(self):
+        self.w.projects["projects"].append({"id": "fresh"})
+        self.assertEqual(self.w.contribs(), [])
+
+    def test_extra_bucket_still_red_after_rule_change(self):
+        del self.w.contributors["projects"]["core"]
+        self.w.contributors["projects"]["ghost"] = {"contributors": []}
+        msgs = self.w.contribs()
+        self.assertEqual(msgs, [
+            "data/graph/contributors.json: 'ghost' is not a project id of "
+            "data/projects.json — re-run tools/build_contributors.py"])
+
+    def test_malformed_bucket_still_red(self):
+        self.w.contributors["projects"]["core"] = ["not", "an", "object"]
+        self.assertRed(self.w.contribs(), "'core' must be an object")
+        self.w.contributors["projects"]["core"] = {"people": []}
+        msgs = self.w.contribs()
+        self.assertRed(msgs, "'core' has unknown key(s)")
+        self.assertRed(msgs, "'core' has no 'contributors' list")
 
     def test_unknown_row_field_is_red(self):
         self.w.contributors["projects"]["core"]["contributors"][0]["email"] = "x"
