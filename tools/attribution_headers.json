@@ -22,6 +22,21 @@
   ],
   "canonical_project_url": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
   "files": {
+    "api/auth.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "baa82b58a7bca585f53cf0534a9e068611d59bdacd25e25faac73bef3d36d04f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Exchange a GitHub App sign-in code for a user access token without exposing the secret."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "api/librarian.js": {
       "classification": "included",
       "evidence": {
@@ -49,6 +64,21 @@
         "last_substantive_modification": "5 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Route and render the documentation site's pages from JSON registries and Markdown."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/cms-callback.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e42cb27681a4d5ba2d4fbf63bb7355466910f771078d1005171dc09c70652e55",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Hand the GitHub sign-in code from the popup to the CMS window that opened it."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
@@ -232,9 +262,9 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "5 September 2026",
+        "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Serve static pages and the librarian function locally with deterministic provider mocks."
+        "purpose": "Serve static pages and every api/ function locally, with deterministic librarian mocks."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
@@ -281,6 +311,21 @@
         "purpose": "Test attribution inventory reconciliation and exact header validation failures."
       },
       "reason": "First-party focused checker tests added in this change."
+    },
+    "tools/tests/test_auth_handler.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "eb796f6f8186dae20d1ab2a0f8ba9d0befac5afbf6a7e5701be27b6c9a056c00",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the GitHub sign-in code exchange, its callback page, and dev_site's api routing."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
     "tools/tests/test_build_contributors.py": {
       "classification": "included",
