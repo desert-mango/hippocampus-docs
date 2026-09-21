@@ -103,11 +103,14 @@ CONTRIB_MAX_ROWS = 12
 # Every key a READER dereferences WITHOUT a guard. A READER is any file in this
 # repo that reads a data/*.json registry — the category is the rule; the names
 # below are only today's instance of it:
-#   js/app.js, js/graph.js, tools/bench_librarian.mjs,
-#   tools/build_contributors.py, tools/build_repo_graphs.py,
-#   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
-#   tools/check_urls.py, tools/rst_convert.py
-# and, once the CMS units land them: js/cms.js, js/cms-core.js, js/source.js
+#   js/app.js, js/cms-core.js, js/cms.js, js/graph.js,
+#   tools/bench_librarian.mjs, tools/build_contributors.py,
+#   tools/build_repo_graphs.py, tools/build_search_index.py,
+#   tools/build_wiki_graph.py, tools/check.py, tools/check_urls.py,
+#   tools/derive.py (paths only: it passes registry paths to git diff and
+#   dereferences no key), tools/rst_convert.py
+# (js/source.js does not match the grep: it fetches registry files on the
+# readers' behalf and dereferences no key.)
 # Re-derive that list, never trust it:
 #   grep -rln "data/[a-z_-]*\.json" . --exclude-dir=.git --exclude-dir=data \
 #     --exclude-dir=search

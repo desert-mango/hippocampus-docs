@@ -6,6 +6,24 @@
 record of that plan, not a pre-build proposal — read the reconciliation note directly below
 for the three places reality diverged from the original plan.*
 
+> ## Superseded in part by CMS v2 — 2026-09-21
+>
+> The body below stays as the historical record of the 2026-09-03 plan. The CMS v2 plan,
+> `docs/cms-v2-plan.md`, replaces these parts of it:
+>
+> - **"Kyle merges"** → Nathalie (Admin) and the Maintainers she names review and merge,
+>   through the Review tab at `/cms/#/review`.
+> - **Fork-only contributions** → lab members are Write collaborators who work on branches in
+>   this repository (no fork, no "Approve and run"); the fork path stays for outsiders.
+> - **The `search-shard-advisory` job** → retired; `.github/workflows/derive.yml` regenerates
+>   and commits the derived data after every merge, and the `check` job regenerates it
+>   (uncommitted) on pull requests.
+> - **Phase F, "static admin UI, default NO"** → built as a thin custom `/cms/` (v2 plan, D1):
+>   off-the-shelf CMSes cannot review arbitrary pull requests such as PR #1, and their
+>   previews do not run the site's own renderer, which the note-box and tabs dialect needs.
+>
+> The day-to-day steps for the lab are `docs/maintainer-protocols.md`.
+
 > ## Reconciliation note — 2026-09-09
 >
 > The pipeline is merged and, on a re-audit against today's `main`, sound: the gate's
