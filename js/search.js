@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 5 September 2026
+// Last substantive modification: 21 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Rank indexed documentation results and coordinate optional librarian answers.
 /* Static in-browser search over the precomputed index in search/.
@@ -34,6 +34,12 @@
    (the root, api/* runs). The one rule that keeps both working is that the
    fetch URL below stays RELATIVE. On Pages a POST to it returns 405, which this
    file reads as "no function on this host" and latches off for the session.
+
+   Every read (the manifest, the shards) and the librarian POST go through the
+   content-source seam in js/source.js when it is on the page: same-origin
+   fetch on the live site; inside a CMS preview frame the files come over the
+   preview bridge and the librarian answers 405, which latches it off exactly
+   as on Pages. Without the seam (plain node, the tests) it is plain fetch.
 
    The pure helpers are exported for tools/tests/test_search_routing.mjs; the
    file loads cleanly under plain node with no window, no document, and issues
@@ -103,16 +109,29 @@
     return out;
   }
 
-  async function loadAll() {
-    const manifest = await fetch('search/manifest.json').then((r) => {
-      if (!r.ok) throw new Error('search index missing — run tools/build_search_index.py');
+  // js/source.js's HC when the page has it; plain fetch otherwise (node).
+  function seam() {
+    return (typeof window !== 'undefined' && window.HC) ? window.HC : null;
+  }
+  function getJSON(path) {
+    const hc = seam();
+    if (hc) return hc.fetchJSON(path);
+    return fetch(path).then((r) => {
+      if (!r.ok) {
+        const err = new Error(`${path}: HTTP ${r.status}`);
+        err.status = r.status;
+        throw err;
+      }
       return r.json();
     });
-    const shards = await Promise.all(manifest.shards.map((s) =>
-      fetch(s.file).then((r) => {
-        if (!r.ok) throw new Error(`${s.file}: HTTP ${r.status}`);
-        return r.json();
-      })));
+  }
+
+  async function loadAll() {
+    const manifest = await getJSON('search/manifest.json').catch((err) => {
+      if (err && err.status) throw new Error('search index missing — run tools/build_search_index.py');
+      throw err;
+    });
+    const shards = await Promise.all(manifest.shards.map((s) => getJSON(s.file)));
     for (const it of buildItems(shards)) items.push(it);
     return items.length;
   }
@@ -390,7 +409,10 @@
   function createLibrarian(opts) {
     const cfg = opts || {};
     const timeoutMs = cfg.timeoutMs || LIBRARIAN_TIMEOUT_MS;
-    const doFetch = cfg.fetch || ((url, init) => fetch(url, init));
+    const doFetch = cfg.fetch || ((url, init) => {
+      const hc = seam();
+      return hc ? hc.callFunction(url, init) : fetch(url, init);
+    });
     let absent = false;
     const answers = new Map();
 

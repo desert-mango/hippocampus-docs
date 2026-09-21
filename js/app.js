@@ -1,11 +1,14 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 5 September 2026
+// Last substantive modification: 21 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Route and render the documentation site's pages from JSON registries and Markdown.
 /* HippoCampus Robotics docs — hash router + renderers.
    Zero-build: this file, marked.min.js (vendored, MIT), and JSON/Markdown content.
-   Slug rule mirrors tools/rst_convert.py slugify() — keep them in sync. */
+   Slug rule mirrors tools/rst_convert.py slugify() — keep them in sync.
+   Every content read goes through HC (js/source.js: same-origin fetch, or the
+   CMS preview bridge inside a preview frame), and every rendered Markdown page
+   through HCSanitize (js/sanitize.js). Both load before this file. */
 (function () {
   'use strict';
 
@@ -30,16 +33,12 @@
     t.innerHTML = html.trim();
     return t.content;
   }
-  async function fetchJSON(path) {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
-    return r.json();
+  function fetchJSON(path) {
+    return HC.fetchJSON(path);
   }
   async function fetchMD(path) {
     if (mdCache[path]) return mdCache[path];
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
-    const text = await r.text();
+    const text = await HC.fetchText(path);
     mdCache[path] = text;
     return text;
   }
@@ -57,7 +56,7 @@
   // ---------- markdown rendering + enhancement ----------
   function renderMarkdown(md) {
     marked.use({ mangle: false, headerIds: false });
-    const html = marked.parse(md);
+    const html = HCSanitize.clean(marked.parse(md));   // allowlist first, enhance() after
     const frag = el(`<div class="page-body">${html}</div>`);
     const body = frag.firstElementChild;
     enhance(body);
@@ -492,13 +491,41 @@
     paint(res);
   }
 
+  // ---------- "Edit this page" ----------
+  /* One footer link, pointed at the page on screen: cms/#/edit/<page-id>.
+     Relative, so it works on any host (Vercel's root, Pages' subpath). The
+     page id is site-mcp's page_index id — setup/<id>, project/<id>,
+     tool/<id>, about — which is also the id the CMS page tree uses. Only
+     Markdown pages have one; lists, home and search show no link, and a
+     CMS preview frame (HC.preview) never shows it. */
+  function editPageId(seg) {
+    if (seg[0] === 'setup') return seg.length === 1 ? 'setup/start/index' : `setup/${seg.slice(1).join('/')}`;
+    if (seg[0] === 'projects' && seg.length === 2) return `project/${seg[1]}`;
+    if (seg[0] === 'tools' && seg.length === 2) return `tool/${seg[1]}`;
+    if (seg[0] === 'about' && seg.length === 1) return 'about';
+    return null;
+  }
+  function setEditLink(pageId) {
+    const link = $('#edit-page');
+    if (!link) return;
+    if (pageId && !HC.preview) {
+      link.setAttribute('href', `cms/#/edit/${pageId}`);
+      link.hidden = false;
+    } else {
+      link.removeAttribute('href');
+      link.hidden = true;
+    }
+  }
+
   // ---------- router ----------
   async function route() {
     routeEpoch += 1;
+    const epoch = routeEpoch;
     const hash = location.hash || '#/';
     const [pathPart, anchor] = hash.slice(1).split('@');
     const [path, queryStr] = pathPart.split('?');
     const seg = path.split('/').filter(Boolean);
+    setEditLink(null);                      // no stale link while the next page loads
     try {
       if (seg.length === 0) { navHighlight(null); viewHome(); }
       else if (seg[0] === 'setup' && seg.length === 1) { navHighlight('setup'); await viewSetupIndex(); }
@@ -516,6 +543,7 @@
       // viewSearch scrolls on its own first paint, so it is excluded here —
       // otherwise this would fire only after the optional librarian round trip.
       if (!anchor && seg[0] !== 'search') window.scrollTo({ top: 0, behavior: 'instant' });
+      if (epoch === routeEpoch) setEditLink(editPageId(seg));
     } catch (err) {
       errorPanel(err);
     }

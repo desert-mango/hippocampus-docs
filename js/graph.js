@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 3 September 2026
+// Last substantive modification: 21 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Link related page terms and display graph previews and project contributors.
 /* HippoCampus Robotics docs — semantic graph UI layer.
@@ -232,7 +232,11 @@
 
   // Every file is optional: a 404, a network error or malformed JSON all resolve
   // to null so one missing file can never take the others (or the page) down.
+  // Reads go through js/source.js's HC when the page has it (same-origin fetch
+  // on the live site, the preview bridge inside a CMS preview frame).
   function loadJSON(path) {
+    const hc = (typeof window !== 'undefined' && window.HC) ? window.HC : null;
+    if (hc) return hc.fetchJSON(path).catch(function () { return null; });
     if (typeof fetch !== 'function') return Promise.resolve(null);
     return fetch(path)
       .then(function (r) { return (r && r.ok) ? r.json() : null; })
