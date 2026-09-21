@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 3 September 2026
+# Last substantive modification: 21 September 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Test wiki graph construction and overlays against isolated fixture sites.
 """Unit tests for tools/build_wiki_graph.py.
@@ -444,6 +444,41 @@ class TestRelated(FixtureCase):
             self.build()
         self.assertIn("why", str(cm.exception))
 
+    def test_missing_id_is_one_located_line_on_stdout(self):
+        self.overlay({"note": "n", "edges": [
+            {"s": "about", "t": "projects/old-id", "why": "x"}]})
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = bwg.main(["--allow-empty-summaries"], root=self.root)
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.getvalue().splitlines()[-1],
+                         "data/graph/edges-authored.json: 'projects/old-id' is not a page or "
+                         "repository id any more — renaming or removing an existing id needs "
+                         "Desert Mango (docs/maintainer-protocols.md)")
+        self.assertNotIn("Traceback", out.getvalue() + err.getvalue())
+        self.assertFalse((self.root / "data/graph/wiki.json").exists())
+
+    def test_overlay_line_wins_over_a_broken_link_to_the_same_id(self):
+        # a rename also strands every #/projects/<old-id> link; the overlay line,
+        # which says who can fix it, must be what the reader sees
+        write(self.root / "content/about.md",
+              "# About\n\nA tiny fixture site. See [old](#/projects/old-id).\n")
+        self.overlay({"note": "n", "edges": [
+            {"s": "about", "t": "projects/old-id", "why": "x"}]})
+        with self.assertRaises(bwg.OverlayError) as cm:
+            self.build()
+        self.assertIn("edges-authored.json: 'projects/old-id'", str(cm.exception))
+
+    def test_every_missing_overlay_id_is_listed_once(self):
+        self.overlay({"note": "n", "edges": [
+            {"s": "about", "t": "projects/gone", "why": "x"},
+            {"s": "projects/gone", "t": "about", "why": "y"},
+            {"s": "about", "t": "tools/gone-too", "why": "z"}]})
+        with self.assertRaises(bwg.OverlayError) as cm:
+            self.build()
+        lines = str(cm.exception).splitlines()
+        self.assertEqual([l.split("'")[1] for l in lines], ["projects/gone", "tools/gone-too"])
+
 
 # --------------------------------------------------------------------------
 # summaries
@@ -480,9 +515,15 @@ class TestSummaries(FixtureCase):
             "setup/getting-started/renamed": {"summary": "x", "source": "authored"}}}))
         with self.assertRaises(bwg.BuildError) as cm:
             self.build()
-        msg = str(cm.exception)
-        self.assertIn("setup/getting-started/renamed", msg)
-        self.assertIn("rst_convert.py", msg)
+        self.assertEqual(str(cm.exception),
+                         "data/graph/summaries.json: 'setup/getting-started/renamed' is not a "
+                         "page or repository id any more — renaming or removing an existing id "
+                         "needs Desert Mango (docs/maintainer-protocols.md)")
+
+    def test_stale_derived_entry_for_a_missing_id_is_not_an_overlay(self):
+        write(self.path(), json.dumps({"note": "n", "pages": {
+            "projects/gone": {"summary": "x", "source": "derived"}}}))
+        self.assertNotIn("projects/gone", self.build()["summaries"]["pages"])
 
     def test_empty_summary_exit_codes(self):
         write(self.root / "content/setup/getting-started/deploy.md",

@@ -158,7 +158,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "3 September 2026",
+        "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Build page and repository graph nodes, summaries, and cross-reference terms."
       },
@@ -205,6 +205,21 @@
         "last_substantive_modification": "3 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Check referenced image URLs and public people-card links for liveness."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/derive.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "b5d9c928deef2bef0d1a72ba5db58db92ad7689933fdb3db7e994ceb0563f923",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Regenerate the derived data (wiki graph, site search shard, contributors) in one run."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
@@ -306,7 +321,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "3 September 2026",
+        "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test wiki graph construction and overlays against isolated fixture sites."
       },
@@ -324,6 +339,21 @@
         "last_substantive_modification": "17 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test graph parity and contributor validation in the site quality gate."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_derive.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "366cc810ea4118135a87f1deb55398e948fa07b28a49eb0d158563eec42be9f5",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test derived-data regeneration order, filters, failure pass-through, and CI annotations."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },

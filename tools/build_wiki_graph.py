@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 3 September 2026
+# Last substantive modification: 21 September 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Build page and repository graph nodes, summaries, and cross-reference terms.
 """Build the wiki graph: one node per page, index view, and org repo.
@@ -29,10 +29,19 @@ rule the search index uses (it indexes 90 pages, not landing views). The page
 set here is enumerated exactly as tools/build_search_index.py enumerates it:
 71 setup + 15 projects + 3 tools + 1 about = 90.
 
-SURVIVABILITY RULE: every overlay keys on page node ids, which are the registry
-ids. So a tools/rst_convert.py re-run either changes nothing, or this build
-FAILS BY NAME ("unknown id — did rst_convert.py rename a page?") — an overlay
-can never silently detach from the page it was written for.
+SURVIVABILITY RULE: the two id-keyed overlays (the edges of edges-authored.json
+and the "authored" summaries) key on node ids, which are the registry ids. So
+a rename or removal — a tools/rst_convert.py re-run, a registry edit — either
+leaves every overlay id in place, or this build FAILS BY NAME with one located
+line per stranded id, checked before anything else can fail:
+
+  data/graph/edges-authored.json: '<id>' is not a page or repository id any
+  more — renaming or removing an existing id needs Desert Mango
+  (docs/maintainer-protocols.md)
+
+(printed on stdout, exit 1; tools/check.py prints the same line). An overlay can
+never silently detach from the page it was written for. The "rejected" and
+"stoplist" lists of xref-terms.json are word lists, not ids, and are not checked.
 
 Failure policy — loud, never silent. Any unresolvable route, unknown edge
 endpoint, authored entry for an unknown id, missing "why", or a repos-index
@@ -111,6 +120,14 @@ DEFAULT_STOPLIST = [
 
 class BuildError(Exception):
     """A validation failure that must abort the run, naming the offender."""
+
+
+class OverlayError(BuildError):
+    """An authored overlay names an id that is gone: one located line per id."""
+
+
+OVERLAY_GONE = ("{file}: '{nid}' is not a page or repository id any more — renaming or "
+                "removing an existing id needs Desert Mango (docs/maintainer-protocols.md)")
 
 
 def _out(stream):
@@ -446,6 +463,31 @@ def load_authored_edges(root, out=None):
     return doc
 
 
+def check_overlay_ids(edges_overlay, existing_summaries, node_ids):
+    """Raise OverlayError listing every id an authored overlay names that is gone.
+
+    Runs before links and summaries are built, so a rename that also strands a
+    #/projects/<old-id> link still answers with the line that says who can fix it.
+    """
+    lines = []
+
+    def gone(rel, nid):
+        line = OVERLAY_GONE.format(file=f"{GRAPH_DIR}/{rel}", nid=nid)
+        if line not in lines:
+            lines.append(line)
+
+    for e in edges_overlay.get("edges", []):
+        for side in ("s", "t"):
+            nid = e.get(side)
+            if nid and nid not in node_ids:     # a missing side is related_edges' error
+                gone("edges-authored.json", nid)
+    for nid, entry in (existing_summaries or {}).get("pages", {}).items():
+        if entry.get("source") == "authored" and nid not in node_ids:
+            gone("summaries.json", nid)
+    if lines:
+        raise OverlayError("\n".join(lines))
+
+
 def related_edges(overlay, node_ids):
     edges = []
     for i, e in enumerate(overlay.get("edges", [])):
@@ -454,8 +496,8 @@ def related_edges(overlay, node_ids):
             if not e.get(side):
                 raise BuildError(f"{where}: authored edge has no '{side}'")
             if e[side] not in node_ids:
-                raise BuildError(f"{where}: authored edge endpoint '{e[side]}' is not a "
-                                 f"node id — did rst_convert.py rename a page?")
+                raise OverlayError(OVERLAY_GONE.format(
+                    file=f"{GRAPH_DIR}/edges-authored.json", nid=e[side]))
         if not (e.get("why") or "").strip():
             raise BuildError(f"{where}: authored edge {e['s']} -> {e['t']} has no 'why' "
                              f"(every related edge must say why in one line)")
@@ -509,8 +551,8 @@ def merge_summaries(existing, derived, node_ids):
         if entry.get("source") != "authored":
             continue          # a stale derived entry is simply regenerated
         if nid not in node_ids:
-            raise BuildError(f"{GRAPH_DIR}/summaries.json: authored entry for unknown id "
-                             f"'{nid}' — did rst_convert.py rename a page?")
+            raise OverlayError(OVERLAY_GONE.format(file=f"{GRAPH_DIR}/summaries.json",
+                                                   nid=nid))
         pages[nid] = {"summary": entry.get("summary", ""), "source": "authored"}
         authored.append(nid)
     for nid, (summary, _how) in derived.items():
@@ -682,8 +724,11 @@ def build_all(root=None, out=None):
     node_ids = ({p["id"] for p in pages} | {i["id"] for i in indexes}
                 | {r["id"] for r in repos})
 
-    derived = derive_summaries(pages, indexes)
     existing_summaries = read_json_optional(root, f"{GRAPH_DIR}/summaries.json")
+    authored_edges = load_authored_edges(root, stream)
+    check_overlay_ids(authored_edges, existing_summaries, node_ids)
+
+    derived = derive_summaries(pages, indexes)
     summaries, authored_ids, empty_ids = merge_summaries(
         existing_summaries, derived, node_ids)
     nodes = assemble_nodes(pages, indexes, repos, summaries["pages"])
@@ -712,7 +757,7 @@ def build_all(root=None, out=None):
     edges = (links_to_edges(pages, reg, node_ids)
              + member_edges(reg, node_ids)
              + mentions_edges(pages, mention_repos, title_terms)
-             + related_edges(load_authored_edges(root, stream), node_ids))
+             + related_edges(authored_edges, node_ids))
     edges, self_edges = finalize_edges(edges, node_ids)
     if self_edges:
         print(f"  -- dropped {self_edges} self-edge(s) (a page linking to itself)",
@@ -743,6 +788,10 @@ def main(argv=None, root=None):
     stream = sys.stderr if args.xref_candidates else sys.stdout
     try:
         r = build_all(root, out=stream)
+    except OverlayError as e:
+        # the located line(s) alone, at the root, on stdout — no FAIL: wrapper
+        print(e)
+        return 1
     except BuildError as e:
         print(f"FAIL: {e}", file=sys.stderr)
         return 1

@@ -1,13 +1,22 @@
 # CI for hippocampus-docs — a zero-build static site (what you edit is what serves).
 #
-# Two jobs, and the difference between them is the whole design:
-#   check                  the repo's offline gate, run verbatim. This is the job
-#                          that becomes the REQUIRED status check on main.
-#   search-shard-advisory  a detector for the maintainer. Advisory forever: it is
-#                          never added to required checks and always exits 0.
+# One job, `check`: the repo's offline gate, `python3 tools/check.py`, run
+# verbatim on every pull request and every push to main. Around that one
+# command:
+#   - on pull requests only, the derived data (wiki graph + site search shard)
+#     is regenerated in the workspace first, NOT committed, so the gate judges
+#     what main will hold once derive.yml has run after the merge. A lab member
+#     who adds a project never needs a terminal to make this job green.
+#   - on push to main nothing is regenerated: the gate judges the committed
+#     tree, so this job agrees with the deploy build.
+#   - when the gate fails, every finding is re-emitted as a GitHub annotation
+#     (file + line where the message names them), and the job summary keeps
+#     the full output.
+# derive.yml (a separate workflow) regenerates and commits the derived data on
+# main after each merge.
 #
-# Job names are load-bearing — branch protection selects a check run by job name,
-# so renaming a job silently unhooks (or breaks) the required check.
+# The job name `check` is load-bearing: the CMS Review tab and the docs refer
+# to the check run by that name. Do not rename it.
 name: CI
 
 on:
@@ -16,29 +25,54 @@ on:
     branches:
       - main
 
-# Minimal token. Both jobs only ever read the repository.
+# Minimal token. This workflow only ever reads the repository.
 permissions:
   contents: read
 
 jobs:
   check:
-    # Pinned name: this is the string selected in branch protection. Do not rename.
     name: check
     runs-on: ubuntu-24.04
     steps:
+      # fetch-depth 2: on a pull request the checked-out commit is GitHub's
+      # merge commit, and its first parent (HEAD^1) is the base branch tip —
+      # the notice step below diffs against it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 — resolved via gh api repos/actions/checkout/git/ref/tags/v7 on 2026-09-03
+        with:
+          fetch-depth: 2
 
-      # This job deliberately uses the runner image's system python3. The gate is
-      # stdlib-only, so there is no setup-python step and no pip install — nothing
-      # to resolve, nothing to cache, nothing to drift. The runner image is pinned
-      # to an exact version above rather than tracking the floating rolling alias,
-      # so the interpreter only ever moves when someone edits this file on purpose.
+      # This job deliberately uses the runner image's system python3. Every
+      # tool here is stdlib-only, so there is no setup-python step and no pip
+      # install — nothing to resolve, nothing to cache, nothing to drift. The
+      # runner image is pinned to an exact version above rather than tracking
+      # the floating rolling alias, so the interpreter only ever moves when
+      # someone edits this file on purpose.
+      - name: Regenerate derived data in the workspace (not committed) so the gate judges what main will hold after derive.yml
+        if: github.event_name == 'pull_request'
+        # Never aborts the job: derive's exit code is recorded, and the gate
+        # below still runs and reports on its own. build_contributors.py is not
+        # run here (network-bound, and contributors.json is optional to the gate).
+        run: |
+          set -o pipefail
+          set +e
+          python3 tools/derive.py 2>&1 | tee derive-output.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "derive.py exited $rc (derived data regenerated in the workspace, not committed)"
+            echo '```text'
+            cat derive-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
       - name: Run the offline gate (tools/check.py)
         # Why this shape:
         #   pipefail + ${PIPESTATUS[0]} preserve the gate's exit code through tee —
         #     without them the step's status would be tee's, which is always 0.
         #   2>&1 folds stderr into the pipe so a stack trace lands in the summary
         #     instead of leaving readers an empty fenced block.
+        #   tee also keeps a copy in gate-output.txt for the annotation step.
         #   The set +e / set -e dance keeps GitHub's default `bash -e` from aborting
         #     the step the instant the gate fails, which would leave the fence in the
         #     job summary unclosed and swallow the rest of the log.
@@ -46,40 +80,35 @@ jobs:
           set -o pipefail
           echo '```text' >> "$GITHUB_STEP_SUMMARY"
           set +e
-          python3 tools/check.py 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/check.py 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" gate-output.txt
           rc=${PIPESTATUS[0]}
           set -e
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $rc
 
-  search-shard-advisory:
-    # Pinned name: keep this OUT of required checks. See the step comment below.
-    name: search-shard-advisory
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 — resolved via gh api repos/actions/checkout/git/ref/tags/v7 on 2026-09-03
-
-      - name: Detect a stale search shard (advisory — maintainer only)
-        # This job is a DETECTOR FOR THE MAINTAINER, never a gate. search/ is
-        # generated, and contributors are told not to touch it; showing one of them
-        # a red X over a directory they were asked to leave alone is a bug, not a
-        # signal. So every path through this step ends in exit 0, and the findings
-        # are surfaced as ::warning:: annotations plus a job-summary line.
-        #
-        # Deliberately NO error-suppressing job/step flag anywhere in this file:
-        # there is nothing here for one to mask (the step cannot fail), and the
-        # job-level form still renders a red check run — exactly the outcome this
-        # job exists to avoid. The guaranteed `exit 0` below is the whole mechanism.
-        #
-        # git status is scoped to search/ so the shard rebuild's own shard.log (an
-        # untracked file at the repo root) can never be mistaken for drift.
+      - name: Annotate the failures
+        if: failure()
+        # derive-output.txt exists on pull requests only; on push to main only
+        # gate-output.txt does. A missing file is skipped, never an error.
         run: |
-          if ! python3 tools/build_search_index.py --site-only >shard.log 2>&1; then
-            echo "::warning::MAINTAINER: shard rebuild could not run on this PR (see the check job) — no action for the contributor"
-            exit 0
+          files=()
+          for f in derive-output.txt gate-output.txt; do
+            [ -f "$f" ] || continue
+            files+=("$f")
+          done
+          if [ ${#files[@]} -gt 0 ]; then
+            python3 tools/derive.py --annotate "${files[@]}"
           fi
-          if [ -n "$(git status --porcelain search/)" ]; then
-            echo "::warning::MAINTAINER: search shard refresh needed before merge — no action for the contributor"
-            echo "MAINTAINER: search shard refresh needed before merge — no action for the contributor" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Note derived files carried by the pull request
+        if: always() && github.event_name == 'pull_request'
+        # Only the files derive.py writes count as "carried" — a PR that edits
+        # the authored overlay data/graph/edges-authored.json is not carrying
+        # derived data.
+        run: |
+          if [ -n "$(git status --porcelain search/ data/graph/)" ] && \
+             [ -n "$(git diff --name-only HEAD^1 HEAD -- search/site.json search/manifest.json \
+                    data/graph/wiki.json data/graph/summaries.json data/graph/xref-terms.json \
+                    data/graph/contributors.json)" ]; then
+            echo "::notice::this PR carries derived files; derive.yml regenerates them after merge — no action needed"
           fi
-          exit 0
