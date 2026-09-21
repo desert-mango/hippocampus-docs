@@ -11,7 +11,7 @@ Run from the repo root with plain python3 (no pytest, no network):
     python3 tools/tests/test_check_content_safety.py
 
 Covers 6d (content safety), the 6a manifest rules for CMS uploads
-("source": null, the hippocampus-docs/ folder), the when-present CMS shell
+("source": null, the hippocampus-docs/ folder), the required CMS shell
 check in section 7, and the authored-overlay id rule (9a). Every rule under
 test is a pure function, proven red on an in-memory fixture or a temporary
 tree; the integration tests read the real repo read-only and expect nothing.
@@ -261,7 +261,7 @@ class Manifest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
-# 7. the CMS shell — checked when present (U7a makes it required)
+# 7. the CMS shell — required (U7a flipped it from when-present)
 # --------------------------------------------------------------------------
 class CmsShell(unittest.TestCase):
     def test_unterminated_or_empty_inline_script_is_caught(self):
@@ -274,18 +274,45 @@ class CmsShell(unittest.TestCase):
                 self.assertTrue(got[0].startswith(
                     "cms/index.html:2: inline <script> (no src)"), got)
 
-    def tree(self, files):
+    CLEAN = "<!doctype html>\n<p>clean</p>\n"
+
+    def tree(self, files, cms_defaults=True):
+        # Both CMS pages are REQUIRED (U7a), so a fixture that is about one
+        # page gets a clean copy of the other; cms_defaults=False builds the
+        # tree exactly as given, to test the requirement itself.
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        for rel, text in files.items():
+        full = dict(files)
+        if cms_defaults:
+            for rel in check.CMS_PAGES:
+                full.setdefault(rel, self.CLEAN)
+        for rel, text in full.items():
             p = root / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(text, encoding="utf-8")
         return root
 
-    def test_absent_is_skipped_silently(self):
-        self.assertEqual(check.check_cms_shell(self.tree({"index.html": ""})), [])
+    def test_absent_pages_are_required(self):
+        root = self.tree({"index.html": ""}, cms_defaults=False)
+        self.assertEqual(check.check_cms_shell(root), [
+            "cms/callback.html:1: missing — the CMS shell is required (the "
+            "editor page and its sign-in callback ship with the site)",
+            "cms/index.html:1: missing — the CMS shell is required (the "
+            "editor page and its sign-in callback ship with the site)"])
+
+    def test_one_missing_page_does_not_hide_the_other_pages_faults(self):
+        root = self.tree({"cms/index.html": "<!doctype html>\n<script>x</script>"},
+                         cms_defaults=False)
+        got = check.check_cms_shell(root)
+        self.assertEqual(len(got), 2, got)
+        self.assertTrue(got[0].startswith("cms/callback.html:1: missing"), got)
+        self.assertTrue(got[1].startswith("cms/index.html:2: inline <script>"), got)
+
+    def test_the_real_cms_pages_are_present_and_clean(self):
+        for rel in check.CMS_PAGES:
+            self.assertTrue((ROOT / rel).is_file(), rel)
+        self.assertEqual(check.check_cms_shell(ROOT), [])
 
     def test_clean_pages_pass(self):
         page = ('<!doctype html>\n<link rel="stylesheet" href="../css/cms.css">\n'

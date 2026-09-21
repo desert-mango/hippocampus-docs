@@ -23,11 +23,17 @@
           localhost dev server such as tools/dev_site.mjs on 8131).
      out  200  {"token": "...", "expires_in": <seconds> | null}
           400  malformed request, unknown app, or the app is not configured here
-          403  missing or foreign Origin          405  not a POST
+          403  missing or foreign Origin          405  neither GET nor POST
           413  body too large
           502  GitHub refused or failed: {"error": "...", ["reason": "<code>"]}
                `reason` is GitHub's short error code (e.g. bad_verification_code)
                and only when it is plain lowercase_with_underscores.
+
+     in   GET ?app=editor | ?app=viewer      (the CMS page, on "Sign in")
+     out  200  {"client_id": "..."} — the App's PUBLIC id, which the page needs
+               to build GitHub's authorize URL (it rides in that URL anyway)
+          400  unknown app, or the app is not configured here (id AND secret)
+          403  not a same-origin request (sameOriginRead below)
 
    The viewer App arrives with U10: until GH_VIEWER_CLIENT_ID and
    GH_VIEWER_CLIENT_SECRET exist, `app: "viewer"` gets a clean 400.
@@ -80,6 +86,29 @@ function ownOrigin(req) {
   if (url.protocol === 'https:') return url.origin;
   if (url.protocol === 'http:' && local) return url.origin;
   return null;
+}
+
+/* The GET's version of the same rule. A browser sends NO Origin header on a
+   same-origin GET, so there the Fetch Metadata header every current browser
+   sends — Sec-Fetch-Site: same-origin — stands in for it. A present Origin
+   still has to pass ownOrigin() exactly; a caller with neither header (a
+   script, curl) is refused. What this guards is a public id, so the rule is
+   about keeping the function this site's own, not about a secret. */
+function sameOriginRead(req) {
+  const headers = (req && req.headers) || {};
+  if (headers.origin !== undefined) return ownOrigin(req) !== null;
+  const site = String(headers['sec-fetch-site'] || '').trim().toLowerCase();
+  return site === 'same-origin' && Boolean(String(headers.host || '').trim());
+}
+
+function appFromQuery(url) {
+  let app;
+  try {
+    app = new URL(String(url || '/'), 'http://query.invalid').searchParams.get('app');
+  } catch (e) {
+    return null;
+  }
+  return typeof app === 'string' && Object.prototype.hasOwnProperty.call(APPS, app) ? app : null;
 }
 
 // ------------------------------------------------------------- responses ---
@@ -196,15 +225,40 @@ async function exchange(doFetch, cfg, code, redirectUri, timeoutMs) {
 
 // --------------------------------------------------------------- handler ---
 
+/* GET ?app=<name>: the App's client id, or "not configured". The id is only
+   offered when the secret exists too — an id without a secret would send the
+   person to GitHub for a sign-in the exchange can never finish. */
+function handleClientId(req, res, env, CLOSE) {
+  if (!sameOriginRead(req)) {
+    send(res, 403, { error: 'sign-in is accepted only from this site' }, CLOSE);
+    return;
+  }
+  const app = appFromQuery(req.url);
+  if (!app) {
+    send(res, 400, { error: 'app must be "editor" or "viewer"' });
+    return;
+  }
+  const spec = APPS[app];
+  if (!env[spec.idEnv] || !env[spec.secretEnv]) {
+    send(res, 400, { error: `sign-in for the ${app} app is not configured on this host` });
+    return;
+  }
+  send(res, 200, { client_id: env[spec.idEnv] });
+}
+
 async function handle(req, res, deps) {
   const env = deps.env || process.env;       // credentials come from the environment only
   const doFetch = deps.fetch || ((url, init) => fetch(url, init));
   const timeoutMs = deps.timeoutMs || GITHUB_TIMEOUT_MS;
   const CLOSE = { connection: 'close' };     // the body of a refused request is never read
 
+  if (req.method === 'GET') {
+    handleClientId(req, res, env, CLOSE);
+    return;
+  }
   if (req.method !== 'POST') {
-    send(res, 405, { error: 'method not allowed — POST {code, app}' },
-      Object.assign({ allow: 'POST' }, CLOSE));
+    send(res, 405, { error: 'method not allowed — GET ?app=editor or POST {code, app}' },
+      Object.assign({ allow: 'GET, POST' }, CLOSE));
     return;
   }
   const origin = ownOrigin(req);
@@ -253,5 +307,6 @@ async function handle(req, res, deps) {
 
 module.exports = (req, res, deps) => handle(req, res, deps || {});
 module.exports.ownOrigin = ownOrigin;
+module.exports.sameOriginRead = sameOriginRead;
 module.exports.APPS = APPS;
 module.exports.CALLBACK_PATH = CALLBACK_PATH;

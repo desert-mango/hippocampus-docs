@@ -82,6 +82,36 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "js/cms-core.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "64b784ae359cad15ddbf3b2e8eb6536bdbb2dbda8df95e8384652a1e0e0ca92c",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "js/cms.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "4835710751a3b34ec9418b95ddc57ac1ae0e97aea5ba3e4a6e448ea2dd380ad1",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes and the preview frame."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
     "js/graph.js": {
       "classification": "included",
       "evidence": {
@@ -431,6 +461,21 @@
         "purpose": "Test graph parity and contributor validation in the site quality gate."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_cms_core.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c06527838a5e7693bd7c370e8ae849bde89e2f4296790f754d06486c3568a175",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
     },
     "tools/tests/test_derive.py": {
       "classification": "included",

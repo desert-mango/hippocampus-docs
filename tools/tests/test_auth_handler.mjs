@@ -43,12 +43,12 @@ const ENV = {
 
 // ---------------------------------------------------------------- fixtures --
 
-function makeReq(method, body, headers) {
+function makeReq(method, body, headers, url) {
   const raw = body === undefined ? ''
     : (typeof body === 'string' ? body : JSON.stringify(body));
   const req = Readable.from(raw ? [Buffer.from(raw, 'utf8')] : []);
   req.method = method;
-  req.url = '/api/auth';
+  req.url = url || '/api/auth';
   req.headers = Object.assign(
     { 'content-type': 'application/json', host: HOST, origin: ORIGIN },
     headers || {});
@@ -104,7 +104,7 @@ async function run(body, opts) {
     console[name] = (...a) => { lines.push(a.map(String).join(' ')); };
   }
   try {
-    await handler(makeReq(o.method || 'POST', body, o.headers), res,
+    await handler(makeReq(o.method || 'POST', body, o.headers, o.url), res,
       { env: o.env || ENV, fetch: gh.fetch, timeoutMs: o.timeoutMs });
     await res.done;
   } finally {
@@ -207,10 +207,76 @@ test('an Origin carrying a path or credentials is refused', async () => {
 
 // ------------------------------------------------------------------- input --
 
-test('a non-POST is 405 with Allow: POST', async () => {
-  const r = await run(undefined, { method: 'GET' });
-  assert.equal(r.res.code, 405);
-  assert.equal(r.res.headers.allow, 'POST');
+test('a method other than GET or POST is 405 with Allow: GET, POST', async () => {
+  for (const method of ['PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']) {
+    const r = await run(undefined, { method, url: '/api/auth?app=editor' });
+    assert.equal(r.res.code, 405, method);
+    assert.equal(r.res.headers.allow, 'GET, POST', method);
+    assert.equal(r.calls.length, 0);
+  }
+});
+
+// ------------------------------------------------- GET: the public client id --
+// The CMS page needs the App's client id to build GitHub's authorize URL. The id
+// is public by design (it rides in that URL); the secret never leaves the function.
+
+test('GET ?app=editor answers {client_id} and nothing else — never the secret', async () => {
+  const r = await run(undefined, { method: 'GET', url: '/api/auth?app=editor' });
+  assert.equal(r.res.code, 200);
+  assert.deepEqual(r.json, { client_id: ENV.GH_APP_CLIENT_ID });
+  assert.equal(r.res.headers['cache-control'], 'no-store');
+  assert.match(r.res.headers['content-type'], /^application\/json/);
+  assert.equal(r.calls.length, 0, 'GitHub is never asked for a public id');
+  assertClean(r);
+});
+
+test('GET: a same-origin browser fetch carries no Origin; Sec-Fetch-Site: same-origin stands in', async () => {
+  const r = await run(undefined, { method: 'GET', url: '/api/auth?app=editor',
+    headers: { origin: undefined, 'sec-fetch-site': 'same-origin' } });
+  assert.equal(r.res.code, 200);
+  assert.deepEqual(r.json, { client_id: ENV.GH_APP_CLIENT_ID });
+});
+
+test('GET: the same Origin rule as the POST — foreign, cross-site or bare callers get 403', async () => {
+  const cases = [
+    { origin: 'https://evil.example.com' },
+    { origin: 'null' },
+    { origin: `http://${HOST}` },                                   // https only off localhost
+    { origin: 'https://evil.example.com', 'sec-fetch-site': 'same-origin' },  // a present Origin rules
+    { origin: undefined, 'sec-fetch-site': 'cross-site' },
+    { origin: undefined, 'sec-fetch-site': 'same-site' },
+    { origin: undefined, 'sec-fetch-site': 'none' },                // typed into the address bar
+    { origin: undefined },                                          // curl: no browser headers at all
+  ];
+  for (const headers of cases) {
+    const r = await run(undefined, { method: 'GET', url: '/api/auth?app=editor', headers });
+    assert.equal(r.res.code, 403, JSON.stringify(headers));
+    assert.ok(!r.res.body.includes(ENV.GH_APP_CLIENT_ID), 'a refused caller learns nothing');
+    assertClean(r);
+  }
+});
+
+test('GET: an unconfigured app is a clean 400 "not configured"; a bad app is 400', async () => {
+  for (const env of [{}, { GH_APP_CLIENT_ID: 'Iv1.fakeeditorid' }]) {   // the id alone is not a working sign-in
+    const r = await run(undefined, { method: 'GET', url: '/api/auth?app=editor', env });
+    assert.equal(r.res.code, 400);
+    assert.match(r.json.error, /not configured/);
+    assert.equal(r.json.client_id, undefined);
+  }
+  for (const url of ['/api/auth', '/api/auth?app=', '/api/auth?app=admin', '/api/auth?app=__proto__',
+    '/api/auth?app=constructor']) {
+    const r = await run(undefined, { method: 'GET', url });
+    assert.equal(r.res.code, 400, url);
+    assert.match(r.json.error, /app must be/);
+  }
+  const viewer = await run(undefined, { method: 'GET', url: '/api/auth?app=viewer' });
+  assert.equal(viewer.res.code, 400);
+  assert.match(viewer.json.error, /not configured/);
+  const env = Object.assign({}, ENV,
+    { GH_VIEWER_CLIENT_ID: 'Iv1.fakeviewerid', GH_VIEWER_CLIENT_SECRET: VIEWER_SECRET });
+  const both = await run(undefined, { method: 'GET', url: '/api/auth?app=viewer', env });
+  assert.deepEqual(both.json, { client_id: 'Iv1.fakeviewerid' });
+  assertClean(both);
 });
 
 test('a missing code is 400 and GitHub is never called', async () => {
@@ -468,6 +534,12 @@ test('dev_site routes every api/*.js: auth and librarian both answer, unknown is
     const auth = await post(site.port, '/api/auth', { app: 'viewer', code: 'x' });
     assert.equal(auth.status, 400);
     assert.match((await auth.json()).error, /not configured/);
+
+    // the CMS page's client-id lookup keeps its query string through the router
+    const id = await fetch(`http://localhost:${site.port}/api/auth?app=editor`,
+      { headers: { origin: `http://localhost:${site.port}` } });
+    assert.equal(id.status, 400);
+    assert.match((await id.json()).error, /not configured/);
 
     const wrong = await post(site.port, '/api/auth', { app: 'editor', code: 'x' },
       'https://evil.example.com');

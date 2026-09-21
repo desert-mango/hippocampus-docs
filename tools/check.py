@@ -39,8 +39,8 @@ Validates, failing loudly with actionable messages:
      javascript:/vbscript:/data:text/html link in content/**.md or in any
      string of data/**/*.json;
   7. shell: index.html references exist; cms/index.html and cms/callback.html
-     (when present) reference only existing files and carry no inline script
-     or on*= handler; vendored marked.min.js matches its pinned sha256;
+     exist, reference only existing files and carry no inline script or on*=
+     handler; vendored marked.min.js matches its pinned sha256;
   8. probes: data/search-probes.json carries exactly 10 well-formed keyword probes
      AND exactly 2 well-formed semantic probes (kind "semantic", a positive int
      'top', a non-empty 'expect' list and a 'fair' list of routes/GitHub URLs);
@@ -539,17 +539,21 @@ class _ShellTags(HTMLParser):
 
 
 def check_cms_shell(root):
-    """Each CMS page's local references exist; no inline script, no on*=.
+    """Each CMS page exists; its local references exist; no inline script,
+    no on*=.
 
-    WHEN PRESENT: the pages arrive with units U5/U7a, and U7a flips this to
-    required when it adds them. The CMS runs under a CSP without
-    'unsafe-inline', so inline code would simply not run.
+    REQUIRED: the sign-in callback arrived with U5 and the editor page with
+    U7a, which flipped this from when-present — a missing page is a broken
+    editor, not a skip. The CMS runs under a CSP without 'unsafe-inline', so
+    inline code would simply not run.
     """
     root = Path(root)
     out = []
     for rel in CMS_PAGES:
         page = root / rel
         if not page.is_file():
+            out.append(f"{rel}:1: missing — the CMS shell is required (the "
+                       f"editor page and its sign-in callback ship with the site)")
             continue
         text = page.read_text(encoding="utf-8")
 
@@ -1626,7 +1630,7 @@ def main():
             continue
         if not (ROOT / ref).exists():
             err(f"index.html: missing referenced file {ref}")
-    # the CMS shell — when present; U7a flips this to required when it adds the pages
+    # the CMS shell — required (U7a): both pages must exist and be clean
     for msg in check_cms_shell(ROOT):
         err(msg)
     marked = ROOT / "js" / "marked.min.js"
