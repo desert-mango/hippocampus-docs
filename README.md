@@ -108,3 +108,5 @@ page with a live preview and propose it (**Edit**), upload images (**Media**), t
 pull request's gate result and a rendered preview, approve and merge (**Review**). The
 github.com pencil still works as a second way. The protocols for the lab are
 `docs/maintainer-protocols.md`; the plan is `docs/cms-v2-plan.md`.
+
+<!-- deploy-path check, 2026-09-23: M1 step 4 (owner-authored commit). Removed again by M1 step 5. -->
