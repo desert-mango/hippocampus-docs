@@ -79,7 +79,7 @@
    "source": "derived"
   },
   "projects/underwater-localization": {
-   "summary": "Known-map localization and environment-change mapping for underwater robots, followed by\na temperature-guided exploration phase. The shared Python core matches range observations\nagainst a fixed tank map and records pers",
+   "summary": "A small underwater robot in a water tank, and the code that works out where it is. The robot\ncompares what its sensors read with a stored plan of the tank. Anything the stored plan cannot\nexplain goes into a separate lay",
    "source": "derived"
   },
   "projects/uvms": {
