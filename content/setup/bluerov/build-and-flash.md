@@ -11,7 +11,7 @@ We replaced the original FCU with the Pixhawk4, which is a 5th generation board.
 $ make px4_fmu-v5_default
 ```
 
-If you get an error message that tells you, the `gcc-arm-none-eabi` could not be found, make sure you have installed it (for example via the `Tools/setup/ubuntu.sh` convenience script). In some cases, the path is not correctly extended, so it might be necessary to copy the line similiar to
+If you get an error message that tells you, the `gcc-arm-none-eabi` could not be found, make sure you have installed it (for example via the `Tools/setup/ubuntu.sh` convenience script). In some cases, the path is not correctly extended, so it might be necessary to copy the line similar to
 
 
 ```console

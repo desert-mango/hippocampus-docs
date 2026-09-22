@@ -68,7 +68,7 @@ This requires some additional steps as it involves updating the buildbot to make
 
     <div class="adm adm-note"><p class="adm-title">Note</p>
 
-    If there are currently builds beeing processed, the buildbot master will not exit before they are completed. In this case, we will get the message
+    If there are currently builds being processed, the buildbot master will not exit before they are completed. In this case, we will get the message
 
 
     ```console

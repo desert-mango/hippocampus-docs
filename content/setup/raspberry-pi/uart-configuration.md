@@ -192,7 +192,7 @@ The `ttyAMA` numbers might differ, depending on the UARTs you have activated.
 ## Identify KERNELS
 
 
-To identify the KERNELS paramter of a certain `ttyAMA` device, execute the following command.
+To identify the KERNELS parameter of a certain `ttyAMA` device, execute the following command.
 
 
 ```console
