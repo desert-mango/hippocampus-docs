@@ -21,7 +21,7 @@ This section is still work in progress.
 ## SSH Access
 
 
-For convenience, you can copy your ssh-key to the BlueROV to enable passwordless login and create an entry in your `~/.ssh/config` for the BlueROV similiar to:
+For convenience, you can copy your ssh-key to the BlueROV to enable passwordless login and create an entry in your `~/.ssh/config` for the BlueROV similar to:
 
 
 <div class="tabs">

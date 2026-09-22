@@ -16,7 +16,7 @@ But for building our workspace, we should **not** have sourced the workspace bef
 ## How to Build the Workspace when We Autosource the ROS Workspaces
 
 
-As said before, we need to get rid of the workspaces that we source automatically when opening new shell sessions. This can be done via running commands with the prefix `env -i`. This clears the whole enviroment of our shell. Thus, sourcing the basic ROS installation and optionally any required underlay worskapce is needed afterwards. We want to execute colcon inside a shell, for example `bash` (the used shell does not matter here). To exectute commands directly, we run `bash -c '<INSERT_THE_COMMAND_HERE>'` The command in our case is to source the required enviroment and subsequently build the workspace via `colcon`.
+As said before, we need to get rid of the workspaces that we source automatically when opening new shell sessions. This can be done via running commands with the prefix `env -i`. This clears the whole environment of our shell. Thus, sourcing the basic ROS installation and optionally any required underlay worskapce is needed afterwards. We want to execute colcon inside a shell, for example `bash` (the used shell does not matter here). To exectute commands directly, we run `bash -c '<INSERT_THE_COMMAND_HERE>'` The command in our case is to source the required environment and subsequently build the workspace via `colcon`.
 
 
 ```console
