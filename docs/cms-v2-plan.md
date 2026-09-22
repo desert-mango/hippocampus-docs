@@ -1225,6 +1225,13 @@ git push origin proposal/hippo-01-parity-docs
 ```
 Then `gh pr view 1 --json mergeable` → `MERGEABLE`. Judge it in `/cms/#/review/1`.
 
+**M9 — the agent half is DONE 2026-09-23.** `main` had moved again since `825bab4`, so the two
+derived search files conflicted a second time; `78ba6a7` on the branch re-syncs them with
+`origin/main` byte for byte. Nothing else on the branch was touched, and none of the proposal's
+content decisions were changed (the unapproved 2026-09-17 content review stays unapplied). PR #1
+now reads `mergeable: true`, `mergeable_state: clean`, with the `check` run on head `78ba6a7`
+`success`. What is left is Kyle's judgement call in `/cms/#/review/1`.
+
 **M10 — Optional tidy-ups (new account).** `https://vercel.com/<new-team-slug>/hippocampus-docs/settings/git`
 → **Pull Request Comments** → off (the links would be protected previews the lab cannot open;
 Vercel says this setting now lives in the dashboard [S19]). Deployment Protection stays as is.
@@ -1406,8 +1413,53 @@ No third escalation. Nothing else spends money or reverses a decision.
   in `HippoCampusRobotics/docs`. The repository went public the same day. The re-run import
   deployed `e8c03f0` to Production: **Ready**, `/` and `/cms/` answer 200, and the librarian
   answers through `OPENROUTER_API_KEY`.
-- **Steps 4–6** (owner commit, non-owner squash merge, bot commit): this commit is step 4's
-  owner commit; the results of steps 4–6 follow below once each deployment is read.
+- **How steps 4–6 were read, 2026-09-23.** There is no Vercel login on Kyle's machine, so the
+  Deployments page is unreadable to an agent. Two read-only channels replace it, and both had to
+  agree for a step to pass: (a) **served-byte identity** — `curl -s
+  https://hippocampus-docs-smoky.vercel.app/<path> | shasum -a 256` equals `git show <sha>:<path>
+  | shasum -a 256` and differs from the parent commit's, with the response's `last-modified`
+  showing a new deployment; (b) the **Vercel commit status** on the same sha
+  (`gh api repos/desert-mango/hippocampus-docs/commits/<sha>/status`), which is public. `README.md`
+  is the marker file: the site serves the repository as-is, so `README.md` is fetchable and no
+  visible page has to be touched, and it is not an input to any derived output, so `derive.yml`
+  cannot overwrite the evidence. The commit author was read with `git log -1 --format='%an <%ae>'`
+  **before** each push. Note for future runs: the Vercel project slug is
+  `hippocampus-docs-site`, not `hippocampus-docs` — the dashboard path is
+  `https://vercel.com/desert-mango/hippocampus-docs-site`.
+- **Step 4, 2026-09-23 — owner commit deploys. PASS.** Commit `49b3538` ("chore: M1 step 4 deploy
+  check"), author read before the push as `Desert Mango
+  <323077863+desert-mango-robotics@users.noreply.github.com>`, changed one comment line in
+  `README.md`. Live `README.md` hashed
+  `6d473be591b5f7eab2b6de89c13407fa1e8dbdd547782f25fbfbdf5f60234322`, identical to `git show
+  49b3538:README.md` and different from the parent `1d7088c`'s
+  `283d7154414c31c79efd0e8df0b4f0003eff8e875e1d7becc3c79f9fb9ebfe77`; the deploy was live 11 s
+  after the push (`last-modified: Tue, 22 Sep 2026 23:13:34 GMT`). Vercel commit status on
+  `49b3538`: `success`. The `check` and `derive` workflow runs on it were both `success`, and
+  `derive.yml` pushed nothing, because `README.md` is not a derived input.
+- **Step 5, 2026-09-23 — non-owner squash merge deploys. PASS.** Branch `deploy-check/m1-step5`,
+  its commit `025af36` and PR **#3** were all created by `kyle-nelson-berkeley` (Write, not Admin,
+  not the Hobby owner) through the GitHub API, removing the step-4 marker line again so the two
+  tests' net diff is zero. The PR's `check` run went green, then **Squash and merge** — the site
+  editor's method. Author read after the merge: `git log -1 --format='%an <%ae>' origin/main` →
+  `Kyle Nelson <143034663+kyle-nelson-berkeley@users.noreply.github.com>` on `4fb9a9f`, so the
+  test is valid. Live `README.md` then hashed
+  `283d7154414c31c79efd0e8df0b4f0003eff8e875e1d7becc3c79f9fb9ebfe77`, identical to `git show
+  4fb9a9f:README.md` and different from its parent `49b3538`'s
+  `6d473be591b5f7eab2b6de89c13407fa1e8dbdd547782f25fbfbdf5f60234322`, served by a second, newer
+  deployment (`last-modified: Tue, 22 Sep 2026 23:14:55 GMT`, a fresh `etag`). Vercel commit status
+  on `4fb9a9f`: `success`. The test branch was deleted after the merge.
+- **Step 6, 2026-09-23 — bot commit deploys. PASS.** `derive.yml`'s own commit `1d7088c`
+  ("derive: regenerate derived data after fc175b3") is authored by `github-actions[bot]
+  <41898282+github-actions[bot]@users.noreply.github.com>`. Live `search/manifest.json` hashed
+  `85dff0ed70aecc79d0b07b2db44f5694ae8451a02def3206fae03588fb8b1a9a`, identical to `git show
+  1d7088c:search/manifest.json` and different from `72298f4`'s
+  `cdd6a34441ae…`. This was the first real `derive.yml` write on the new account.
+- **E1-C confirmed, 2026-09-23.** All three authors deploy on public + Hobby ($0): the Hobby owner
+  (`desert-mango-robotics`), a Write collaborator who is not the owner (`kyle-nelson-berkeley`,
+  through a squash merge), and `github-actions[bot]`. The R1-F2 risk — the derive bot's commits
+  silently not deploying after the handoff — does not apply under C. Step 7's condition is met, so
+  **M1 step 8, the domain move, is unblocked**; it stays Kyle's step because it is the public
+  site's front door and step 9 (deleting the old project) cannot be undone.
 
 ---
 
