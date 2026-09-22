@@ -1392,6 +1392,23 @@ reads any as a new law, Kyle decides before U11 ships.
 
 No third escalation. Nothing else spends money or reverses a decision.
 
+**M1 results (recorded per M1 step 7).**
+
+- **Step 3, 2026-09-22 — the private import is refused.** On the new Desert Mango Vercel team
+  (Hobby, team slug `desert-mango`, GitHub login `desert-mango-robotics`), the import screen for
+  the private `desert-mango/hippocampus-docs` said: "Deploying from a private GitHub organization
+  requires a Vercel Pro plan. Switch to an existing Pro team or upgrade Desert Mango to continue."
+  The private + Hobby path is closed, as the docs said.
+- **E1 decided, 2026-09-22 — C, public + Hobby ($0).** Kyle chose C and left the commit e-mails
+  as they are (E1-C(1)). Before the switch, a full-history audit found no secret: the only
+  key-shaped strings are two fake test tokens in `tools/tests/`, and the only third-party e-mail
+  addresses (two SSH-key comments in an early copy of the Ubuntu setup page) are already public
+  in `HippoCampusRobotics/docs`. The repository went public the same day. The re-run import
+  deployed `e8c03f0` to Production: **Ready**, `/` and `/cms/` answer 200, and the librarian
+  answers through `OPENROUTER_API_KEY`.
+- **Steps 4–6** (owner commit, non-owner squash merge, bot commit): this commit is step 4's
+  owner commit; the results of steps 4–6 follow below once each deployment is read.
+
 ---
 
 ## 10. What could not be verified
