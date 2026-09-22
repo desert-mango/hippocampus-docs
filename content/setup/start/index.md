@@ -2,7 +2,7 @@
 
 This section gets you from a blank machine to a running robot or simulation. It replaces
 the old Sphinx docs site page for page — the parity table
-lives in this repository at `docs/setup-parity.md` until the org cut-over is decided.
+lives in this repository at `docs/setup-parity.md`.
 
 ## Where to start
 
