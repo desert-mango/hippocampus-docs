@@ -1651,7 +1651,7 @@
    "title": "Setup",
    "route": "#/setup/start/index",
    "where": "Setup · Start here",
-   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md` until the org cut-over",
+   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md`.",
    "file": "content/setup/start/index.md"
   },
   {
