@@ -1423,9 +1423,10 @@ No third escalation. Nothing else spends money or reverses a decision.
   is the marker file: the site serves the repository as-is, so `README.md` is fetchable and no
   visible page has to be touched, and it is not an input to any derived output, so `derive.yml`
   cannot overwrite the evidence. The commit author was read with `git log -1 --format='%an <%ae>'`
-  **before** each push. Note for future runs: the Vercel project slug is
-  `hippocampus-docs-site`, not `hippocampus-docs` — the dashboard path is
-  `https://vercel.com/desert-mango/hippocampus-docs-site`.
+  **before** each push. Note for future runs: the steps 4–6 reads used the project's generated
+  address `hippocampus-docs-smoky.vercel.app`, because the real address still pointed at the old
+  personal project; after step 8 both addresses serve the same project and the dashboard path is
+  `https://vercel.com/desert-mango/hippocampus-docs`.
 - **Step 4, 2026-09-23 — owner commit deploys. PASS.** Commit `49b3538` ("chore: M1 step 4 deploy
   check"), author read before the push as `Desert Mango
   <323077863+desert-mango-robotics@users.noreply.github.com>`, changed one comment line in
@@ -1460,6 +1461,34 @@ No third escalation. Nothing else spends money or reverses a decision.
   silently not deploying after the handoff — does not apply under C. Step 7's condition is met, so
   **M1 step 8, the domain move, is unblocked**; it stays Kyle's step because it is the public
   site's front door and step 9 (deleting the old project) cannot be undone.
+- **Step 8, 2026-09-23 — the domain move. PASS, but only the second method works.** The step's
+  own method — remove `hippocampus-docs.vercel.app` from the old personal project, then add it on
+  the new one — **failed** on 2026-09-22: the `DELETE /v9/projects/<old>/domains/<name>` left the
+  old project with no domains, the Add Domain click on the new project did not attach it, and the
+  address served 404 for about two minutes until `POST /v10/projects/<old>/domains` put it back.
+  Retried on 2026-09-23 with the old project still holding the address, Add Domain gave the reason
+  in full: "hippocampus-docs.vercel.app is already assigned to another team. Use a different
+  domain or transfer it." A `*.vercel.app` address is reserved to the **team**, and removing it
+  does not release it; only a transfer moves it. The method that worked, with no downtime:
+  `POST /projects/<old id>/transfer-request` (the personal CLI token at
+  `~/Library/Application Support/com.vercel.cli/auth.json`, `teamId` = the personal team) returns
+  a `code` valid 24 h; opening `https://vercel.com/claim-deployment?code=<code>` while signed in
+  as the Desert Mango account, picking the team and clicking **Transfer** moved the whole old
+  project, address included, into `desert-mango`. Two traps: the claim page has **no rename box**
+  and refuses while a same-named project exists on the target ("Cannot transfer project because a
+  project named "hippocampus-docs" already exists on Desert Mango"), so the live project was
+  renamed to `hippocampus-docs-site` first and renamed back afterwards; and a claim code is spent
+  by a failed attempt, so a refused claim needs a fresh code. With both projects then on one team,
+  adding the address on the live project offered Vercel's **Move Domain** confirm and moved it
+  instantly. Verified after the move: `/`, `/cms/` and `/search/site.json` answer 200,
+  `/api/librarian` answers 405 to a GET (the function is live), and the served `index.html` is
+  byte-identical to the one served by the project's generated address.
+- **Step 9, 2026-09-23 — the old project is deleted.** After the move, the transferred project
+  held no domains; Kyle deleted it himself with his explicit OK, which also removed the copy of
+  `OPENROUTER_API_KEY` the transfer had carried into the Desert Mango team. The live project was
+  then renamed back to `hippocampus-docs`. **M1 is complete.** Open follow-up, not part of M1: the
+  OpenRouter key itself still needs rotating, because Vercel's import page leaked its value into a
+  session log on 2026-09-22.
 
 ---
 
