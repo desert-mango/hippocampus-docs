@@ -552,6 +552,20 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/test_home_hero.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "0a2de771c659af2b6e61d6f30623a4ad4f675f8c1ad2977f8f565fdb64df231b"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "23 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the home hero's pure helpers — example queries, hit paths, status line, home route."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/tests/test_librarian_handler.mjs": {
       "classification": "included",
       "evidence": {

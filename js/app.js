@@ -173,26 +173,155 @@
   }
 
   // ---------- views ----------
+  /* HOME — direction A: the search field IS the front door.
+
+     The hero's box is not a second search. It calls the very same
+     HCSearch.query(q, {onLocal}) entry viewSearch uses below, gets the same
+     ranking in the same order, and renders the same rows in a panel six deep
+     instead of a whole page; Enter hands the query to #/search for the full
+     list. There is no index in this file — a homepage search that lied about
+     what the site contains would be worse than no homepage search.
+
+     The four section cards keep their registry entries and their routes; they
+     are simply demoted to a quiet row under a divider, because a reader who
+     already knows where they are going clicks past the box. */
+  const HERO_LIMIT = 6;          // rows in the hero panel before "see all"
+  const HERO_DEBOUNCE_MS = 180;  // one query per pause, not one per keystroke
+
+  const heroHitRow = (r) => `
+        <a class="hit" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>
+          <span class="t"><span class="kind">${esc(KIND_LABEL[r.kind] || r.kind)}</span>${esc(r.title)}</span>
+          <span class="p">${esc(HCSearch.hitPath(r))}</span>
+        </a>`;
+
   function viewHome() {
     sidebar.innerHTML = '';
     setTitle([]);
     const s = DATA.site;
+    const chips = HCSearch.exampleQueries(s);
     content.innerHTML = `
-      <div class="page-body">
+      <section class="hero">
         <p class="kicker">${esc(s.kicker)}</p>
         <h1>${esc(s.title)}</h1>
         <p class="lead">${esc(s.lead)}</p>
-        <div class="card-grid">
+        <div class="askbox">
+          <form id="hero-search-form" role="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.5-4.5"/></svg>
+            <label class="visually-hidden" for="hero-search-input">Search the lab documentation</label>
+            <input id="hero-search-input" type="search" autocomplete="off"
+                   aria-describedby="hero-search-status"
+                   placeholder="e.g. how do I flash PX4 on the HippoCampus?">
+            <kbd aria-hidden="true">/</kbd>
+          </form>${chips.length ? `
+          <div class="ask-chips" role="group" aria-label="Example searches">
+            ${chips.map((c, i) => `<button type="button" class="ask-chip" data-chip="${i}">${esc(c.label)}</button>`).join('')}
+          </div>` : ''}
+          <div class="results" id="hero-results" role="region" aria-label="Search results" hidden>
+            <div class="head"><span class="dot" aria-hidden="true"></span>
+              <span id="hero-search-status" role="status" aria-live="polite"></span></div>
+            <div id="hero-hits"></div>
+          </div>
+        </div>
+      </section>
+      <div class="home-sections">
+        <div class="sep">or go straight to</div>
+        <div class="quietgrid">
           ${s.home_cards.map((c) => `
-            <a class="card" href="${c.href}">
-              <h3>${esc(c.title)} <span class="arrow">→</span></h3>
-              <p>${esc(c.text)}</p>
+            <a class="quiet" href="${esc(c.href)}">
+              <span class="n">${esc(c.title)} <span class="arrow">→</span></span>
+              <span class="d">${esc(c.text)}</span>
             </a>`).join('')}
         </div>
-        <p style="margin-top:2.5rem" class="lead">Looking for something specific?
-        Use the search box above — it covers setup pages, projects, tools, every code
-        repository's classes and functions, and the CAD part list.</p>
       </div>`;
+    wireHero(chips);
+  }
+
+  /* The hero's listeners live on nodes viewHome just created, so they die with
+     the markup on the next navigation — nothing to tear down. Two guards keep a
+     slow answer from painting over a newer one: `token` (the newest keystroke
+     owns the panel) and the route epoch (this hero belongs to this navigation). */
+  function wireHero(chips) {
+    const form = $('#hero-search-form');
+    const input = $('#hero-search-input');
+    const panel = $('#hero-results');
+    const list = $('#hero-hits');
+    const status = $('#hero-search-status');
+    if (!form || !input || !panel || !list || !status) return;
+    const epoch = routeEpoch;
+    let token = 0;
+    let timer = null;
+
+    const paint = (mine, query, res) => {
+      if (mine !== token || epoch !== routeEpoch) return;
+      const rows = HCSearch.heroHits(res, HERO_LIMIT);
+      // Same rule as viewSearch: a multi-word query the keyword index answered
+      // with nothing is still out with the librarian, so do not call it empty.
+      const waiting = !res.results.length && /\s/.test(query) && !HCSearch.librarianLatched();
+      status.textContent = HCSearch.heroStatus(res, rows.length, waiting);
+      const more = res.results.length > rows.length ? `
+        <a class="hit more" href="#/search?q=${encodeURIComponent(query)}">
+          <span class="t">See all ${res.results.length} results <span class="arrow">→</span></span>
+        </a>` : '';
+      // An empty panel says what to try instead — the same advice viewSearch
+      // gives — and drops the green dot, which would otherwise report health
+      // over a miss. A query still out with the librarian says nothing yet.
+      const miss = (rows.length || waiting) ? '' :
+        '<p class="miss">Try a symbol name, a part name, a setup topic, or a project.</p>';
+      list.innerHTML = rows.length ? rows.map(heroHitRow).join('') + more : miss;
+      panel.classList.toggle('empty', !rows.length);
+      panel.hidden = false;
+    };
+
+    const run = (query) => {
+      const mine = (token += 1);
+      if (!query) {
+        panel.hidden = true;
+        list.innerHTML = '';
+        status.textContent = '';
+        return;
+      }
+      status.textContent = 'searching…';
+      list.innerHTML = '';
+      panel.hidden = false;
+      HCSearch.query(query, { onLocal: (res) => paint(mine, query, res) })
+        .then((res) => paint(mine, query, res))
+        .catch(() => {
+          if (mine !== token || epoch !== routeEpoch) return;
+          status.textContent = 'the search index did not load — reload the page';
+        });
+    };
+
+    input.addEventListener('input', () => {
+      const query = input.value.trim();
+      if (timer) clearTimeout(timer);
+      // The keystroke itself retires whatever is in flight. Waiting for the
+      // debounce to do it would leave a window in which a slow answer about the
+      // PREVIOUS text still counts as current and paints over a box that now
+      // reads something else; the rows already on screen simply stay until the
+      // new answer lands.
+      token += 1;
+      if (!query) { run(''); return; }
+      timer = setTimeout(() => run(query), HERO_DEBOUNCE_MS);
+    });
+    // Enter hands the query to the full results page, exactly as the header box does.
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const query = input.value.trim();
+      if (query) location.hash = `#/search?q=${encodeURIComponent(query)}`;
+    });
+    // A chip's label is what a reader recognises; its `q` is the term the index
+    // knows. The index into `chips` stays in the DOM, never the query itself.
+    content.querySelectorAll('.ask-chip').forEach((button) => {
+      button.addEventListener('click', () => {
+        const chip = chips[Number(button.dataset.chip)];
+        if (!chip) return;
+        input.value = chip.q;
+        input.focus();
+        if (timer) clearTimeout(timer);
+        run(chip.q);
+      });
+    });
   }
 
   async function viewSetupPage(pageId, anchor) {
@@ -517,6 +646,24 @@
     }
   }
 
+  // ---------- the header search box, and who owns search on this route ----------
+  /* On #/ the hero owns search, so the header's own box closes into its right
+     edge; every other route has it. The motion is one class and a CSS width
+     transition (css/site.css, "the header search box" block) — no per-frame
+     script, no library.
+
+     hc-anim is what keeps a COLD load still. It is added one frame after the
+     first route, so the very first class toggle happens with no transition
+     declared: a deep link paints the box at full size and #/ paints it already
+     closed, neither of them animating. Every later navigation sweeps. */
+  let animReady = false;
+  function setHeaderSearch(hash) {
+    document.body.classList.toggle('hc-hero-search', HCSearch.isHomeHash(hash));
+    if (animReady) return;
+    animReady = true;
+    requestAnimationFrame(() => document.body.classList.add('hc-anim'));
+  }
+
   // ---------- router ----------
   async function route() {
     routeEpoch += 1;
@@ -526,6 +673,7 @@
     const [path, queryStr] = pathPart.split('?');
     const seg = path.split('/').filter(Boolean);
     setEditLink(null);                      // no stale link while the next page loads
+    setHeaderSearch(hash);                  // the home route hands search to the hero
     try {
       if (seg.length === 0) { navHighlight(null); viewHome(); }
       else if (seg[0] === 'setup' && seg.length === 1) { navHighlight('setup'); await viewSetupIndex(); }
@@ -568,11 +716,13 @@
       e.preventDefault();
       if (input.value.trim()) location.hash = `#/search?q=${encodeURIComponent(input.value.trim())}`;
     });
+    // "/" focuses whichever box is on screen: the hero's on #/, where the
+    // header's own box is closed, and the header's on every other route.
     document.addEventListener('keydown', (e) => {
       if (e.key === '/' && document.activeElement !== input &&
           !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
         e.preventDefault();
-        input.focus();
+        ($('#hero-search-input') || input).focus();
       }
     });
   }

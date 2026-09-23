@@ -27,7 +27,7 @@
    "kind": "index",
    "title": "Home",
    "route": "#/",
-   "summary": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use."
+   "summary": "One box over 71 setup pages, 17 projects, 94 repositories' classes and functions, and the CAD part list. Ask in plain words or type a symbol name."
   },
   {
    "id": "index:projects",

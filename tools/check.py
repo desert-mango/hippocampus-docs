@@ -175,9 +175,15 @@ CONTRIB_MAX_ROWS = 12
 # reported here.
 TYPE_WORDS = {bool: "true or false", str: "a string", int: "a whole number"}
 READER_REQUIRED_KEYS = {
+    # 'example_queries' is the home hero's chip row (direction A: the search
+    # field is the front door). js/app.js ITERATES it and js/search.js's
+    # exampleQueries() reads label + q off every member, so it needs an "each"
+    # entry, not a "keys" one — a string in the list's place would iterate as
+    # characters and render one dead chip per letter instead of raising.
     "data/site.json": {
-        "keys": ("kicker", "title", "lead", "home_cards"),
-        "each": {"home_cards": {"keys": ("href", "title", "text")}},
+        "keys": ("kicker", "title", "lead", "example_queries", "home_cards"),
+        "each": {"home_cards": {"keys": ("href", "title", "text")},
+                 "example_queries": {"keys": ("label", "q")}},
     },
     "data/setup.json": {
         "keys": ("sections",),

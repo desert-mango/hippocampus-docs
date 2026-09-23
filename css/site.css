@@ -23,6 +23,11 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --radius: 10px;
   --header-h: 3.5rem;
+  /* how long the header search box takes to sweep open or shut on a route
+     change (js/app.js setHeaderSearch). A token because the
+     prefers-reduced-motion block below zeroes it, and it must win the
+     cascade over rules that come after it in this file. */
+  --hc-sweep: 0.3s;
 }
 [data-theme="light"] {
   --bg: #fafafa;
@@ -79,7 +84,7 @@ body {
 .site-nav a.active { color: var(--accent); background: var(--accent-soft); }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
 #search-input {
-  width: 15rem; max-width: 34vw;
+  width: 100%;                       /* the form owns the width: see the home block */
   background: var(--surface); color: var(--heading);
   border: 1px solid var(--edge); border-radius: 8px;
   padding: 0.4rem 0.7rem; font: inherit; font-size: 0.9rem;
@@ -338,6 +343,11 @@ a.person-card:hover {
      specificity contest against it, and media queries add no specificity of their own. */
   .card, .card:hover,
   .person-card, .person-card:hover, a.person-card:hover { transition: none; transform: none; }
+  /* The header search box appears and disappears instead of sweeping. Zeroing
+     the token is what makes this stick: this block sits ABOVE the rules that
+     declare the transition, a media query adds no specificity of its own, and a
+     zero-duration transition neither animates nor fires a transition event. */
+  :root { --hc-sweep: 0s; }
 }
 
 /* ---- semantic graph: xrefs, popover, modal, contributors ---- */
@@ -436,3 +446,137 @@ a.person-card:hover {
   border-top: 1px solid var(--edge-soft); padding-top: 0.9rem;
 }
 .search-notice { margin-top: 1.4rem; font-size: 0.82rem; color: var(--muted); }
+
+/* ---- home: search as the front door (js/app.js viewHome) ----
+   Direction A. The page's own search field is the biggest thing on it, the four
+   section cards are demoted to a quiet row under a divider, and the header's own
+   search box collapses out of the way on this one route (see the block below).
+   Every colour, radius and font here is an existing token — nothing new. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.hero { max-width: 52rem; margin: 0 auto; padding: 3.3rem 0 0; text-align: center; }
+.hero .kicker {
+  /* mono and muted, as mocked: on this page the accent belongs to the search
+     field, and a blue kicker above a blue-ringed box competes with it. */
+  font-family: var(--mono); font-weight: 400; letter-spacing: 0.09em;
+  color: var(--muted); margin-bottom: 0.9rem;
+}
+.hero h1 { font-size: 2.5rem; line-height: 1.15; letter-spacing: -0.025em; margin: 0 0 0.7rem; }
+.hero .lead { font-size: 1.05rem; color: var(--body-soft); margin: 0 auto 2.2rem; max-width: 36rem; }
+
+/* the ask box */
+.askbox { text-align: left; }
+.askbox form {
+  display: flex; align-items: center; gap: 0.75rem;
+  background: var(--surface); border: 1px solid var(--edge); border-radius: 14px;
+  padding: 0.95rem 1.15rem; box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.9);
+}
+.askbox form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 18px 40px -28px rgba(0, 0, 0, 0.9);
+}
+.askbox svg { flex: none; color: var(--muted); }
+.askbox input {
+  flex: 1; min-width: 0; background: none; border: 0; outline: 0;
+  color: var(--heading); font: inherit; font-size: 1.12rem;
+}
+.askbox input::placeholder { color: var(--muted); }
+.askbox kbd {
+  flex: none; font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+  border: 1px solid var(--edge); border-radius: 5px; padding: 0.1rem 0.35rem;
+}
+
+/* the example queries — buttons, not links: they search in place. Named apart
+   from the site's existing .chip (a small mono repo pill) on purpose. */
+.ask-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
+.ask-chip {
+  font: inherit; font-size: 0.83rem; color: var(--body-soft);
+  background: var(--surface-2); border: 1px solid var(--edge-soft);
+  border-radius: 999px; padding: 0.32rem 0.8rem; cursor: pointer;
+}
+.ask-chip:hover { color: var(--heading); border-color: var(--accent); background: var(--accent-soft); }
+.ask-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* the panel: the real HCSearch answer, six rows of it */
+.askbox .results {
+  margin-top: 1.1rem; background: var(--surface); border: 1px solid var(--edge);
+  border-radius: 12px; overflow: hidden; text-align: left;
+}
+.askbox .results .head {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.95rem;
+  border-bottom: 1px solid var(--edge-soft);
+  font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+}
+/* The dot reports the index, so it stops being green when nothing matched. */
+.askbox .results .head .dot {
+  width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--ok); flex: none;
+}
+.askbox .results.empty .head .dot { background: var(--muted); }
+.askbox .results .miss { padding: 0.7rem 0.95rem; margin: 0; font-size: 0.88rem; color: var(--body-soft); }
+.hit { display: block; padding: 0.7rem 0.95rem; text-decoration: none; border-bottom: 1px solid var(--edge-soft); }
+.hit:last-child { border-bottom: 0; }
+.hit:hover { background: var(--surface-2); }
+.hit .t { color: var(--heading); font-size: 0.95rem; display: block; }
+.hit .p { color: var(--muted); font-family: var(--mono); font-size: 0.74rem; margin-top: 0.15rem; display: block; word-break: break-all; }
+.hit .kind {
+  font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid var(--edge); border-radius: 5px; padding: 0.05rem 0.35rem;
+  color: var(--body-soft); margin-right: 0.45rem; white-space: nowrap;
+}
+.hit.more .t { color: var(--body-soft); font-size: 0.86rem; }
+.hit.more:hover .t { color: var(--accent); }
+
+/* the four sections, demoted */
+.home-sections { max-width: 64rem; margin: 0 auto; }
+.sep {
+  display: flex; align-items: center; gap: 1rem; margin: 4rem 0 1.4rem;
+  color: var(--muted); font-family: var(--mono); font-size: 0.74rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.sep::before, .sep::after { content: ""; height: 1px; background: var(--edge-soft); flex: 1; }
+.quietgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; }
+.quiet {
+  display: block; text-decoration: none; background: var(--bg-soft);
+  border: 1px solid var(--edge-soft); border-radius: var(--radius); padding: 0.9rem 1rem;
+}
+.quiet:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); background: var(--surface); }
+.quiet .n { color: var(--heading); font-size: 0.98rem; display: flex; align-items: center; gap: 0.4rem; }
+.quiet .n .arrow { color: var(--muted); margin-left: auto; }
+.quiet:hover .n .arrow { color: var(--accent); }
+.quiet .d { font-size: 0.83rem; color: var(--muted); margin-top: 0.2rem; display: block; }
+
+@media (max-width: 640px) {
+  .hero { padding-top: 1rem; }
+  .hero h1 { font-size: 1.9rem; }
+  .askbox input { font-size: 1rem; }
+  .askbox kbd { display: none; }
+}
+
+/* ---- the header search box, which the home route hands to the hero ----
+   On #/ the page itself is the search box, so the header's own field closes into
+   its right edge; every other route has it at full size. Because .header-actions
+   is margin-left:auto and the form is its first child, animating the FORM's width
+   pins the right edge and walks the left edge: the box collapses rightwards
+   towards the theme toggle and opens back out leftwards.
+
+   The transition lives behind body.hc-anim, which js/app.js adds one frame AFTER
+   the first route. A cold load therefore paints the box at its final size with no
+   property change to animate — full size on a deep link, already closed on #/ —
+   and only a real navigation sweeps it. visibility rides along so the closed box
+   is not an invisible tab stop: instant on the way open, held to the end of the
+   sweep on the way shut. #search-form's submit handler and the "/" shortcut stay
+   bound on every route; on #/ the shortcut focuses the hero field instead. */
+#search-form { width: 15rem; max-width: 34vw; overflow: hidden; }
+body.hc-anim #search-form {
+  transition: width var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
+              margin-right var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
+              visibility 0s linear 0s;
+}
+body.hc-hero-search #search-form { width: 0; margin-right: -0.5rem; visibility: hidden; }
+body.hc-anim.hc-hero-search #search-form {
+  transition: width var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
+              margin-right var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
+              visibility 0s linear var(--hc-sweep);
+}

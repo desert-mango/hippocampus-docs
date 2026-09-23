@@ -489,6 +489,81 @@
 
   const librarian = createLibrarian();
 
+  /* ---------- the home hero (direction A: search is the front door) ----------
+
+     The homepage's big search field runs the very same query() below, so these
+     helpers are only about PRESENTING its answer in a panel that is six rows
+     tall instead of a whole page. They are pure on purpose: js/app.js cannot
+     load under node (it reaches for #content at import time), so everything
+     worth testing about the hero lives here, in tools/tests/test_home_hero.mjs. */
+
+  /* The example-query chips, read from data/site.json's example_queries. Each
+     chip is a LABEL a reader can recognise and the QUERY it actually runs —
+     the two differ where the readable phrase is not the term the index knows
+     ("the gantry" searches "gantry"). Anything unusable is dropped rather than
+     rendered as an empty pill, and a string where the list belongs yields no
+     chips instead of one chip per character. */
+  function exampleQueries(site) {
+    const list = (site && Array.isArray(site.example_queries)) ? site.example_queries : [];
+    return list
+      .filter((c) => c && typeof c === 'object')
+      .map((c) => ({
+        label: String(c.label == null ? (c.q == null ? '' : c.q) : c.label).trim(),
+        q: String(c.q == null ? '' : c.q).trim(),
+      }))
+      .filter((c) => c.label && c.q);
+  }
+
+  /* The exact path under a hero hit's title. A site hit is its own hash route.
+     A code, file, CAD or fork hit already carries a repository-relative path in
+     `snippet`, which beats showing the raw GitHub blob URL — prefixed by the
+     repository in `where`, but only when `where` is a repository name (one
+     token) and does not already lead the snippet. A row whose snippet is prose
+     (a page excerpt, a repository description) has no path to show, so the
+     destination itself is the honest answer. */
+  function hitPath(row) {
+    const r = row || {};
+    const href = String(r.href == null ? '' : r.href);
+    if (href.startsWith('#')) return href;
+    const snippet = String(r.snippet == null ? '' : r.snippet).trim();
+    if (!snippet || /\s/.test(snippet)) return href;
+    const where = String(r.where == null ? '' : r.where).trim();
+    if (!where || /\s/.test(where)) return snippet;
+    if (snippet === where || snippet.startsWith(`${where}/`)) return snippet;
+    return `${where}/${snippet}`;
+  }
+
+  /* The rows the hero panel shows: the leading `limit` of whatever ordering the
+     search produced (librarian picks already lead res.results), minus any row
+     with no destination — a malformed librarian row must not render as a link
+     to nowhere. */
+  function heroHits(res, limit) {
+    const rows = (res && Array.isArray(res.results)) ? res.results : [];
+    const n = Math.max(0, Math.trunc(Number(limit) || 0));
+    return rows.filter((r) => r && r.href).slice(0, n);
+  }
+
+  /* The one status line above the hero panel. `waiting` is viewSearch's rule,
+     narrowed to one line: a multi-word query the keyword index answered with
+     nothing is still out with the librarian, so saying "no results" would be
+     wrong about a search that has not finished. */
+  function heroStatus(res, shown, waiting) {
+    const rows = (res && Array.isArray(res.results)) ? res.results : [];
+    if (!rows.length) return waiting ? 'no keyword match — asking the librarian…' : 'no keyword match';
+    const total = Number((res && res.total) || 0);
+    return `${shown} of ${total.toLocaleString('en-US')} indexed entries`;
+  }
+
+  /* Is this hash the home route? The header's own search box collapses there
+     (the page itself is the search box), so the router toggles a class on every
+     navigation and needs the same answer the view dispatch reaches: js/app.js
+     splits the hash on '@', then '?', then counts '/'-segments. */
+  function isHomeHash(hash) {
+    const raw = String(hash == null ? '' : hash).replace(/^#/, '');
+    const path = raw.split('@')[0].split('?')[0];
+    return path.split('/').filter(Boolean).length === 0;
+  }
+
   /* query(q) resolves the final merged shape {total, results, librarianCount,
      notice} — that contract is unchanged.
 
@@ -536,6 +611,12 @@
     pickRows,
     mergePicks,
     strongLead,
+    // the home hero's pure helpers (tools/tests/test_home_hero.mjs)
+    exampleQueries,
+    hitPath,
+    heroHits,
+    heroStatus,
+    isHomeHash,
     librarianLatched: () => librarian.isLatched(),
     LIBRARIAN_URL,
     LIBRARIAN_NOTICE,

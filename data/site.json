@@ -1,15 +1,24 @@
 {
   "kicker": "TUHH · Institute of Mechanics and Ocean Engineering",
-  "title": "HippoCampus Robotics",
-  "lead": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use.",
+  "title": "What do you need to get running?",
+  "lead": "One box over 71 setup pages, 17 projects, 94 repositories' classes and functions, and the CAD part list. Ask in plain words or type a symbol name.",
+  "example_queries": [
+    {"label": "flash PX4", "q": "px4"},
+    {"label": "thruster mixer", "q": "mixer"},
+    {"label": "Raspberry Pi UART", "q": "uart"},
+    {"label": "run the simulation", "q": "simulation"},
+    {"label": "event camera", "q": "event camera"},
+    {"label": "acoustic localization", "q": "acoustic localization"},
+    {"label": "the gantry", "q": "gantry"}
+  ],
   "home_cards": [
     {"href": "#/setup", "title": "Setup",
-     "text": "Install ROS 2, set up a workstation or Raspberry Pi, bring up a vehicle, run the simulation. Replaces the old docs site page for page."},
+     "text": "71 pages: ROS 2, workstation, Raspberry Pi, vehicle bring-up, simulation."},
     {"href": "#/projects", "title": "Projects",
-     "text": "What the team builds and has built — every repository in the org, grouped into projects with context, status, and links."},
-    {"href": "#/search?q=controller", "title": "Search",
-     "text": "One search box over setup pages, projects, every code repo's symbols, and CAD parts — deep links to the exact file, line, or heading."},
+     "text": "17 projects covering all 94 repositories in the org."},
     {"href": "#/tools", "title": "Agent tools",
-     "text": "The lab's MCP servers for AI agents — GPU compute and CAD access — documented from scratch for new users."}
+     "text": "3 MCP servers: GPU compute and CAD access."},
+    {"href": "#/about", "title": "About & people",
+     "text": "Who is in the lab, and how this site is built."}
   ]
 }
