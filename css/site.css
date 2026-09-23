@@ -28,6 +28,11 @@
      prefers-reduced-motion block below zeroes it, and it must win the
      cascade over rules that come after it in this file. */
   --hc-sweep: 0.3s;
+  /* how wide the header search box opens. A token for the same reason
+     --hc-sweep is one: the rule that consumes it is the last #search-form rule
+     in this file, so a media query earlier in the file cannot outrank it on
+     specificity. The phone block below retunes the token instead. */
+  --hc-search-max: 34vw;
 }
 [data-theme="light"] {
   --bg: #fafafa;
@@ -75,16 +80,20 @@ body {
 .brand-mark { display: block; }
 .brand-text { color: var(--heading); font-weight: 700; letter-spacing: 0.01em; white-space: nowrap; }
 .brand-soft { color: var(--muted); font-weight: 500; }
-.site-nav { display: flex; gap: 0.25rem; margin-left: 0.5rem; }
+/* flex: none is load-bearing. As a shrinkable flex item the nav gave way to the
+   search box first, which broke "Agent tools" onto a second line and stretched
+   all four links to a 60px row inside a 56px header. The search box is the
+   element that yields now (min-width: 0 below); the labels never wrap. */
+.site-nav { display: flex; gap: 0.25rem; margin-left: 0.5rem; flex: none; }
 .site-nav a {
   color: var(--body-soft); text-decoration: none; font-size: 0.92rem;
-  padding: 0.35rem 0.7rem; border-radius: 8px;
+  padding: 0.35rem 0.7rem; border-radius: 8px; white-space: nowrap;
 }
 .site-nav a:hover { color: var(--heading); background: var(--surface-2); }
 .site-nav a.active { color: var(--accent); background: var(--accent-soft); }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
 #search-input {
-  width: 100%;                       /* the form owns the width: see the home block */
+  width: 100%; min-width: 0;         /* the form owns the width: see the home block */
   background: var(--surface); color: var(--heading);
   border: 1px solid var(--edge); border-radius: 8px;
   padding: 0.4rem 0.7rem; font: inherit; font-size: 0.9rem;
@@ -221,7 +230,11 @@ details summary { cursor: pointer; color: var(--heading); font-weight: 600; }
 .img-grid p { margin: 0; }
 
 /* ---------- cards (home, projects, tools) ---------- */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 1.1rem; margin-top: 1.4rem; }
+/* min(19rem, 100%) rather than a bare 19rem: a 304px track floor is wider than
+   a 320px viewport has left over after .content's padding, so the cards pushed
+   the page 3px sideways. The floor yields to the column at that width, and the
+   grid is unchanged at every width where 19rem still fits. */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr)); gap: 1.1rem; margin-top: 1.4rem; }
 .card {
   display: block; text-decoration: none; color: var(--body);
   background: var(--surface); border: 1px solid var(--edge-soft);
@@ -312,7 +325,10 @@ a.person-card:hover {
 .result a.title { color: var(--heading); text-decoration: none; font-weight: 600; }
 .result a.title:hover { color: var(--accent); }
 .result .where { color: var(--muted); font-size: 0.8rem; margin-left: 0.5rem; }
-.result p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--body-soft); }
+/* code hits carry unbroken repo paths (include/rapid_trajectories/trajectory/
+   vec3.h:L74), which have no space to break at and so ran off a phone screen.
+   .hit .p already breaks for the same reason on the home panel. */
+.result p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--body-soft); overflow-wrap: anywhere; }
 .result .why { color: var(--muted); font-size: 0.8rem; font-style: italic; }
 
 /* ---------- misc ---------- */
@@ -336,6 +352,47 @@ a.person-card:hover {
   .aside-box { position: static; }
   .site-nav a { padding: 0.35rem 0.45rem; }
   .brand-soft { display: none; }
+}
+/* Below 768 the header stops being one row. The arithmetic forces it: brand
+   (161px once " Robotics" is gone) + the four nav labels (273px) + the search
+   box + the toggle needs about 766px, so every narrower viewport was pushing
+   the overflow off the right edge. The nav takes a second row whole, which is
+   what keeps all four labels intact, full size and on ONE line down to 320px —
+   the alternative, shortening "Agent tools", would change a primary nav label.
+
+   The breakpoint is 768 rather than the 640 used by the hero below, because
+   641-767 is exactly the band where the single row survives only by crushing
+   the search box to a sliver. --header-h is redefined with it: h1-h4
+   scroll-margin-top is measured from that token, so an anchor would otherwise
+   land under the taller header. --hc-search-max drops with it: flex wraps a
+   line before it shrinks one, so at 34vw the actions claimed a THIRD row below
+   390px rather than let the search box give way. At 24vw the brand and the
+   actions stay on row 1 down to 310px, and the box still sweeps - it sweeps to
+   a smaller open width. */
+@media (max-width: 767px) {
+  :root { --header-h: 5.25rem; --hc-search-max: 24vw; }
+  .site-header {
+    flex-wrap: wrap; height: auto; min-height: var(--header-h);
+    align-content: center; column-gap: 0.45rem; row-gap: 0;
+    padding: 0 0.7rem 0.4rem;
+  }
+  /* The brand is the widest thing on row 1 (172px), so at 320 it decided
+     whether the actions fit beside it or took a third row. The mark scales to
+     42x28 - same artwork, same 3:2 ratio, no wordmark change - which together
+     with the tighter gaps leaves about 11px of slack at 320. */
+  .brand { gap: 0.45rem; }
+  .brand-mark { width: 42px; height: 28px; }
+  /* order puts the actions beside the brand on row 1 and the nav alone on row 2;
+     flex-basis is what claims the whole row. Tab order still follows the DOM. */
+  .header-actions { order: 2; }
+  /* the negative margin cancels the first link's own padding, so the nav row's
+     text starts on the same pixel as the brand mark above it. */
+  .site-nav { order: 3; flex-basis: 100%; margin-left: -0.4rem; gap: 0; }
+  .site-nav a { padding: 0.3rem 0.4rem; }
+  /* the one deliberate casualty: the TUHH wordmark is a courtesy link to the
+     institute, and it is the only header element with no phone-sized job. It
+     comes back at 768. */
+  .tuhh-link { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -568,7 +625,7 @@ a.person-card:hover {
    is not an invisible tab stop: instant on the way open, held to the end of the
    sweep on the way shut. #search-form's submit handler and the "/" shortcut stay
    bound on every route; on #/ the shortcut focuses the hero field instead. */
-#search-form { width: 15rem; max-width: 34vw; overflow: hidden; }
+#search-form { width: 15rem; max-width: var(--hc-search-max); min-width: 0; overflow: hidden; }
 body.hc-anim #search-form {
   transition: width var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
               margin-right var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
