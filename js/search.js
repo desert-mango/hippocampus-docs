@@ -1,3 +1,8 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 21 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Rank indexed documentation results and coordinate optional librarian answers.
 /* Static in-browser search over the precomputed index in search/.
    No server, no keys: shards are plain JSON fetched once on first query.
    Scoring is deliberately simple and inspectable — exact symbol/name matches
@@ -29,6 +34,12 @@
    (the root, api/* runs). The one rule that keeps both working is that the
    fetch URL below stays RELATIVE. On Pages a POST to it returns 405, which this
    file reads as "no function on this host" and latches off for the session.
+
+   Every read (the manifest, the shards) and the librarian POST go through the
+   content-source seam in js/source.js when it is on the page: same-origin
+   fetch on the live site; inside a CMS preview frame the files come over the
+   preview bridge and the librarian answers 405, which latches it off exactly
+   as on Pages. Without the seam (plain node, the tests) it is plain fetch.
 
    The pure helpers are exported for tools/tests/test_search_routing.mjs; the
    file loads cleanly under plain node with no window, no document, and issues
@@ -98,16 +109,29 @@
     return out;
   }
 
-  async function loadAll() {
-    const manifest = await fetch('search/manifest.json').then((r) => {
-      if (!r.ok) throw new Error('search index missing — run tools/build_search_index.py');
+  // js/source.js's HC when the page has it; plain fetch otherwise (node).
+  function seam() {
+    return (typeof window !== 'undefined' && window.HC) ? window.HC : null;
+  }
+  function getJSON(path) {
+    const hc = seam();
+    if (hc) return hc.fetchJSON(path);
+    return fetch(path).then((r) => {
+      if (!r.ok) {
+        const err = new Error(`${path}: HTTP ${r.status}`);
+        err.status = r.status;
+        throw err;
+      }
       return r.json();
     });
-    const shards = await Promise.all(manifest.shards.map((s) =>
-      fetch(s.file).then((r) => {
-        if (!r.ok) throw new Error(`${s.file}: HTTP ${r.status}`);
-        return r.json();
-      })));
+  }
+
+  async function loadAll() {
+    const manifest = await getJSON('search/manifest.json').catch((err) => {
+      if (err && err.status) throw new Error('search index missing — run tools/build_search_index.py');
+      throw err;
+    });
+    const shards = await Promise.all(manifest.shards.map((s) => getJSON(s.file)));
     for (const it of buildItems(shards)) items.push(it);
     return items.length;
   }
@@ -385,7 +409,10 @@
   function createLibrarian(opts) {
     const cfg = opts || {};
     const timeoutMs = cfg.timeoutMs || LIBRARIAN_TIMEOUT_MS;
-    const doFetch = cfg.fetch || ((url, init) => fetch(url, init));
+    const doFetch = cfg.fetch || ((url, init) => {
+      const hc = seam();
+      return hc ? hc.callFunction(url, init) : fetch(url, init);
+    });
     let absent = false;
     const answers = new Map();
 
@@ -462,6 +489,81 @@
 
   const librarian = createLibrarian();
 
+  /* ---------- the home hero (direction A: search is the front door) ----------
+
+     The homepage's big search field runs the very same query() below, so these
+     helpers are only about PRESENTING its answer in a panel that is six rows
+     tall instead of a whole page. They are pure on purpose: js/app.js cannot
+     load under node (it reaches for #content at import time), so everything
+     worth testing about the hero lives here, in tools/tests/test_home_hero.mjs. */
+
+  /* The example-query chips, read from data/site.json's example_queries. Each
+     chip is a LABEL a reader can recognise and the QUERY it actually runs —
+     the two differ where the readable phrase is not the term the index knows
+     ("the gantry" searches "gantry"). Anything unusable is dropped rather than
+     rendered as an empty pill, and a string where the list belongs yields no
+     chips instead of one chip per character. */
+  function exampleQueries(site) {
+    const list = (site && Array.isArray(site.example_queries)) ? site.example_queries : [];
+    return list
+      .filter((c) => c && typeof c === 'object')
+      .map((c) => ({
+        label: String(c.label == null ? (c.q == null ? '' : c.q) : c.label).trim(),
+        q: String(c.q == null ? '' : c.q).trim(),
+      }))
+      .filter((c) => c.label && c.q);
+  }
+
+  /* The exact path under a hero hit's title. A site hit is its own hash route.
+     A code, file, CAD or fork hit already carries a repository-relative path in
+     `snippet`, which beats showing the raw GitHub blob URL — prefixed by the
+     repository in `where`, but only when `where` is a repository name (one
+     token) and does not already lead the snippet. A row whose snippet is prose
+     (a page excerpt, a repository description) has no path to show, so the
+     destination itself is the honest answer. */
+  function hitPath(row) {
+    const r = row || {};
+    const href = String(r.href == null ? '' : r.href);
+    if (href.startsWith('#')) return href;
+    const snippet = String(r.snippet == null ? '' : r.snippet).trim();
+    if (!snippet || /\s/.test(snippet)) return href;
+    const where = String(r.where == null ? '' : r.where).trim();
+    if (!where || /\s/.test(where)) return snippet;
+    if (snippet === where || snippet.startsWith(`${where}/`)) return snippet;
+    return `${where}/${snippet}`;
+  }
+
+  /* The rows the hero panel shows: the leading `limit` of whatever ordering the
+     search produced (librarian picks already lead res.results), minus any row
+     with no destination — a malformed librarian row must not render as a link
+     to nowhere. */
+  function heroHits(res, limit) {
+    const rows = (res && Array.isArray(res.results)) ? res.results : [];
+    const n = Math.max(0, Math.trunc(Number(limit) || 0));
+    return rows.filter((r) => r && r.href).slice(0, n);
+  }
+
+  /* The one status line above the hero panel. `waiting` is viewSearch's rule,
+     narrowed to one line: a multi-word query the keyword index answered with
+     nothing is still out with the librarian, so saying "no results" would be
+     wrong about a search that has not finished. */
+  function heroStatus(res, shown, waiting) {
+    const rows = (res && Array.isArray(res.results)) ? res.results : [];
+    if (!rows.length) return waiting ? 'no keyword match — asking the librarian…' : 'no keyword match';
+    const total = Number((res && res.total) || 0);
+    return `${shown} of ${total.toLocaleString('en-US')} indexed entries`;
+  }
+
+  /* Is this hash the home route? The header's own search box collapses there
+     (the page itself is the search box), so the router toggles a class on every
+     navigation and needs the same answer the view dispatch reaches: js/app.js
+     splits the hash on '@', then '?', then counts '/'-segments. */
+  function isHomeHash(hash) {
+    const raw = String(hash == null ? '' : hash).replace(/^#/, '');
+    const path = raw.split('@')[0].split('?')[0];
+    return path.split('/').filter(Boolean).length === 0;
+  }
+
   /* query(q) resolves the final merged shape {total, results, librarianCount,
      notice} — that contract is unchanged.
 
@@ -509,6 +611,12 @@
     pickRows,
     mergePicks,
     strongLead,
+    // the home hero's pure helpers (tools/tests/test_home_hero.mjs)
+    exampleQueries,
+    hitPath,
+    heroHits,
+    heroStatus,
+    isHomeHash,
     librarianLatched: () => librarian.isLatched(),
     LIBRARIAN_URL,
     LIBRARIAN_NOTICE,

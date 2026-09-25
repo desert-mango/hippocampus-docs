@@ -192,6 +192,9 @@
     }
    ]
   },
+  "learning-to-swim": {
+   "contributors": []
+  },
   "legacy-ros1": {
    "contributors": [
     {
@@ -333,6 +336,9 @@
      "roster": true
     }
    ]
+  },
+  "underwater-localization": {
+   "contributors": []
   },
   "uvms": {
    "contributors": [

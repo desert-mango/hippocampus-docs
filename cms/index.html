@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>Editor — HippoCampus Robotics</title>
+  <!-- The signed-in area. Plain HTML; js/cms.js draws every view from the
+       hash route (#/, #/review, #/review/<n>, #/help, #/edit/<page>, …).
+       Local scripts and styles only: no inline script, no on*= handler, no
+       CDN (tools/check.py section 7 holds that line). -->
+  <link rel="stylesheet" href="../css/site.css">
+  <link rel="stylesheet" href="../css/cms.css">
+</head>
+<body class="cms">
+  <header class="site-header cms-header">
+    <a class="brand" href="../" title="Back to the site">
+      <img class="brand-mark" src="https://res.cloudinary.com/dr76gues0/image/upload/v1788447786/hippocampus-docs/brand/hippocampus-mark.png" alt="" width="51" height="34">
+      <span class="brand-text">HippoCampus<span class="brand-soft"> Editor</span></span>
+    </a>
+    <nav class="site-nav" id="cms-nav" aria-label="Editor">
+      <a href="#/" data-nav="home">Home</a>
+      <a href="#/review" data-nav="review">Review</a>
+      <a href="#/help" data-nav="help">Help</a>
+    </nav>
+    <div class="header-actions">
+      <span id="cms-who" class="cms-who" hidden></span>
+      <button id="cms-sign-in" type="button" class="cms-btn cms-btn-primary">Sign in with GitHub</button>
+      <button id="cms-sign-out" type="button" class="cms-btn" hidden>Sign out</button>
+      <a class="cms-back" href="../">Back to the site</a>
+    </div>
+  </header>
+  <p id="cms-notice" class="cms-notice" role="status" hidden></p>
+  <main id="cms-main" class="cms-main" tabindex="-1">
+    <noscript><p>The editor needs JavaScript.</p></noscript>
+  </main>
+  <script src="../js/source.js"></script>
+  <script src="../js/cms-core.js"></script>
+  <script src="../js/cms.js"></script>
+</body>
+</html>

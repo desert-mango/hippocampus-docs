@@ -997,7 +997,7 @@
    "id": "docs-and-site",
    "name": "Documentation & site",
    "status": "active",
-   "tagline": "The lab's documentation itself: the current Sphinx docs (which this site replaces), the org website, and the org profile.",
+   "tagline": "The public lab reference: setup guides, project maps, code search, and the tooling that keeps the site consistent.",
    "file": "content/projects/docs-and-site.md",
    "repos": [
     {
@@ -1029,6 +1029,31 @@
     }
    ],
    "hardware": [],
+   "links": []
+  },
+  {
+   "id": "underwater-localization",
+   "name": "Underwater localization & temperature exploration",
+   "status": "active",
+   "tagline": "Known-map localization, change mapping, and temperature-guided exploration tested in the measured HippoCampus pool simulation.",
+   "file": "content/projects/underwater-localization.md",
+   "repos": [],
+   "hardware": [
+    "HippoCampus micro AUV"
+   ],
+   "links": []
+  },
+  {
+   "id": "learning-to-swim",
+   "name": "Learning to Swim replication",
+   "status": "active",
+   "tagline": "A simulation replication and vehicle-specific evaluation of the published reinforcement-learning control pipeline.",
+   "file": "content/projects/learning-to-swim.md",
+   "repos": [],
+   "hardware": [
+    "HippoCampus micro AUV",
+    "BlueROV2 Heavy"
+   ],
    "links": []
   },
   {

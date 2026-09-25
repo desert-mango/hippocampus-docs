@@ -7,7 +7,7 @@
    "source": "derived"
   },
   "index:home": {
-   "summary": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use.",
+   "summary": "One box over 71 setup pages, 17 projects, 94 repositories' classes and functions, and the CAD part list. Ask in plain words or type a symbol name.",
    "source": "derived"
   },
   "index:projects": {
@@ -35,7 +35,7 @@
    "source": "derived"
   },
   "projects/docs-and-site": {
-   "summary": "The lab's documentation about itself: the current Sphinx docs site, the org website, and\nthe org profile.",
+   "summary": "The lab's public reference: setup guides, a map of every organization repository,\nin-browser search over documentation and code, and the tools that keep those views in\nstep. The site is served directly from committed fil",
    "source": "derived"
   },
   "projects/hippocampus-vehicle": {
@@ -48,6 +48,10 @@
   },
   "projects/lab-infrastructure": {
    "summary": "The systems around the water that every experiment leans on: Qualisys motion capture for\nmillimeter ground truth, the gantry that moves equipment over the tank, and the physical\nbutton boxes wired into the safety and con",
+   "source": "derived"
+  },
+  "projects/learning-to-swim": {
+   "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
    "source": "derived"
   },
   "projects/legacy-ros1": {
@@ -72,6 +76,10 @@
   },
   "projects/teaching": {
    "summary": "The lab's teaching side: the **Formulas and Vehicles** course, where students program\nunderwater robots, and the Python onramp that gets them ready.",
+   "source": "derived"
+  },
+  "projects/underwater-localization": {
+   "summary": "A small underwater robot in a water tank, and the code that works out where it is. The robot\ncompares what its sensors read with a stored plan of the tank. Anything the stored plan cannot\nexplain goes into a separate lay",
    "source": "derived"
   },
   "projects/uvms": {
@@ -347,7 +355,7 @@
    "source": "derived"
   },
   "setup/start/index": {
-   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md` until the org cut-over",
+   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md`.",
    "source": "derived"
   },
   "setup/time-sync/client": {

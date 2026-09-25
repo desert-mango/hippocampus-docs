@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 3 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Convert the earlier Sphinx documentation into the site's Markdown and setup registry.
 """One-shot migration: convert the old Sphinx docs (RST) into this site's Markdown.
 
 Reads  : a clone of HippoCampusRobotics/docs (--src) and data/setup-structure.json

@@ -1,5 +1,21 @@
-# Auto-requests review from the maintainer on every PR. This file signals
-# ownership; enforcement is the branch-protection required `check` + the
-# zero-write-collaborators access model (see docs/cms-plan.md §5).
-*          @kyle-nelson-berkeley
-/.github/  @kyle-nelson-berkeley
+# Code owners for desert-mango/hippocampus-docs.
+#
+# What this file does and does not do:
+# - Code owners must have write access to the repository, or GitHub ignores them.
+# - While the repository is private on GitHub's Free plan, this file is inert: GitHub
+#   offers code owners on private repositories only on paid plans. If the repository
+#   goes public, it becomes live and GitHub auto-requests these reviewers on each PR.
+# - It never blocks a merge: main has no branch protection (declined 2026-09-06, see
+#   docs/cms-plan.md), so there is no "require review from code owners" rule to enforce.
+#
+# Later lines win. Content: Nathalie and Desert Mango. Everything else, and the site's
+# machinery, is Desert Mango. @kyle-nelson-berkeley stays listed while he holds Write.
+*                 @desert-mango-robotics @kyle-nelson-berkeley
+/content/         @NBauschmann @desert-mango-robotics
+/data/            @NBauschmann @desert-mango-robotics
+/.github/         @desert-mango-robotics @kyle-nelson-berkeley
+/tools/           @desert-mango-robotics @kyle-nelson-berkeley
+/api/             @desert-mango-robotics @kyle-nelson-berkeley
+/js/              @desert-mango-robotics @kyle-nelson-berkeley
+/cms/             @desert-mango-robotics @kyle-nelson-berkeley
+/vercel.json      @desert-mango-robotics @kyle-nelson-berkeley

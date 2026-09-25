@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Author: Kyle Nelson
+# Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+# Last substantive modification: 21 September 2026
+# Affiliation: TUHH HippoCampus Robotics
+# Purpose: Validate site content and dispatch the deterministic attribution-header check.
 """The check gate. Run before every commit:  python3 tools/check.py
 
 Validates, failing loudly with actionable messages:
@@ -21,16 +26,26 @@ Validates, failing loudly with actionable messages:
      jpg|jpeg|gif|svg, every res.cloudinary.com reference must resolve to an
      entry of data/cloudinary-manifest.json (matched on public_id, so delivery
      transformations are fine), and every manifest entry must be referenced;
+  6a. manifest: every entry carries source/public_id/url, a 64-hex sha256 and
+     a positive 'bytes'; every public_id starts with 'hippocampus-docs/'; a
+     local source exists and has not drifted — a CMS upload carries
+     "source": null and skips only those two local-file checks;
   6b. hygiene: no credentials, key material or personal emails in content/**.md,
      data/**/*.json (the graph shards included) or .mcp.json;
   6c. people: data/people.json (when present) carries exactly name/title/photo/
      link per person, every photo resolves to a manifest entry, every link is an
      http(s) URL;
-  7. shell: index.html references exist; vendored marked.min.js matches its
-     pinned sha256;
+  6d. content safety: no script-capable tag, on*= attribute, srcdoc or
+     javascript:/vbscript:/data:text/html link in content/**.md or in any
+     string of data/**/*.json;
+  7. shell: index.html references exist; cms/index.html and cms/callback.html
+     exist, reference only existing files and carry no inline script or on*=
+     handler; vendored marked.min.js matches its pinned sha256;
   8. probes: data/search-probes.json carries exactly 10 well-formed keyword probes
      AND exactly 2 well-formed semantic probes (kind "semantic", a positive int
      'top', a non-empty 'expect' list and a 'fair' list of routes/GitHub URLs);
+  9a. overlays: every id named by edges-authored.json or by an authored entry
+     of summaries.json is a current page or repository id (reported first);
   9. graph: the semantic layer under data/graph/ is in step with the registries —
      every registry page is a wiki.json node exactly once with the right kind and
      no stale ones, the 3 index views and one node per org repo, the counts block
@@ -49,9 +64,12 @@ the job of its online twin, tools/check_urls.py.
 Never weaken a check to make it pass — fix the content it is complaining about.
 """
 import hashlib
+import html
 import json
 import re
+import subprocess
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -85,10 +103,15 @@ CONTRIB_MAX_ROWS = 12
 # Every key a READER dereferences WITHOUT a guard. A READER is any file in this
 # repo that reads a data/*.json registry — the category is the rule; the names
 # below are only today's instance of it:
-#   js/app.js, js/graph.js, tools/bench_librarian.mjs,
-#   tools/build_contributors.py, tools/build_repo_graphs.py,
-#   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
-#   tools/check_urls.py, tools/rst_convert.py
+#   api/media.js (manifest only: it reads data/cloudinary-manifest.json,
+#   which section 6a covers), js/app.js, js/cms-core.js, js/cms.js, js/graph.js,
+#   tools/bench_librarian.mjs, tools/build_contributors.py,
+#   tools/build_repo_graphs.py, tools/build_search_index.py,
+#   tools/build_wiki_graph.py, tools/check.py, tools/check_urls.py,
+#   tools/derive.py (paths only: it passes registry paths to git diff and
+#   dereferences no key), tools/rst_convert.py
+# (js/source.js does not match the grep: it fetches registry files on the
+# readers' behalf and dereferences no key.)
 # Re-derive that list, never trust it:
 #   grep -rln "data/[a-z_-]*\.json" . --exclude-dir=.git --exclude-dir=data \
 #     --exclude-dir=search
@@ -152,9 +175,15 @@ CONTRIB_MAX_ROWS = 12
 # reported here.
 TYPE_WORDS = {bool: "true or false", str: "a string", int: "a whole number"}
 READER_REQUIRED_KEYS = {
+    # 'example_queries' is the home hero's chip row (direction A: the search
+    # field is the front door). js/app.js ITERATES it and js/search.js's
+    # exampleQueries() reads label + q off every member, so it needs an "each"
+    # entry, not a "keys" one — a string in the list's place would iterate as
+    # characters and render one dead chip per letter instead of raising.
     "data/site.json": {
-        "keys": ("kicker", "title", "lead", "home_cards"),
-        "each": {"home_cards": {"keys": ("href", "title", "text")}},
+        "keys": ("kicker", "title", "lead", "example_queries", "home_cards"),
+        "each": {"home_cards": {"keys": ("href", "title", "text")},
+                 "example_queries": {"keys": ("label", "q")}},
     },
     "data/setup.json": {
         "keys": ("sections",),
@@ -298,6 +327,373 @@ def walk_json(node, path=""):
             yield from walk_json(v, f"{path}[{i}]")
     elif isinstance(node, str):
         yield path, path.rsplit(".", 1)[-1].split("[")[0], node
+
+
+# --------------------------------------------------------------------------
+# 6d. content safety — no active markup in anything the site renders.
+#
+# The site renders content/**.md and the strings of data/**.json as HTML, and
+# the CMS lets lab members edit both from a browser. None of it may carry
+# script: no script-capable tag, no event-handler attribute, no srcdoc, and no
+# javascript:/vbscript:/data:text/html link target. Fenced code blocks are
+# scanned too (deliberately simple: the site shows them as text, but a rule
+# with holes in it invites the wrong kind of cleverness). The patterns are
+# tight on purpose — a legitimate string that trips one means the PATTERN is
+# too broad; tighten it, never allowlist the file.
+# --------------------------------------------------------------------------
+UNSAFE_TAGS = ("script", "iframe", "object", "embed", "form", "meta", "link",
+               "style", "base", "svg")
+# the tag name must END there: '<base-url>' and '<link-name>' are placeholders
+UNSAFE_TAG_RE = re.compile(
+    r"<(" + "|".join(UNSAFE_TAGS) + r")(?=[\s/>]|$)", re.IGNORECASE)
+# any on*= attribute; '/' and quotes separate attributes as well as spaces do
+EVENT_ATTR_RE = re.compile(r"(?:^|(?<=[\s/\"'`]))(on[a-z]+)\s*=",
+                           re.IGNORECASE | re.MULTILINE)
+SRCDOC_RE = re.compile(r"(?<![\w-])srcdoc\s*=", re.IGNORECASE)
+# where a link target starts: a Markdown inline link/image, a reference
+# definition, a CommonMark autolink, or an href/src attribute (any quoting).
+# The WHOLE value is captured, never a bounded prefix: browsers strip any
+# amount of leading whitespace (raw or as character references) first.
+LINK_TARGET_RES = (
+    re.compile(r"\]\(\s*<?([^)]*)"),
+    re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?(\S+)", re.MULTILINE),
+    re.compile(r"<([a-z][a-z0-9+.\-]{1,31}:[^\s<>]*)>", re.IGNORECASE),
+    re.compile(r"(?<![\w-])(?:href|src)\s*=\s*[\"'`]?([^\"'`>]*)",
+               re.IGNORECASE),
+)
+UNSAFE_SCHEMES = ("javascript:", "vbscript:", "data:text/html")
+# the JSON keys whose whole value is a link target (projects/people/site)
+URL_KEYS = ("href", "src", "url", "link", "photo")
+SAFETY_MSG = ("inline script or event handler is not allowed in content ({tok})"
+              "{at} — use the dialect blocks in CONTRIBUTING.md")
+
+
+def unsafe_scheme(target):
+    """The forbidden scheme a link target starts with, or None.
+
+    Browsers drop ASCII whitespace/control characters inside a URL scheme and
+    decode character references first, so 'java&#58;script' and 'java<TAB>
+    script:' are the same attack as 'javascript:' and are normalised the same.
+    """
+    flat = re.sub(r"[\x00-\x20]", "", html.unescape(target)).lower()
+    return next((s for s in UNSAFE_SCHEMES if flat.startswith(s)), None)
+
+
+def scan_markup(text):
+    """Every forbidden construct in `text`, as sorted (line, token) pairs."""
+    hits = []
+    for m in UNSAFE_TAG_RE.finditer(text):
+        hits.append((m.start(), f"<{m.group(1).lower()}>"))
+    for m in EVENT_ATTR_RE.finditer(text):
+        hits.append((m.start(1), f"{m.group(1).lower()}="))
+    for m in SRCDOC_RE.finditer(text):
+        hits.append((m.start(), "srcdoc="))
+    for rx in LINK_TARGET_RES:
+        for m in rx.finditer(text):
+            scheme = unsafe_scheme(m.group(1))
+            if scheme:
+                hits.append((m.start(1), scheme))
+    out = []
+    for pos, tok in sorted(set(hits)):
+        line = text.count("\n", 0, pos) + 1
+        if (line, tok) not in out:
+            out.append((line, tok))
+    return out
+
+
+def check_content_safety(root):
+    """6d over content/**.md and every string value in data/**/*.json."""
+    root = Path(root)
+    out = []
+    for md in sorted((root / "content").rglob("*.md")):
+        rel = md.relative_to(root).as_posix()
+        for line, tok in scan_markup(md.read_text(encoding="utf-8")):
+            out.append(f"{rel}:{line}: " + SAFETY_MSG.format(tok=tok, at=""))
+    for jf in sorted((root / "data").rglob("*.json")):
+        rel = jf.relative_to(root).as_posix()
+        try:
+            doc = json.loads(jf.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue          # located by the 6b hygiene scan
+        for keypath, key, value in walk_json(doc):
+            found = [tok for _line, tok in scan_markup(value)]
+            if key.lower() in URL_KEYS:
+                scheme = unsafe_scheme(value)
+                if scheme and scheme not in found:
+                    found.append(scheme)
+            for tok in found:
+                out.append(f"{rel}: " + SAFETY_MSG.format(
+                    tok=tok, at=f" at '{keypath}'"))
+    return out
+
+
+# --------------------------------------------------------------------------
+# 6a. the Cloudinary manifest — a pure check over the loaded document.
+# --------------------------------------------------------------------------
+MANIFEST = "data/cloudinary-manifest.json"
+MANIFEST_FOLDER = "hippocampus-docs/"
+
+
+def check_manifest(cloudinary, root):
+    """(messages, public_ids, resolved local sources) for the manifest.
+
+    An entry uploaded through the CMS carries "source": null — there is no
+    local original, so the existence and drift checks are skipped for it; the
+    sha256, the url on this cloud, the public_id, a positive 'bytes' and every
+    uniqueness rule still hold, and every public_id lives in the site's own
+    Cloudinary folder.
+    """
+    root = Path(root)
+    out = []
+    cloud = cloudinary.get("cloud") or ""
+    if not cloud:
+        out.append(f"{MANIFEST}: no 'cloud' name")
+    manifest_sources = set()
+    public_ids, urls, sources = set(), set(), set()
+    assets = cloudinary.get("assets", [])
+    if not isinstance(assets, list):
+        return ([f"{MANIFEST}: 'assets' must be a list, got "
+                 f"{type(assets).__name__}"], public_ids, manifest_sources)
+    for e in assets:
+        if not isinstance(e, dict):
+            out.append(f"{MANIFEST}: asset entry must be an object: {e!r}")
+            continue
+        src, pid, url = e.get("source"), e.get("public_id"), e.get("url")
+        local = src is not None
+        if "source" not in e or (local and not (isinstance(src, str) and src)) \
+                or not (isinstance(pid, str) and pid) \
+                or not (isinstance(url, str) and url):
+            out.append(f"{MANIFEST}: entry missing source/public_id/url: {e} "
+                       f"(a CMS upload has \"source\": null)")
+            continue
+        for value, seen, what in ((src, sources, "source"), (url, urls, "url"),
+                                  (pid, public_ids, "public_id")):
+            if value is None:
+                continue      # many CMS uploads share "no local source"
+            if value in seen:
+                out.append(f"{MANIFEST}: duplicate {what} '{value}'")
+            seen.add(value)
+        if not pid.startswith(MANIFEST_FOLDER):
+            out.append(f"{MANIFEST}: public_id '{pid}' is outside the site's "
+                       f"folder — every public_id starts with '{MANIFEST_FOLDER}'")
+        # The digest is what makes drift detectable, so it is mandatory: an entry
+        # without one would otherwise count as a valid source and quietly opt out
+        # of the guarantee below.
+        recorded = e.get("sha256")
+        digest_ok = isinstance(recorded, str) and re.fullmatch(r"[0-9a-f]{64}", recorded)
+        if not digest_ok:
+            out.append(f"{MANIFEST}: manifest entry {pid}: missing/invalid "
+                       f"sha256 — required for source drift detection")
+        size = e.get("bytes")
+        if not (isinstance(size, int) and not isinstance(size, bool) and size > 0):
+            out.append(f"{MANIFEST}: manifest entry {pid}: 'bytes' must be a "
+                       f"positive whole number")
+        if local:
+            p = root / src
+            if not p.is_file():
+                out.append(f"{MANIFEST}: source file missing on disk: {src} "
+                           f"(the local original is the upload source — do not "
+                           f"delete it)")
+            else:
+                manifest_sources.add(p.resolve())
+                # Drift guard: edit the local original and the site would keep
+                # serving the OLD remote image. Only sha256 is compared —
+                # 'bytes' is what Cloudinary stored after its own processing
+                # and legitimately differs from the source (it does for the
+                # two GIFs).
+                digest = hashlib.sha256(p.read_bytes()).hexdigest()
+                if digest_ok and digest != recorded:
+                    out.append(f"{MANIFEST}: {src} changed since upload "
+                               f"({digest[:12]}… vs {recorded[:12]}…) — re-upload "
+                               f"it and refresh the manifest, or the site serves "
+                               f"the old image")
+        if cloud and not url.startswith(f"https://res.cloudinary.com/{cloud}/"):
+            out.append(f"{MANIFEST}: url for {pid} is not on cloud '{cloud}': {url}")
+    return out, public_ids, manifest_sources
+
+
+# --------------------------------------------------------------------------
+# 7. the CMS shell — cms/index.html and cms/callback.html.
+# --------------------------------------------------------------------------
+CMS_PAGES = ("cms/index.html", "cms/callback.html")
+TAG_OPEN_RE = re.compile(r"<[a-zA-Z]")
+SCRIPT_OPEN_RE = re.compile(r"<script(?=[\s/>])[^>]*>?", re.IGNORECASE)
+
+
+class _ShellTags(HTMLParser):
+    """Start tags with their attributes, tokenized the way a browser does.
+
+    Attribute names end only at whitespace, '/', '=' or '>', so 'data.src',
+    'x:src' and a ' src=' inside another attribute's quoted value are NOT a
+    src — a regex boundary cannot tell those apart. Values arrive with
+    character references decoded. The FIRST of a repeated attribute wins, as
+    in the browser.
+    """
+
+    def __init__(self, text):
+        super().__init__(convert_charrefs=True)
+        self._starts = [0]
+        for i, ch in enumerate(text):
+            if ch == "\n":
+                self._starts.append(i + 1)
+        self.tags = {}          # offset of '<' -> (tag name, {attr: value})
+        self.feed(text)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        line, col = self.getpos()
+        first = {}
+        for k, v in attrs:
+            first.setdefault(k, v if v is not None else "")
+        self.tags[self._starts[line - 1] + col] = (tag, first)
+
+
+def check_cms_shell(root):
+    """Each CMS page exists; its local references exist; no inline script,
+    no on*=.
+
+    REQUIRED: the sign-in callback arrived with U5 and the editor page with
+    U7a, which flipped this from when-present — a missing page is a broken
+    editor, not a skip. The CMS runs under a CSP without 'unsafe-inline', so
+    inline code would simply not run.
+    """
+    root = Path(root)
+    out = []
+    for rel in CMS_PAGES:
+        page = root / rel
+        if not page.is_file():
+            out.append(f"{rel}:1: missing — the CMS shell is required (the "
+                       f"editor page and its sign-in callback ship with the site)")
+            continue
+        text = page.read_text(encoding="utf-8")
+
+        def line_of(pos):
+            return text.count("\n", 0, pos) + 1
+
+        try:
+            tags = _ShellTags(text).tags
+        except Exception as e:  # never a traceback from the gate
+            out.append(f"{rel}:1: could not be parsed as HTML ({e})")
+            continue
+        for pos, (name, attrs) in sorted(tags.items()):
+            for attr in ("src", "href"):
+                if attr not in attrs:
+                    continue
+                ref = attrs[attr].strip()
+                # a resource is something the browser LOADS into the page
+                # (every src, and <link href>); an <a href> only navigates
+                resource = attr == "src" or name == "link"
+                if resource:
+                    # an empty src/href loads nothing (or the page itself) —
+                    # and a src attribute also satisfies the no-inline-script
+                    # rule below, so it must name something real
+                    if not ref:
+                        out.append(f"{rel}:{line_of(pos)}: empty {attr} "
+                                   f"on <{name}> — a loaded resource must name "
+                                   f"a file")
+                        continue
+                    # the CMS loads only its own code and styles (plan U4b:
+                    # CSP script-src 'self', style-src 'self'; no third-party
+                    # script from any CDN) — the gate holds that line before
+                    # the headers exist. Only an <img> may be remote (img-src
+                    # lists the image CDNs). A data: URL is never a file: for
+                    # a script it is inline code under another name.
+                    if ref.lower().startswith(("http:", "https:", "//")):
+                        if name == "img":
+                            continue
+                        out.append(f"{rel}:{line_of(pos)}: remote "
+                                   f"<{name}> {attr} {ref} — the CMS loads its "
+                                   f"code and styles from its own files")
+                        continue
+                elif not ref or ref.lower().startswith(
+                        ("http:", "https:", "#", "data:", "mailto:", "//")):
+                    continue
+                path = ref.split("#")[0].split("?")[0]
+                target = (root / path.lstrip("/")) if path.startswith("/") \
+                    else (page.parent / path)
+                # a navigation link may name a directory that serves an
+                # index.html; a loaded resource (script, stylesheet, image)
+                # must be a file — a directory would answer with an HTML page
+                ok = target.is_file() or (
+                    not resource and (target / "index.html").is_file())
+                if not ok:
+                    out.append(f"{rel}:{line_of(pos)}: missing referenced "
+                               f"file {ref}")
+        # inline handlers are read from the parsed attributes: a tag regex
+        # stops at the first '>' even inside a quoted value (title=">"), so
+        # the real onerror= after it went unseen while the browser ran it.
+        handlers = set()
+        for pos, (name, attrs) in tags.items():
+            for attr in attrs:
+                if attr.startswith("on") and len(attr) > 2:
+                    handlers.add((line_of(pos), attr))
+        # the strict side: a tag opening the parser did NOT read as a start
+        # tag (inside a comment or raw text, or a parse disagreement between
+        # this Python's html.parser and the browser) may still be a tag to the
+        # browser, and its end cannot be known. From the first such opening
+        # to the end of the file, every on*= in the text is judged a handler.
+        unread = [m.start() for m in TAG_OPEN_RE.finditer(text)
+                  if m.start() not in tags]
+        if unread:
+            for m in EVENT_ATTR_RE.finditer(text, unread[0]):
+                handlers.add((line_of(m.start(1)), m.group(1).lower()))
+        for line, attr in sorted(handlers):
+            out.append(f"{rel}:{line}: inline event handler ({attr}=) — CMS "
+                       f"pages attach handlers from their script files")
+        # every OPENING tag is judged, closed or not: an unterminated
+        # '<script>x' still runs everything after it as script. Only a real
+        # src attribute (as the parser reads it) excuses a body — an empty
+        # one is already red above; an opening tag the parser did not see as
+        # a script start tag at the same place (inside a comment, a parse
+        # disagreement) is judged inline — the strict side.
+        for m in SCRIPT_OPEN_RE.finditer(text):
+            name, attrs = tags.get(m.start(), (None, {}))
+            if name != "script" or "src" not in attrs:
+                out.append(f"{rel}:{line_of(m.start())}: inline <script> (no src) "
+                           f"— CMS pages load their code from files (the CSP "
+                           f"forbids inline script)")
+    return sorted(out, key=lambda s: (s.split(":")[0], int(s.split(":")[1])))
+
+
+# --------------------------------------------------------------------------
+# 9a. authored overlays — every id they name is a current page or repo.
+#
+# edges-authored.json and the "authored" entries of summaries.json are
+# hand-kept inputs keyed on registry ids. A rename or removal strands them,
+# and that is a Desert Mango change. Runs early in main() so this plain line is
+# the first failure a reader sees, ahead of the graph-parity noise the same
+# rename causes. The 'rejected' and 'stoplist' lists of xref-terms.json are
+# WORD lists (veto sets), not ids — no id rule applies to them.
+# --------------------------------------------------------------------------
+OVERLAY_MSG = ("{where}: '{nid}' is not a page or repository id any more — "
+               "renaming or removing an existing id needs Desert Mango "
+               "(docs/maintainer-protocols.md)")
+
+
+def check_overlay_ids(authored, summaries, setup, projects, tools, org):
+    """One located line per stale id per overlay file (never raises)."""
+    valid = {nid for nid, _ in enumerate_page_nodes(setup, projects, tools)}
+    valid |= set(INDEX_IDS)
+    valid |= {f"repo:{r['name']}" for r in org
+              if isinstance(r, dict) and isinstance(r.get("name"), str)}
+    out = []
+    named = []
+    edges = authored.get("edges") if isinstance(authored, dict) else None
+    for e in edges if isinstance(edges, list) else []:
+        if isinstance(e, dict):
+            named += [e.get(side) for side in ("s", "t")]
+    stale = []
+    for nid in named:
+        if isinstance(nid, str) and nid not in valid and nid not in stale:
+            stale.append(nid)
+    out += [OVERLAY_MSG.format(where=f"{GRAPH}/edges-authored.json", nid=n)
+            for n in stale]
+    pages = summaries.get("pages") if isinstance(summaries, dict) else None
+    for nid, row in (pages.items() if isinstance(pages, dict) else ()):
+        if isinstance(row, dict) and row.get("source") == "authored" \
+                and nid not in valid:
+            out.append(OVERLAY_MSG.format(where=f"{GRAPH}/summaries.json", nid=nid))
+    return out
 
 
 def entry_label(path, entry):
@@ -780,7 +1176,8 @@ def check_contributors(contributors, projects):
     """data/graph/contributors.json, when it exists, is address-free and sorted.
 
     The file is a gated artifact: a checkout without it is fine (None), and the
-    check is then a no-op — the same shape as the people.json rule at 6c.
+    check is then a no-op — the same shape as the people.json rule at 6c. The
+    same holds per project: a project with no bucket yet is fine (see below).
     """
     if contributors is None:
         return []
@@ -816,9 +1213,14 @@ def check_contributors(contributors, projects):
     for pid in sorted(set(buckets) - project_ids):
         out.append(f"{where}: '{pid}' is not a project id of data/projects.json — "
                    f"re-run tools/build_contributors.py")
-    for pid in sorted(project_ids - set(buckets)):
-        out.append(f"{where}: no entry for project '{pid}' — every project gets a "
-                   f"bucket; re-run tools/build_contributors.py")
+    # A project WITHOUT a bucket is allowed: it is the "never built yet" state
+    # (build_contributors.py's docstring tells it apart from "nobody found" =
+    # an empty list, and js/graph.js renders nothing for it). The bucket cannot
+    # exist yet on a pull request that adds a project: build_contributors.py
+    # needs the network, so it stays off the offline PR path and derive.yml
+    # fills the bucket only after the merge (plan D4). Requiring it here would
+    # make every project-adding PR red. A bucket for a project that no longer
+    # exists, and a malformed bucket, stay red.
     for pid in sorted(set(buckets) & project_ids):
         bucket = buckets[pid]
         if not isinstance(bucket, dict):
@@ -932,6 +1334,10 @@ def main():
             err(f"{rel}: missing — {consumers}")
     if errors:
         report()
+
+    # ---- 9a. authored overlays name current ids (run FIRST, see the helper) ----
+    for msg in check_overlay_ids(authored, summaries, setup, projects, tools, org):
+        err(msg)
 
     # ---- 2. setup manifest <-> files ----
     setup_ids = set()
@@ -1062,6 +1468,8 @@ def main():
                 continue
             elif href.startswith("#"):
                 continue  # same-page anchor
+            elif unsafe_scheme(href):
+                continue  # not a file: 6d reports the script link, located
             else:
                 if not (ROOT / href).exists():
                     err(f"{rel}: missing local file {href}")
@@ -1088,47 +1496,14 @@ def main():
     if people_path.exists():
         scanned.append(("data/people.json", people_path.read_text(encoding="utf-8")))
 
+    if not isinstance(cloudinary, dict):
+        err(f"{MANIFEST}: top level must be a JSON object with cloud/assets, got "
+            f"{type(cloudinary).__name__}")
+        report()
     cloud = cloudinary.get("cloud") or ""
-    if not cloud:
-        err("data/cloudinary-manifest.json: no 'cloud' name")
-    manifest_sources = set()
-    public_ids, urls, sources = set(), set(), set()
-    for e in cloudinary.get("assets", []):
-        src, pid, url = e.get("source"), e.get("public_id"), e.get("url")
-        if not (src and pid and url):
-            err(f"data/cloudinary-manifest.json: entry missing source/public_id/url: {e}")
-            continue
-        for value, seen, what in ((src, sources, "source"), (url, urls, "url"),
-                                  (pid, public_ids, "public_id")):
-            if value in seen:
-                err(f"data/cloudinary-manifest.json: duplicate {what} '{value}'")
-            seen.add(value)
-        # The digest is what makes drift detectable, so it is mandatory: an entry
-        # without one would otherwise count as a valid source and quietly opt out
-        # of the guarantee below.
-        recorded = e.get("sha256")
-        digest_ok = isinstance(recorded, str) and re.fullmatch(r"[0-9a-f]{64}", recorded)
-        if not digest_ok:
-            err(f"data/cloudinary-manifest.json: manifest entry {pid}: missing/invalid "
-                f"sha256 — required for source drift detection")
-        p = ROOT / src
-        if not p.exists():
-            err(f"data/cloudinary-manifest.json: source file missing on disk: {src} "
-                f"(the local original is the upload source — do not delete it)")
-        else:
-            manifest_sources.add(p.resolve())
-            # Drift guard: edit the local original and the site would keep
-            # serving the OLD remote image. Only sha256 is compared — 'bytes'
-            # is what Cloudinary stored after its own processing and legitimately
-            # differs from the source (it does for the two GIFs).
-            digest = hashlib.sha256(p.read_bytes()).hexdigest()
-            if digest_ok and digest != recorded:
-                err(f"data/cloudinary-manifest.json: {src} changed since upload "
-                    f"({digest[:12]}… vs {recorded[:12]}…) — re-upload it and "
-                    f"refresh the manifest, or the site serves the old image")
-        if cloud and not url.startswith(f"https://res.cloudinary.com/{cloud}/"):
-            err(f"data/cloudinary-manifest.json: url for {pid} is not on cloud "
-                f"'{cloud}': {url}")
+    msgs, public_ids, manifest_sources = check_manifest(cloudinary, ROOT)
+    for msg in msgs:
+        err(msg)
 
     referenced_ids = set()
     for where, text in scanned:
@@ -1254,6 +1629,10 @@ def main():
                     err(f"{rel}: personal email address '{em}' at '{keypath}' — "
                         f"do not republish personal data")
 
+    # ---- 6d. content safety: no active markup in anything the site renders ----
+    for msg in check_content_safety(ROOT):
+        err(msg)
+
     # ---- 7. shell ----
     index = index_text
     for ref in html_ref_re.findall(index):
@@ -1261,6 +1640,9 @@ def main():
             continue
         if not (ROOT / ref).exists():
             err(f"index.html: missing referenced file {ref}")
+    # the CMS shell — required (U7a): both pages must exist and be clean
+    for msg in check_cms_shell(ROOT):
+        err(msg)
     marked = ROOT / "js" / "marked.min.js"
     if not marked.exists():
         err("js/marked.min.js missing")
@@ -1342,6 +1724,17 @@ def main():
     else:
         for msg in check_contributors(contributors, projects):
             err(msg)
+
+    checker = ROOT / "tools" / "check_attribution_headers.py"
+    result = subprocess.run(
+        [sys.executable, str(checker), "--root", str(ROOT)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode:
+        output = (result.stdout + result.stderr).strip()
+        err(f"attribution header inventory failed:\n{output}")
 
     report(site)
 

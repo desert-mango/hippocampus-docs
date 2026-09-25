@@ -1,10 +1,18 @@
 #!/usr/bin/env node
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 21 September 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Serve static pages and every api/ function locally, with deterministic librarian mocks.
 /* dev_site — the ONE local server that serves this site exactly the way Vercel
-   does: static files from the repo root, plus api/librarian.js run as a real
-   function on the raw request and response.
+   does: static files from the repo root, plus EVERY api/<name>.js run as a real
+   function on the raw request and response at /api/<name> (today
+   api/librarian.js and api/auth.js — a new function file is picked up with no
+   edit here).
 
-     node tools/dev_site.mjs                        # static + the function if present
+     node tools/dev_site.mjs                        # static + every function present
      node tools/dev_site.mjs --port 8140
+     node tools/dev_site.mjs --dotenv path/to/file   # instead of ./.env.local
      node tools/dev_site.mjs --mock-provider=echo   # a fake LLM that echoes candidates
      node tools/dev_site.mjs --mock-provider=adversarial
      node tools/dev_site.mjs --mock-provider=graph  # the walk, keyless and deterministic
@@ -34,6 +42,16 @@
         untouched, so a handler that reaches for a Vercel-injected convenience
         breaks here, loudly, instead of in production.
 
+   ENVIRONMENT. On Vercel the functions read their keys and App credentials
+   from the project's environment. Here they come from `.env.local` at the
+   repo root when that file exists (`.env*` is gitignored — never commit one):
+   plain `KEY=VALUE` lines, `#` comments, optional quotes around the value, an
+   optional leading `export`. A variable already set in the shell wins over the
+   file. Only a COUNT is ever printed — never a name's value. The CMS sign-in
+   (api/auth.js) needs GH_APP_CLIENT_ID and GH_APP_CLIENT_SECRET there, and the
+   App's second callback URL is http://localhost:8131/cms/callback.html — so
+   open the site as http://localhost:8131, the port this server defaults to.
+
    No dependencies, node stdlib only. */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -42,7 +60,10 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const DEFAULT_PORT = 8131;
-const LIBRARIAN_ROUTE = '/api/librarian';
+const API_DIR = path.join(ROOT, 'api');
+const API_ROUTE_RE = /^\/api\/([a-z0-9][a-z0-9_-]*)$/;   // one plain name, no dots, no slashes
+const API_FILE_RE = /^([a-z0-9][a-z0-9_-]*)\.js$/;
+const DEFAULT_ENV_FILE = path.join(ROOT, '.env.local');
 const MOCK_ROUTE = '/__mock/v1/chat/completions';
 const MOCK_MODES = ['echo', 'adversarial', 'graph', 'quota'];
 const MAX_HITS = 8;         // the handler's MAX_PICKS; it caps anyway, we stay inside it
@@ -73,15 +94,17 @@ const TYPES = {
 
 // ------------------------------------------------------------------- args ---
 
-const USAGE = 'usage: node tools/dev_site.mjs [--port N] '
+const USAGE = 'usage: node tools/dev_site.mjs [--port N] [--dotenv PATH] '
   + `[--mock-provider=${MOCK_MODES.join('|')}] [--mock-delay=<ms>]\n`
+  + '  --dotenv         KEY=VALUE file loaded at startup (default: .env.local at the repo root,\n'
+  + '                   skipped silently when absent). Values are never printed.\n'
   + '  --mock-provider  echo/adversarial re-rank the candidates; graph answers both hops\n'
   + '                   of the walk by token overlap; quota 429s every call.\n'
   + '  --mock-delay     milliseconds the mock waits before answering EACH call (default 0).\n'
   + '                   It only means something with a mock, so it is refused without one.\n';
 
 function parseArgs(argv) {
-  const out = { port: DEFAULT_PORT, mock: null, mockDelay: null };
+  const out = { port: DEFAULT_PORT, mock: null, mockDelay: null, envFile: DEFAULT_ENV_FILE };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') { out.help = true; continue; }
@@ -93,6 +116,15 @@ function parseArgs(argv) {
         throw new Error(`--port needs a port number, got ${JSON.stringify(value)}`);
       }
       out.port = port;
+      continue;
+    }
+    m = arg.match(/^--dotenv(?:=(.*))?$/);
+    if (m) {
+      const value = m[1] !== undefined ? m[1] : argv[++i];
+      // Not "--env-file": node itself claims that flag even after the script
+      // name and exits before this file runs.
+      if (!value) throw new Error('--dotenv needs a path');
+      out.envFile = path.resolve(value);
       continue;
     }
     m = arg.match(/^--mock-provider(?:=(.*))?$/);
@@ -137,6 +169,44 @@ if (args.help) {
   process.exit(0);
 }
 const MOCK_DELAY_MS = args.mockDelay || 0;
+
+// ------------------------------------------------------------ environment ---
+
+/* Loads a KEY=VALUE file into process.env BEFORE any handler is imported.
+   Returns null when the file does not exist, else counts only. A line that is
+   not KEY=VALUE is skipped and counted, never echoed (it might hold a value). */
+function loadEnvFile(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return null;
+    throw new Error(`cannot read ${file}: ${e && e.code ? e.code : 'read failed'}`);
+  }
+  const counts = { loaded: 0, kept: 0, skipped: 0 };
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) { counts.skipped += 1; continue; }
+    let value = m[2];
+    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.endsWith(value[0])) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[m[1]] !== undefined) { counts.kept += 1; continue; }   // the shell wins
+    process.env[m[1]] = value;
+    counts.loaded += 1;
+  }
+  return counts;
+}
+
+let envCounts = null;
+try {
+  envCounts = loadEnvFile(args.envFile);
+} catch (e) {
+  process.stderr.write(`${e.message}\n`);
+  process.exit(1);
+}
 
 // -------------------------------------------------------------- json reply ---
 
@@ -403,19 +473,28 @@ if (args.mock) {
   process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'dev-site-mock-not-a-real-key';
 }
 
-let librarian = null;
-let handlerError = null;
+/* Every api/<name>.js becomes /api/<name>, imported once at startup. A missing
+   api/ directory is not an error (the GitHub Pages checkout has none); a file
+   that fails to import is reported at startup and its route answers 404,
+   exactly like a checkout without it. */
+const handlers = new Map();        // name -> function
+const handlerErrors = [];          // "api/x.js: message"
+let apiFiles = [];
 try {
-  const target = path.join(ROOT, 'api', 'librarian.js');
-  const mod = await import(pathToFileURL(target).href);
-  librarian = (mod && mod.default) || mod;
-  if (typeof librarian !== 'function') {
-    handlerError = 'api/librarian.js does not export a function';
-    librarian = null;
-  }
+  apiFiles = fs.readdirSync(API_DIR).filter((f) => API_FILE_RE.test(f)).sort();
 } catch (e) {
-  librarian = null;
-  handlerError = e && e.code === 'ERR_MODULE_NOT_FOUND' ? null : String((e && e.message) || e);
+  apiFiles = [];
+}
+for (const file of apiFiles) {
+  const name = file.match(API_FILE_RE)[1];
+  try {
+    const mod = await import(pathToFileURL(path.join(API_DIR, file)).href);
+    const fn = (mod && mod.default) || mod;
+    if (typeof fn === 'function') handlers.set(name, fn);
+    else handlerErrors.push(`api/${file} does not export a function`);
+  } catch (e) {
+    handlerErrors.push(`api/${file}: ${String((e && e.message) || e)}`);
+  }
 }
 
 // ------------------------------------------------------------- the server ----
@@ -424,7 +503,7 @@ try {
    a single page load would drown this in. It exists so "how many searches did
    that run make, and how many upstream calls did each one cost" is a fact in
    the log rather than a number the bench reports about itself. */
-let librarianRequests = 0;
+const apiRequests = new Map();     // name -> POST count
 
 function logWhenDone(res, line) {
   res.on('finish', () => process.stdout.write(`  ${line()} ${res.statusCode}\n`));
@@ -433,26 +512,37 @@ function logWhenDone(res, line) {
 const server = http.createServer((req, res) => {
   const urlPath = (req.url || '/').split('?')[0];
 
-  if (urlPath === LIBRARIAN_ROUTE) {
-    // Only a POST is a SEARCH, so only a POST takes a number: the readiness
-    // GET reads no body, calls no model and must not inflate the count a run
-    // is measured by.
-    const n = req.method === 'POST' ? (librarianRequests += 1) : null;
+  const api = urlPath.startsWith('/api/') ? urlPath.match(API_ROUTE_RE) : null;
+  if (urlPath.startsWith('/api/')) {
+    const name = api ? api[1] : null;
+    const route = name ? `/api/${name}` : urlPath;
+    // Only a POST is real work, so only a POST takes a number: the librarian's
+    // readiness GET reads no body, calls no model and must not inflate the
+    // count a bench run is measured by.
+    let n = null;
+    if (name && req.method === 'POST') {
+      n = (apiRequests.get(name) || 0) + 1;
+      apiRequests.set(name, n);
+    }
     const started = Date.now();
-    logWhenDone(res, () => `${req.method} ${LIBRARIAN_ROUTE}`
+    logWhenDone(res, () => `${req.method} ${route}`
       + `${n === null ? '' : ` #${n}`} ${Date.now() - started}ms →`);
-    if (!librarian) {
+    const fn = name ? handlers.get(name) : null;
+    if (!fn) {
       // Exactly what GitHub Pages does with a missing path — and exactly what
-      // the client latches on.
-      sendJson(res, 404, { error: 'no librarian handler in this checkout' });
+      // the search client latches on.
+      sendJson(res, 404, { error: `no handler for ${route} in this checkout` });
       return;
     }
     // RAW pass-through. No shim, no body parsing, no helpers bolted on.
     Promise.resolve()
-      .then(() => librarian(req, res))
+      .then(() => fn(req, res))
       .catch((e) => {
-        process.stderr.write(`librarian handler threw: ${(e && e.stack) || e}\n`);
-        if (!res.headersSent) sendJson(res, 500, { error: 'handler threw', detail: String((e && e.message) || e) });
+        // The error's name and its stack FRAMES, never its message: a sign-in
+        // handler's error text could carry what it was handling.
+        const frames = String((e && e.stack) || '').split('\n').slice(1).join('\n');
+        process.stderr.write(`api/${name}.js handler threw${e && e.name ? ` (${e.name})` : ''}\n${frames}\n`);
+        if (!res.headersSent) sendJson(res, 500, { error: 'handler threw' });
         else res.end();
       });
     return;
@@ -473,9 +563,21 @@ const server = http.createServer((req, res) => {
 server.listen(args.port, '127.0.0.1', () => {
   process.stdout.write(`dev_site serving ${ROOT}\n`);
   process.stdout.write(`  http://127.0.0.1:${args.port}/\n`);
-  if (librarian) process.stdout.write(`  librarian handler loaded -> ${LIBRARIAN_ROUTE}\n`);
-  else process.stdout.write('  librarian handler absent — static only\n');
-  if (handlerError) process.stdout.write(`  (import failed: ${handlerError})\n`);
+  if (handlers.size) {
+    process.stdout.write(`  api handlers loaded -> ${[...handlers.keys()].map((n) => `/api/${n}`).join(', ')}\n`);
+  } else {
+    process.stdout.write('  no api handlers — static only\n');
+  }
+  for (const err of handlerErrors) process.stdout.write(`  (import failed: ${err})\n`);
+  if (envCounts) {
+    const rel = path.relative(ROOT, args.envFile) || args.envFile;
+    process.stdout.write(`  env: ${envCounts.loaded} variables from ${rel}`
+      + `${envCounts.kept ? `, ${envCounts.kept} already set in the shell (kept)` : ''}`
+      + `${envCounts.skipped ? `, ${envCounts.skipped} line(s) skipped (not KEY=VALUE)` : ''}`
+      + ' — values never printed\n');
+  } else {
+    process.stdout.write(`  env: no ${path.relative(ROOT, args.envFile) || args.envFile} (functions see the shell environment only)\n`);
+  }
   if (args.mock) {
     process.stdout.write(
       `  mock provider: ${args.mock} (BOTH provider base URLs point at ${MOCK_ROUTE})\n`);

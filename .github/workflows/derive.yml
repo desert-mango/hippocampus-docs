@@ -1,0 +1,86 @@
+# derive — regenerate and commit the derived data after every push to main.
+#
+# Derived data = files that are a pure function of the content: search/site.json,
+# search/manifest.json, data/graph/{wiki,summaries,xref-terms}.json and, when its
+# inputs changed, data/graph/contributors.json. Pull requests never commit them
+# (the CI `check` job regenerates them in its workspace instead); this workflow
+# commits them on main, as github-actions[bot], right after the merge.
+#
+# Why the GITHUB_TOKEN and not a secret: a push made with GITHUB_TOKEN does not
+# start new workflow runs, so the bot commit cannot trigger this workflow again,
+# and no stored secret is needed. The job asks for contents: write itself; the
+# repository default token permission stays read-only. The actor guard below is
+# a second lock on the same door.
+#
+# The job runs the offline gate before pushing and pushes nothing when it is
+# red: a red gate is content to fix, never something to push past.
+name: derive
+
+on:
+  push:
+    branches: [main]
+
+# One run at a time on main; a newer push waits for the running one.
+concurrency: derive-main
+
+permissions:
+  contents: read
+
+jobs:
+  derive:
+    name: derive
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 — resolved via gh api repos/actions/checkout/git/ref/tags/v7 on 2026-09-03
+        with:
+          fetch-depth: 2
+
+      - name: Regenerate, check, commit and push the derived data
+        env:
+          # build_contributors.py calls `gh api` for public contributor counts.
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        # derive.py resolves BEFORE itself: a multi-commit push or a new branch
+        # (all-zeros sha) may leave it outside this shallow checkout, and then it
+        # fetches it or treats the contributor inputs as changed.
+        #
+        # On a non-fast-forward rejection (main moved while this ran) the local
+        # bot commit is dropped, the job moves to the new tip and regenerates
+        # from there — derived data is a function of the tree, so rebuilding it
+        # is always correct, and it cannot hit a rebase conflict in a generated
+        # file. At most 3 attempts.
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            echo "::group::attempt $attempt: derive"
+            python3 tools/derive.py --contributors-if-changed "$BEFORE"
+            echo "::endgroup::"
+            python3 tools/check.py
+            if [ -z "$(git status --porcelain search/ data/graph/)" ]; then
+              echo "derive: nothing to commit"
+              exit 0
+            fi
+            short=$(git rev-parse --short HEAD)
+            git add -A search/ data/graph/
+            git commit -q -m "derive: regenerate derived data after $short"
+            if out=$(git push origin HEAD:main 2>&1); then
+              echo "$out"
+              exit 0
+            fi
+            echo "$out"
+            # Only a moved main is retried; anything else (403, network) fails now.
+            if ! grep -qE 'non-fast-forward|fetch first|\[rejected\]' <<<"$out"; then
+              echo "::error title=derive::push refused (not a moved main) — see the lines above"
+              exit 1
+            fi
+            echo "push rejected (main moved); regenerating on the new tip"
+            git fetch --quiet --depth=2 origin main
+            git reset --quiet --hard origin/main
+          done
+          echo "::error title=derive::push still rejected after 3 attempts"
+          exit 1

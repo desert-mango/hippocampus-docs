@@ -17,7 +17,7 @@ Make sure to adjust the `vehicle_name` and `camera_name` as you need.
 The checkerboard settings are set to match the checkerboard at MuM. If you are using a different pattern, make sure to adjust this as well via launch arguments.
 
 
-The ROS camera calibration tool should open in a seperate window.
+The ROS camera calibration tool should open in a separate window.
 
 
 Try to move the checkerboard so that all categories on the right side turn green. Note: the "size" bar only fills up to the middle. There is no benefit of including samples with the checkerboard far away.

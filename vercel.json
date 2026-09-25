@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": null,
+  "buildCommand": "python3 --version && PYTHONDONTWRITEBYTECODE=1 python3 -B tools/check.py",
   "outputDirectory": ".",
+  "git": {
+    "deploymentEnabled": {
+      "cms/**": false
+    }
+  },
   "functions": {
     "api/librarian.js": {
       "includeFiles": "{data/graph,search}/**",

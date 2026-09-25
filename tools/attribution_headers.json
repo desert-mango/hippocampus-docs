@@ -1,0 +1,646 @@
+{
+  "candidate_extensions": [
+    ".bash",
+    ".c",
+    ".cc",
+    ".cjs",
+    ".cpp",
+    ".cxx",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hxx",
+    ".ino",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".py",
+    ".sh",
+    ".ts",
+    ".tsx",
+    ".zsh"
+  ],
+  "canonical_project_url": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+  "files": {
+    "api/auth.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "baa82b58a7bca585f53cf0534a9e068611d59bdacd25e25faac73bef3d36d04f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Exchange a GitHub App sign-in code for a user access token without exposing the secret."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "api/librarian.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "93852dcb5909d4e537bf6a2bcdecbd7c5670cf38d9f9c87bfcfff4f6857941b4",
+        "commit": "6fe2e5608792297ab3e634dad96a947f96bfa07f"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "5 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Answer documentation queries through a bounded serverless search of the site's graphs."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "api/media.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d1560f3432ad81f4adea35af2e31bd2e4f59cde446fadb6853f4994910a9d3d6",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Cloudinary gateway for the CMS: sign uploads, list, and guarded delete/rename under hippocampus-docs/."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/app.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "1abbd9c8f853f5c09687cb8e87bbfe70cd6c99a95df219f8697f05cb7ef4270a",
+        "commit": "30ba7913e57afa32b1d9e713b0716d9c6ddbe911"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Route and render the documentation site's pages from JSON registries and Markdown."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/cms-callback.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e42cb27681a4d5ba2d4fbf63bb7355466910f771078d1005171dc09c70652e55",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Hand the GitHub sign-in code from the popup to the CMS window that opened it."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/cms-core.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "64b784ae359cad15ddbf3b2e8eb6536bdbb2dbda8df95e8384652a1e0e0ca92c",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "22 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "js/cms.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "4835710751a3b34ec9418b95ddc57ac1ae0e97aea5ba3e4a6e448ea2dd380ad1",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "22 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "js/graph.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "fcf9fdc6ea8886ff0a572a5a51563f968f3d069d47f2377f3db4e774cfed3dad",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Link related page terms and display graph previews and project contributors."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/marked.min.js": {
+      "classification": "excluded",
+      "evidence": {
+        "baseline_sha256": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
+      },
+      "reason": "Vendored Marked 12.0.2 MIT; no first-party attribution header is permitted."
+    },
+    "js/sanitize.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d95654d8976cf3347bb723cee74c7c3461ce3f417fdf2ec1442be038e8e48656",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Allowlist-sanitize the HTML that Markdown renders to, on the live site and in CMS previews."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U4); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "js/search.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e84b92ce539dd2631b3ab9fb5f3805dfce1c5d7a2447c073a67748f117d774a1",
+        "commit": "d50b2de3e20e6a493356e67205758a58d4ae5bdc"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Rank indexed documentation results and coordinate optional librarian answers."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/source.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d23a015bc090c360de2714ff0aedd9ff2951e2540f92f5266bf0976ea64215a0",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Fetch site content same-origin, or through the CMS preview bridge inside a preview frame."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U4); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/bench_librarian.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "4ef5b6cfc2d29a24b5bad528b676804f120bd4ae609ba7d4f08fd24519e9b62c",
+        "commit": "4efc6041b6bc0a99736b703bf824fd05b8ec4014"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "5 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Measure rendered librarian search answers and request latency over HTTP."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/build_contributors.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "b8b84b07292950f70defd5900e1fdb5bff84f94c25d12b3d638373adc1409c2f",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Project public GitHub contribution counts into privacy-filtered project summaries."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/build_repo_graphs.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ecf443eeff39eab567701ffdb3edd6bc8fb7bee8fc028b46fb2cd38404585040",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Build compact semantic graph shards from the organization's non-fork repositories."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/build_search_index.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "b9f39a73e4d1b2d382c9c966d3f642811aedf3c5c5d7aab94115eb060c11db0c",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Build documentation, code, fork, and CAD search shards for browser queries."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/build_wiki_graph.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "2c63ef3c63985c5e868c90cbac53ab4f38f6d2b84a6921233c2952611c32ecbc",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Build page and repository graph nodes, summaries, and cross-reference terms."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/check.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "042ca53947fe80d19de195e6f998f96544119df601c1cc928d1671791e5eb46f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Validate site content and dispatch the deterministic attribution-header check."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/check_attribution_headers.py": {
+      "classification": "included",
+      "evidence": {
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "17 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Reconcile tracked code candidates and validate their approved attribution headers."
+      },
+      "reason": "First-party deterministic attribution inventory checker added in this change."
+    },
+    "tools/check_urls.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ac86eef595ecf090d42fbe1afa1fc4ba768bf0e05df31573c1c4d931e23e4361",
+        "commit": "0e8150bd8e1b4899adc4179f7b6bc74cff0c2daa"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Check referenced image URLs and public people-card links for liveness."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/derive.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "b5d9c928deef2bef0d1a72ba5db58db92ad7689933fdb3db7e994ceb0563f923",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Regenerate the derived data (wiki graph, site search shard, contributors) in one run."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/dev_site.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e332cf2528057262ec1a65f6642dcc91cba91b7ae2edc63fa8051df5f9ab0bb5",
+        "commit": "f955b129412fe22a3cf2468ccc1f9af8ef57108e"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Serve static pages and every api/ function locally, with deterministic librarian mocks."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/rst_convert.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ef0133e4f1217249792247e5144e0aa6403c93c4073096ae3408a10768ddc891",
+        "commit": "3a2f1244715c79bbca2a40026ab0e40128ec72c0"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Convert the earlier Sphinx documentation into the site's Markdown and setup registry."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/serve.sh": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d1f9bbc90045f06f06d1e2b4965e748c4da0b2bc8572fa7b66ec521f2759b7ef",
+        "commit": "b40ade490e13cc07eaf51e427319ecdc205874ab"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "28 August 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Serve the static documentation site locally for browser preview."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_attribution_headers.py": {
+      "classification": "included",
+      "evidence": {
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "17 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test attribution inventory reconciliation and exact header validation failures."
+      },
+      "reason": "First-party focused checker tests added in this change."
+    },
+    "tools/tests/test_auth_handler.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "eb796f6f8186dae20d1ab2a0f8ba9d0befac5afbf6a7e5701be27b6c9a056c00",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the GitHub sign-in code exchange, its callback page, and dev_site's api routing."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_build_contributors.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e9a9b680cd84f7e0c790963819ef5c54dae44557f89dc9e0c3043b19dd835399",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test contributor aggregation, privacy filtering, roster matching, and input failures."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_build_repo_graphs.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "24252a74d3e4ddeef091afe673bd8bfe695932ea93ba72ca2d31dbc49da09b0b",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test repository graph condensation, resolution, size limits, and index construction."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_build_wiki_graph.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "47edf10079b26fe204aaa8094907571db4ddb63786c3bc1d49cd8a0d971a5a94",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test wiki graph construction and overlays against isolated fixture sites."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_check_content_safety.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "67172813c3f7e1c8f074a3d7b44598bd90bc98199f5d1a02f4c19a917cb30c3f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the content-safety, manifest, CMS-shell and authored-overlay rules of the site gate."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_check_graph.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "30beff58712377ba9d3bf5cfb5a66128a4078d6c5e6d9ec2cbc031c68a7085f9",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test graph parity and contributor validation in the site quality gate."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_cms_core.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c06527838a5e7693bd7c370e8ae849bde89e2f4296790f754d06486c3568a175",
+        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_cms_editor.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d589ee6be082ecdcc2c9fd738c45ac24446ea4b975fbda319ec907dbd6cf0e3d",
+        "commit": "b9d7cbefbba0e7bdf10186d2c294dc9e29895e88"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS editor: page tree, raw-JSON registry guards, drafts, snippets, live preview, Propose."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U7b); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_cms_media.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "2c77855c75342de500b8af357edbb95eee652507a3061962558e7dd4e45619f5",
+        "commit": "05d1e131b8f45d86437ce42744ffaa0815332ae0"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "22 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the CMS Media tab: signed uploads, the manifest entry, duplicates, the in-use guard, image insertion."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U9); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_derive.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "366cc810ea4118135a87f1deb55398e948fa07b28a49eb0d158563eec42be9f5",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test derived-data regeneration order, filters, failure pass-through, and CI annotations."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_graph_ui.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "a56f722028cc693436fc59416b7296bddbdfc9f4440288c4ec29a82126ff3e71",
+        "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "3 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test semantic graph link matching, previews, routes, and contributor helpers."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_home_hero.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "0a2de771c659af2b6e61d6f30623a4ad4f675f8c1ad2977f8f565fdb64df231b"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "23 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the home hero's pure helpers — example queries, hit paths, status line, home route."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_librarian_handler.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "6a010969a779248238b2a5260e1058c59fb8399c1bab387205c9814eeb65359d",
+        "commit": "6fe2e5608792297ab3e634dad96a947f96bfa07f"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "5 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test serverless librarian request handling, provider calls, and safe failure responses."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_media_handler.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "410559635f8951b5834b77fb9c3c0bcb07900a9f4bb8b5cab256096dccfae02a",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the Cloudinary gateway: caller check, signing, listing, guarded delete and rename."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_preview_bridge.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "709289cd8c3b9051a543c0f15400cf27a4f5d9cd308ddb7a0d52fc9bfe708d04",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the content-source seam and the CMS preview bridge client in js/source.js."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U4); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_sanitize.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "8c24bb265faed08b08e3e43b904e48a6f9c0223cfbf60f5c48fbf580fa954a00",
+        "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the allowlist HTML sanitizer that every rendered Markdown page passes through."
+      },
+      "reason": "First-party site code or test written for the CMS v2 build (unit U4); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_search_routing.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "8155527dccfbb13588fc34944346e80359b85ea285854f386f46e7ece3fe0c6f",
+        "commit": "30ba7913e57afa32b1d9e713b0716d9c6ddbe911"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "5 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test librarian routing and preserve the local search ranking contract."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    }
+  },
+  "schema_version": 1
+}

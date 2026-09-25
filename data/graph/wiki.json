@@ -2,7 +2,7 @@
  "generated": "run tools/build_wiki_graph.py to regenerate",
  "note": "Index nodes (#/, #/projects, #/tools) are landing views, not content pages: they are EXCLUDED from the page-kind parity count — the same rule the search index uses (it indexes 90 pages, not landing views). Edges: 'links-to' is an explicit #/ link, 'member' a project's repository, 'mentions' a word-boundary name match in prose (code stripped; terms that spray — stoplisted, vetoed, or matching more than 15 pages — are muted), 'related' a hand-authored edge from data/graph/edges-authored.json.",
  "counts": {
-  "pages": 90,
+  "pages": 92,
   "index": 3,
   "repos": 94,
   "edges": {
@@ -27,7 +27,7 @@
    "kind": "index",
    "title": "Home",
    "route": "#/",
-   "summary": "The lab's home for getting robots running: setup guides, every project in one place, searchable code and CAD, and the tools our AI agents use."
+   "summary": "One box over 71 setup pages, 17 projects, 94 repositories' classes and functions, and the CAD part list. Ask in plain words or type a symbol name."
   },
   {
    "id": "index:projects",
@@ -85,7 +85,7 @@
    "title": "Documentation & site",
    "route": "#/projects/docs-and-site",
    "where": "Project",
-   "summary": "The lab's documentation about itself: the current Sphinx docs site, the org website, and\nthe org profile.",
+   "summary": "The lab's public reference: setup guides, a map of every organization repository,\nin-browser search over documentation and code, and the tools that keep those views in\nstep. The site is served directly from committed fil",
    "file": "content/projects/docs-and-site.md"
   },
   {
@@ -114,6 +114,15 @@
    "where": "Project",
    "summary": "The systems around the water that every experiment leans on: Qualisys motion capture for\nmillimeter ground truth, the gantry that moves equipment over the tank, and the physical\nbutton boxes wired into the safety and con",
    "file": "content/projects/lab-infrastructure.md"
+  },
+  {
+   "id": "projects/learning-to-swim",
+   "kind": "project",
+   "title": "Learning to Swim replication",
+   "route": "#/projects/learning-to-swim",
+   "where": "Project",
+   "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
+   "file": "content/projects/learning-to-swim.md"
   },
   {
    "id": "projects/legacy-ros1",
@@ -168,6 +177,15 @@
    "where": "Project",
    "summary": "The lab's teaching side: the **Formulas and Vehicles** course, where students program\nunderwater robots, and the Python onramp that gets them ready.",
    "file": "content/projects/teaching.md"
+  },
+  {
+   "id": "projects/underwater-localization",
+   "kind": "project",
+   "title": "Underwater localization & temperature exploration",
+   "route": "#/projects/underwater-localization",
+   "where": "Project",
+   "summary": "A small underwater robot in a water tank, and the code that works out where it is. The robot\ncompares what its sensors read with a stored plan of the tank. Anything the stored plan cannot\nexplain goes into a separate lay",
+   "file": "content/projects/underwater-localization.md"
   },
   {
    "id": "projects/uvms",
@@ -1633,7 +1651,7 @@
    "title": "Setup",
    "route": "#/setup/start/index",
    "where": "Setup · Start here",
-   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md` until the org cut-over",
+   "summary": "This section gets you from a blank machine to a running robot or simulation. It replaces\nthe old Sphinx docs site page for page — the parity table\nlives in this repository at `docs/setup-parity.md`.",
    "file": "content/setup/start/index.md"
   },
   {
