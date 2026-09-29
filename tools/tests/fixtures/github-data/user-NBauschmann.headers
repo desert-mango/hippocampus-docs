@@ -1,0 +1,11 @@
+HTTP/2.0 200 OK
+Content-Type: application/json; charset=utf-8
+Etag: W/"cf6c1ca5a788c5f382dee2f71851fc2cc9e77267d94a12517cb58f7dfec497e7"
+Last-Modified: Thu, 24 Sep 2026 18:14:51 GMT
+X-Github-Api-Version-Selected: 2022-11-28
+X-Github-Media-Type: github.v3; format=json
+X-Ratelimit-Limit: 5000
+X-Ratelimit-Remaining: 4867
+X-Ratelimit-Reset: 1790675173
+X-Ratelimit-Resource: core
+X-Ratelimit-Used: 133

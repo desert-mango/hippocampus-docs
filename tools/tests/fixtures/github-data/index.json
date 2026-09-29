@@ -1,0 +1,392 @@
+{
+  "schema": 1,
+  "about": "Scrubbed raw GitHub REST responses; see README.md. Look a request up by method + path + query; 'source' is 'gh' (captured verbatim, then scrubbed) or 'hand-made' (derived from a captured body, see note).",
+  "base_url": "https://api.github.com",
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/orgs/HippoCampusRobotics/repos",
+      "query": {
+        "type": "public",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "org-repos.json",
+      "headers": "org-repos.headers",
+      "source": "gh",
+      "note": "all of the org's public repos: they fit on page 1, and a next page fails the capture"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "since": "2025-09-29T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "commits-docs.json",
+      "headers": "commits-docs.headers",
+      "source": "gh",
+      "note": "non-fork, the old docs repo, last 365 days; page 1 only by design"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/hippocampus_common/commits",
+      "query": {
+        "since": "2022-03-01T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "commits-hippocampus_common.json",
+      "headers": "commits-hippocampus_common.headers",
+      "source": "gh",
+      "note": "non-fork with author:null commits (since widened); page 1 only by design"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/mavros/commits",
+      "query": {
+        "since": "2020-01-01T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "commits-mavros.json",
+      "headers": "commits-mavros.headers",
+      "source": "gh",
+      "note": "a fork (since widened so it has commits); page 1 only by design"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/releases",
+      "query": {
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "releases-docs.json",
+      "headers": "releases-docs.headers",
+      "source": "gh",
+      "note": "empty release list"
+    },
+    {
+      "method": "GET",
+      "path": "/users/NBauschmann",
+      "query": {},
+      "status": 200,
+      "body": "user-NBauschmann.json",
+      "headers": "user-NBauschmann.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/users/lennartalff",
+      "query": {},
+      "status": 200,
+      "body": "user-lennartalff.json",
+      "headers": "user-lennartalff.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/users/DanielDuecker",
+      "query": {},
+      "status": 200,
+      "body": "user-DanielDuecker.json",
+      "headers": "user-DanielDuecker.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/users/FinnBreu",
+      "query": {},
+      "status": 200,
+      "body": "user-FinnBreu.json",
+      "headers": "user-FinnBreu.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/users/RHochdahl",
+      "query": {},
+      "status": 200,
+      "body": "user-RHochdahl.json",
+      "headers": "user-RHochdahl.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/users/timzarhansen",
+      "query": {},
+      "status": 200,
+      "body": "user-timzarhansen.json",
+      "headers": "user-timzarhansen.headers",
+      "source": "gh",
+      "note": "public profile; profile fields nulled"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "contents/raspberry_pi_setup/ubuntu_24.04_server_64bit.rst",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ubuntu-current.json",
+      "headers": "page-commits-ubuntu-current.headers",
+      "source": "gh",
+      "note": "Ubuntu 24.04 server page, current path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "raspberry_pi_setup/ubuntu_24.04_server_64bit.rst",
+        "until": "2025-03-11T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ubuntu-premove.json",
+      "headers": "page-commits-ubuntu-premove.headers",
+      "source": "gh",
+      "note": "Ubuntu 24.04 server page, pre-move path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "raspberry_pi_4b_setup/ubuntu_24.04_server_64bit.rst",
+        "until": "2025-03-11T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ubuntu-pre-restructure.json",
+      "headers": "page-commits-ubuntu-pre-restructure.headers",
+      "source": "gh",
+      "note": "Ubuntu page, folder before the restructure"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "contents/raspberry_pi_setup/ethernet.rst",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ethernet-current.json",
+      "headers": "page-commits-ethernet-current.headers",
+      "source": "gh",
+      "note": "Raspberry Pi ethernet page, current path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "raspberry_pi_setup/ethernet.rst",
+        "until": "2025-03-11T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ethernet-premove.json",
+      "headers": "page-commits-ethernet-premove.headers",
+      "source": "gh",
+      "note": "Raspberry Pi ethernet page, pre-move path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "raspberry_pi_4b_setup/ethernet.rst",
+        "until": "2025-03-11T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ethernet-pre-restructure.json",
+      "headers": "page-commits-ethernet-pre-restructure.headers",
+      "source": "gh",
+      "note": "ethernet page, folder before the restructure"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "contents/getting_started/ros_installation.rst",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ros-current.json",
+      "headers": "page-commits-ros-current.headers",
+      "source": "gh",
+      "note": "ROS installation page, current path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/HippoCampusRobotics/docs/commits",
+      "query": {
+        "path": "getting_started/ros_installation.rst",
+        "until": "2025-03-11T00:00:00Z",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "page-commits-ros-premove.json",
+      "headers": "page-commits-ros-premove.headers",
+      "source": "gh",
+      "note": "ROS installation page, pre-move path"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/pulls",
+      "query": {
+        "state": "all",
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "pulls-all.json",
+      "headers": "pulls-all.headers",
+      "source": "gh",
+      "note": "this repo's pull requests, every state"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/pulls/1",
+      "query": {},
+      "status": 200,
+      "body": "pull-1.json",
+      "headers": "pull-1.headers",
+      "source": "gh",
+      "note": "PR #1 (read-only)"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/pulls/1/files",
+      "query": {
+        "per_page": "100"
+      },
+      "status": 200,
+      "body": "pull-1-files.json",
+      "headers": "pull-1-files.headers",
+      "source": "gh",
+      "note": "PR #1's changed files"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64",
+      "query": {},
+      "status": 200,
+      "body": "compare-75f09dd...d0bdc64.json",
+      "headers": "compare-75f09dd...d0bdc64.headers",
+      "source": "gh",
+      "note": "PR #1 against its base"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/commits/d0bdc64/check-runs",
+      "query": {},
+      "status": 200,
+      "body": "check-runs-d0bdc64.json",
+      "headers": "check-runs-d0bdc64.headers",
+      "source": "gh",
+      "note": "check runs on PR #1's head"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/check-runs/108080269938/annotations",
+      "query": {},
+      "status": 200,
+      "body": "check-run-check-annotations.json",
+      "headers": "check-run-check-annotations.headers",
+      "source": "gh",
+      "note": "annotations of the 'check' run"
+    },
+    {
+      "method": "GET",
+      "path": "/user",
+      "query": {},
+      "status": 200,
+      "body": "user.json",
+      "headers": "user.headers",
+      "source": "gh",
+      "note": "the signed-in account; profile nulled, private-only fields removed"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs",
+      "query": {},
+      "status": 200,
+      "body": "repo-push.json",
+      "headers": "repo-push.headers",
+      "source": "gh",
+      "note": "the repo as the signed-in account sees it (permissions.push true)"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs",
+      "query": {},
+      "status": 200,
+      "body": "repo-readonly.json",
+      "headers": "repo-readonly.headers",
+      "source": "hand-made",
+      "note": "hand-edited copy of repo-push: admin/maintain/push/triage false"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/desert-mango/hippocampus-docs/git/ref/heads/main",
+      "query": {},
+      "status": 200,
+      "body": "ref-heads-main.json",
+      "headers": "ref-heads-main.headers",
+      "source": "gh",
+      "note": "main's head ref"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/HippoCampusRobotics/repos",
+      "query": {
+        "type": "public",
+        "per_page": "50"
+      },
+      "status": 200,
+      "body": "org-repos-per50-p1.json",
+      "headers": "org-repos-per50-p1.headers",
+      "source": "hand-made",
+      "note": "org-repos split in two; Link rel=next"
+    },
+    {
+      "method": "GET",
+      "path": "/orgs/HippoCampusRobotics/repos",
+      "query": {
+        "type": "public",
+        "per_page": "50",
+        "page": "2"
+      },
+      "status": 200,
+      "body": "org-repos-per50-p2.json",
+      "headers": "org-repos-per50-p2.headers",
+      "source": "hand-made",
+      "note": "second half; Link rel=prev/first, no next"
+    }
+  ],
+  "git_show": [
+    {
+      "rev": "d0bdc64",
+      "path": "content/setup/raspberry-pi/ubuntu-24-04-server.md",
+      "file": "page-ubuntu-24-04-server.at-d0bdc64.md",
+      "note": "git show"
+    },
+    {
+      "rev": "75f09dd",
+      "path": "content/setup/raspberry-pi/ubuntu-24-04-server.md",
+      "file": "page-ubuntu-24-04-server.at-merge-base.md",
+      "note": "git show"
+    },
+    {
+      "rev": "75f09dd",
+      "path": "content/setup/raspberry-pi/ubuntu-24-04-server.md",
+      "file": "page-ubuntu-24-04-server.at-75f09dd.md",
+      "note": "git show"
+    }
+  ]
+}

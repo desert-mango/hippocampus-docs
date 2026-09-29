@@ -373,6 +373,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/fixtures/github-data/capture.sh": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ad4b46cf5db8cdf8a10a06840e0a31b5b847ef62b719ecb696b2e3ed8318489c",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Capture scrubbed raw GitHub API fixtures for the GitHub-data tests and verify the scrub."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/tests/test_attribution_headers.py": {
       "classification": "included",
       "evidence": {

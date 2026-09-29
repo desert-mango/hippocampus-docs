@@ -1,0 +1,1748 @@
+{
+  "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64",
+  "html_url": "https://github.com/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64",
+  "permalink_url": "https://github.com/desert-mango/hippocampus-docs/compare/desert-mango:75f09dd...desert-mango:d0bdc64",
+  "diff_url": "https://github.com/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64.diff",
+  "patch_url": "https://github.com/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64.patch",
+  "base_commit": {
+    "sha": "75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "node_id": "C_kwDOUHAXv9oAKDc1ZjA5ZGQwYjc2MTI3MmYzZmJhMGE5MjhjNWYyZWM3MjM5MzEwMzM",
+    "commit": {
+      "author": {
+        "name": "Desert Mango",
+        "email": "desert-mango-robotics@example.invalid",
+        "date": "2026-09-23T09:46:07Z"
+      },
+      "committer": {
+        "name": "Desert Mango",
+        "email": "desert-mango-robotics@example.invalid",
+        "date": "2026-09-23T09:46:07Z"
+      },
+      "message": "fix: fit the site header to phone widths\n\nThe header was laid out as one unbreakable row. .site-nav was a shrinkable\nflex item, so under pressure it gave way before the search box did: \"Agent\ntools\" broke onto a second line and stretched all four links into a 60px row\ninside a 56px header, and below 768px the rest ran off the right edge — 244px\nof horizontal overflow at 375.\n\nThe nav is now flex: none with nowrap labels, so the search box is the element\nthat yields, and below 768px the header wraps to two rows with the nav taking\nthe second one whole. That keeps all four labels intact and on one line down to\n320px; shortening \"Agent tools\" would have changed a primary nav label instead.\nThe TUHH wordmark is the one deliberate casualty on phones and returns at 768.\n\n--hc-search-max is a new token for the same reason --hc-sweep is one: the rule\nthat consumes it is the last #search-form rule in the file, so a media query\nearlier in the file cannot outrank it. --header-h is redefined with the phone\nblock because h1-h4 scroll-margin-top is measured from it.\n\nTwo adjacent overflow fixes on the same widths, both pre-existing and both one\nline: .card-grid's 19rem track floor is wider than a 320px viewport (3px), and\nsearch-result code paths had no break opportunity (274px).\n\nVerified at 320/375/390/768 across eight routes and both themes: zero\nhorizontal overflow, nav on one line, toggle in view, anchors landing clear of\nthe header. The header search box still sweeps open leaving #/ and shut\nreturning to it, a cold deep link still paints it full size without animating,\nand a zeroed --hc-sweep still collapses both to instant. check.py all green;\n423 node tests and 341 python tests pass.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+      "tree": {
+        "sha": "e09aadba93d90c4f4417a13baf8be8e89f2494f0",
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/e09aadba93d90c4f4417a13baf8be8e89f2494f0"
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/75f09dd0b761272f3fba0a928c5f2ec723931033",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null
+      }
+    },
+    "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/75f09dd0b761272f3fba0a928c5f2ec723931033/comments",
+    "author": {
+      "login": "desert-mango-robotics",
+      "id": 323077863,
+      "node_id": "U_kgDOE0HG5w",
+      "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/desert-mango-robotics",
+      "html_url": "https://github.com/desert-mango-robotics",
+      "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+      "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+      "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+      "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+      "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+      "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "desert-mango-robotics",
+      "id": 323077863,
+      "node_id": "U_kgDOE0HG5w",
+      "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/desert-mango-robotics",
+      "html_url": "https://github.com/desert-mango-robotics",
+      "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+      "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+      "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+      "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+      "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+      "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "33aa73b57f9993dae445a61bf90de027af48a399",
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/33aa73b57f9993dae445a61bf90de027af48a399",
+        "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/33aa73b57f9993dae445a61bf90de027af48a399"
+      }
+    ]
+  },
+  "merge_base_commit": {
+    "sha": "75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "node_id": "C_kwDOUHAXv9oAKDc1ZjA5ZGQwYjc2MTI3MmYzZmJhMGE5MjhjNWYyZWM3MjM5MzEwMzM",
+    "commit": {
+      "author": {
+        "name": "Desert Mango",
+        "email": "desert-mango-robotics@example.invalid",
+        "date": "2026-09-23T09:46:07Z"
+      },
+      "committer": {
+        "name": "Desert Mango",
+        "email": "desert-mango-robotics@example.invalid",
+        "date": "2026-09-23T09:46:07Z"
+      },
+      "message": "fix: fit the site header to phone widths\n\nThe header was laid out as one unbreakable row. .site-nav was a shrinkable\nflex item, so under pressure it gave way before the search box did: \"Agent\ntools\" broke onto a second line and stretched all four links into a 60px row\ninside a 56px header, and below 768px the rest ran off the right edge — 244px\nof horizontal overflow at 375.\n\nThe nav is now flex: none with nowrap labels, so the search box is the element\nthat yields, and below 768px the header wraps to two rows with the nav taking\nthe second one whole. That keeps all four labels intact and on one line down to\n320px; shortening \"Agent tools\" would have changed a primary nav label instead.\nThe TUHH wordmark is the one deliberate casualty on phones and returns at 768.\n\n--hc-search-max is a new token for the same reason --hc-sweep is one: the rule\nthat consumes it is the last #search-form rule in the file, so a media query\nearlier in the file cannot outrank it. --header-h is redefined with the phone\nblock because h1-h4 scroll-margin-top is measured from it.\n\nTwo adjacent overflow fixes on the same widths, both pre-existing and both one\nline: .card-grid's 19rem track floor is wider than a 320px viewport (3px), and\nsearch-result code paths had no break opportunity (274px).\n\nVerified at 320/375/390/768 across eight routes and both themes: zero\nhorizontal overflow, nav on one line, toggle in view, anchors landing clear of\nthe header. The header search box still sweeps open leaving #/ and shut\nreturning to it, a cold deep link still paints it full size without animating,\nand a zeroed --hc-sweep still collapses both to instant. check.py all green;\n423 node tests and 341 python tests pass.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+      "tree": {
+        "sha": "e09aadba93d90c4f4417a13baf8be8e89f2494f0",
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/e09aadba93d90c4f4417a13baf8be8e89f2494f0"
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/75f09dd0b761272f3fba0a928c5f2ec723931033",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null
+      }
+    },
+    "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/75f09dd0b761272f3fba0a928c5f2ec723931033",
+    "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/75f09dd0b761272f3fba0a928c5f2ec723931033/comments",
+    "author": {
+      "login": "desert-mango-robotics",
+      "id": 323077863,
+      "node_id": "U_kgDOE0HG5w",
+      "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/desert-mango-robotics",
+      "html_url": "https://github.com/desert-mango-robotics",
+      "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+      "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+      "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+      "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+      "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+      "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "desert-mango-robotics",
+      "id": 323077863,
+      "node_id": "U_kgDOE0HG5w",
+      "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/desert-mango-robotics",
+      "html_url": "https://github.com/desert-mango-robotics",
+      "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+      "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+      "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+      "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+      "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+      "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "33aa73b57f9993dae445a61bf90de027af48a399",
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/33aa73b57f9993dae445a61bf90de027af48a399",
+        "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/33aa73b57f9993dae445a61bf90de027af48a399"
+      }
+    ]
+  },
+  "status": "ahead",
+  "ahead_by": 18,
+  "behind_by": 0,
+  "total_commits": 18,
+  "commits": [
+    {
+      "sha": "0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+      "node_id": "C_kwDOUHAXv9oAKDBkNmNjZDI4MWE2YzE1Y2FhNWFjODIwZWEwODU5MDI2MTVmYjM1ZjA",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:34Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:34Z"
+        },
+        "message": "setup(raspberry-pi): complete the I2C boot config and say which bus is which\n\nSETUP-PARITY R10 (register item 3.6, first half). The page gave only\ndtoverlay=i2c4,pins_6_7, which yields /dev/i2c-4 alone.\n\nEvidence:\n- 02 (lab robot Pi, manifest captured 2026-08-17): config.txt lines 11, 13, 66\n  carry dtparam=i2c_arm=on, dtoverlay=i2c6,pins_22_23, dtoverlay=i2c4,pins_6_7;\n  i2c-buses.txt lists i2c-1, i2c-4, i2c-6, i2c-20, i2c-21.\n- 03 (live probe 2026-08-19 15:25 CEST): same three lines at the same line\n  numbers; ls /dev/i2c-* returns all five buses after a power cycle.\n- Pin mapping for i2c4 matches the UUV pinout SVG (GPIO6 SDA4 / GPIO7 SCL4).\n- 01: to be confirmed after its re-image (hippo-main-01 parity run 2026-09-16).\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "6fc7c9a8358944afa52d084a0e7231b032a3097f",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/6fc7c9a8358944afa52d084a0e7231b032a3097f"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/0d6ccd281a6c15caa5ac820ea085902615fb35f0/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "b114a20a39dd83696b0774fff04adce37c3dbd70",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/b114a20a39dd83696b0774fff04adce37c3dbd70",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/b114a20a39dd83696b0774fff04adce37c3dbd70"
+        }
+      ]
+    },
+    {
+      "sha": "b658ad1125855f7d20dc22ee96ced35bd3301655",
+      "node_id": "C_kwDOUHAXv9oAKGI2NThhZDExMjU4NTVmN2QyMGRjMjJlZTk2Y2VkMzViZDMzMDE2NTU",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:41Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:41Z"
+        },
+        "message": "setup(raspberry-pi): add dtoverlay=uart3 to the UART page\n\nSETUP-PARITY R11 (register item 3.6, second half). The UART page listed\nuart2, uart4, uart5, while the Ubuntu 24.04 page lists uart2-uart5. The two\npages contradicted each other; the real machines follow the Ubuntu page.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): config.txt lines 67-70 are\n  dtoverlay=uart2, uart3, uart4, uart5.\n- 03 (live probe 2026-08-19 15:25 CEST): config.txt lines 67-70 identical.\n- The ttyAMA numbering depends on which UARTs are enabled (the page's own\n  note), so the missing uart3 also shifted the device numbers.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "ed9648e139f05c286b739e27e9cfbcff7ebc279b",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/ed9648e139f05c286b739e27e9cfbcff7ebc279b"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/b658ad1125855f7d20dc22ee96ced35bd3301655",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/b658ad1125855f7d20dc22ee96ced35bd3301655",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/b658ad1125855f7d20dc22ee96ced35bd3301655",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/b658ad1125855f7d20dc22ee96ced35bd3301655/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/0d6ccd281a6c15caa5ac820ea085902615fb35f0",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/0d6ccd281a6c15caa5ac820ea085902615fb35f0"
+        }
+      ]
+    },
+    {
+      "sha": "64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+      "node_id": "C_kwDOUHAXv9oAKDY0YTNhMDliYTczZGI4MmY2YTIwZmNkOGFjYThjOWNhYjdiZDA0Nzg",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:46Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:46Z"
+        },
+        "message": "setup(raspberry-pi): expected output shows fcu_data, not fcu_tele\n\nSETUP-PARITY R14 (register item 3.7, first half). Both pages print\n/dev/fcu_tele in the expected `ls /dev/fcu*` output, but the 50-serial.rules\nthe UART page gives creates fcu_data for uart5, and the PX4 page then uses\n`MicroXRCEAgent serial --dev /dev/fcu_data`. No rule anywhere creates fcu_tele.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): udev-rules.d/50-serial.rules line 6\n  creates SYMLINK+=\"fcu_data\"; byte-identical to the rule on the UART page.\n- 03 (2026-08-19 15:28 CEST): the same rule installed (sha256 564a84bc...);\n  fcu_tele appears nowhere on the machine.\nOnly the name changed. The ttyAMA numbers stay as printed; the page's note\nalready says they depend on which UARTs are enabled.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "d930ffa2142b5cc1c6c4cd99a7f3be40f737343f",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/d930ffa2142b5cc1c6c4cd99a7f3be40f737343f"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "b658ad1125855f7d20dc22ee96ced35bd3301655",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/b658ad1125855f7d20dc22ee96ced35bd3301655",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/b658ad1125855f7d20dc22ee96ced35bd3301655"
+        }
+      ]
+    },
+    {
+      "sha": "4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+      "node_id": "C_kwDOUHAXv9oAKDRiNWM2YjZmOWNkYzk0N2FlNGMyNjc4NTgzZDk1NTJkNjJjMDc4OTM",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:53Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:41:53Z"
+        },
+        "message": "setup(getting-started): point mavlink-router at /dev/fcu_usb\n\nSETUP-PARITY R48 (register item 3.7, second half). The example main.conf\nused Device =/dev/ttyACM0, while the USB Configuration page creates the\nstable name /dev/fcu_usb for exactly this device, and the FCU firmware page\nsays to choose /dev/fcu_usb. ttyACM0 breaks silently as soon as a second\nUSB-serial device is attached.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): udev-rules.d/50-fcu.rules line 3\n  (vendor 26ac, product 0012) creates SYMLINK+=\"fcu_usb\".\n- 03 (2026-08-19 15:28 CEST): the same rule installed, sha256 e7ea8762...\n- Not verified: 02's own main.conf was never captured, and no FCU was\n  attached to 03, so the running router was not exercised.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "5aa43b859ac642b7e71375f5417ac7acb3ba71ed",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/5aa43b859ac642b7e71375f5417ac7acb3ba71ed"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/4b5c6b6f9cdc947ae4c2678583d9552d62c07893/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/64a3a09ba73db82f6a20fcd8aca8c9cab7bd0478"
+        }
+      ]
+    },
+    {
+      "sha": "15b36e9526a49657db619e21c65a837f6f179935",
+      "node_id": "C_kwDOUHAXv9oAKDE1YjM2ZTk1MjZhNDk2NTdkYjYxOWUyMWM2NWE4MzdmNmYxNzk5MzU",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:10Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:10Z"
+        },
+        "message": "setup(raspberry-pi): install chrony at first boot and explain the clock trap\n\nSETUP-PARITY R29 (register item 3.3). The Pi setup path never mentions time,\nalthough a Pi has no RTC and a wrong first-boot clock makes apt refuse every\nrepository. The chrony page existed but nothing on the Pi path linked to it.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): chrony 4.5-1ubuntu4.2 installed and\n  enabled (dpkg-versions.tsv, systemd-enabled.txt).\n- 03 (2026-08-19 15:26 CEST): chrony 4.5-1ubuntu4.2, clock correct.\n- The failure really happened on 03's first boot (2026-08-17, MIGRATION.md\n  §4a Trap 1): clock read 2026-02-10, apt exited 100, cloud-init ended with\n  status: error and installed none of its packages; re-running after the\n  clock synced worked unchanged.\n- 03 (2026-08-19) and 01 (2026-09-16, still Raspbian): both report no RTC.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "ec6c666f2ea4b1b71de734adbeccd3e771567d9e",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/ec6c666f2ea4b1b71de734adbeccd3e771567d9e"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/15b36e9526a49657db619e21c65a837f6f179935",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/15b36e9526a49657db619e21c65a837f6f179935",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/15b36e9526a49657db619e21c65a837f6f179935",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/15b36e9526a49657db619e21c65a837f6f179935/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/4b5c6b6f9cdc947ae4c2678583d9552d62c07893",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/4b5c6b6f9cdc947ae4c2678583d9552d62c07893"
+        }
+      ]
+    },
+    {
+      "sha": "04d689ed9f214e7554ff757e09416ac3d08e2848",
+      "node_id": "C_kwDOUHAXv9oAKDA0ZDY4OWVkOWYyMTRlNzU1NGZmNzU3ZTA5NDE2YWMzZDA4ZTI4NDg",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:17Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:17Z"
+        },
+        "message": "setup(raspberry-pi): document the unattended-upgrades dpkg-lock wait\n\nSETUP-PARITY R31 (register item 3.4). No page mentioned unattended-upgrades,\nthe dpkg frontend lock, or apt's lock timeout. Killing the upgrade to get the\nlock back is the one mistake here that costs a re-image.\n\nEvidence:\n- 03 first boot (2026-08-17, MIGRATION.md §4a Trap 2): unattended-upgrade ran\n  about 120 packages including the kernel for over 30 minutes and held\n  /var/lib/dpkg/lock-frontend; pgrep unattended-upgrade returned nothing.\n- 03 /var/log/apt/history.log (read 2026-08-19): 68 consecutive\n  /usr/bin/unattended-upgrade transactions between 14:25 and 14:57 on 08-17.\n- 03 (2026-08-19 15:26-15:29 CEST): every apt call used\n  -o DPkg::Lock::Timeout=3600 and completed; dpkg --audit stayed empty.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "af4bf18d9300e1e05dc79b80220c8446c40610bb",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/af4bf18d9300e1e05dc79b80220c8446c40610bb"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/04d689ed9f214e7554ff757e09416ac3d08e2848",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/04d689ed9f214e7554ff757e09416ac3d08e2848",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/04d689ed9f214e7554ff757e09416ac3d08e2848",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/04d689ed9f214e7554ff757e09416ac3d08e2848/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "15b36e9526a49657db619e21c65a837f6f179935",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/15b36e9526a49657db619e21c65a837f6f179935",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/15b36e9526a49657db619e21c65a837f6f179935"
+        }
+      ]
+    },
+    {
+      "sha": "46ab8015be77085d8df222665a26861b77068486",
+      "node_id": "C_kwDOUHAXv9oAKDQ2YWI4MDE1YmU3NzA4NWQ4ZGYyMjI2NjVhMjY4NjFiNzcwNjg0ODY",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:36Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:36Z"
+        },
+        "message": "setup(getting-started): install the ROS 2 apt source with ros2-apt-source\n\nSETUP-PARITY R03 (register item 3.5). The page hand-rolled a ros2.list and\nfetched the key from rosdistro. The lab's robot Pis use the official\nros2-apt-source package instead, which owns both the key and a deb822\nros2.sources file.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): no ros2.list; ros2.sources is a symlink\n  to /usr/share/ros-apt-source/ros2.sources; ros2-apt-source 1.2.0~noble.\n- 03 (2026-08-19 15:25 CEST): same symlink, ros2-apt-source 1.2.0~noble,\n  no ros2.list (installed that way on 2026-08-17, MIGRATION.md Step 9).\n- 2026-09-16: the release lookup returns 1.3.0 and the resulting\n  ros2-apt-source_1.3.0.noble_all.deb URL answers HTTP 200.\n- 01: to be installed this way after its re-image and recorded in\n  HIPPO-01-SETUP.md.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "cd0bc31e139a18632335b500fcc064d450fca6cc",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/cd0bc31e139a18632335b500fcc064d450fca6cc"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/46ab8015be77085d8df222665a26861b77068486",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/46ab8015be77085d8df222665a26861b77068486",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/46ab8015be77085d8df222665a26861b77068486",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/46ab8015be77085d8df222665a26861b77068486/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "04d689ed9f214e7554ff757e09416ac3d08e2848",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/04d689ed9f214e7554ff757e09416ac3d08e2848",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/04d689ed9f214e7554ff757e09416ac3d08e2848"
+        }
+      ]
+    },
+    {
+      "sha": "be37c3c2963c763608b3d8d6253ccc1722559cf3",
+      "node_id": "C_kwDOUHAXv9oAKGJlMzdjM2MyOTYzYzc2MzYwOGIzZDhkNjI1M2NjYzE3MjI1NTljZjM",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:52Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:42:52Z"
+        },
+        "message": "setup(concepts): query the package list for the local architecture and refresh it\n\nSETUP-PARITY R04 and R05 (register item 3.8). The page hard-coded the amd64\nindex and printed a 20-entry list, while the live index serves 28 and the\nTip names meta-packages (hippo_full, hippo_robot) the printed list lacked.\nA Pi reader copying the command got the amd64 answer for an arm64 machine.\n\nEvidence (read live 2026-09-16 from repositories.hippocampus-robotics.net,\nRelease dated Fri, 29 Aug 2025 15:17:34 UTC):\n- binary-amd64/Packages: 28 packages (the list now printed).\n- binary-arm64/Packages: 27 packages; the only difference is\n  ros-jazzy-acoustic-msgs. binary-all: HTTP 404.\n- ros-jazzy-hippo-robot 1.0.3-0noble Depends includes ros-jazzy-acoustic-msgs\n  (R06); 03 (2026-08-19 15:27 CEST) proved it with apt-get -s install:\n  \"Depends: ros-jazzy-acoustic-msgs but it is not installable\".\n- 02 (manifest 2026-08-17) is aarch64 (hardware-and-os.txt line 14).\nAlso fixes the install example, which was missing `sudo apt install`.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "d634aa36796deb37984f605dea213e6f881685ca",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/d634aa36796deb37984f605dea213e6f881685ca"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/be37c3c2963c763608b3d8d6253ccc1722559cf3",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/be37c3c2963c763608b3d8d6253ccc1722559cf3",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/be37c3c2963c763608b3d8d6253ccc1722559cf3",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/be37c3c2963c763608b3d8d6253ccc1722559cf3/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "46ab8015be77085d8df222665a26861b77068486",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/46ab8015be77085d8df222665a26861b77068486",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/46ab8015be77085d8df222665a26861b77068486"
+        }
+      ]
+    },
+    {
+      "sha": "c5116216ac42379fddef3748c5daf8c20c46ee0c",
+      "node_id": "C_kwDOUHAXv9oAKGM1MTE2MjE2YWM0MjM3OWZkZGVmMzc0OGM1ZGFmOGMyMGM0NmVlMGM",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:10Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:10Z"
+        },
+        "message": "setup(raspberry-pi): replace the inert ifupdown Ethernet hook, marked untested\n\nSETUP-PARITY R32 (register item 3.9). The page's fix ran $ETHTOOL, a variable\nthat only ifupdown hooks receive. Ubuntu 24.04 Server, which the same section\ntells you to flash, uses netplan and systemd-networkd, so the hook never runs.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): ifupdown not installed\n  (dpkg-versions.tsv has no entry); networking is cloud-init netplan, eth0 DHCP.\n- 03 (2026-08-19 15:25 CEST): dpkg -l ifupdown -> \"un ifupdown <none>\";\n  /etc/network/if-pre-up.d/ exists but nothing executes it; the documented\n  hook file was never created.\nThe replacement calls ethtool directly (now, and from a oneshot unit at boot).\nIt is labelled untested: nobody has reproduced the lag it is meant to fix,\nand it was not run on 01 or 03 because it renegotiates the link the SSH\nsession depends on.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "45c43296549f429f1d8a64af7c18ef520f22d2a8",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/45c43296549f429f1d8a64af7c18ef520f22d2a8"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/c5116216ac42379fddef3748c5daf8c20c46ee0c",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c5116216ac42379fddef3748c5daf8c20c46ee0c",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/c5116216ac42379fddef3748c5daf8c20c46ee0c",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c5116216ac42379fddef3748c5daf8c20c46ee0c/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "be37c3c2963c763608b3d8d6253ccc1722559cf3",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/be37c3c2963c763608b3d8d6253ccc1722559cf3",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/be37c3c2963c763608b3d8d6253ccc1722559cf3"
+        }
+      ]
+    },
+    {
+      "sha": "c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+      "node_id": "C_kwDOUHAXv9oAKGMyNTgwM2NjZmY4ZDQ0MDdhZDJjYmE5ZjM4M2RhZjllYTMxZTk2YTU",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:19Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:19Z"
+        },
+        "message": "setup(raspberry-pi): document the wifi/Bluetooth disable overlays and the lock-out risk\n\nSETUP-PARITY R33 (register item 3.10, first part). No page mentioned\ndtoverlay=disable-wifi or disable-bt, which the lab's robot Pis carry. With\nboth, Ethernet is the only way in, so the warning belongs next to the lines.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): config.txt lines 41-43\n  \"# disable bluetooth and wifi\", dtoverlay=disable-wifi, dtoverlay=disable-bt;\n  line 30 enable_uart=1.\n- 03 (2026-08-19 15:25 CEST): config.txt lines 42-43 identical.\n- HANDOFF-REPORT.md item 7: the first post-flash outage on 03 was a dead\n  Ethernet cable that looked like a permanent loss of access.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "bf06d593f539b670c959bb1be491522981a7c24b",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/bf06d593f539b670c959bb1be491522981a7c24b"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c25803ccff8d4407ad2cba9f383daf9ea31e96a5/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "c5116216ac42379fddef3748c5daf8c20c46ee0c",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c5116216ac42379fddef3748c5daf8c20c46ee0c",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/c5116216ac42379fddef3748c5daf8c20c46ee0c"
+        }
+      ]
+    },
+    {
+      "sha": "e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+      "node_id": "C_kwDOUHAXv9oAKGU1MTIxMGY1Yzc2MzBmMWIyYmY3ZjdhNmQ4ZDNkOTkyYTQxMTM1Yzc",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:37Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:37Z"
+        },
+        "message": "setup(lab-cameras): install the iniVation and uhubctl udev rules\n\nSETUP-PARITY R35 (register item 3.10, second part). The event-camera page\nnever mentions a udev rule for either the camera or uhubctl, which is why its\nuhubctl commands need sudo. The lab's robot Pi carried both rules.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): udev-rules.d/65-inivation.rules (DVS/DAVIS\n  vendor/product rules, MODE 0666, GROUP video/plugdev) and\n  udev-rules.d/50-uhubctl.rules (\"for rootless operation on Linux for users in\n  group dialout\").\n- 03 (2026-08-19 15:28 CEST): both installed, sha256 65f0d7db... and\n  accc1651..., identical to 02's.\n- 2026-09-16 upstream: libcaer_driver's README says to copy\n  65-inivation.rules into /etc/udev/rules.d and add the user to video and\n  plugdev; mvp/uhubctl ships udev/rules.d/52-usb.rules, a newer revision of the\n  file 02 installed as 50-uhubctl.rules (same rules, DRIVER now \"hub|usb\").\nNot verified: rootless uhubctl on a lab Pi; stated as the rule's intent.\n\nR49 (the 24.04 route for the iniVation software) needs no change here: this\npage already builds libcaer from source via libcaer_driver's vcs import.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "c1ccb8d2d9eecb40b844c9f676edd6d643e9af75",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/c1ccb8d2d9eecb40b844c9f676edd6d643e9af75"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/c25803ccff8d4407ad2cba9f383daf9ea31e96a5",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/c25803ccff8d4407ad2cba9f383daf9ea31e96a5"
+        }
+      ]
+    },
+    {
+      "sha": "d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+      "node_id": "C_kwDOUHAXv9oAKGQ5ZGIwZjc3ODBhMmE2YzY4OTdkNWVmODE5YmQyNmY2OGI1ZTAxZDg",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:46Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:46Z"
+        },
+        "message": "setup(concepts): fix the convenience-script path and say it needs a source checkout\n\nSETUP-PARITY R20 (register item 3.11, first half). The page ran\n~/ros2/src/hippo_core/hippo_common/scripts/install_scripts.sh, but no\nhippo_core directory exists on the lab's Pis, and Workspace Setup clones\nhippo_common directly into ~/ros2/src.\n\nEvidence:\n- 02 (manifest captured 2026-08-17): rootfs-02/home-pi/ros2-src has no\n  hippo_core; hippo_common comes from apt (ros-jazzy-hippo-common 1.0.2-0noble).\n- 03 (2026-08-19 15:25 CEST): no hippo_core under /home/pi/ros2/src.\n- 2026-09-16: HippoCampusRobotics/hippo_common has scripts/build-ros,\n  scripts/clean-ros, scripts/install_scripts.sh (which copies both to\n  $HOME/.local/bin); the arm64 deb ros-jazzy-hippo-common_1.0.2-0noble\n  installs only /opt/ros/jazzy/lib/hippo_common/* nodes, no scripts.\nR19 (a Raspberry-Pi-specific clone list) is left unchanged: it needs the lab\nto decide the intended Pi workspace (SETUP-PARITY §E question 4).\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "0a8d8e25ef14308eebbbf86cd30fcafaf3971b5e",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/0a8d8e25ef14308eebbbf86cd30fcafaf3971b5e"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/e51210f5c7630f1b2bf7f7a6d8d3d992a41135c7"
+        }
+      ]
+    },
+    {
+      "sha": "bf7926facf083a7cced6c9244ac8710c7f098000",
+      "node_id": "C_kwDOUHAXv9oAKGJmNzkyNmZhY2YwODNhN2NjZWQ2YzkyNDRhYzg3MTBjN2YwOTgwMDA",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:56Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T10:43:56Z"
+        },
+        "message": "search: refresh the site shard after the Pi setup parity fixes\n\nGenerated by `python3 tools/build_search_index.py --site-only` (new headings:\nFirst Boot, Wifi and Bluetooth, udev Rule). No hand edits.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "2e3770103187a3acd8cc9f38363d7f5c02c0cc51",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/2e3770103187a3acd8cc9f38363d7f5c02c0cc51"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/bf7926facf083a7cced6c9244ac8710c7f098000",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/bf7926facf083a7cced6c9244ac8710c7f098000",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/bf7926facf083a7cced6c9244ac8710c7f098000",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/bf7926facf083a7cced6c9244ac8710c7f098000/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/d9db0f7780a2a6c6897d5ef819bd26f68b5e01d8"
+        }
+      ]
+    },
+    {
+      "sha": "8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+      "node_id": "C_kwDOUHAXv9oAKDhmMDA1OTVjZTg1ZTk2NzhjYTA3Y2E5MmNmNjgwZWMwZDdmNjFjMDA",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T13:42:41Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T13:42:41Z"
+        },
+        "message": "setup(raspberry-pi): say chrony cannot prevent the first-boot clock failure\n\nSETUP-PARITY R29 and R31 (register items 3.3 and 3.4), follow-up with new\nevidence from the hippo-main-01 re-image.\n\nEvidence, hippo-main-01, Ubuntu 24.04.4 arm64, 2026-09-16:\n- cloud-init user-data listed chrony under packages:. First boot still ended\n  with cloud-init status: error. /var/log/cloud-init-output.log: apt-get update\n  \"Release file ... is not valid yet (invalid for another 218d 7h 47min)\", i.e.\n  the clock read the image date (2026-02-10). None of the packages installed,\n  chrony included, so listing it cannot prevent the failure.\n- The follow-on install in the same run failed with \"404 Not Found\" on\n  noble-updates packages, because apt still used the image's old lists.\n- systemd-timesyncd synchronized the clock by itself (timedatectl:\n  System clock synchronized: yes). apt-get update, then the same installs,\n  succeeded unchanged (01 run log, 15:32 CEST).\n- During apt-get upgrade (openssh-server upgraded), new SSH connections to 01\n  were refused from about 15:36 to 15:40 CEST while ping kept answering; SSH\n  came back by itself when apt finished the package.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "7692f9e7974e2a10ee5ff5383b2fe8ca274c7d3c",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/7692f9e7974e2a10ee5ff5383b2fe8ca274c7d3c"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/8f00595ce85e9678ca07ca92cf680ec0d7f61c00/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "bf7926facf083a7cced6c9244ac8710c7f098000",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/bf7926facf083a7cced6c9244ac8710c7f098000",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/bf7926facf083a7cced6c9244ac8710c7f098000"
+        }
+      ]
+    },
+    {
+      "sha": "783a191b1f43758bd85dd9f203f0043a8af71508",
+      "node_id": "C_kwDOUHAXv9oAKDc4M2ExOTFiMWY0Mzc1OGJkODVkZDlmMjAzZjAwNDNhOGFmNzE1MDg",
+      "commit": {
+        "author": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T13:42:49Z"
+        },
+        "committer": {
+          "name": "kyle",
+          "email": "kyle-nelson-berkeley@example.invalid",
+          "date": "2026-09-16T13:42:49Z"
+        },
+        "message": "setup(raspberry-pi): the stock image already enables i2c_arm; add only the overlays\n\nSETUP-PARITY R10 (register item 3.6), follow-up to 0d6ccd2 with the stock\nconfig.txt as evidence.\n\nEvidence:\n- Ubuntu 24.04.4 preinstalled server arm64 image (sha256 790652fa...0d37,\n  Canonical SHA256SUMS), its system-boot config.txt saved by flash-01.sh on\n  2026-09-16: line \"dtparam=i2c_arm=on\" sits in the base section before any\n  dtoverlay=, and \"enable_uart=1\" is present too (the fallback that c25803c's\n  warning relies on is stock).\n- diff of that stock file against hippo-main-02's config.txt (rootfs-02,\n  sha256 4f106dd3...1866): 02 adds only dtoverlay=i2c6,pins_22_23 (after the\n  stock dtparam), the disable-wifi/-bt pair, and dtoverlay=i2c4,pins_6_7 plus\n  uart2..uart5 at the end. No second dtparam=i2c_arm line.\n- hippo-main-01 booted with 02's file on 2026-09-16: ls /dev/i2c-* lists\n  i2c-1, i2c-4, i2c-6, i2c-20, i2c-21, as the page says.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "55bd3b5f02eb60ba5f318d565c2956f7482a2bd6",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/55bd3b5f02eb60ba5f318d565c2956f7482a2bd6"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/783a191b1f43758bd85dd9f203f0043a8af71508",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/783a191b1f43758bd85dd9f203f0043a8af71508",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/783a191b1f43758bd85dd9f203f0043a8af71508",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/783a191b1f43758bd85dd9f203f0043a8af71508/comments",
+      "author": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "kyle-nelson-berkeley",
+        "id": 143034663,
+        "node_id": "U_kgDOCIaJJw",
+        "avatar_url": "https://avatars.githubusercontent.com/u/143034663?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/kyle-nelson-berkeley",
+        "html_url": "https://github.com/kyle-nelson-berkeley",
+        "followers_url": "https://api.github.com/users/kyle-nelson-berkeley/followers",
+        "following_url": "https://api.github.com/users/kyle-nelson-berkeley/following{/other_user}",
+        "gists_url": "https://api.github.com/users/kyle-nelson-berkeley/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/kyle-nelson-berkeley/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/kyle-nelson-berkeley/subscriptions",
+        "organizations_url": "https://api.github.com/users/kyle-nelson-berkeley/orgs",
+        "repos_url": "https://api.github.com/users/kyle-nelson-berkeley/repos",
+        "events_url": "https://api.github.com/users/kyle-nelson-berkeley/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/kyle-nelson-berkeley/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/8f00595ce85e9678ca07ca92cf680ec0d7f61c00",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/8f00595ce85e9678ca07ca92cf680ec0d7f61c00"
+        }
+      ]
+    },
+    {
+      "sha": "825bab4fa43bfb10964621d1e4d8476b5971dc78",
+      "node_id": "C_kwDOUHAXv9oAKDgyNWJhYjRmYTQzYmZiMTA5NjQ2MjFkMWU0ZDg0NzZiNTk3MWRjNzg",
+      "commit": {
+        "author": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-21T17:37:38Z"
+        },
+        "committer": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-21T17:37:38Z"
+        },
+        "message": "proposal: drop derived files (derive.yml regenerates them after merge)",
+        "tree": {
+          "sha": "0187b7ec2cc061968ab71e60cceb629402370f2a",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/0187b7ec2cc061968ab71e60cceb629402370f2a"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/825bab4fa43bfb10964621d1e4d8476b5971dc78",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/825bab4fa43bfb10964621d1e4d8476b5971dc78",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/825bab4fa43bfb10964621d1e4d8476b5971dc78",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/825bab4fa43bfb10964621d1e4d8476b5971dc78/comments",
+      "author": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "783a191b1f43758bd85dd9f203f0043a8af71508",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/783a191b1f43758bd85dd9f203f0043a8af71508",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/783a191b1f43758bd85dd9f203f0043a8af71508"
+        }
+      ]
+    },
+    {
+      "sha": "78ba6a768f062ee110900e50a831aafa3dcadef7",
+      "node_id": "C_kwDOUHAXv9oAKDc4YmE2YTc2OGYwNjJlZTExMDkwMGU1MGE4MzFhYWZhM2RjYWRlZjc",
+      "commit": {
+        "author": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-22T23:16:43Z"
+        },
+        "committer": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-22T23:16:43Z"
+        },
+        "message": "proposal: re-sync the derived search files with main\n\nMechanical only: search/manifest.json and search/site.json are derived outputs\n(CLAUDE.md: never committed in a pull request; derive.yml regenerates them on\nmain). main has moved since 825bab4, so the branch's copies conflicted. They now\nmatch origin/main byte for byte. No content decision on this proposal was made\nor changed.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "6c1c952cf6389bcaa82990478df7447d23a609e5",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/6c1c952cf6389bcaa82990478df7447d23a609e5"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/78ba6a768f062ee110900e50a831aafa3dcadef7",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/78ba6a768f062ee110900e50a831aafa3dcadef7",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/78ba6a768f062ee110900e50a831aafa3dcadef7",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/78ba6a768f062ee110900e50a831aafa3dcadef7/comments",
+      "author": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "825bab4fa43bfb10964621d1e4d8476b5971dc78",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/825bab4fa43bfb10964621d1e4d8476b5971dc78",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/825bab4fa43bfb10964621d1e4d8476b5971dc78"
+        }
+      ]
+    },
+    {
+      "sha": "d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "node_id": "C_kwDOUHAXv9oAKGQwYmRjNjRiMjIxNDdhZGRlMjcwN2U4NmRmNGY3ZTdlNDY1OGRmZWI",
+      "commit": {
+        "author": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-25T12:55:49Z"
+        },
+        "committer": {
+          "name": "Desert Mango",
+          "email": "desert-mango-robotics@example.invalid",
+          "date": "2026-09-25T12:55:49Z"
+        },
+        "message": "proposal: merge main (75f09dd) and stop carrying the derived search files\n\nMechanical only. No word of this proposal's prose was changed, added or removed,\nand nothing main did was reverted.\n\nWhy: this is the second time the pull request went stale. Every push to main runs\nderive.yml, which commits fresh search/manifest.json and search/site.json; a branch\nthat carries its own copies of those files conflicts the moment that happens. The\n2026-09-23 fix only re-synced the copies, so the wound reopened five commits later.\n\nThe durable fix is for the branch to stop differing from main on those two files at\nall, which is what CLAUDE.md's edit map asks for (\"Derived outputs ... never\ncommitted in a pull request; derive.yml commits them on main\"). Both conflicted here\nand both are resolved to origin/main's exact bytes, so the pull request's diff no\nlonger touches them. CI regenerates them with tools/derive.py in the workspace before\nrunning the gate, so the proposal does not need its own copies.\n\nThe two content files main also edited, content/setup/concepts/colcon.md and\ncontent/setup/raspberry-pi/uart-configuration.md, auto-merged with no conflict: the\nedits are in different places. main's typo fixes (\"environment\", \"KERNELS\nparameter\") and this proposal's own edits are both present in the merged result.\n\nCo-Authored-By: Claude Opus 5 <redacted@example.invalid>",
+        "tree": {
+          "sha": "e35cfff416a9e823ee3029e0398bc1998a4fc045",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/trees/e35cfff416a9e823ee3029e0398bc1998a4fc045"
+        },
+        "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/git/commits/d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+        "comment_count": 0,
+        "verification": {
+          "verified": false,
+          "reason": "unsigned",
+          "signature": null,
+          "payload": null
+        }
+      },
+      "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "comments_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/comments",
+      "author": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "desert-mango-robotics",
+        "id": 323077863,
+        "node_id": "U_kgDOE0HG5w",
+        "avatar_url": "https://avatars.githubusercontent.com/u/323077863?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/desert-mango-robotics",
+        "html_url": "https://github.com/desert-mango-robotics",
+        "followers_url": "https://api.github.com/users/desert-mango-robotics/followers",
+        "following_url": "https://api.github.com/users/desert-mango-robotics/following{/other_user}",
+        "gists_url": "https://api.github.com/users/desert-mango-robotics/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/desert-mango-robotics/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/desert-mango-robotics/subscriptions",
+        "organizations_url": "https://api.github.com/users/desert-mango-robotics/orgs",
+        "repos_url": "https://api.github.com/users/desert-mango-robotics/repos",
+        "events_url": "https://api.github.com/users/desert-mango-robotics/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/desert-mango-robotics/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "78ba6a768f062ee110900e50a831aafa3dcadef7",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/78ba6a768f062ee110900e50a831aafa3dcadef7",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/78ba6a768f062ee110900e50a831aafa3dcadef7"
+        },
+        {
+          "sha": "75f09dd0b761272f3fba0a928c5f2ec723931033",
+          "url": "https://api.github.com/repos/desert-mango/hippocampus-docs/commits/75f09dd0b761272f3fba0a928c5f2ec723931033",
+          "html_url": "https://github.com/desert-mango/hippocampus-docs/commit/75f09dd0b761272f3fba0a928c5f2ec723931033"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "sha": "1d1857e79af2a2fa4f74373809154c35248475e6",
+      "filename": "content/setup/concepts/colcon.md",
+      "status": "modified",
+      "additions": 6,
+      "deletions": 2,
+      "changes": 8,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fconcepts%2Fcolcon.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fconcepts%2Fcolcon.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fconcepts%2Fcolcon.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -95,13 +95,17 @@ Deleting files can be dangerous because it is quite irreversible by its nature.\n ## Install the Convenience Scripts\n \n \n-Install the scripts via\n+The scripts live in the `scripts/` folder of the `hippo_common` **source** repository. The `ros-jazzy-hippo-common` apt package does not contain them, so a machine that only uses the pre-built packages (for example a Raspberry Pi) needs a checkout of `hippo_common` for this step.\n+\n+If `hippo_common` is cloned into your workspace (see [Workspace Setup](#/setup/getting-started/workspace-setup)), install the scripts via\n \n \n ```console\n-$ ~/ros2/src/hippo_core/hippo_common/scripts/install_scripts.sh\n+$ ~/ros2/src/hippo_common/scripts/install_scripts.sh\n ```\n \n+The script copies `build-ros` and `clean-ros` to `~/.local/bin`, which must be on your `PATH`.\n+\n For a better auto completion we add the required `argcomplete` line to our `.zshrc` by executing\n \n "
+    },
+    {
+      "sha": "a04859649bbbc11afc7bcfe977eb3db95afa9d27",
+      "filename": "content/setup/concepts/pre-built-packages.md",
+      "status": "modified",
+      "additions": 18,
+      "deletions": 4,
+      "changes": 22,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fconcepts%2Fpre-built-packages.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fconcepts%2Fpre-built-packages.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fconcepts%2Fpre-built-packages.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -24,35 +24,49 @@ This also implies if you want to work with the pre-built version of a package, m\n ## Which Packages can I Install via `apt`?\n \n \n-To find out which packages can be installed from our repository, execute\n-\n+To find out which packages can be installed from our repository for the machine you are on, execute\n \n ```console\n-$ curl -s https://repositories.hippocampus-robotics.net/ubuntu/dists/noble/main/binary-amd64/Packages \\\n+$ curl -s https://repositories.hippocampus-robotics.net/ubuntu/dists/noble/main/binary-$(dpkg --print-architecture)/Packages \\\n | grep \"^Package: \" \\\n | cut -d\" \" -f2 | sort -u\n+```\n+\n+`$(dpkg --print-architecture)` is `amd64` on a desktop computer and `arm64` on a Raspberry Pi. The two lists are not the same. On 2026-09-16 the `amd64` list read:\n+\n+```console\n ros-jazzy-acoustic-msgs\n ros-jazzy-alpha-msgs\n ros-jazzy-buttons-msgs\n ros-jazzy-dvl\n ros-jazzy-dvl-msgs\n ros-jazzy-esc\n+ros-jazzy-gantry\n+ros-jazzy-gantry-gui\n ros-jazzy-gantry-msgs\n ros-jazzy-hardware\n ros-jazzy-hippo-common\n ros-jazzy-hippo-common-msgs\n ros-jazzy-hippo-control\n ros-jazzy-hippo-control-msgs\n+ros-jazzy-hippo-full\n+ros-jazzy-hippo-gz-plugins\n ros-jazzy-hippo-msgs\n+ros-jazzy-hippo-robot\n+ros-jazzy-hippo-sim\n ros-jazzy-mjpeg-cam\n ros-jazzy-path-planning\n ros-jazzy-px4-msgs\n+ros-jazzy-qualisys-bridge\n ros-jazzy-rapid-trajectories-msgs\n ros-jazzy-remote-control\n ros-jazzy-state-estimation-msgs\n ros-jazzy-uvms-msgs\n+ros-jazzy-visual-localization\n ```\n \n+The `arm64` list had the same packages except `ros-jazzy-acoustic-msgs`. Because `ros-jazzy-hippo-robot` depends on it, `hippo_robot` cannot be installed on a Raspberry Pi until an `arm64` build of `acoustic_msgs` is published; install the packages you need one by one instead. The list changes over time, so run the command rather than trusting this copy.\n+\n We can install them by\n \n \n@@ -64,7 +78,7 @@ for example, if we want to install the remote control package the command would\n \n \n ```console\n-$ ros-${ROS_DISTRO}-remote-control\n+$ sudo apt install ros-${ROS_DISTRO}-remote-control\n ```\n \n <div class=\"adm adm-tip\"><p class=\"adm-title\">Tip</p>"
+    },
+    {
+      "sha": "b274f8f4d13f359dc3a16c605f41a109b508ef39",
+      "filename": "content/setup/getting-started/px4-setup.md",
+      "status": "modified",
+      "additions": 2,
+      "deletions": 1,
+      "changes": 3,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fgetting-started%2Fpx4-setup.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fgetting-started%2Fpx4-setup.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fgetting-started%2Fpx4-setup.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -233,7 +233,8 @@ The configuration file is at `/etc/mavlink-router/main.conf` and can contain the\n \n # Path to UART device. like `/dev/ttyS0`\n # Mandatory, no default value\n-Device =/dev/ttyACM0\n+# /dev/fcu_usb is the stable name from /etc/udev/rules.d/50-fcu.rules\n+Device =/dev/fcu_usb\n Baud = 921600\n \n [UdpEndpoint hippo-celsius]"
+    },
+    {
+      "sha": "909e5c5bc79075588596ff68139aefd021e04396",
+      "filename": "content/setup/getting-started/ros-installation.md",
+      "status": "modified",
+      "additions": 9,
+      "deletions": 5,
+      "changes": 14,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fgetting-started%2Fros-installation.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fgetting-started%2Fros-installation.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fgetting-started%2Fros-installation.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -42,21 +42,25 @@ We use ROS2 Jazzy. The following installations steps work for a Ubuntu 24.04 amd\n     && sudo add-apt-repository universe\n     ```\n \n-3. Add the key\n+3. Add the ROS 2 apt source\n \n+    Install the official `ros2-apt-source` package. It brings both the ROS signing key and the apt source, and it keeps them up to date.\n \n     ```console\n     $ sudo apt update && sudo apt install curl -y \\\n-    && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg\n+    && export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F \"tag_name\" | awk -F\\\" '{print $4}') \\\n+    && curl -L -o /tmp/ros2-apt-source.deb \"https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $UBUNTU_CODENAME)_all.deb\" \\\n+    && sudo dpkg -i /tmp/ros2-apt-source.deb\n     ```\n \n-4. Add sources\n-\n+4. Check the source\n \n     ```console\n-    $ echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main\" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null\n+    $ ls -l /etc/apt/sources.list.d/ros2.sources\n     ```\n \n+    It should be a symbolic link to `/usr/share/ros-apt-source/ros2.sources`. If an older guide left a `/etc/apt/sources.list.d/ros2.list` behind, remove that file so the repository is not configured twice.\n+\n 5. Update\n \n "
+    },
+    {
+      "sha": "2ee473055e0c16b91ca3479c05e74db8088e37f7",
+      "filename": "content/setup/lab-cameras/event-cameras.md",
+      "status": "modified",
+      "additions": 22,
+      "deletions": 0,
+      "changes": 22,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Flab-cameras%2Fevent-cameras.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Flab-cameras%2Fevent-cameras.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Flab-cameras%2Fevent-cameras.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -48,6 +48,18 @@ Build\n $ build_underlay\n ```\n \n+### udev Rule\n+\n+Without a udev rule only root can open the camera. The driver's [README](https://github.com/ros-event-camera/libcaer_driver/) asks you to copy iniVation's `65-inivation.rules` (it ships with the libcaer source that `vcs import` fetched) and to add your user to the `video` and `plugdev` groups:\n+\n+```console\n+$ sudo cp $WS_DIR/libcaer/lib/udev/rules.d/65-inivation.rules /etc/udev/rules.d/ \\\n+&& sudo usermod -aG video,plugdev $USER \\\n+&& sudo udevadm control --reload-rules && sudo udevadm trigger\n+```\n+\n+If the file is not at that path, search for it with `find $WS_DIR -name 65-inivation.rules`. Log out and back in so the new groups apply.\n+\n ### Repower USB\n \n \n@@ -66,6 +78,16 @@ $ git clone https://github.com/mvp/uhubctl.git \\\n && sudo make install\n ```\n \n+uhubctl needs root unless its udev rule is installed. The rule ships in the repository and allows members of the `dialout` group to switch ports:\n+\n+```console\n+$ sudo cp udev/rules.d/52-usb.rules /etc/udev/rules.d/ \\\n+&& sudo usermod -aG dialout $USER \\\n+&& sudo udevadm trigger --attr-match=subsystem=usb\n+```\n+\n+The rule's own header describes it as being for rootless operation, so with it in place the commands below should work without `sudo` (not yet re-checked in the lab).\n+\n Off\n \n ```console"
+    },
+    {
+      "sha": "27a8a4a73fdc06ba3fd90f3770a43febf7f33448",
+      "filename": "content/setup/raspberry-pi/ethernet.md",
+      "status": "modified",
+      "additions": 39,
+      "deletions": 3,
+      "changes": 42,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fethernet.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fethernet.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fraspberry-pi%2Fethernet.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -27,11 +27,47 @@ The Bluerobotics Switch is a 100Mbit/s switch. So there is no need to configure\n Most likely the Gigabit connection via our manually crimped RJ45 connectors is not stable. Hence, the connection speed (100 Mbit/s vs Gbit) is repetitively negotiated which results in an unstable connection.\n \n \n-We try to avoid this by manually setting the advertised link mode to 100 MBit/s.\n+We try to avoid this by manually setting the advertised link mode to 100 MBit/s (`0x008` is 100baseT full duplex).\n \n \n-```sh\n-$ETHTOOL --change eth0 advertise 0x008\n+<div class=\"adm adm-warning\"><p class=\"adm-title\">Warning</p>\n+\n+The old version of this page used `$ETHTOOL` in an `/etc/network/if-pre-up.d/` hook. That only works with `ifupdown`, which Ubuntu 24.04 Server does not install (it uses netplan and systemd-networkd), so such a hook never runs and `$ETHTOOL` is empty. The steps below replace it. They have **not been tested** against the lag described above; if you try them, please report whether they help.\n+\n+</div>\n+\n+To apply the setting until the next reboot (needs the `ethtool` package):\n+\n+\n+```console\n+$ sudo ethtool --change eth0 advertise 0x008\n+```\n+\n+Changing the link mode renegotiates the link, so an SSH session over `eth0` can drop for a few seconds.\n+\n+\n+To apply it at every boot, create `/etc/systemd/system/eth0-advertise-100m.service`:\n+\n+\n+```ini\n+[Unit]\n+Description=Advertise only 100 Mbit/s full duplex on eth0\n+BindsTo=sys-subsystem-net-devices-eth0.device\n+After=sys-subsystem-net-devices-eth0.device\n+\n+[Service]\n+Type=oneshot\n+ExecStart=/usr/sbin/ethtool --change eth0 advertise 0x008\n+\n+[Install]\n+WantedBy=sys-subsystem-net-devices-eth0.device\n+```\n+\n+and enable it:\n+\n+\n+```console\n+$ sudo systemctl daemon-reload && sudo systemctl enable eth0-advertise-100m.service\n ```\n \n "
+    },
+    {
+      "sha": "1f0f320b4e3bbe9e8c07fcc0a4d41936f3f544c6",
+      "filename": "content/setup/raspberry-pi/uart-configuration.md",
+      "status": "modified",
+      "additions": 2,
+      "deletions": 1,
+      "changes": 3,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fuart-configuration.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fuart-configuration.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fraspberry-pi%2Fuart-configuration.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -27,6 +27,7 @@ and append the `dtoverlay=` lines for the required UARTs.\n \n ```sh\n dtoverlay=uart2\n+dtoverlay=uart3\n dtoverlay=uart4\n dtoverlay=uart5\n ```\n@@ -163,7 +164,7 @@ The output should show symbolic links for the serial devices:\n \n ```sh\n lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_debug -> ttyAMA1               \n-lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_tele -> ttyAMA2 \n+lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_data -> ttyAMA2 \n ```\n \n </div>"
+    },
+    {
+      "sha": "4314c2102975a6f3cb421b1b9f72812ade1fabbb",
+      "filename": "content/setup/raspberry-pi/ubuntu-24-04-server.md",
+      "status": "modified",
+      "additions": 52,
+      "deletions": 0,
+      "changes": 52,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fubuntu-24-04-server.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fubuntu-24-04-server.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fraspberry-pi%2Fubuntu-24-04-server.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -34,6 +34,7 @@ package_update: true\n package_upgrade: true\n packages:\n     - avahi-daemon\n+    - chrony\n \n power_state: \n     mode: reboot\n@@ -49,6 +50,30 @@ Make sure to connect the Raspberry Pi with the Internet via Ethernet before boot\n \n </div>\n \n+<div class=\"adm adm-attention\"><p class=\"adm-title\">Attention</p>\n+\n+A Raspberry Pi has no battery-backed clock. On the first boot the system time can be months in the past. apt then rejects every repository as \"not valid yet\", and cloud-init finishes with `status: error` without installing its `packages:`. This is not a broken image. Listing `chrony` under `packages:` does not prevent this, because `chrony` is one of the packages that fail to install. Check the clock with `timedatectl` and `sudo cloud-init status --long`. The built-in time service sets the clock soon after the network comes up (`System clock synchronized: yes`). Then run `sudo apt-get update` first, and after it the installs from your `packages:` list; they succeed. Skipping the `update` gives `404 Not Found` errors, because apt still has the old package lists. `chrony` keeps the clock right from then on; to use the lab's NTP server, see [Time Synchronization: Client](#/setup/time-sync/client).\n+\n+</div>\n+\n+## First Boot: Let the Automatic Upgrade Finish\n+\n+Right after the first boot, Ubuntu's `unattended-upgrades` upgrades a large part of the fresh image (on an SD card this can take 10 to 30 minutes, including the kernel). It holds the dpkg lock the whole time, so any `apt` or `dpkg` command you start fails with `dpkg frontend lock was locked by another process`.\n+\n+Do **not** kill it and never delete the lock file. Stopping `dpkg` in the middle of a transaction can corrupt the package database. Let apt wait for the lock instead:\n+\n+```console\n+$ sudo apt-get -o DPkg::Lock::Timeout=3600 install -y <packages>\n+```\n+\n+To see whether the lock is still held (`pgrep unattended-upgrade` does not work, because the process name is truncated):\n+\n+```console\n+$ sudo fuser -v /var/lib/dpkg/lock-frontend\n+```\n+\n+No output means the lock is free. Do not power off the Pi while apt is running. While apt upgrades `openssh-server`, new SSH connections are refused (`Connection refused`) for a few minutes; the Pi still answers `ping`. Wait for apt to finish. If it was interrupted anyway, run `sudo dpkg --audit` and `sudo dpkg --configure -a` before any other apt command.\n+\n ## Boot Config\n \n On the `system-boot` partition of the SD Card prepared for the Pi, edit `config.txt` and append the required lines for the specific setup.\n@@ -69,9 +94,21 @@ See [the documentation](https://github.com/raspberrypi/firmware/blob/master/boot\n \n \n ```ini\n+dtparam=i2c_arm=on\n+dtoverlay=i2c6,pins_22_23\n dtoverlay=i2c4,pins_6_7\n ```\n \n+The three lines create three buses on the GPIO header:\n+\n+| Line | Device | Pins |\n+|---|---|---|\n+| `dtparam=i2c_arm=on` | `/dev/i2c-1` | GPIO2 (SDA) / GPIO3 (SCL) |\n+| `dtoverlay=i2c6,pins_22_23` | `/dev/i2c-6` | GPIO22 (SDA) / GPIO23 (SCL) |\n+| `dtoverlay=i2c4,pins_6_7` | `/dev/i2c-4` | GPIO6 (SDA) / GPIO7 (SCL), the ESC bus on the UUV (see [Pinout](#/setup/raspberry-pi/pinout)) |\n+\n+`dtparam=i2c_arm=on` is a base device-tree parameter, so it must come before any `dtoverlay=` line. The stock Ubuntu 24.04 `config.txt` already has `dtparam=i2c_arm=on` in the right place, near the top. On a fresh image, add only the two `dtoverlay=` lines, and do not add the `dtparam` line a second time at the end of the file. After a reboot, `ls /dev/i2c-*` should list `i2c-1`, `i2c-4` and `i2c-6` (plus the GPU-internal `i2c-20` and `i2c-21`).\n+\n ### UART\n \n \n@@ -82,6 +119,21 @@ dtoverlay=uart4\n dtoverlay=uart5\n ```\n \n+### Wifi and Bluetooth\n+\n+The lab's robot Pis switch both radios off in the device tree:\n+\n+```ini\n+dtoverlay=disable-wifi\n+dtoverlay=disable-bt\n+```\n+\n+<div class=\"adm adm-warning\"><p class=\"adm-title\">Warning</p>\n+\n+With these two lines, **Ethernet is the only way into the Pi**. Before you add them, make sure the Pi is reachable over its Ethernet connection, and keep a fallback ready (an HDMI monitor and a USB keyboard, or a 3.3 V USB-serial adapter on GPIO14/GPIO15, which `enable_uart=1` keeps active). A bad cable then looks exactly like a Pi that has lost its network for good.\n+\n+</div>\n+\n ## Disable Interactive Upgrade\n \n "
+    },
+    {
+      "sha": "dbb7498bc353916c37c64677abd97e68fe06b204",
+      "filename": "content/setup/raspberry-pi/usb-configuration.md",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "blob_url": "https://github.com/desert-mango/hippocampus-docs/blob/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fusb-configuration.md",
+      "raw_url": "https://github.com/desert-mango/hippocampus-docs/raw/d0bdc64b22147adde2707e86df4f7e7e4658dfeb/content%2Fsetup%2Fraspberry-pi%2Fusb-configuration.md",
+      "contents_url": "https://api.github.com/repos/desert-mango/hippocampus-docs/contents/content%2Fsetup%2Fraspberry-pi%2Fusb-configuration.md?ref=d0bdc64b22147adde2707e86df4f7e7e4658dfeb",
+      "patch": "@@ -59,7 +59,7 @@ And the result should show at least the marked line:\n \n ```console\n lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_debug -> ttyAMA1\n-lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_tele -> ttyAMA2\n+lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_data -> ttyAMA2\n lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_usb -> ttyACM0\n ```\n "
+    }
+  ]
+}

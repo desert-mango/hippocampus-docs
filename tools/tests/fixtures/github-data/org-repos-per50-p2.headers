@@ -1,0 +1,10 @@
+HTTP/2.0 200 OK
+Content-Type: application/json; charset=utf-8
+X-Github-Api-Version-Selected: 2022-11-28
+X-Github-Media-Type: github.v3; format=json
+X-Ratelimit-Limit: 5000
+X-Ratelimit-Remaining: 4872
+X-Ratelimit-Reset: 1790675173
+X-Ratelimit-Resource: core
+X-Ratelimit-Used: 128
+Link: <https://api.github.com/orgs/HippoCampusRobotics/repos?type=public&per_page=50&page=1>; rel="prev", <https://api.github.com/orgs/HippoCampusRobotics/repos?type=public&per_page=50&page=1>; rel="first"
