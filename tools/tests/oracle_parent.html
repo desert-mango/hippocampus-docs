@@ -1,0 +1,220 @@
+<!doctype html>
+<!--
+  R3 oracles (b) and (c) — a TEST-ONLY parent page (plan D-E). Never deployed
+  (.vercelignore: tools/tests/*.html) and inert anywhere but localhost /
+  127.0.0.1. Driven by tools/tests/browser_oracles.mjs through headless Chrome
+  (--dump-dom), or open it by hand under ./tools/serve.sh:
+    http://localhost:8130/tools/tests/oracle_parent.html?pages=content/about.md,content/tools/onshape-mcp.md&neg=1
+
+  For every page in ?pages= it renders the REAL site (index.html in preview
+  mode, js/source.js's bridge) twice in an iframe with NO sandbox attribute
+  (same origin, so this page can read the frame's DOM; production's frame
+  stays sandboxed, and nothing in rendering depends on the sandbox): once
+  with the page's Markdown as it is, once with HCCore.withSentinels(text).
+  It answers the frame's hc-fetch requests from the local files (no GitHub),
+  waits until the frame has settled (the page body rendered and cross-linked,
+  no bridge request pending, no DOM change for a while), then judges:
+    (b) render-equivalence: the sentinel render, sentinels removed from the
+        DOM, equals the plain render (whitespace-only text between top-level
+        children ignored: a removed sentinel leaves its line breaks behind);
+    (c) every sentinel is present and a DIRECT child of the page body.
+  ?neg=1 adds one synthetic page with a sentinel inside an unclosed <div>,
+  which must come out FAIL. Verdicts go into THIS page's DOM (#verdicts,
+  one line per page, then #done), which --dump-dom prints.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R3 oracles (b) and (c)</title>
+<style>
+  body { font: 13px/1.4 monospace; margin: 8px; }
+  iframe { width: 1100px; height: 700px; border: 1px solid #999; }
+</style>
+</head>
+<body>
+<p id="status">starting</p>
+<pre id="verdicts"></pre>
+<script src="../../js/marked.min.js"></script>
+<script src="../../js/cms-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const status = document.getElementById('status');
+  const out = document.getElementById('verdicts');
+  if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    status.textContent = 'refused: this test page runs on localhost only';
+    return;
+  }
+  const C = window.HCCore;
+  const SETTLE_MS = 300;
+  const RENDER_LIMIT_MS = 30000;
+  const NEG_FILE = 'synthetic:unclosed-div';
+
+  const hex = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)),
+    (b) => b.toString(16).padStart(2, '0')).join('');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const line = (s) => { out.textContent += s + '\n'; };
+
+  let current = null;         // {nonce, file, text, frame, pending, last}
+
+  window.addEventListener('message', async (ev) => {
+    const cur = current;
+    if (!cur || !cur.frame.contentWindow || ev.source !== cur.frame.contentWindow) return;
+    const m = ev.data;
+    if (!m || typeof m !== 'object' || m.type !== 'hc-fetch' || m.nonce !== cur.nonce || !Number.isInteger(m.id)) return;
+    cur.pending += 1;
+    cur.last = performance.now();
+    let ans = { ok: false, status: 403, text: '' };
+    if (C.isBridgePath(m.path)) {
+      if (m.path === cur.file) ans = { ok: true, status: 200, text: cur.text };
+      else {
+        try {
+          const r = await fetch('/' + m.path, { cache: 'no-store' });
+          ans = r.ok ? { ok: true, status: r.status, text: await r.text() } : { ok: false, status: r.status, text: '' };
+        } catch (e) { ans = { ok: false, status: 502, text: '' }; }
+      }
+    }
+    cur.pending -= 1;
+    cur.last = performance.now();
+    if (current === cur) ev.source.postMessage({ type: 'hc-file', nonce: m.nonce, id: m.id, ok: ans.ok, status: ans.status, text: ans.text }, location.origin);
+  });
+
+  const bodyOf = (doc) => doc.querySelector('#project-md > .page-body') || doc.querySelector('#content > .page-body');
+
+  /* Render `text` as `file` at `route`; resolve {doc, body, frame} once
+     settled, or {error}. The caller removes the frame. */
+  async function render(route, file, text) {
+    const frame = document.createElement('iframe');
+    const cur = { nonce: hex(16), file, text, frame, pending: 0, last: performance.now() };
+    current = cur;
+    let lastMut = performance.now();
+    frame.src = '/index.html' + C.previewFragment(cur.nonce, route);
+    document.body.appendChild(frame);
+    const t0 = performance.now();
+    let observer = null;
+    for (;;) {
+      await sleep(50);
+      const now = performance.now();
+      if (now - t0 > RENDER_LIMIT_MS) return { frame, error: 'the frame did not settle in time' };
+      const doc = frame.contentDocument;
+      if (!doc || !doc.body) continue;
+      if (!observer) {
+        observer = new MutationObserver(() => { lastMut = performance.now(); });
+        observer.observe(doc.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+      }
+      if (doc.querySelector('#content .error-panel')) return { frame, error: 'the site showed its error panel' };
+      const body = bodyOf(doc);
+      if (!body) continue;
+      const win = frame.contentWindow;
+      const linked = !win.HCGraph || body.getAttribute('data-hc-xref') === '1';
+      if (linked && cur.pending === 0 && now - cur.last >= SETTLE_MS && now - lastMut >= SETTLE_MS) {
+        observer.disconnect();
+        return { frame, doc, body };
+      }
+    }
+  }
+
+  /* A canonical string of a subtree: tags, sorted attributes, text. Only
+     whitespace-only text nodes that are direct children of `top` are left
+     out. */
+  function canon(node, top) {
+    if (node.nodeType === 3) return (node.parentNode === top && !node.data.trim()) ? '' : 'T' + JSON.stringify(node.data);
+    if (node.nodeType !== 1) return '';
+    const attrs = Array.from(node.attributes).map((a) => a.name + '=' + JSON.stringify(a.value)).sort().join(' ');
+    return '<' + node.localName + (attrs ? ' ' + attrs : '') + '>'
+      + Array.from(node.childNodes).map((c) => canon(c, top)).join('') + '</' + node.localName + '>';
+  }
+
+  function firstDiff(a, b) {
+    let i = 0;
+    while (i < a.length && a[i] === b[i]) i += 1;
+    return 'at ' + i + ': ' + JSON.stringify(a.slice(Math.max(0, i - 40), i + 60)) + ' vs '
+      + JSON.stringify(b.slice(Math.max(0, i - 40), i + 60));
+  }
+
+  async function judge(file, route, plainText, markedText, prefix, expected) {
+    const why = [];
+    const a = await render(route, file, plainText);
+    const plainCanon = a.error ? null : canon(a.body, a.body);
+    a.frame.remove();
+    if (a.error) return 'FAIL ' + file + ' plain render: ' + a.error;
+    const b = await render(route, file, markedText);
+    if (b.error) { b.frame.remove(); return 'FAIL ' + file + ' sentinel render: ' + b.error; }
+    const found = Array.from(b.doc.querySelectorAll('[id^="hcb-' + prefix + '-"]'));
+    const nested = found.filter((el) => el.parentElement !== b.body);
+    if (found.length !== expected) why.push('(c) ' + found.length + ' of ' + expected + ' sentinels in the DOM');
+    if (nested.length) {
+      why.push('(c) ' + nested.length + ' sentinel(s) not a direct child of the page body: '
+        + nested.slice(0, 3).map((el) => el.id + ' in <' + el.parentElement.localName + '>').join(', '));
+    }
+    const copy = b.body.cloneNode(true);
+    copy.querySelectorAll('[id^="hcb-' + prefix + '-"]').forEach((el) => el.remove());
+    const markedCanon = canon(copy, copy);
+    b.frame.remove();
+    if (markedCanon !== plainCanon) why.push('(b) render differs ' + firstDiff(plainCanon, markedCanon));
+    return why.length ? 'FAIL ' + file + ' ' + why.join('; ')
+      : 'PASS ' + file + ' sentinels=' + found.length + ' dom=' + plainCanon.length;
+  }
+
+  async function main() {
+    const params = new URLSearchParams(location.search);
+    const files = (params.get('pages') || '').split(',').filter(Boolean);
+    const getJSON = (p) => fetch('/' + p, { cache: 'no-store' }).then((r) => r.json());
+    const [setup, projects, tools] = await Promise.all(['data/setup.json', 'data/projects.json', 'data/tools.json'].map(getJSON));
+    const pages = C.pageList({ setup, projects, tools });
+    const routeOf = (file) => { const hit = pages.find((p) => p.file === file); return hit ? hit.route : null; };
+    let n = 0;
+    for (const file of files) {
+      status.textContent = 'page ' + (n += 1) + ' of ' + files.length + ': ' + file;
+      let verdict;
+      // Only a bridge path is ever fetched: no request for a //host value.
+      if (!C.isBridgePath(file)) { line('FAIL ' + file + ' refused: not a bridge path'); continue; }
+      try {
+        const route = routeOf(file);
+        const res = await fetch('/' + file, { cache: 'no-store' });
+        const text = res.ok ? await res.text() : null;
+        const prefix = hex(6);
+        const split = text === null ? null : C.splitBlocks(text);
+        if (!route) verdict = 'FAIL ' + file + ' no site route names this file';
+        else if (text === null) verdict = 'FAIL ' + file + ' could not read the file (HTTP ' + res.status + ')';
+        else if (!split.ok) verdict = 'FAIL ' + file + ' the page does not split: ' + split.reason;
+        else {
+          const expected = split.blocks.filter((b) => b.kind !== 'space').length;
+          verdict = await judge(file, route, text, C.withSentinels(text, prefix), prefix, expected);
+        }
+      } catch (e) {
+        verdict = 'FAIL ' + file + ' oracle error: ' + (e && e.message);
+      }
+      line(verdict);
+    }
+    if (params.get('neg') === '1') {
+      // A sentinel inside an unclosed <div>: (c) must catch it. Served in
+      // place of a real page's file, on that page's route.
+      const host = pages.find((p) => p.route.indexOf('/tools/') === 0) || pages[0];
+      const prefix = hex(6);
+      const plain = 'Intro.\n\n<div>\n\nInside an unclosed div.\n\nStill inside.\n';
+      const withS = 'Intro.\n\n<div id="hcb-' + prefix + '-0"></div>\n\n<div>\n\nInside an unclosed div.\n\n'
+        + '<div id="hcb-' + prefix + '-1"></div>\n\nStill inside.\n';
+      let verdict;
+      try { verdict = await judge(host.file, host.route, plain, withS, prefix, 2); } catch (e) { verdict = 'FAIL ' + host.file + ' oracle error'; }
+      line(verdict.replace(host.file, NEG_FILE));
+    }
+    current = null;
+    status.textContent = 'done';
+    const done = document.createElement('p');
+    done.id = 'done';
+    done.textContent = 'done ' + out.textContent.split('\n').filter(Boolean).length;
+    document.body.appendChild(done);
+  }
+
+  main().catch((e) => {
+    line('FAIL oracle-parent ' + (e && e.message));
+    const done = document.createElement('p');
+    done.id = 'done';
+    done.textContent = 'done (error)';
+    document.body.appendChild(done);
+  });
+}());
+</script>
+</body>
+</html>

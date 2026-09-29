@@ -112,6 +112,21 @@
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
     },
+    "js/cms-redirect.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "6d9efdb501744c7861dff7588fbf5ff05094ee2cec0e23ea64236946053ee08e",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Send the retired /cms/ editor's routes to the site page they now live on, in Editor mode."
+      },
+      "reason": "First-party site code or test written for the editor-mode build (unit U5); the baseline is the file as introduced."
+    },
     "js/cms.js": {
       "classification": "included",
       "evidence": {
@@ -418,6 +433,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/browser_oracles.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "6692b15af32e7dbd69e6c6256fe913629e241530f0121c4ad780a5f39acd6512",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Run the R3 block-sentinel oracles (b) and (c) in a real headless Chrome over every content page."
+      },
+      "reason": "First-party site code or test written for the editor-mode build (unit U5); the baseline is the file as introduced."
+    },
     "tools/tests/fixtures/github-data/capture.sh": {
       "classification": "included",
       "evidence": {
@@ -461,6 +491,21 @@
         "purpose": "Test the GitHub sign-in code exchange, its callback page, and dev_site's api routing."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_block_model.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "8bbba06746df859c55f1d209f3c72e12642980910090ebb278c48f768032d6fb",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the editor's block model, span editor, block diff, overlay, cached fetcher and view settings."
+      },
+      "reason": "First-party site code or test written for the editor-mode build (unit U5); the baseline is the file as introduced."
     },
     "tools/tests/test_build_contributors.py": {
       "classification": "included",
@@ -611,6 +656,21 @@
         "purpose": "Test the CMS Media tab: signed uploads, the manifest entry, duplicates, the in-use guard, image insertion."
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U9); the baseline is the file as introduced, on top of the recorded parent commit."
+    },
+    "tools/tests/test_cms_redirect.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "80395ef8debdc80249dc0729c651bc5e63e0575ab2a53e58e735515329a65282",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the /cms/ redirect map: every old editor route lands on the site in Editor mode."
+      },
+      "reason": "First-party site code or test written for the editor-mode build (unit U5); the baseline is the file as introduced."
     },
     "tools/tests/test_derive.py": {
       "classification": "included",

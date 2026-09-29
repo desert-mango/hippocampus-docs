@@ -1727,3 +1727,243 @@ test('js/cms.js home: each recently merged proposal links to its Review page (wh
   const links = findAll(page.els['cms-main'], (e) => e.tagName === 'A' && e.attrs.href === '#/review/3');
   assert.equal(links.length, 1);
 });
+
+// ------------------------------------------- the org reader (U5, D-A) --
+/* The ONE stated exception to the ONE-REPOSITORY rule: createOrgReader, a
+   GET-only reader with an exact allowlist. The existing client stays
+   one-repository: assertRepoPath still refuses every HippoCampusRobotics
+   path, including every path the reader itself accepts. */
+
+const ORG_REPOS = ['docs', 'hippocampus_common', 'mavros'];
+const ORG_FIX = path.join(ROOT, 'tools', 'tests', 'fixtures', 'github-data');
+const orgIndex = JSON.parse(fs.readFileSync(path.join(ORG_FIX, 'index.json'), 'utf8'));
+const qs = (q) => (q && Object.keys(q).length
+  ? `?${Object.entries(q).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')}` : '');
+const fixturePaths = orgIndex.requests.map((r) => r.path + qs(r.query));
+
+function orgStorage() {
+  const m = new Map();
+  return {
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); },
+    keys: () => [...m.keys()],
+  };
+}
+
+test('org reader: assertRepoPath (the one-repository client) still refuses EVERY HippoCampusRobotics path', () => {
+  const org = fixturePaths.filter((p) => /HippoCampusRobotics/.test(p));
+  assert.ok(org.length >= 10);
+  const built = [C.orgCommitsPath('docs', { since: '2025-09-29T00:00:00Z', per_page: 100 }),
+    C.orgCommitsPath('mavros'), '/repos/HippoCampusRobotics/docs', '/orgs/HippoCampusRobotics/repos'];
+  for (const p of org.concat(built)) {
+    assert.throws(() => C.assertRepoPath(p), /this site's repository/, p);
+  }
+  const client = C.createGitHubClient({ token: TOKEN, fetch: async () => { throw new Error('never called'); } });
+  return Promise.all(built.map((p) => assert.rejects(client.get(p), /this site's repository/)));
+});
+
+test('org reader: the allowlist accepts exactly the commits reads (fixture paths) and this repo\'s commits?path= and compare', () => {
+  const names = new Set(ORG_REPOS);
+  const allowed = fixturePaths.filter((p) => C.orgReadAllowed(p, names));
+  assert.deepEqual(allowed.sort(), fixturePaths.filter((p) => /\/commits\?|\/compare\//.test(p)
+    && !/check-runs/.test(p)).sort());
+  for (const p of fixturePaths.filter((x) => !allowed.includes(x))) {
+    assert.equal(C.orgReadAllowed(p, names), false, p);
+  }
+  assert.equal(C.orgReadAllowed(C.pageCommitsPath('content/setup/raspberry-pi/ubuntu-24-04-server.md', { per_page: 100 }), names), true);
+  assert.equal(C.orgReadAllowed(C.comparePath('main', 'd'.repeat(40)), names), true);
+  assert.equal(C.orgReadAllowed('/repos/HippoCampusRobotics/docs/commits', names), true);
+});
+
+test('org reader: prefix tricks, dot segments, encodings, other owners, list calls and other endpoints are refused', () => {
+  const names = ['docs', 'mavros'];
+  const bad = [
+    '/repos/HippoCampusRobotics/docs-evil/commits', '/repos/HippoCampusRobotics/doc/commits',
+    '/repos/HippoCampusRobotics/docs/commits/', '/repos/HippoCampusRobotics/docs/commits/abc1234',
+    '/repos/HippoCampusRobotics/docs/../mavros/commits', '/repos/HippoCampusRobotics/docs/%2e%2e/x/commits',
+    '/repos/HippoCampusRobotics%2Fdocs/commits', '/repos/HippoCampusRobotics//docs/commits',
+    '/repos/hippocampusrobotics/docs/commits', '/repos/HippoCampusRobotics/Docs/commits',
+    '/repos/HippoCampusRobotics/private-thing/commits', '/repos/someone-else/docs/commits',
+    '/repos/HippoCampusRobotics/docs/releases', '/repos/HippoCampusRobotics/docs/pulls',
+    '/repos/HippoCampusRobotics/docs', '/orgs/HippoCampusRobotics/repos?type=public', '/user',
+    '/users/somebody', '/repos/desert-mango/hippocampus-docs/pulls', '/repos/desert-mango/hippocampus-docs/commits',
+    '/repos/desert-mango/hippocampus-docs/commits?per_page=100', '/repos/desert-mango/other/commits?path=a.md',
+    '/repos/desert-mango/hippocampus-docs/compare/main...x?per_page=1', '/repos/desert-mango/hippocampus-docs/compare/a..b',
+    '/repos/desert-mango/hippocampus-docs/compare/a...b...c', '/repos/desert-mango/hippocampus-docs/compare/../x...y',
+    'https://api.github.com/repos/HippoCampusRobotics/docs/commits', '//api.github.com/repos/HippoCampusRobotics/docs/commits',
+    'repos/HippoCampusRobotics/docs/commits', '/repos/HippoCampusRobotics/docs/commits#x',
+    '/repos/HippoCampusRobotics/docs/commits?since=2025-09-29T00:00:00Z',               // not the canonical spelling
+    '/repos/HippoCampusRobotics/docs/commits?per_page=100&per_page=1',                   // twice
+    '/repos/HippoCampusRobotics/docs/commits?author=x', '/repos/HippoCampusRobotics/docs/commits?',
+    '/repos/HippoCampusRobotics/docs/commits?path=a%26per_page%3D1', '/repos/HippoCampusRobotics/docs/commits?path=..%2Fx',
+    '/repos/HippoCampusRobotics/docs/commits?path=%2Fetc', '/repos/HippoCampusRobotics/docs/commits?per_page=101',
+    '/repos/HippoCampusRobotics/docs/commits?per_page=0', '/repos/HippoCampusRobotics/docs/commits?since=yesterday',
+    '/repos/HippoCampusRobotics/docs/commits?path', '/repos/HippoCampusRobotics/docs/commits?path=a b',
+    '/repos/HippoCampusRobotics/docs/commits\\', '/repos/HippoCampusRobotics/docs/commits?path=a%0Ab',
+    `/repos/HippoCampusRobotics/docs/commits?path=${'a'.repeat(2100)}`, 42, null,
+  ];
+  for (const p of bad) assert.equal(C.orgReadAllowed(p, names), false, String(p).slice(0, 90));
+  assert.equal(C.orgReadAllowed('/repos/HippoCampusRobotics/docs/commits', ['..', '.', 'docs/x', '']), false,
+    'junk names never enter the allowlist');
+});
+
+test('org reader: the builders spell the one canonical form and refuse injection', () => {
+  assert.equal(C.pageCommitsPath('content/setup/x.md', { per_page: 100 }),
+    '/repos/desert-mango/hippocampus-docs/commits?path=content%2Fsetup%2Fx.md&per_page=100');
+  assert.equal(C.orgCommitsPath('docs', { since: '2025-09-29T00:00:00Z', per_page: 100 }),
+    '/repos/HippoCampusRobotics/docs/commits?since=2025-09-29T00%3A00%3A00Z&per_page=100');
+  assert.equal(C.comparePath('75f09dd', 'd0bdc64'), '/repos/desert-mango/hippocampus-docs/compare/75f09dd...d0bdc64');
+  assert.throws(() => C.pageCommitsPath('a.md&per_page=1'));
+  assert.throws(() => C.pageCommitsPath('../secret.md'));
+  assert.throws(() => C.orgCommitsPath('docs/../x'));
+  assert.throws(() => C.orgCommitsPath('docs', { author: 'x' }));
+  assert.throws(() => C.orgCommitsPath('docs', { since: '2025-09-29T00:00:00Z&x=1' }));
+  assert.throws(() => C.comparePath('a..b', 'c'));
+});
+
+test('org reader: GET only, the token on allowed reads, and a refused path never reaches fetch (403-shaped)', async () => {
+  const f = fakeFetch(() => reply(200, [{ sha: 'x' }]));
+  const r = C.createOrgReader(TOKEN, f.fetch, orgStorage(), ORG_REPOS);
+  assert.deepEqual(Object.keys(r).sort(), ['allowed', 'get', 'repoNames']);
+  const out = await r.get(C.orgCommitsPath('docs', { per_page: 100 }));
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.data, [{ sha: 'x' }]);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, 'https://api.github.com/repos/HippoCampusRobotics/docs/commits?per_page=100');
+  assert.equal(f.calls[0].init.method, 'GET');
+  assert.equal(f.calls[0].init.headers.Authorization, `Bearer ${TOKEN}`);
+  assert.equal(f.calls[0].init.body, undefined);
+  for (const p of ['/orgs/HippoCampusRobotics/repos', '/repos/HippoCampusRobotics/secret/commits',
+    '/repos/desert-mango/hippocampus-docs/git/refs', '/user']) {
+    assert.deepEqual(await r.get(p), { ok: false, status: 403, data: null, refused: true });
+  }
+  assert.equal(f.calls.length, 1, 'nothing refused was fetched');
+});
+
+test('org reader: a 403 or 404 with the token is retried ONCE with no Authorization header', async () => {
+  for (const first of [403, 404]) {
+    let n = 0;
+    const f = fakeFetch(() => { n += 1; return n === 1 ? reply(first, { message: 'no' }) : reply(200, []); });
+    const r = C.createOrgReader(TOKEN, f.fetch, orgStorage(), ORG_REPOS);
+    const out = await r.get(C.orgCommitsPath('mavros'));
+    assert.equal(out.ok, true);
+    assert.equal(out.anonymous, true);
+    assert.equal(f.calls.length, 2);
+    assert.equal(f.calls[0].init.headers.Authorization, `Bearer ${TOKEN}`);
+    assert.ok(!('Authorization' in f.calls[1].init.headers), 'the retry carries no token');
+    assert.equal(f.calls[1].init.method, 'GET');
+    assert.equal(f.calls[1].url, f.calls[0].url);
+  }
+  const both = fakeFetch(() => reply(403, { message: 'rate limited' }));
+  const r2 = C.createOrgReader(TOKEN, both.fetch, orgStorage(), ORG_REPOS);
+  const out2 = await r2.get(C.orgCommitsPath('docs'));
+  assert.deepEqual([out2.ok, out2.status, out2.data], [false, 403, null]);
+  assert.equal(both.calls.length, 2, 'one retry, never more');
+  const five = fakeFetch(() => reply(500, {}));
+  await C.createOrgReader(TOKEN, five.fetch, orgStorage(), ORG_REPOS).get(C.orgCommitsPath('docs'));
+  assert.equal(five.calls.length, 1, 'a 500 is not retried');
+  const net = fakeFetch(() => new Error('offline'));
+  const out3 = await C.createOrgReader(TOKEN, net.fetch, orgStorage(), ORG_REPOS).get(C.orgCommitsPath('docs'));
+  assert.deepEqual([out3.ok, out3.status], [false, 0]);
+  const anon = fakeFetch(() => reply(404, {}));
+  await C.createOrgReader('', anon.fetch, orgStorage(), ORG_REPOS).get(C.orgCommitsPath('docs'));
+  assert.equal(anon.calls.length, 1, 'no token: one anonymous read, nothing to retry');
+  assert.ok(!('Authorization' in anon.calls[0].init.headers));
+});
+
+test('org reader: a good answer is kept 15 minutes in storage, keyed by URL; failures are not kept', async () => {
+  let t = 1_000_000;
+  const store = orgStorage();
+  const f = fakeFetch((url) => (/mavros/.test(url) ? reply(502, {}) : reply(200, [{ sha: 'y' }])));
+  const r = C.createOrgReader(TOKEN, f.fetch, store, ORG_REPOS, { now: () => t });
+  const p = C.orgCommitsPath('docs', { per_page: 100 });
+  await r.get(p);
+  const again = await r.get(p);
+  assert.equal(again.cached, true);
+  assert.deepEqual(again.data, [{ sha: 'y' }]);
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(store.keys(), [`hc-org-cache:https://api.github.com${p}`]);
+  assert.ok(!store.keys().some((k) => /Bearer|planted/.test(store.getItem(k))), 'the token is never stored');
+  await r.get(C.orgCommitsPath('docs', { per_page: 50 }));
+  assert.equal(f.calls.length, 2, 'another URL is another read');
+  t += 15 * 60 * 1000 - 1;
+  await r.get(p);
+  assert.equal(f.calls.length, 2, 'still fresh just before 15 minutes');
+  t += 1;
+  await r.get(p);
+  assert.equal(f.calls.length, 3, 'stale at 15 minutes');
+  await r.get(C.orgCommitsPath('mavros'));
+  await r.get(C.orgCommitsPath('mavros'));
+  assert.equal(f.calls.length, 5, 'a failure is read again');
+  const boom = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() {} };
+  const r2 = C.createOrgReader(TOKEN, fakeFetch(() => reply(200, [])).fetch, boom, ORG_REPOS);
+  assert.equal((await r2.get(p)).ok, true, 'a throwing storage costs the cache, not the read');
+});
+
+test('org reader: the allowlist is fixed when the reader is made', async () => {
+  const names = ['docs'];
+  const f = fakeFetch(() => reply(200, []));
+  const r = C.createOrgReader(TOKEN, f.fetch, orgStorage(), names);
+  names.push('mavros');
+  assert.equal((await r.get(C.orgCommitsPath('mavros'))).refused, true);
+  assert.deepEqual(r.repoNames, ['docs']);
+  assert.ok(Object.isFrozen(r.repoNames));
+});
+
+/* Security-pass hardenings (U5 fixup). */
+
+test('org reader: every fetch refuses redirects (redirect: "error"), with the token and on the anonymous retry', async () => {
+  let n = 0;
+  const f = fakeFetch(() => { n += 1; return n === 1 ? reply(404, {}) : reply(200, []); });
+  const out = await C.createOrgReader(TOKEN, f.fetch, orgStorage(), ORG_REPOS).get(C.orgCommitsPath('docs'));
+  assert.equal(out.ok, true);
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.calls[0].init.headers.Authorization, `Bearer ${TOKEN}`);
+  assert.equal(f.calls[0].init.redirect, 'error', 'a 301 can never carry the token to an unchecked URL');
+  assert.equal(f.calls[1].init.redirect, 'error', 'the anonymous retry refuses redirects too');
+});
+
+test('org reader: a cached answer is ok only for a 2xx status, and keeps its real anonymous flag', async () => {
+  const t = 5_000_000;
+  const p = C.orgCommitsPath('docs');
+  const url = `https://api.github.com${p}`;
+  const store = orgStorage();
+  store.setItem(`hc-org-cache:${url}`, JSON.stringify({ t, status: 500, data: [{ sha: 'planted' }] }));
+  const f = fakeFetch(() => reply(200, []));
+  const planted = await C.createOrgReader(TOKEN, f.fetch, store, ORG_REPOS, { now: () => t }).get(p);
+  assert.equal(planted.ok, false, 'a stored 500 is never served as ok');
+  assert.equal(planted.data, null);
+
+  let n = 0;
+  const anonStore = orgStorage();
+  const g = fakeFetch(() => { n += 1; return n === 1 ? reply(403, {}) : reply(200, [{ sha: 'a' }]); });
+  const r = C.createOrgReader(TOKEN, g.fetch, anonStore, ORG_REPOS, { now: () => t });
+  assert.equal((await r.get(p)).anonymous, true);
+  const hit = await r.get(p);
+  assert.deepEqual([hit.cached, hit.ok, hit.anonymous], [true, true, true], 'an anonymous answer stays anonymous from the cache');
+  const authStore = orgStorage();
+  const h = C.createOrgReader(TOKEN, fakeFetch(() => reply(200, [])).fetch, authStore, ORG_REPOS, { now: () => t });
+  await h.get(p);
+  const hit2 = await h.get(p);
+  assert.deepEqual([hit2.cached, hit2.anonymous], [true, false]);
+});
+
+test('sign-out: clearSession also removes every hc-org-cache:* key, and nothing else', () => {
+  const m = new Map();
+  const s = {
+    get length() { return m.size; },
+    key: (i) => ([...m.keys()][i] ?? null),
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); },
+  };
+  C.writeSession(s, C.makeSession(TOKEN, null, 'x', 1));
+  s.setItem('hc-org-cache:https://api.github.com/repos/HippoCampusRobotics/docs/commits', '{}');
+  s.setItem('hc-org-cache:https://api.github.com/repos/HippoCampusRobotics/mavros/commits', '{}');
+  s.setItem('hc-draft:content/about.md', 'keep me');
+  C.clearSession(s);
+  assert.deepEqual([...m.keys()], ['hc-draft:content/about.md'], 'the session and every org-cache answer are gone');
+  const hostile = { get length() { throw new Error('x'); }, key() { throw new Error('x'); }, removeItem() { throw new Error('x'); } };
+  assert.doesNotThrow(() => C.clearSession(hostile));
+});

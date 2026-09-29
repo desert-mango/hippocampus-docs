@@ -7,10 +7,23 @@
    it (tools/tests/test_cms_core.mjs). js/cms.js is the DOM glue around it.
 
    ONE REPOSITORY. The token a signed-in person holds may reach other
-   repositories; this code never reads, lists or writes any of them (R2-F1).
-   Every GitHub API path goes through assertRepoPath(): it passes '/user' and
-   paths under /repos/desert-mango/hippocampus-docs, and throws on anything
-   else before fetch is ever called.
+   repositories; this code never lists or writes any of them, and reads
+   another repository only through the ONE stated exception below (R2-F1).
+   Every GitHub API path of the client goes through assertRepoPath(): it
+   passes '/user' and paths under /repos/desert-mango/hippocampus-docs, and
+   throws on anything else before fetch is ever called — it still refuses
+   every HippoCampusRobotics path (a test proves it).
+
+   THE STATED EXCEPTION (plan D-A, rev 4; cms-v2-plan.md §5). Exactly one
+   GET-only reader, createOrgReader, may send the user's token to
+   repos/HippoCampusRobotics/<repo>/commits… for <repo> in the committed
+   data/graph/github-repos.json (a fixed allowlist of names, built when the
+   reader is made), plus this repository's commits?path= and compare. Never
+   a list call, never another owner, never another endpoint, never a write;
+   anything else is refused locally (403) before fetch; a 403/404 is
+   retried once WITHOUT the token; answers are cached 15 minutes. The
+   allowlist, the cache and the retry live here and are node-tested
+   (tools/tests/test_cms_core.mjs, "org reader").
 
    WRITES ARE AN ALLOWLIST OF EXACT PATHS. The GitHub client sends GET to
    any path assertRepoPath() passes, and a write verb ONLY to a path shape
@@ -44,7 +57,14 @@
    fetcher's closure and never enters a message or the frame's URL.
    isBridgePath / previewFragment / BRIDGE_PATH_RE are copies of js/source.js's
    (that file exports them to node only); the test suite proves the copies
-   agree with the originals. */
+   agree with the originals.
+
+   THE EDITOR'S BLOCK MODEL (U5, plan D-D/D-E/D-F) is the last section:
+   splitBlocks over the vendored marked lexer with the anchoring guard, the
+   span editor, id-sentinels, the block diff and the overlay on main, the
+   (sha, path) fetch cache, the View settings and the org reader.
+   tools/tests/test_block_model.mjs pins it; tools/tests/browser_oracles.mjs
+   checks the sentinels in a real Chrome over every content page. */
 (function () {
   'use strict';
 
@@ -335,8 +355,18 @@
     };
   }
 
+  /* Sign-out also drops every org-reader answer (ORG_CACHE_PREFIX keys):
+     a signed-out tab never serves an answer fetched with the token. */
   function clearSession(storage) {
     try { if (storage) storage.removeItem(SESSION_KEY); } catch (e) { /* nothing to clear */ }
+    try {
+      const keys = [];
+      for (let i = 0; storage && i < storage.length; i += 1) {
+        const k = storage.key(i);
+        if (typeof k === 'string' && k.startsWith(ORG_CACHE_PREFIX)) keys.push(k);
+      }
+      keys.forEach((k) => storage.removeItem(k));
+    } catch (e) { /* nothing to clear */ }
   }
 
   function readSession(storage, now) {
@@ -1278,12 +1308,38 @@
       after: '\n\n</div>\n\n<div class="tab" data-label="Second">\n\nWhat the second tab says.\n\n</div>\n\n</div>\n' }),
   });
 
+  /* U5: the block picker's catalog = SNIPPETS plus four. It is a separate
+     table because /cms/ (js/cms.js) draws one button per SNIPPETS key and
+     tools/tests/test_cms_editor.mjs pins those three keys; the two fold
+     together when /cms/ is retired (U8). The site serves images only from
+     its Cloudinary manifest, so the image snippet has no address: `media`
+     tells the picker to take one from the Media tab (imageMarkdown); the
+     bare snippet renders its alt text and passes the gate. The sanitizer
+     drops <video> and <iframe>, so a video is a link. */
+  const SNIPPET_CATALOG = Object.freeze({
+    note: SNIPPETS.note,
+    warning: SNIPPETS.warning,
+    tabs: SNIPPETS.tabs,
+    image: Object.freeze({ label: 'Image', media: true,
+      before: '![', placeholder: 'Describe the image', after: ']()\n' }),
+    attention: Object.freeze({ label: 'Attention',
+      before: '<div class="adm adm-attention"><p class="adm-title">Attention</p>\n\n',
+      placeholder: 'What the reader must not miss.', after: '\n\n</div>\n' }),
+    video: Object.freeze({ label: 'Video (a link)',
+      before: '[Watch the video: ', placeholder: 'what it shows',
+      after: '](https://www.youtube.com/watch?v=VIDEO-ID)\n' }),
+    repo: Object.freeze({ label: 'Repository card',
+      before: '<div class="adm adm-seealso"><p class="adm-title">Repository</p>\n\n',
+      placeholder: '[HippoCampusRobotics/repo-name](https://github.com/HippoCampusRobotics/repo-name): what it holds.',
+      after: '\n\n</div>\n' }),
+  });
+
   /* The block snippet `kind` at [start, end) of text, on its own lines; the
      selection (or the placeholder) goes inside and comes back selected.
      -> {text, selStart, selEnd} */
   function insertSnippet(text, start, end, kind) {
-    if (!Object.prototype.hasOwnProperty.call(SNIPPETS, kind)) throw new Error(`no such snippet: ${String(kind).slice(0, 20)}`);
-    const sn = SNIPPETS[kind];
+    if (!Object.prototype.hasOwnProperty.call(SNIPPET_CATALOG, kind)) throw new Error(`no such snippet: ${String(kind).slice(0, 20)}`);
+    const sn = SNIPPET_CATALOG[kind];
     const t = String(text || '');
     const a = Math.max(0, Math.min(start, t.length));
     const b = Math.max(a, Math.min(end, t.length));
@@ -1968,6 +2024,719 @@
     return { text: t.slice(0, a) + insert + t.slice(b), selStart: at, selEnd: at };
   }
 
+  // --------------------------------------------- the block model (U5) ---
+
+  /* Plan D-E. A page's blocks are the TOP-LEVEL tokens of the vendored
+     marked lexer (js/marked.min.js, the same parser that renders the page),
+     re-anchored to real offsets in the ORIGINAL text. marked normalizes
+     before it lexes (CR LF -> LF, leading tabs -> spaces) and drops reference
+     definitions ([x]: url), so its `raw` pieces do not always add up to the
+     file. THE ANCHORING RULE IS THE GUARD: each token's raw must be found
+     exactly at the running cursor, or right after a gap made only of
+     reference-definition lines and blank lines (the gap then belongs to the
+     block before it). Anything else — a normalized CR or tab line, a raw
+     that is nowhere, a gap with other content — turns block editing OFF for
+     that text: splitBlocks answers {ok: false, reason} and the editor offers
+     only "Edit whole page as Markdown". So every block it does answer is
+     {start, end, text: original.slice(start, end), kind, type}, and the
+     blocks join back to the text byte for byte.
+
+     Wrappers. Token runs merge while an HTML <div>, <details> or <figure>
+     is still open at the top level (tags counted the way the browser's tree
+     builder sees them: in HTML blocks and in inline HTML of paragraphs and
+     headings, never inside code; a close tag pops back to its opener; a list,
+     quote or table closes what opened inside it). So an adm box, a tabs
+     group, an img-grid or a <details> is ONE block with everything inside
+     it, and an unclosed one takes the rest of the page — a sentinel is
+     never put where the browser would nest it. (This covers the plan's
+     "column-0 open tag" rule and the indented and inline spellings too.)
+
+     Kinds: heading, paragraph, list, code, table, html (one balanced HTML
+     block), wrapper (a merged run), image (a paragraph that is only an
+     image), space (blank lines). Other token types (hr, blockquote) are
+     'paragraph'; `type` keeps marked's own name. */
+  const BLOCK_KINDS = Object.freeze(['heading', 'paragraph', 'list', 'code', 'table', 'html', 'wrapper', 'image', 'space']);
+  const WRAPPER_TAG_RE = /<(\/?)(div|details|figure)(?=[\s/>])[^>]*>/gi;
+  const DEF_LINE_RE = /^ {0,3}\[(?:[^\]\\\n]|\\.)+\]:[ \t]*(?:<[^>\n]*>|\S+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$/;
+  const SENTINEL_PREFIX_RE = /^[A-Za-z0-9_-]{8,64}$/;
+  const FULL_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+  /* marked: the page's global in a browser (index.html and the editor load
+     js/marked.min.js), the vendored file itself in node. */
+  let lexerFn = null;
+  function defaultLexer() {
+    if (lexerFn) return lexerFn;
+    let m = null;
+    if (typeof marked !== 'undefined' && marked && typeof marked.lexer === 'function') m = marked;  // eslint-disable-line no-undef
+    else if (typeof require === 'function' && typeof __dirname === 'string') {
+      try { m = require(`${__dirname}/marked.min.js`).marked; } catch (e) { m = null; }  // eslint-disable-line no-undef
+    }
+    if (!m) return null;
+    lexerFn = (src) => m.lexer(src);
+    return lexerFn;
+  }
+
+  /* [from, to) of text holds only blank lines and reference definitions
+     (a definition only where a line starts). */
+  function isDefGap(text, from, to) {
+    if (from === to) return true;
+    const lines = text.slice(from, to).split('\n');
+    const lineStart = from === 0 || text.charAt(from - 1) === '\n';
+    const last = lines.length - 1;
+    return lines.every((ln, i) => /^[ \t]*$/.test(ln)
+      || (i !== last && (i > 0 || lineStart) && DEF_LINE_RE.test(ln)));
+  }
+
+  function guardReason(text, at) {
+    if (/\r/.test(text)) return 'this page has Windows line endings (CR LF); block editing needs plain LF line endings';
+    if (/^ *\t/m.test(text)) return 'a line of this page starts with a tab; block editing needs spaces';
+    const line = text.slice(0, at).split('\n').length;
+    return `the Markdown parser reads this page differently from its text near line ${line}`;
+  }
+
+  /* Find raw at the cursor, or after a gap of blank and definition lines. */
+  function anchor(text, raw, cursor) {
+    if (text.startsWith(raw, cursor)) return cursor;
+    for (let at = text.indexOf(raw, cursor), n = 0; at >= 0 && n < 1000; at = text.indexOf(raw, at + 1), n += 1) {
+      if (isDefGap(text, cursor, at)) return at;
+    }
+    return -1;
+  }
+
+  const CLOSES_ITSELF = Object.freeze(['list', 'blockquote', 'table']);
+
+  /* The wrapper tags a token opens and closes, applied to `stack` (the open
+     wrapper names, outermost first). */
+  function scanWrapperTags(tok, stack) {
+    if (!tok || typeof tok !== 'object' || tok.type === 'code' || tok.type === 'codespan') return stack;
+    if (CLOSES_ITSELF.indexOf(tok.type) >= 0) return stack;
+    if (tok.type === 'html') {
+      const s = stack.slice();
+      for (const m of String(tok.raw || '').matchAll(WRAPPER_TAG_RE)) {
+        const name = m[2].toLowerCase();
+        if (!m[1]) s.push(name);
+        else if (s.lastIndexOf(name) >= 0) s.length = s.lastIndexOf(name);
+      }
+      return s;
+    }
+    let s = stack;
+    for (const child of listOf(tok.tokens)) s = scanWrapperTags(child, s);
+    return s;
+  }
+
+  function isImageOnly(tok) {
+    const parts = listOf(tok.tokens).filter((t) => t && !(t.type === 'text' && !String(t.raw || '').trim()) && t.type !== 'br');
+    if (parts.length !== 1) return false;
+    const p = parts[0];
+    if (p.type === 'image') return true;
+    return p.type === 'link' && listOf(p.tokens).length === 1 && p.tokens[0].type === 'image';
+  }
+
+  function kindOf(tok) {
+    const t = tok.type;
+    if (t === 'paragraph') return isImageOnly(tok) ? 'image' : 'paragraph';
+    return ['heading', 'list', 'code', 'table', 'html', 'space'].indexOf(t) >= 0 ? t : 'paragraph';
+  }
+
+  /* -> {ok: true, reason: null, blocks} | {ok: false, reason, blocks: []}.
+     opts.lexer replaces marked (tests only). */
+  function splitBlocks(text, opts) {
+    const off = (reason) => ({ ok: false, reason, blocks: [] });
+    if (typeof text !== 'string') return off('there is no page text to split');
+    if (text === '') return { ok: true, reason: null, blocks: [] };
+    if (/\r/.test(text)) return off(guardReason(text, 0));
+    const lexer = opts && typeof opts.lexer === 'function' ? opts.lexer : defaultLexer();
+    if (!lexer) return off('the Markdown parser is not loaded');
+    let tokens;
+    try { tokens = lexer(text); } catch (e) { return off('the Markdown parser could not read this page'); }
+    if (!Array.isArray(tokens)) return off('the Markdown parser could not read this page');
+    const pieces = [];
+    let cursor = 0;
+    for (const tok of tokens) {
+      const raw = tok && typeof tok.raw === 'string' ? tok.raw : '';
+      if (!raw) continue;
+      const at = anchor(text, raw, cursor);
+      if (at < 0) return off(guardReason(text, cursor));
+      if (at > cursor && pieces.length) pieces[pieces.length - 1].end = at;
+      pieces.push({ start: pieces.length ? at : 0, end: at + raw.length, tok });
+      cursor = at + raw.length;
+    }
+    if (cursor < text.length) {
+      if (!isDefGap(text, cursor, text.length)) return off(guardReason(text, cursor));
+      if (pieces.length) pieces[pieces.length - 1].end = text.length;
+      else pieces.push({ start: 0, end: text.length, tok: { type: 'space' } });
+    }
+    const blocks = [];
+    let stack = [];
+    let run = null;
+    for (const p of pieces) {
+      stack = scanWrapperTags(p.tok, stack);
+      if (run) {
+        run.end = p.end;
+        if (!stack.length) { blocks.push(run); run = null; }
+      } else if (stack.length) {
+        run = { start: p.start, end: p.end, kind: 'wrapper', type: 'wrapper' };
+      } else {
+        blocks.push({ start: p.start, end: p.end, kind: kindOf(p.tok), type: String(p.tok.type) });
+      }
+    }
+    if (run) blocks.push(run);
+    return { ok: true, reason: null,
+      blocks: blocks.map((b) => ({ start: b.start, end: b.end, text: text.slice(b.start, b.end), kind: b.kind, type: b.type })) };
+  }
+
+  // ----------------------------------------------------- the span editor ---
+
+  /* Plan D-D: an edit is pinned to a character SPAN, not a block index. The
+     parent records spanOf(draft, index) when a block is selected; every
+     change is replaceSpan(draft, span, newText), whose answer carries the
+     moved span; the block list is re-split for display only. So typing an
+     unclosed fence or an opening <div class="adm…"> never swallows the rest
+     of the page: the text outside the span stays byte-identical. */
+  function spanOf(text, index) {
+    const s = splitBlocks(text);
+    if (!s.ok || !Number.isInteger(index) || index < 0 || index >= s.blocks.length) return null;
+    return { start: s.blocks[index].start, end: s.blocks[index].end };
+  }
+
+  function replaceSpan(text, span, insert) {
+    const t = text;
+    const ok = typeof t === 'string' && typeof insert === 'string' && span && typeof span === 'object'
+      && Number.isInteger(span.start) && Number.isInteger(span.end)
+      && span.start >= 0 && span.start <= span.end && span.end <= t.length;
+    if (!ok) throw new Error('replaceSpan: a span {start, end} inside the text and a string are needed');
+    return { text: t.slice(0, span.start) + insert + t.slice(span.end),
+      span: { start: span.start, end: span.start + insert.length } };
+  }
+
+  const trailingNewlines = (s) => s.length - s.replace(/\n+$/, '').length;
+  const leadingNewlines = (s) => s.length - s.replace(/^\n+/, '').length;
+
+  /* head + tail with a blank line between them when both have text, so two
+     blocks never glue into one (a paragraph, then a paragraph). Adds only
+     newlines. */
+  function joinParts(head, tail) {
+    if (!head || !tail) return head + tail;
+    const have = trailingNewlines(head) + leadingNewlines(tail);
+    return have >= 2 ? head + tail : head + '\n'.repeat(2 - have) + tail;
+  }
+
+  /* A snippet kind (a SNIPPETS key) or Markdown text -> {body, select}. */
+  function snippetBody(snippet) {
+    if (typeof snippet !== 'string') throw new Error('insertAt: a snippet kind or Markdown text is needed');
+    if (Object.prototype.hasOwnProperty.call(SNIPPET_CATALOG, snippet)) {
+      const sn = SNIPPET_CATALOG[snippet];
+      const body = (sn.before + sn.placeholder + sn.after).replace(/\s+$/, '');
+      return { body, select: { from: sn.before.length, to: sn.before.length + sn.placeholder.length } };
+    }
+    const body = snippet.replace(/\s+$/, '');
+    return { body, select: { from: 0, to: body.length } };
+  }
+
+  /* The snippet (or Markdown) as its own block at the boundary BEFORE block
+     `index` (index === blocks.length: the end). -> {text, span (the new
+     block), select (the placeholder, to select in the textarea)} | null. */
+  function insertAt(text, index, snippet) {
+    const { body, select } = snippetBody(snippet);
+    const s = splitBlocks(text);
+    if (!s.ok || !Number.isInteger(index) || index < 0 || index > s.blocks.length) return null;
+    const at = index < s.blocks.length ? s.blocks[index].start : text.length;
+    const head = text.slice(0, at);
+    const tail = text.slice(at);
+    const lead = !head ? '' : '\n'.repeat(Math.max(0, 2 - trailingNewlines(head)));
+    const trail = !tail || /^\n/.test(tail) ? '\n' : '\n\n';
+    const start = at + lead.length;
+    return { text: head + lead + body + trail + tail,
+      span: { start, end: start + body.length + 1 },
+      select: { start: start + select.from, end: start + select.to } };
+  }
+
+  /* Units: a non-space block and the blank lines after it (a page that
+     starts with blank lines has them as a unit of their own).
+     -> [{from, to (block indices, inclusive), start, end}] */
+  function unitsOf(blocks) {
+    const units = [];
+    blocks.forEach((b, i) => {
+      const u = units[units.length - 1];
+      if (b.kind === 'space' && u) { u.to = i; u.end = b.end; } else units.push({ from: i, to: i, start: b.start, end: b.end });
+    });
+    return units;
+  }
+
+  function unitAt(units, index) {
+    return units.findIndex((u) => index >= u.from && index <= u.to);
+  }
+
+  /* Rebuild from units in a new order: pairs that were neighbours keep
+     their bytes; a new joint gets a blank line. */
+  function joinUnits(text, units, order) {
+    let out = '';
+    order.forEach((k, n) => {
+      const piece = text.slice(units[k].start, units[k].end);
+      out = n > 0 && order[n - 1] === k - 1 ? out + piece : joinParts(out, piece);
+    });
+    return out;
+  }
+
+  /* Block `from` (with its blank lines) moved to before block `to`
+     (to === blocks.length: the end). -> text | null. */
+  function moveBlock(text, from, to) {
+    const s = splitBlocks(text);
+    const n = s.blocks.length;
+    if (!s.ok || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= n || to < 0 || to > n) return null;
+    const units = unitsOf(s.blocks);
+    const u = unitAt(units, from);
+    let v = to === n ? units.length : unitAt(units, to);
+    if (to < n && units[v].from !== to) v += 1;          // inside a unit's blank lines: after it
+    if (v === u || v === u + 1) return text;
+    const order = units.map((x, k) => k).filter((k) => k !== u);
+    order.splice(v > u ? v - 1 : v, 0, u);
+    return joinUnits(text, units, order);
+  }
+
+  /* Block `index` removed (a non-space block takes its blank lines with
+     it). -> text | null. */
+  function deleteBlock(text, index) {
+    const s = splitBlocks(text);
+    if (!s.ok || !Number.isInteger(index) || index < 0 || index >= s.blocks.length) return null;
+    const b = s.blocks[index];
+    let end = b.end;
+    if (b.kind !== 'space') {
+      for (let j = index + 1; j < s.blocks.length && s.blocks[j].kind === 'space'; j += 1) end = s.blocks[j].end;
+    }
+    return joinParts(text.slice(0, b.start), text.slice(end));
+  }
+
+  /* D-E marks. The page's Markdown with an id-sentinel before every
+     non-space block i:  \n\n<div id="hcb-<prefix>-<i>"></div>\n\n
+     (the sanitizer keeps div + id; an hc-* CLASS would be dropped, and the
+     per-load prefix is what content cannot guess). `spans` (optional) are
+     the blocks to mark, e.g. overlayOnMain's entries: sentinel i goes before
+     spans[i]. -> text | null (the page does not split: no block editing). */
+  const sentinelId = (prefix, i) => `hcb-${prefix}-${i}`;
+  const sentinel = (prefix, i) => `\n\n<div id="${sentinelId(prefix, i)}"></div>\n\n`;
+
+  function withSentinels(text, prefix, spans) {
+    if (typeof prefix !== 'string' || !SENTINEL_PREFIX_RE.test(prefix)) {
+      throw new Error('withSentinels: the prefix must be 8-64 characters of [A-Za-z0-9_-]');
+    }
+    let marks;
+    if (spans === undefined) {
+      const s = splitBlocks(text);
+      if (!s.ok) return null;
+      marks = s.blocks.map((b, i) => ({ at: b.start, i, space: b.kind === 'space' })).filter((m) => !m.space);
+    } else {
+      let last = 0;
+      marks = listOf(spans).map((sp, i) => {
+        const good = sp && Number.isInteger(sp.start) && Number.isInteger(sp.end)
+          && sp.start >= last && sp.start <= sp.end && sp.end <= text.length;
+        if (!good) throw new Error('withSentinels: spans must be ordered, non-overlapping and inside the text');
+        last = sp.end;
+        return { at: sp.start, i };
+      });
+    }
+    let out = '';
+    let pos = 0;
+    for (const m of marks) {
+      out += text.slice(pos, m.at) + sentinel(prefix, m.i);
+      pos = m.at;
+    }
+    return out + text.slice(pos);
+  }
+
+  // ------------------------------------------------- diff + overlay (D-F) ---
+
+  const blockCore = (b) => b.text.replace(/\s+$/, '');
+
+  /* LCS over the non-space blocks' text (trailing blank lines ignored). A
+     run of deletions and additions between two equal blocks pairs up, in
+     order, as 'change'; the rest stay 'del' / 'add'. a and b are block
+     indices into the split of each text (null on the side that has none). */
+  function diffSplits(sa, sb) {
+    const A = sa.blocks.map((b, i) => ({ i, key: blockCore(b), space: b.kind === 'space' })).filter((x) => !x.space);
+    const B = sb.blocks.map((b, i) => ({ i, key: blockCore(b), space: b.kind === 'space' })).filter((x) => !x.space);
+    const n = A.length;
+    const m = B.length;
+    const w = m + 1;
+    const dp = new Int32Array((n + 1) * w);
+    for (let i = n - 1; i >= 0; i -= 1) {
+      for (let j = m - 1; j >= 0; j -= 1) {
+        dp[i * w + j] = A[i].key === B[j].key ? dp[(i + 1) * w + j + 1] + 1
+          : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+      }
+    }
+    const out = [];
+    let dels = [];
+    let adds = [];
+    const flush = () => {
+      const k = Math.min(dels.length, adds.length);
+      for (let x = 0; x < k; x += 1) out.push({ status: 'change', a: dels[x], b: adds[x] });
+      dels.slice(k).forEach((a) => out.push({ status: 'del', a, b: null }));
+      adds.slice(k).forEach((b) => out.push({ status: 'add', a: null, b }));
+      dels = [];
+      adds = [];
+    };
+    let i = 0;
+    let j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && A[i].key === B[j].key) {
+        flush();
+        out.push({ status: 'same', a: A[i].i, b: B[j].i });
+        i += 1;
+        j += 1;
+      } else if (j >= m || (i < n && dp[(i + 1) * w + j] >= dp[i * w + j + 1])) {
+        dels.push(A[i].i);
+        i += 1;
+      } else {
+        adds.push(B[j].i);
+        j += 1;
+      }
+    }
+    flush();
+    return out;
+  }
+
+  /* -> [{status: 'same'|'add'|'del'|'change', a, b}] | null (a text that
+     does not split). */
+  function blockDiff(a, b) {
+    const sa = splitBlocks(a);
+    const sb = splitBlocks(b);
+    return sa.ok && sb.ok ? diffSplits(sa, sb) : null;
+  }
+
+  /* The PR's block diff (merge base -> head) drawn over the CURRENT main.
+     -> {text, overlay, conflicts} | null (a text that does not split: no
+     overlay is drawn). overlay has one entry per composite block, in order:
+       {source: 'main'|'pr-add'|'pr-del'|'conflict', mainIndex, pr, text, start, end}
+     mainIndex is the block index in main's split (null for 'pr-add'); pr is
+     null for a plain main block, else {base, head} (block indices in the
+     merge base's and the head's splits, null where there is none). A block
+     the PR deleted or replaced is kept, as 'pr-del', BEFORE its replacement.
+     A block that main changed (or deleted) since the merge base AND the PR
+     changed (or deleted) is never guessed: it is main's version, as
+     'conflict' (nothing drawn when main deleted it), and listed in
+     conflicts as {mainIndex, base, head}. The composite text is the
+     entries' text (trailing blank lines trimmed) joined by blank lines;
+     start/end locate each entry in it (withSentinels(text, prefix, overlay)
+     marks exactly these blocks). */
+  function overlayOnMain(mainText, baseText, headText) {
+    const M = splitBlocks(mainText);
+    const Bs = splitBlocks(baseText);
+    const H = splitBlocks(headText);
+    if (!M.ok || !Bs.ok || !H.ok) return null;
+    const prOf = new Map();
+    const prAdds = new Map();
+    let anchorAt = -1;
+    for (const d of diffSplits(Bs, H)) {
+      if (d.a !== null) { prOf.set(d.a, d); anchorAt = d.a; }
+      if (d.status === 'add') {
+        if (!prAdds.has(anchorAt)) prAdds.set(anchorAt, []);
+        prAdds.get(anchorAt).push(d.b);
+      }
+    }
+    const entries = [];
+    const conflicts = [];
+    const main = (mi) => entries.push({ source: 'main', mainIndex: mi, pr: null, text: blockCore(M.blocks[mi]) });
+    const addsAfter = (baseIndex) => listOf(prAdds.get(baseIndex)).forEach((h) => entries.push({
+      source: 'pr-add', mainIndex: null, pr: { base: baseIndex < 0 ? null : baseIndex, head: h }, text: blockCore(H.blocks[h]) }));
+    addsAfter(-1);
+    for (const d of diffSplits(Bs, M)) {
+      if (d.status === 'add') { main(d.b); continue; }
+      const p = prOf.get(d.a) || { status: 'same', b: null };
+      const prHead = p.status === 'change' ? p.b : null;
+      if (d.status === 'same') {
+        if (p.status === 'same') main(d.b);
+        else {
+          entries.push({ source: 'pr-del', mainIndex: d.b, pr: { base: d.a, head: prHead }, text: blockCore(M.blocks[d.b]) });
+          if (prHead !== null) {
+            entries.push({ source: 'pr-add', mainIndex: null, pr: { base: d.a, head: prHead }, text: blockCore(H.blocks[prHead]) });
+          }
+        }
+      } else if (p.status === 'same') {
+        if (d.status === 'change') main(d.b);
+      } else {
+        const mi = d.status === 'change' ? d.b : null;
+        conflicts.push({ mainIndex: mi, base: d.a, head: prHead });
+        if (mi !== null) entries.push({ source: 'conflict', mainIndex: mi, pr: { base: d.a, head: prHead }, text: blockCore(M.blocks[mi]) });
+      }
+      addsAfter(d.a);
+    }
+    let text = '';
+    const overlay = entries.map((e) => {
+      if (text) text += '\n\n';
+      const start = text.length;
+      text += e.text;
+      return Object.freeze({ ...e, pr: e.pr ? Object.freeze(e.pr) : null, start, end: text.length });
+    });
+    if (text) text += '\n';
+    return { text, overlay, conflicts };
+  }
+
+  // ------------------------------------------ cached fetcher + resolveRef ---
+
+  /* Plan D-D, reload cost: files at a commit sha never change, so a read is
+     memoized by (sha, path) for the life of the editor. fetchAt(sha, path)
+     answers {ok, status, text} (e.g. (sha, p) => refFetcher(token, sha)(p));
+     at(sha) is a path fetcher for draftFetcher's fallback or the preview
+     host. A branch name is refused (it moves); a failed read is forgotten,
+     so the next load asks again; concurrent reads share one request. */
+  function cachedFetcher(fetchAt) {
+    if (typeof fetchAt !== 'function') throw new Error('cachedFetcher: a fetch function (sha, path) is needed');
+    const memo = new Map();
+    const needSha = (sha) => {
+      if (typeof sha !== 'string' || !FULL_SHA_RE.test(sha)) {
+        throw new Error('cachedFetcher: a full commit sha is needed (a branch name moves)');
+      }
+    };
+    function get(sha, p) {
+      needSha(sha);
+      const key = `${sha}:${p}`;
+      if (memo.has(key)) return memo.get(key);
+      const answer = Promise.resolve()
+        .then(() => fetchAt(sha, p))
+        .then(normalizeAnswer, () => ({ ok: false, status: 502, text: '' }));
+      memo.set(key, answer);
+      answer.then((a) => { if (!a.ok && memo.get(key) === answer) memo.delete(key); });
+      return answer;
+    }
+    return Object.freeze({
+      get,
+      at(sha) { needSha(sha); return (p) => get(sha, p); },
+      size: () => memo.size,
+      clear() { memo.clear(); },
+    });
+  }
+
+  /* A ref -> its commit sha: a full sha is itself (no call); a branch is
+     one GET of git/ref/heads/<branch> through `client` (createGitHubClient).
+     Rejects with an Error whose .status is GitHub's answer. */
+  async function resolveRef(client, ref) {
+    if (typeof ref === 'string' && FULL_SHA_RE.test(ref)) return ref;
+    if (!isRef(ref)) throw new Error('resolveRef: a branch name or a full commit sha is needed');
+    const res = await client.get(`${REPO_API_PATH}/git/ref/heads/${encodePath(ref)}`);
+    const obj = res && res.ok && isObj(res.data) && isObj(res.data.object) ? res.data.object : null;
+    if (!obj || typeof obj.sha !== 'string' || !FULL_SHA_RE.test(obj.sha)) {
+      const err = new Error(`could not read where ${ref} points: HTTP ${(res && res.status) || 0}`);
+      err.status = (res && res.status) || 502;
+      throw err;
+    }
+    return obj.sha;
+  }
+
+  // ------------------------------------------- view settings + members ---
+
+  /* Plan D-H: the View tab's settings live in localStorage only. A stored
+     value of the wrong type falls back to its default, one by one. */
+  const VIEW_DEFAULTS = Object.freeze({ suggestions: true, diff: 'inline', compact: false, outlines: true });
+  const VIEW_DIFFS = Object.freeze(['inline', 'side']);
+
+  function cleanView(v) {
+    const o = isObj(v) ? v : {};
+    const bool = (k) => (typeof o[k] === 'boolean' ? o[k] : VIEW_DEFAULTS[k]);
+    return { suggestions: bool('suggestions'), diff: VIEW_DIFFS.indexOf(o.diff) >= 0 ? o.diff : VIEW_DEFAULTS.diff,
+      compact: bool('compact'), outlines: bool('outlines') };
+  }
+
+  const viewSettings = Object.freeze({
+    KEY: 'hc-editor-view',
+    DEFAULTS: VIEW_DEFAULTS,
+    DIFFS: VIEW_DIFFS,
+    load(storage) {
+      try {
+        const raw = storage.getItem('hc-editor-view');
+        return cleanView(raw ? JSON.parse(raw) : null);
+      } catch (e) {
+        return cleanView(null);
+      }
+    },
+    save(storage, settings) {
+      try {
+        storage.setItem('hc-editor-view', JSON.stringify(cleanView(settings)));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+  });
+
+  /* Members-only detail (plan D-A, D-C) is for Admin, Maintainer and Editor:
+     a role from roleFromPermissions whose push is a real true. */
+  const MEMBER_ROLE_KEYS = Object.freeze(['admin', 'maintain', 'push']);
+  function membersOnly(role) {
+    return isObj(role) && role.canPush === true && MEMBER_ROLE_KEYS.indexOf(role.key) >= 0;
+  }
+
+  // ------------------------------------------------- the org reader (D-A) ---
+
+  /* THE ONE STATED EXCEPTION to the ONE-REPOSITORY rule (see the header).
+     createOrgReader is GET-only and sends the user's token to exactly:
+       /repos/HippoCampusRobotics/<repo>/commits[?since|until|per_page|page|path]
+           for <repo> in repoNames (data/graph/github-repos.json), fixed at creation;
+       /repos/desert-mango/hippocampus-docs/commits?path=…[&per_page|page|since|until]
+       /repos/desert-mango/hippocampus-docs/compare/<ref>...<ref>
+     Nothing else: no list call, no other owner, no other endpoint, no write
+     (it has no method parameter at all). The path part carries no encoding,
+     no empty, '.' or '..' segment; every query parameter is named in the
+     endpoint's table, given once, spelled in the ONE canonical encoding
+     (encodeURIComponent of its value) and checked by value, so nothing can
+     ride inside path= or since=. Anything else is refused locally with a
+     403-shaped answer and fetch is never called. A 403 or 404 on a read WITH
+     the token is retried ONCE without it (the editor App may not be
+     installed on the org; public data reads anonymously). A good answer is
+     kept 15 minutes in `storage` (sessionStorage), keyed by URL, and dropped
+     at sign-out (clearSession). No fetch follows a redirect. */
+  const ORG_OWNER = 'HippoCampusRobotics';
+  const ORG_CACHE_PREFIX = 'hc-org-cache:';
+  const ORG_CACHE_MS = 15 * 60 * 1000;
+  const ISO_TIME_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$/;
+  const isRepoName = (n) => typeof n === 'string' && REPO_NAME_RE.test(n) && n !== '.' && n !== '..';
+  const isFilePath = (p) => typeof p === 'string' && p.length <= 400
+    && /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(p) && p.split('/').every((s) => s !== '.' && s !== '..');
+  const isCount = (max) => (v) => /^[1-9][0-9]{0,3}$/.test(v) && Number(v) <= max;
+  const isTime = (v) => ISO_TIME_RE.test(v) && Number.isFinite(Date.parse(v));
+  const ORG_COMMITS_PARAMS = Object.freeze({ since: isTime, until: isTime, per_page: isCount(100), page: isCount(1000), path: isFilePath });
+  const QUERY_ORDER = Object.freeze(['path', 'since', 'until', 'per_page', 'page']);
+
+  function queryOk(query, table, required) {
+    if (query === null) return required.length === 0;
+    const seen = new Set();
+    for (const part of query.split('&')) {
+      const eq = part.indexOf('=');
+      if (eq <= 0) return false;
+      const k = part.slice(0, eq);
+      const raw = part.slice(eq + 1);
+      if (!Object.prototype.hasOwnProperty.call(table, k) || seen.has(k)) return false;
+      seen.add(k);
+      let v;
+      try { v = decodeURIComponent(raw); } catch (e) { return false; }
+      if (encodeURIComponent(v) !== raw || !table[k](v)) return false;
+    }
+    return required.every((k) => seen.has(k));
+  }
+
+  const isCompareSpec = (spec) => {
+    const refs = spec.split('...');
+    return refs.length === 2 && refs.every(isRef);
+  };
+
+  function repoAllowlist(repoNames) {
+    return new Set(listOf(repoNames).filter(isRepoName));
+  }
+
+  /* true only for a path createOrgReader may GET (repoNames: the allowlist). */
+  function orgReadAllowed(apiPath, repoNames) {
+    if (typeof apiPath !== 'string' || apiPath.length > 2000 || /[\\#\s\x00-\x1f\x7f%]/.test(apiPath.split('?')[0])) return false;
+    if (/[\\#\s\x00-\x1f\x7f]/.test(apiPath)) return false;
+    const q = apiPath.indexOf('?');
+    const p = q < 0 ? apiPath : apiPath.slice(0, q);
+    const query = q < 0 ? null : apiPath.slice(q + 1);
+    const segs = p.split('/');
+    if (segs[0] !== '' || segs[1] !== 'repos') return false;
+    if (segs.slice(1).some((s) => s === '' || s === '.' || s === '..')) return false;
+    const names = repoNames instanceof Set ? repoNames : repoAllowlist(repoNames);
+    if (segs.length === 5 && segs[2] === ORG_OWNER && names.has(segs[3]) && segs[4] === 'commits') {
+      return queryOk(query, ORG_COMMITS_PARAMS, []);
+    }
+    if (segs[2] !== REPO_OWNER || segs[3] !== REPO_NAME) return false;
+    if (segs.length === 5 && segs[4] === 'commits') return queryOk(query, ORG_COMMITS_PARAMS, ['path']);
+    if (segs.length >= 6 && segs[4] === 'compare' && query === null) return isCompareSpec(segs.slice(5).join('/'));
+    return false;
+  }
+
+  function buildQuery(q) {
+    const o = isObj(q) ? q : {};
+    const parts = [];
+    for (const k of QUERY_ORDER) {
+      if (o[k] === undefined || o[k] === null) continue;
+      const v = String(o[k]);
+      if (!ORG_COMMITS_PARAMS[k](v)) throw new Error(`org reader: a bad ${k}`);
+      parts.push(`${k}=${encodeURIComponent(v)}`);
+    }
+    Object.keys(o).forEach((k) => { if (QUERY_ORDER.indexOf(k) < 0) throw new Error(`org reader: no parameter ${k.slice(0, 20)}`); });
+    return parts.length ? `?${parts.join('&')}` : '';
+  }
+
+  /* The builders: the only spellings the reader is meant to be given. */
+  function orgCommitsPath(repo, q) {
+    if (!isRepoName(repo)) throw new Error('org reader: a bad repository name');
+    return `/repos/${ORG_OWNER}/${repo}/commits${buildQuery(q)}`;
+  }
+
+  function pageCommitsPath(file, q) {
+    if (!isFilePath(file)) throw new Error('org reader: a bad file path');
+    return `${REPO_API_PATH}/commits${buildQuery({ ...(isObj(q) ? q : {}), path: file })}`;
+  }
+
+  function comparePath(base, head) {
+    if (!isRef(base) || !isRef(head)) throw new Error('org reader: a bad ref');
+    return `${REPO_API_PATH}/compare/${base}...${head}`;
+  }
+
+  function createOrgReader(token, fetchImpl, storage, repoNames, opts) {
+    const names = repoAllowlist(repoNames);
+    const now = opts && typeof opts.now === 'function' ? opts.now : () => Date.now();
+    const auth = typeof token === 'string' && token ? token : null;
+
+    function cached(url) {
+      try {
+        const raw = storage ? storage.getItem(ORG_CACHE_PREFIX + url) : null;
+        if (!raw) return null;
+        const c = JSON.parse(raw);
+        const t = now();
+        if (isObj(c) && Number.isFinite(c.t) && c.t <= t && t - c.t < ORG_CACHE_MS && Number.isInteger(c.status)) {
+          return { status: c.status, data: c.data, anonymous: c.anonymous === true };
+        }
+        storage.removeItem(ORG_CACHE_PREFIX + url);
+      } catch (e) { /* no cache */ }
+      return null;
+    }
+
+    function keep(url, r, anonymous) {
+      try {
+        storage.setItem(ORG_CACHE_PREFIX + url, JSON.stringify({ t: now(), status: r.status, data: r.data, anonymous }));
+      } catch (e) { /* full */ }
+    }
+
+    async function once(url, withToken) {
+      const headers = { Accept: 'application/vnd.github+json' };
+      if (withToken) headers.Authorization = `Bearer ${auth}`;
+      let res;
+      try {
+        // redirect: 'error' — a moved repository's 301 (to /repositories/<id>/…)
+        // must never carry the token to a URL the allowlist did not check.
+        res = await fetchImpl(url, { method: 'GET', headers, cache: 'no-store', credentials: 'omit', redirect: 'error' });
+      } catch (e) {
+        return { ok: false, status: 0, data: null };
+      }
+      const status = res && Number.isInteger(res.status) ? res.status : 0;
+      return { ok: Boolean(res && res.ok) && status >= 200 && status < 300, status, data: await readJson(res) };
+    }
+
+    async function get(apiPath) {
+      if (!orgReadAllowed(apiPath, names)) return { ok: false, status: 403, data: null, refused: true };
+      const url = API_ROOT + apiPath;
+      const hit = cached(url);
+      if (hit) {
+        const ok = hit.status >= 200 && hit.status < 300;
+        return { ok, status: hit.status, data: ok ? hit.data : null, cached: true, anonymous: hit.anonymous };
+      }
+      let r = await once(url, Boolean(auth));
+      let anonymous = !auth;
+      if (auth && (r.status === 403 || r.status === 404)) {
+        r = await once(url, false);
+        anonymous = true;
+      }
+      if (r.ok) keep(url, r, anonymous);
+      return { ok: r.ok, status: r.status, data: r.ok ? r.data : null, cached: false, anonymous };
+    }
+
+    return Object.freeze({
+      get,
+      allowed: (p) => orgReadAllowed(p, names),
+      repoNames: Object.freeze([...names]),
+    });
+  }
+
   const api = Object.freeze({
     REPO_OWNER, REPO_NAME, REPO_FULL, API_ROOT, REPO_API_PATH, GITHUB_WEB,
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
@@ -1986,7 +2755,7 @@
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
     vercelCommentUrl, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
-    ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, SNIPPETS,
+    ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, SNIPPETS, SNIPPET_CATALOG,
     editKind, pageTree, pageList, pageIdForFile, routeForPage,
     jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
@@ -1997,6 +2766,9 @@
     MEDIA_TYPES, SIZE_HINT_TEXT, REMOVE_FIRST_TEXT, IN_USE_TEXT, IN_DRAFT_TEXT, THUMB_TRANSFORM, MEDIA_SLUG_RE,
     thumbUrl, parseManifest, manifestAssets, findBySha, mediaChangeProblem, mediaFileProblem, mediaFailure,
     createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
+    BLOCK_KINDS, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
+    blockDiff, overlayOnMain, cachedFetcher, resolveRef, viewSettings, membersOnly,
+    ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,
   });
 
   if (typeof window !== 'undefined') window.HCCore = api;
