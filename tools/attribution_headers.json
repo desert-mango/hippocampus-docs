@@ -224,6 +224,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/build_github_data.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "781e13b47bf1c5c0e170783ce31ed753635213bba3662bc3a9b9e132ebd4695b",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Project public GitHub org activity, repo cards, page authorship and people into privacy-filtered site data."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/build_repo_graphs.py": {
       "classification": "included",
       "evidence": {
@@ -343,6 +358,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/github_layer_rules.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "066d817223ba55f7551edaad5f085a4327cc61a798b3ef8428ce7c5013694b92",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Hold the one copy of the text-safety patterns and the GitHub-layer rules the gate and builder share."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/github_names.py": {
       "classification": "included",
       "evidence": {
@@ -447,6 +477,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/test_build_github_data.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "9db4da297bc49635c3e547367804ea1ca52539a978e71e48cda93d19ea21b626",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the GitHub-layer builder on raw API fixtures: shapes, redaction, caching, paging and avatars."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/tests/test_build_repo_graphs.py": {
       "classification": "included",
       "evidence": {
@@ -489,6 +534,21 @@
         "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the content-safety, manifest, CMS-shell and authored-overlay rules of the site gate."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_check_github_layer.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "135d4a23813b05b1f2faab474ace84c9ebe23b3d093a297a07aaacf511ba6ffd",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test gate section 11 (the public GitHub-layer shapes), the github-links block and the index.html shell rule."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },

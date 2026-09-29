@@ -1,0 +1,2126 @@
+{
+ "generated": "run tools/build_github_data.py to regenerate",
+ "read_at": "2026-09-29",
+ "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository",
+ "prs_read": [
+  2,
+  3
+ ],
+ "pages": {
+  "about": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/about.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "842e1bc80df6003a0df001144c8d2714554fca8a"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/acoustics": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/acoustics.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "59a96f81b7111d9275b5dd38a10a9682a8183c95"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/cameras": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/cameras.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "5e82a4622d090c7115cd65c9d88763e9f9d17e86"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/core-stack": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/core-stack.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "b04b15c65184ac06e774763a38f4a026dcb1f53b"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/dev-infrastructure": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/dev-infrastructure.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "d0f574cb9e70d7d8b11def7dc502b1ef69fc9456"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/docs-and-site": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/docs-and-site.md",
+    "authors": [
+     {
+      "login": "kyle-nelson-berkeley",
+      "name": "Kyle Nelson"
+     },
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "a505ffd48372be3e868a0d79146c12c72b9caf7c"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/hippocampus-vehicle": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/hippocampus-vehicle.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "d00703bbd81e6e5e803064edf377ab9bdb3d1223"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/holiday-fun": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/holiday-fun.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "e1d68235e38a0f616437ea551a48f5009a66caa2"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/lab-infrastructure": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/lab-infrastructure.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "496441699427aa4efdc6e59d3fe7d044f3960b69"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/learning-to-swim": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/learning-to-swim.md",
+    "authors": [
+     {
+      "login": "kyle-nelson-berkeley",
+      "name": "Kyle Nelson"
+     }
+    ],
+    "history_read": true,
+    "blob": "4634da18cd60d8f4fff9663171f5637911c2ff2d"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/legacy-ros1": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/legacy-ros1.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "924d274240eee21f70fa0f6bd917a9f99dff1000"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/localization": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/localization.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "ad3ee8958734ff116018196cf59c1f7fe4266563"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/radio-comms": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/radio-comms.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "ecac5bb23f5ae6ad8b7ca4b58f05f1f43f8c41f4"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/scalar-field": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/scalar-field.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "1e912aa2fc2c701caa0b189a03cf4b932781891a"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/simulation": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/simulation.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "4f20b392698e81a19049053a6f2b729535204e4b"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/teaching": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/teaching.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "c157d7cf20b19342a5360d6ae220ef6d845c0748"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/underwater-localization": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/underwater-localization.md",
+    "authors": [
+     {
+      "login": "kyle-nelson-berkeley",
+      "name": "Kyle Nelson"
+     },
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "7db2f3e68042f93c7a7e60dafec735788b9ebb07"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "projects/uvms": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/uvms.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "7e84ba47128892851a8fc0000937b5ff732d5784"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "setup/bluerov/alpha-arm": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/alpha_arm.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/bluerov/build-and-flash": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/build_and_flash.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/bluerov/deploy": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/deploy.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/bluerov/dvl": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/dvl.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/bluerov/full-uvms-setup": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/full_uvms_setup.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/bluerov/servo-and-light": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/bluerov/servo_and_light.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/concepts/colcon": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/concepts/colcon.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    },
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/concepts/deployment": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/concepts/deployment.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/concepts/pre-built-packages": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/concepts/pre-built_packages.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/concepts/ros2-repositories": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/concepts/ros2_repositories.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/concepts/ros2-workspace": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/concepts/ros2_workspace.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/contributing/debian-packages": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/contributing/releasing_debian_packages.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/contributing/documentation": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/contributing/contributing_to_documentation.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/contributing/hippocampus": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/contributing/contributing_to_hippocampus.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/apriltag-localization": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/apriltag_localization.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/deploying-hippocampus": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/deploying_hippocampus.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/installing-qgc": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/installing_qgc.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "DanielDuecker",
+      "name": "Daniel Duecker"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/pre-built-packages": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/pre-built_packages.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/px4-setup": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/px4_setup.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/getting-started/ros-installation": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/ros_installation.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/getting-started/starting-gazebo-simulation": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/starting_gazebo_simulation.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "DanielDuecker",
+      "name": "Daniel Duecker"
+     },
+     {
+      "login": "josina1234",
+      "name": "Josina Gerdes"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/workspace-setup": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/workspace_setup.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/getting-started/workstation-quality-of-life": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/getting_started/zsh_and_other_quality_of_live_features.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/apriltag": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/ros2/apriltag.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/buttons": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/buttons/buttons.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/camera-calibration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/camera_calibration.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/guides/dvb-t": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/rf/dvb_t.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/informative-path-planning": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/ipp.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/install-source-dependencies": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/install_source_dependencies.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/misc-notes": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/misc.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/mixers": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/mixers.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/path-follower": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/path_follower.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/path-follower-concept": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/path_follower/concept.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/ros2-cheatsheet": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/ros2.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/guides/ros2-misc": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/ros2/misc.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/acoustic-modems": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/acoustic_modems.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/bluerov": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/bluerov.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/buttons": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/buttons.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/cameras": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/cameras.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/gantry": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/gantry.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/hippocampus": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/hippocampus.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/marker": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/marker.rst",
+    "authors": [
+     {
+      "login": "VincentTUHH",
+      "name": "Vincent Lenz"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/qualisys": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/qualisys.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hardware/rf-modules": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hardware/RF_modules.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hippocampus-bringup/afro-esc": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hippocampus/afro_esc.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hippocampus-bringup/fcu-firmware": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hippocampus/fcu_firmware.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/hippocampus-bringup/motor-configuration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/hippocampus/motor_configuration.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-cameras/event-camera-collaboration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/cameras/event_camera_collaboration.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-cameras/event-cameras": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/cameras/event_cameras.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/lab-cameras/ip-cameras": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/cameras/ip_cameras.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-cameras/usb-cameras": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/cameras/usb_cameras.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-gantry/general-information": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/gantry/general_information.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-gantry/installation": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/gantry/installation.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-gantry/motor-node": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/gantry/motor_node.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-gantry/raspi-setup": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/gantry/raspi_setup.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-gantry/usage": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/gantry/usage.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-marker/design": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/marker/design.rst",
+    "authors": [
+     {
+      "login": "VincentTUHH",
+      "name": "Vincent Lenz"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-marker/fabrication": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/marker/fabrication.rst",
+    "authors": [
+     {
+      "login": "VincentTUHH",
+      "name": "Vincent Lenz"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-qualisys/calibration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/qualisys/calibration.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-qualisys/camera-settings": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/qualisys/camera_settings.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/lab-qualisys/defining-bodies": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/qualisys/defining_bodies.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/raspberry-pi/ethernet": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/ethernet.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "josina1234",
+      "name": "Josina Gerdes"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/raspberry-pi/pinout": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/pinout.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "FinnBreu",
+      "name": "Finn Breuer"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/raspberry-pi/quality-of-life": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/quality_of_life_features.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/raspberry-pi/uart-configuration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/uart_configuration.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    },
+    {
+     "pr": 2,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
+  },
+  "setup/raspberry-pi/ubuntu-24-04-server": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/ubuntu_24.04_server_64bit.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/raspberry-pi/usb-configuration": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/raspberry_pi_setup/usb_configuration.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": [
+    {
+     "pr": 1,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
+  },
+  "setup/start/index": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "index.rst",
+    "authors": [
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     },
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "VincentTUHH",
+      "name": "Vincent Lenz"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/time-sync/client": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/time_synchronization/client.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/time-sync/overview": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/misc/time_synchronization.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "setup/time-sync/server": {
+   "original": {
+    "repo": "HippoCampusRobotics/docs",
+    "path": "contents/time_synchronization/server.rst",
+    "authors": [
+     {
+      "login": "NBauschmann",
+      "name": "Nathalie Bauschmann"
+     },
+     {
+      "login": "lennartalff",
+      "name": "Thies Lennart Alff"
+     }
+    ],
+    "history_read": true,
+    "blob": null
+   },
+   "converted": {
+    "date": "2026-08-28",
+    "by": "kyle-nelson-berkeley",
+    "tool": "tools/rst_convert.py",
+    "commit": "b40ade4"
+   },
+   "edited_here": []
+  },
+  "tools/media-uploads": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/tools/media-uploads.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "0ae9e73d26307fd2a6cdd1778dd0d223f907271c"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "tools/onshape-mcp": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/tools/onshape-mcp.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "fa9de631bff5af003697e511484a6cbaabf94a7b"
+   },
+   "converted": null,
+   "edited_here": []
+  },
+  "tools/runpod-mcp": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/tools/runpod-mcp.md",
+    "authors": [
+     {
+      "login": null,
+      "name": "kyle"
+     }
+    ],
+    "history_read": true,
+    "blob": "3b913d38483d90c356acbaac930b44ddced27464"
+   },
+   "converted": null,
+   "edited_here": []
+  }
+ }
+}

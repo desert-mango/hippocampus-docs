@@ -76,6 +76,10 @@ class DeriveCase(unittest.TestCase):
         self.builder("build_search_index.py", fake_writer({"search/site.json": "site-v1\n"}))
         self.builder("build_contributors.py",
                      fake_writer({"data/graph/contributors.json": "contrib-v1\n"}))
+        write(self.root / "data/graph/org-activity.json", "activity-v1\n")
+        write(self.root / "data/graph/avatars/ada.png", "png-v1\n")
+        self.builder("build_github_data.py",
+                     fake_writer({"data/graph/org-activity.json": "activity-v1\n"}))
 
     def builder(self, name, body):
         write(self.root / "tools" / name, FAKE_HEAD + body)
@@ -194,6 +198,71 @@ class TestFailure(DeriveCase):
         self.assertEqual(self.run_derive("--contributors", "--contributors-if-changed", "HEAD"), 2)
 
 
+SOFT_FAIL = "derive: build_github_data.py FAILED — previous GitHub data kept"
+
+
+class TestGithubData(DeriveCase):
+    def test_off_by_default_and_silent(self):
+        self.assertEqual(self.run_derive(), 0)
+        self.assertNotIn("build_github_data.py ", self.order())
+        self.assertFalse(any("build_github_data" in l for l in self.lines), self.out)
+
+    def test_runs_last_after_contributors(self):
+        self.assertEqual(self.run_derive("--contributors", "--github-data"), 0)
+        self.assertEqual(self.order(), ["build_wiki_graph.py ",
+                                        "build_search_index.py --site-only",
+                                        "build_contributors.py ",
+                                        "build_github_data.py "])
+        self.assertIn("derive: build_github_data.py ok", self.lines)
+        self.assertEqual(self.lines[-1], "derive: nothing to do")
+
+    def test_combines_with_contributors_if_changed(self):
+        self.assertEqual(self.run_derive("--contributors-if-changed", "0" * 40,
+                                         "--github-data"), 0)
+        self.assertEqual(self.order()[-2:], ["build_contributors.py ",
+                                             "build_github_data.py "])
+
+    def test_not_with_annotate(self):
+        self.assertEqual(self.run_derive("--annotate", "x.txt", "--github-data"), 2)
+
+    def test_new_outputs_are_counted(self):
+        self.builder("build_github_data.py", fake_writer({
+            "data/graph/org-activity.json": "activity-v2\n",
+            "data/graph/avatars/bob.jpg": "jpg\n"}))
+        self.assertEqual(self.run_derive("--github-data"), 0)
+        self.assertEqual(self.lines[-1], "derive: 2 files changed (data/graph/avatars/bob.jpg, "
+                                         "data/graph/org-activity.json)")
+
+    def test_soft_fail_keeps_previous_bytes_and_exits_zero(self):
+        self.builder("build_wiki_graph.py", fake_writer({"data/graph/wiki.json": "wiki-v2\n"}))
+        # a builder that dies half-way: one file rewritten, one avatar added,
+        # one avatar removed — derive must put every byte back
+        self.builder("build_github_data.py", fake_writer({
+            "data/graph/org-activity.json": "half-written\n",
+            "data/graph/avatars/new.png": "new\n"})
+            + "(root / 'data/graph/avatars/ada.png').unlink()\n"
+            + 'print("ABORT: gh said 502", file=sys.stderr)\nsys.exit(1)\n')
+        self.assertEqual(self.run_derive("--github-data"), 0)
+        self.assertIn(SOFT_FAIL, self.lines)
+        self.assertEqual((self.root / "data/graph/org-activity.json").read_text(),
+                         "activity-v1\n")
+        self.assertEqual((self.root / "data/graph/avatars/ada.png").read_text(), "png-v1\n")
+        self.assertFalse((self.root / "data/graph/avatars/new.png").exists())
+        # the graph still refreshed, and only it is reported as changed
+        self.assertEqual(self.lines[-1], "derive: 1 file changed (data/graph/wiki.json)")
+        # the builder's own message is shown, before the soft-fail line
+        self.assertIn("ABORT: gh said 502", self.out)
+        self.assertLess(self.out.index("ABORT: gh said 502"), self.out.index(SOFT_FAIL))
+
+    def test_soft_fail_line_is_not_an_error_annotation(self):
+        self.assertEqual(derive.findings(SOFT_FAIL + "\n"), [])
+
+    def test_contributors_failure_is_still_hard(self):
+        self.builder("build_contributors.py", "sys.exit(1)\n")
+        self.assertEqual(self.run_derive("--contributors", "--github-data"), 1)
+        self.assertNotIn("build_github_data.py ", self.order())
+
+
 class TestContributorsIfChanged(DeriveCase):
     def setUp(self):
         super().setUp()
@@ -218,7 +287,8 @@ class TestContributorsIfChanged(DeriveCase):
                             and self.first in l for l in self.lines), self.out)
 
     def test_each_input_file_triggers_contributors(self):
-        for name in ("data/projects.json", "data/org-repos.json", "data/people.json"):
+        for name in ("data/projects.json", "data/org-repos.json", "data/people.json",
+                     "data/github-links.json"):
             with self.subTest(name=name):
                 (self.root / "order.log").unlink(missing_ok=True)
                 before = git(self.root, "rev-parse", "HEAD")
@@ -371,6 +441,18 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("derive: regenerate derived data after", d)
         self.assertIn("python3 tools/check.py", d)
         self.assertNotIn("secrets.", d)
+
+    def test_derive_workflow_github_data(self):
+        d = self.derive
+        run = [l for l in d.splitlines() if "python3 tools/derive.py" in l]
+        self.assertEqual(len(run), 1, run)
+        self.assertIn('--contributors-if-changed "$BEFORE" --github-data', run[0])
+        perms = d[d.index("    permissions:"):d.index("    steps:")]
+        self.assertIn("contents: write", perms)
+        self.assertIn("pull-requests: read", perms)
+        self.assertIn("::warning", d)
+        self.assertIn(SOFT_FAIL, d)
+        self.assertIn("set -euo pipefail", d)
 
 
 class TestHygiene(unittest.TestCase):

@@ -56,7 +56,18 @@ Validates, failing loudly with actionable messages:
      org repo, xref terms resolve and collide with neither stoplist nor each other,
      and every hand-authored edge was merged into wiki.json as 'related';
   10. contributors: data/graph/contributors.json (when present) is the projected,
-     address-free shape build_contributors.py writes.
+     address-free shape build_contributors.py writes;
+  11. the GitHub layer (tools/github_layer_rules.py, shared with the builder):
+     data/graph/{org-activity,github-repos,page-authors,people-public}.json
+     (each when present) carry exactly their public key sets with a plain
+     value at every leaf, no e-mail-shaped text, no '<'/'>' in
+     names/messages/descriptions, public repositories only, the two allowed
+     page-authors blob shapes, and a flat data/graph/avatars/ of PNG/JPEG files
+     of at most 16 KB; and
+     data/github-links.json has its exact shape with no login both linked and
+     excluded. Stale keys (a page, roster name or repository the registries no
+     longer hold) are printed as NOTES, never red: pull-request CI does not
+     rebuild the GitHub files.
 
 This gate is OFFLINE by design (it never touches the network). URL liveness is
 the job of its online twin, tools/check_urls.py.
@@ -64,13 +75,18 @@ the job of its online twin, tools/check_urls.py.
 Never weaken a check to make it pass — fix the content it is complaining about.
 """
 import hashlib
-import html
 import json
 import re
 import subprocess
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from github_layer_rules import (  # noqa: E402  (one copy, shared with the builder)
+    EMAIL_OK, EMAIL_RE, EVENT_ATTR_RE, LINK_TARGET_RES, SRCDOC_RE, UNSAFE_SCHEMES,
+    UNSAFE_TAG_RE, UNSAFE_TAGS, scan_markup, unsafe_scheme)
+import github_layer_rules  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKED_SHA256 = "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
@@ -86,8 +102,9 @@ CLOUDINARY_RE = re.compile(r"https?://res\.cloudinary\.com/[^\s)\"'<>\]]+")
 DELIVERY_PREFIX_RE = re.compile(r"v\d+|[a-z]{1,3}_[^/,]+(?:,[a-z]{1,3}_[^/,]+)*")
 SECRET_KEY_RE = re.compile(
     r"(password|passwd|pwd|api_key|apikey|api_secret|secret|token)", re.IGNORECASE)
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-EMAIL_OK = re.compile(r"@(github\.com|[\w.-]*\.local|example\.[a-z]+)$")
+# EMAIL_RE / EMAIL_OK (6b) and the 6d patterns below live in ONE copy in
+# tools/github_layer_rules.py, which the GitHub-data builder redacts against —
+# so builder and gate can never disagree about a commit message (plan D-B2).
 # ---- the semantic graph under data/graph/ (checks 9 + 10) ----
 GRAPH = "data/graph"
 # index views are landing pages, not content: they are counted separately, the
@@ -104,12 +121,14 @@ CONTRIB_MAX_ROWS = 12
 # repo that reads a data/*.json registry — the category is the rule; the names
 # below are only today's instance of it:
 #   api/media.js (manifest only: it reads data/cloudinary-manifest.json,
-#   which section 6a covers), js/app.js, js/cms-core.js, js/cms.js, js/graph.js,
+#   which section 6a covers), js/app.js, js/cms-core.js, js/cms-redirect.js,
+#   js/cms.js, js/editor.js, js/editor-frame.js, js/graph.js, js/lab.js,
 #   tools/bench_librarian.mjs, tools/build_contributors.py,
-#   tools/build_repo_graphs.py, tools/build_search_index.py,
-#   tools/build_wiki_graph.py, tools/check.py, tools/check_urls.py,
-#   tools/derive.py (paths only: it passes registry paths to git diff and
-#   dereferences no key), tools/rst_convert.py
+#   tools/build_github_data.py, tools/build_repo_graphs.py,
+#   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
+#   tools/check_urls.py, tools/derive.py (paths only: it passes registry paths
+#   to git diff and dereferences no key), tools/github_names.py (people.json
+#   and github-links.json only, both excluded below), tools/rst_convert.py
 # (js/source.js does not match the grep: it fetches registry files on the
 # readers' behalf and dereferences no key.)
 # Re-derive that list, never trust it:
@@ -129,12 +148,20 @@ CONTRIB_MAX_ROWS = 12
 # dedicated and stricter validator:
 #   data/cloudinary-manifest.json — section 6a (source/public_id/url + sha256);
 #   data/people.json              — section 6c (exact field set, photo, link);
+#   data/github-links.json        — its own block beside section 11 (exact
+#     shape, no login both linked and excluded);
 #   data/graph/**                 — sections 9 and 10, which LOAD every one of
 #     them (the wiki graph, the summaries, the xref terms, the authored edges,
 #     the repos index, the per-repo shards and the contributors projection) and
 #     validate them against the registries above. js/graph.js and
 #     tools/build_wiki_graph.py are the readers there, so their bare
-#     dereferences are covered by 9-10, not by an entry here.
+#     dereferences are covered by 9-10, not by an entry here. EXCEPT the four
+#     GitHub-layer files (org-activity, github-repos, page-authors,
+#     people-public): section 11 holds their exact PUBLIC key sets, and the
+#     entries below name the keys js/lab.js and js/graph.js dereference bare
+#     (plan D-B is the contract both sides build to). They are optional: a
+#     checkout without them is checked only when they appear
+#     (READER_OPTIONAL).
 #
 # Spec node shape:
 #   {"keys":      (keys this object must carry,),
@@ -143,6 +170,8 @@ CONTRIB_MAX_ROWS = 12
 #    "str_lists": (keys whose list MEMBERS must each be a string,),
 #    "each":      {list key: spec node applied to every entry of that list},
 #    "objects":   {key: spec node applied to the nested OBJECT at that key},
+#    "values":    {key: spec node applied to every VALUE of the object at that
+#                  key — an object keyed by id/name/login, e.g. "repos"},
 #    "entries":   spec node applied to every entry of a top-level LIST document}
 # A list named in "each" or "lists", or an object named in "objects", that is
 # absent from "keys" is optional: absent is fine, present is shape-checked.
@@ -190,7 +219,9 @@ READER_REQUIRED_KEYS = {
         "each": {"sections": {
             "keys": ("title", "pages"),
             "each": {"pages": {"keys": ("id", "title", "file"),
-                               "types": {"id": str, "file": str}}}}},
+                               # tools/build_github_data.py builds the old docs
+                               # paths from 'old' with string methods
+                               "types": {"id": str, "file": str, "old": str}}}}},
     },
     # tools/rst_convert.py is the second reader of this file and a stricter one
     # than section 3: it builds every setup.json page id from g['id'] +
@@ -263,7 +294,52 @@ READER_REQUIRED_KEYS = {
     # build_cad_shard() iterates cad["files"] and calls Path() on each
     "data/cad-tree.json": {"keys": ("repo", "files"), "lists": ("files",),
                            "str_lists": ("files",)},
+    # ---- the GitHub layer (optional; section 11 holds the exact key sets) ----
+    # js/lab.js draws the Lab page from these: the totals tiles, the heatmap
+    # (it iterates weeks and every week's days), the recent-commit and
+    # most-active lists, the releases; "GitHub data as of <read_at>".
+    "data/graph/org-activity.json": {
+        "keys": ("read_at", "totals", "weeks", "recent_commits",
+                 "most_active_repos", "releases"),
+        "objects": {"totals": {"keys": ("public_repos", "commits_365d",
+                                        "authors_365d", "repos_touched_365d",
+                                        "stars", "forks", "open_issues",
+                                        "releases")}},
+        "each": {"weeks": {"keys": ("week", "days"), "lists": ("days",)},
+                 "recent_commits": {"keys": ("repo", "sha", "date", "msg")},
+                 "most_active_repos": {"keys": ("name", "commits", "language",
+                                                "pushed_at")},
+                 "releases": {"keys": ("repo", "tag", "name", "date")}},
+    },
+    # the repo cards (project pages, Lab page); 'fork' and 'archived' are
+    # branched on, so a string "false" would be silently truthy
+    "data/graph/github-repos.json": {
+        "keys": ("read_at", "repos"),
+        "values": {"repos": {"keys": ("name", "description", "language", "stars",
+                                      "open_issues", "pushed_at", "archived",
+                                      "fork", "html_url"),
+                             "types": {"fork": bool, "archived": bool}}},
+    },
+    # "who wrote this" under every page; js/lab.js iterates authors and
+    # edited_here ('converted' may be null, so it is read with a guard)
+    "data/graph/page-authors.json": {
+        "keys": ("pages",),
+        "values": {"pages": {
+            "keys": ("original", "converted", "edited_here"),
+            "objects": {"original": {"keys": ("repo", "path", "authors"),
+                                     "each": {"authors": {"keys": ("login", "name")}}}},
+            "each": {"edited_here": {"keys": ("pr", "by", "state")}}}},
+    },
+    # the avatar popover and the login -> roster card link (js/lab.js,
+    # js/graph.js's Primary contributors)
+    "data/graph/people-public.json": {
+        "keys": ("people",),
+        "values": {"people": {"keys": ("login", "name", "avatar", "html_url",
+                                       "roster")}},
+    },
 }
+# Registries with an entry above that may be absent (checked when present).
+READER_OPTIONAL = frozenset(github_layer_rules.FILES.values())
 
 # Content files the readers open by HARDCODED name. Files reached through a
 # registry ('file' fields) are already checked by sections 2, 4 and 5.
@@ -273,10 +349,21 @@ READER_FIXED_PATHS = {
 }
 
 errors = []
+notes = []      # printed, never red (section 11's stale-key notes)
 
 
 def err(msg):
     errors.append(msg)
+
+
+def github_layer_rules_roster(people):
+    """Every roster name of data/people.json (for the section-11 notes)."""
+    out = []
+    for g in (people or {}).get("groups", []) if isinstance(people, dict) else []:
+        for p in (g.get("people", []) if isinstance(g, dict) else []):
+            if isinstance(p, dict) and isinstance(p.get("name"), str):
+                out.append(p["name"])
+    return out
 
 
 def load(name):
@@ -340,65 +427,17 @@ def walk_json(node, path=""):
 # with holes in it invites the wrong kind of cleverness). The patterns are
 # tight on purpose — a legitimate string that trips one means the PATTERN is
 # too broad; tighten it, never allowlist the file.
+#
+# The patterns (UNSAFE_TAG_RE, EVENT_ATTR_RE, SRCDOC_RE, LINK_TARGET_RES,
+# UNSAFE_SCHEMES) and the scanner functions unsafe_scheme() / scan_markup()
+# are imported above from tools/github_layer_rules.py: ONE copy, because the
+# GitHub-data builder redacts commit messages and descriptions against the
+# very same patterns before it writes (plan D-B2).
 # --------------------------------------------------------------------------
-UNSAFE_TAGS = ("script", "iframe", "object", "embed", "form", "meta", "link",
-               "style", "base", "svg")
-# the tag name must END there: '<base-url>' and '<link-name>' are placeholders
-UNSAFE_TAG_RE = re.compile(
-    r"<(" + "|".join(UNSAFE_TAGS) + r")(?=[\s/>]|$)", re.IGNORECASE)
-# any on*= attribute; '/' and quotes separate attributes as well as spaces do
-EVENT_ATTR_RE = re.compile(r"(?:^|(?<=[\s/\"'`]))(on[a-z]+)\s*=",
-                           re.IGNORECASE | re.MULTILINE)
-SRCDOC_RE = re.compile(r"(?<![\w-])srcdoc\s*=", re.IGNORECASE)
-# where a link target starts: a Markdown inline link/image, a reference
-# definition, a CommonMark autolink, or an href/src attribute (any quoting).
-# The WHOLE value is captured, never a bounded prefix: browsers strip any
-# amount of leading whitespace (raw or as character references) first.
-LINK_TARGET_RES = (
-    re.compile(r"\]\(\s*<?([^)]*)"),
-    re.compile(r"^ {0,3}\[[^\]]+\]:\s*<?(\S+)", re.MULTILINE),
-    re.compile(r"<([a-z][a-z0-9+.\-]{1,31}:[^\s<>]*)>", re.IGNORECASE),
-    re.compile(r"(?<![\w-])(?:href|src)\s*=\s*[\"'`]?([^\"'`>]*)",
-               re.IGNORECASE),
-)
-UNSAFE_SCHEMES = ("javascript:", "vbscript:", "data:text/html")
 # the JSON keys whose whole value is a link target (projects/people/site)
 URL_KEYS = ("href", "src", "url", "link", "photo")
 SAFETY_MSG = ("inline script or event handler is not allowed in content ({tok})"
               "{at} — use the dialect blocks in CONTRIBUTING.md")
-
-
-def unsafe_scheme(target):
-    """The forbidden scheme a link target starts with, or None.
-
-    Browsers drop ASCII whitespace/control characters inside a URL scheme and
-    decode character references first, so 'java&#58;script' and 'java<TAB>
-    script:' are the same attack as 'javascript:' and are normalised the same.
-    """
-    flat = re.sub(r"[\x00-\x20]", "", html.unescape(target)).lower()
-    return next((s for s in UNSAFE_SCHEMES if flat.startswith(s)), None)
-
-
-def scan_markup(text):
-    """Every forbidden construct in `text`, as sorted (line, token) pairs."""
-    hits = []
-    for m in UNSAFE_TAG_RE.finditer(text):
-        hits.append((m.start(), f"<{m.group(1).lower()}>"))
-    for m in EVENT_ATTR_RE.finditer(text):
-        hits.append((m.start(1), f"{m.group(1).lower()}="))
-    for m in SRCDOC_RE.finditer(text):
-        hits.append((m.start(), "srcdoc="))
-    for rx in LINK_TARGET_RES:
-        for m in rx.finditer(text):
-            scheme = unsafe_scheme(m.group(1))
-            if scheme:
-                hits.append((m.start(1), scheme))
-    out = []
-    for pos, tok in sorted(set(hits)):
-        line = text.count("\n", 0, pos) + 1
-        if (line, tok) not in out:
-            out.append((line, tok))
-    return out
 
 
 def check_content_safety(root):
@@ -512,10 +551,69 @@ def check_manifest(cloudinary, root):
     return out, public_ids, manifest_sources
 
 
+def check_avatar_dir(root):
+    """Section 11: every file under data/graph/avatars/ is a flat PNG/JPEG of
+    at most 16 KB. The folder is flat: a subfolder (and anything in it, an
+    .svg say) is red, because nothing there would be judged otherwise."""
+    adir = Path(root) / github_layer_rules.AVATAR_DIR
+    if not adir.is_dir():
+        return []
+    out, flat = [], []
+    for p in sorted(adir.rglob("*")):
+        rel = p.relative_to(adir).as_posix()
+        if p.is_dir():
+            out.append(f"{github_layer_rules.AVATAR_DIR}/{rel}/: a subfolder — the "
+                       f"avatar folder is flat; re-run tools/build_github_data.py")
+        elif p.parent != adir:
+            out.append(f"{github_layer_rules.AVATAR_DIR}/{rel}: a file inside a "
+                       f"subfolder — avatars are flat PNG/JPEG files")
+        elif p.is_file():
+            flat.append((p.name, p.read_bytes()))
+    return github_layer_rules.check_avatar_files(flat) + out
+
+
+def read_github_links(root):
+    """(document or None, hard problems) of data/github-links.json. A file that
+    parses to null, a list or a string is a shape problem, never a skip."""
+    rel = github_layer_rules.LINKS_FILE
+    try:
+        doc = json.loads((Path(root) / rel).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, [f"{rel}: missing"]
+    except json.JSONDecodeError as e:
+        return None, [f"{rel}:{e.lineno}:{e.colno}: {e.msg} (strict JSON — no "
+                      f"trailing commas, double quotes)"]
+    return doc, github_layer_rules.check_github_links(doc)
+
+
 # --------------------------------------------------------------------------
-# 7. the CMS shell — cms/index.html and cms/callback.html.
+# 7. the shell — index.html, cms/index.html and cms/callback.html.
+#
+# index.html joined the list with the editor mode (plan D-C): the signed-in
+# editor's token now lives in the site's own document, so the site page is
+# held to the same rule as the CMS pages — no inline script, no on*=, local
+# scripts and styles only. Its one remote <link>, the favicon, is allowed only
+# as an image of the site's own Cloudinary account (the manifest's "cloud"):
+# rel made of "icon"/"shortcut" only, href under
+# https://res.cloudinary.com/<cloud>/image/upload/ — so a rel="stylesheet icon"
+# or another account's file is a remote <link> like any other.
 # --------------------------------------------------------------------------
 CMS_PAGES = ("cms/index.html", "cms/callback.html")
+SHELL_PAGES = ("index.html",) + CMS_PAGES
+ICON_RELS = frozenset({"icon", "shortcut"})
+
+
+def icon_prefix(root):
+    """https://res.cloudinary.com/<cloud>/image/upload/ of the site's own
+    account, or None (no favicon allowed) when the manifest cannot say."""
+    try:
+        cloud = json.loads((Path(root) / "data" / "cloudinary-manifest.json")
+                           .read_text(encoding="utf-8")).get("cloud")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not (isinstance(cloud, str) and re.fullmatch(r"[a-z0-9_-]+", cloud)):
+        return None
+    return f"https://res.cloudinary.com/{cloud}/image/upload/"
 TAG_OPEN_RE = re.compile(r"<[a-zA-Z]")
 SCRIPT_OPEN_RE = re.compile(r"<script(?=[\s/>])[^>]*>?", re.IGNORECASE)
 
@@ -549,19 +647,25 @@ class _ShellTags(HTMLParser):
 
 
 def check_cms_shell(root):
-    """Each CMS page exists; its local references exist; no inline script,
+    """Each shell page exists; its local references exist; no inline script,
     no on*=.
 
     REQUIRED: the sign-in callback arrived with U5 and the editor page with
     U7a, which flipped this from when-present — a missing page is a broken
     editor, not a skip. The CMS runs under a CSP without 'unsafe-inline', so
-    inline code would simply not run.
+    inline code would simply not run. index.html is judged when present (a
+    missing one is already fatal in main(), which reads it at 6a).
     """
     root = Path(root)
     out = []
-    for rel in CMS_PAGES:
+    icon_ok = icon_prefix(root)
+    for rel in SHELL_PAGES:
         page = root / rel
+        who = "CMS pages" if rel in CMS_PAGES else "the site page (it holds the " \
+            "editor's token)"
         if not page.is_file():
+            if rel not in CMS_PAGES:
+                continue
             out.append(f"{rel}:1: missing — the CMS shell is required (the "
                        f"editor page and its sign-in callback ship with the site)")
             continue
@@ -601,9 +705,30 @@ def check_cms_shell(root):
                     if ref.lower().startswith(("http:", "https:", "//")):
                         if name == "img":
                             continue
+                        # the favicon: an image, from the site's own image
+                        # account only, and rel naming nothing but an icon
+                        rels = set((attrs.get("rel") or "").lower().split())
+                        # a '.'/'..' segment (plain or %2e-encoded) or a
+                        # backslash climbs out of the account after the
+                        # prefix, so such a path is never the favicon. A
+                        # Cloudinary image path never needs percent-encoding,
+                        # and an encoded separator (%2f, %5c) climbs as surely
+                        # as a literal one: any '%' in the path is refused.
+                        path = ref.split("?")[0].split("#")[0]
+                        segs = path.split("/")
+                        plain = "\\" not in ref and "%2e" not in ref.lower() \
+                            and "%" not in path \
+                            and not any(x in (".", "..") for x in segs)
+                        if name == "link" and "icon" in rels \
+                                and rels <= ICON_RELS and icon_ok \
+                                and ref.startswith(icon_ok) and plain:
+                            continue
                         out.append(f"{rel}:{line_of(pos)}: remote "
-                                   f"<{name}> {attr} {ref} — the CMS loads its "
-                                   f"code and styles from its own files")
+                                   f"<{name}> {attr} {ref} — "
+                                   + ("the CMS loads its code and styles from "
+                                      "its own files" if rel in CMS_PAGES else
+                                      "the site loads its code and styles from "
+                                      "its own files"))
                         continue
                 elif not ref or ref.lower().startswith(
                         ("http:", "https:", "#", "data:", "mailto:", "//")):
@@ -638,8 +763,11 @@ def check_cms_shell(root):
             for m in EVENT_ATTR_RE.finditer(text, unread[0]):
                 handlers.add((line_of(m.start(1)), m.group(1).lower()))
         for line, attr in sorted(handlers):
-            out.append(f"{rel}:{line}: inline event handler ({attr}=) — CMS "
-                       f"pages attach handlers from their script files")
+            out.append(f"{rel}:{line}: inline event handler ({attr}=) — {who} "
+                       f"attach handlers from their script files"
+                       if rel in CMS_PAGES else
+                       f"{rel}:{line}: inline event handler ({attr}=) — {who} "
+                       f"attaches handlers from its script files")
         # every OPENING tag is judged, closed or not: an unterminated
         # '<script>x' still runs everything after it as script. Only a real
         # src attribute (as the parser reads it) excuses a body — an empty
@@ -651,7 +779,9 @@ def check_cms_shell(root):
             if name != "script" or "src" not in attrs:
                 out.append(f"{rel}:{line_of(m.start())}: inline <script> (no src) "
                            f"— CMS pages load their code from files (the CSP "
-                           f"forbids inline script)")
+                           f"forbids inline script)" if rel in CMS_PAGES else
+                           f"{rel}:{line_of(m.start())}: inline <script> (no src) "
+                           f"— {who} loads its code from files")
     return sorted(out, key=lambda s: (s.split(":")[0], int(s.split(":")[1])))
 
 
@@ -758,6 +888,18 @@ def check_reader_keys(name, node, spec, path="", label=""):
             item_path = f"{prefix}[{i}]"
             check_reader_keys(name, item, child, item_path,
                               entry_label(item_path, item))
+    # objects keyed by id/name/login: the child spec applies to every value
+    for key, child in spec.get("values", {}).items():
+        if key not in node:
+            continue
+        value = node[key]
+        if not isinstance(value, dict):
+            err(f'{at}"{key}" must be a JSON object, got {type(value).__name__}')
+            continue
+        prefix = f"{path}.{key}" if path else key
+        for vkey, item in value.items():
+            item_path = f"{prefix}.{vkey}"
+            check_reader_keys(name, item, child, item_path, item_path)
     # nested objects: the same spec vocabulary, one level in
     for key, child in spec.get("objects", {}).items():
         if key not in node:
@@ -1323,11 +1465,17 @@ def main():
         "data/search-probes.json": probes,
         "data/cad-tree.json": cad,
     }
-    for rel in sorted(set(READER_REQUIRED_KEYS) - set(registries)):
+    # the GitHub layer: optional, loaded (and so located on a syntax error)
+    # only when present; section 11 below judges the same documents
+    github_docs = {}
+    for key, rel in github_layer_rules.FILES.items():
+        if (ROOT / rel).exists():
+            registries[rel] = github_docs[key] = load(rel)
+    for rel in sorted(set(READER_REQUIRED_KEYS) - set(registries) - READER_OPTIONAL):
         err(f"{rel}: has a READER_REQUIRED_KEYS entry but no load() call in "
             f"tools/check.py — add one so a syntax error is located too")
     for rel, spec in READER_REQUIRED_KEYS.items():
-        if rel in registries:
+        if rel in registries and not (rel in READER_OPTIONAL and registries[rel] is None):
             check_reader_registry(rel, registries[rel], spec)
     for rel, consumers in READER_FIXED_PATHS.items():
         if not (ROOT / rel).is_file():
@@ -1725,6 +1873,29 @@ def main():
         for msg in check_contributors(contributors, projects):
             err(msg)
 
+    # ---- 11. the GitHub layer (shared rules: tools/github_layer_rules.py) ----
+    # HARD: intrinsic to the files. NOTES: stale against the registries —
+    # printed, never red (PR CI does not rebuild these files; see the module).
+    def read_avatar(rel):
+        p = ROOT / rel
+        return p.read_bytes() if p.is_file() else None
+    for msg in github_layer_rules.check_github_layer(github_docs, read_avatar):
+        err(msg)
+    for msg in check_avatar_dir(ROOT):
+        err(msg)
+    people_doc = people if people_path.exists() else None      # loaded at 6c
+    roster = set(github_layer_rules_roster(people_doc))
+    page_keys = {nid for nid, _ in enumerate_page_nodes(setup, projects, tools)}
+    org_names_snapshot = {r["name"] for r in org}
+    notes.extend(github_layer_rules.github_layer_notes(
+        github_docs, page_keys, roster, org_names_snapshot))
+    links, link_problems = read_github_links(ROOT)
+    for msg in link_problems:
+        err(msg)
+    if isinstance(links, dict):
+        notes.extend(github_layer_rules.github_links_notes(
+            links, roster, github_docs.get("people-public")))
+
     checker = ROOT / "tools" / "check_attribution_headers.py"
     result = subprocess.run(
         [sys.executable, str(checker), "--root", str(ROOT)],
@@ -1740,12 +1911,17 @@ def main():
 
 
 def report(site=None):
+    # the verdict line comes first; section 11's notes follow it (never red)
     if errors:
         print(f"CHECK FAILED — {len(errors)} problem(s):")
         for e in errors:
             print(f"  ✗ {e}")
+        for n in notes:
+            print(f"note: {n}")
         sys.exit(1)
     print("check.py: all green")
+    for n in notes:
+        print(f"note: {n}")
     print("reminder: URL liveness is checked by tools/check_urls.py — run it when "
           "images, links, or the manifest changed")
     sys.exit(0)

@@ -1,8 +1,11 @@
 # derive — regenerate and commit the derived data after every push to main.
 #
 # Derived data = files that are a pure function of the content: search/site.json,
-# search/manifest.json, data/graph/{wiki,summaries,xref-terms}.json and, when its
-# inputs changed, data/graph/contributors.json. Pull requests never commit them
+# search/manifest.json, data/graph/{wiki,summaries,xref-terms}.json, when its
+# inputs changed data/graph/contributors.json, and on every run the GitHub layer
+# data/graph/{org-activity,github-repos,page-authors,people-public}.json plus
+# data/graph/avatars/ (public reads; its step fails SOFT — a ::warning, the
+# previous GitHub data kept, the rest still committed). Pull requests never commit them
 # (the CI `check` job regenerates them in its workspace instead); this workflow
 # commits them on main, as github-actions[bot], right after the merge.
 #
@@ -33,6 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      pull-requests: read   # build_github_data.py lists this repo's pull requests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 — resolved via gh api repos/actions/checkout/git/ref/tags/v7 on 2026-09-03
         with:
@@ -40,7 +44,9 @@ jobs:
 
       - name: Regenerate, check, commit and push the derived data
         env:
-          # build_contributors.py calls `gh api` for public contributor counts.
+          # build_contributors.py and build_github_data.py call `gh api` for
+          # public data only (contributor counts; org activity, repo cards, page
+          # history, pull requests, profiles' display names).
           GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
         # derive.py resolves BEFORE itself: a multi-commit push or a new branch
@@ -58,8 +64,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3; do
             echo "::group::attempt $attempt: derive"
-            python3 tools/derive.py --contributors-if-changed "$BEFORE"
+            python3 tools/derive.py --contributors-if-changed "$BEFORE" --github-data | tee "$RUNNER_TEMP/derive-output.txt"
             echo "::endgroup::"
+            if grep -qF "derive: build_github_data.py FAILED — previous GitHub data kept" "$RUNNER_TEMP/derive-output.txt"; then
+              echo "::warning title=derive::build_github_data.py failed — the previous GitHub data was kept; the next push catches it up"
+            fi
             python3 tools/check.py
             if [ -z "$(git status --porcelain search/ data/graph/)" ]; then
               echo "derive: nothing to commit"

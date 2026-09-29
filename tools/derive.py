@@ -10,6 +10,9 @@
     python3 tools/derive.py --contributors                   # ... + contributors (gh)
     python3 tools/derive.py --contributors-if-changed <ref>  # ... + contributors when
                                                              #     its inputs differ
+    python3 tools/derive.py --github-data                    # ... + the GitHub layer
+                                                             #     (combines with either
+                                                             #     contributors flag)
     python3 tools/derive.py --annotate <file>...             # CI: output -> annotations
 
 Plain python3, stdlib only. The builders run in this order, each as its own
@@ -19,8 +22,12 @@ process, exactly as a maintainer would run them:
     2. tools/build_search_index.py --site-only   search/{site,manifest}.json
     3. tools/build_contributors.py               data/graph/contributors.json
        (only with --contributors, or with --contributors-if-changed <ref> when
-       data/projects.json, data/org-repos.json or data/people.json differ from
-       <ref>; it needs `gh` and GH_TOKEN, so it stays off the pull-request path)
+       data/projects.json, data/org-repos.json, data/people.json or
+       data/github-links.json differ from <ref>; it needs `gh` and GH_TOKEN, so
+       it stays off the pull-request path)
+    4. tools/build_github_data.py                data/graph/{org-activity,
+       github-repos,page-authors,people-public}.json + data/graph/avatars/
+       (only with --github-data; needs `gh`; LAST, and it fails SOFT: see below)
 
 Output contract (the maintainer protocols quote it): one `derive:` line per
 builder, then `derive: <n> files changed (<paths>)` or `derive: nothing to do`.
@@ -28,6 +35,18 @@ builder, then `derive: <n> files changed (<paths>)` or `derive: nothing to do`.
 before the run. A builder that fails stops the run with exit 1: derive names it
 on one line, then passes the builder's own output through unchanged, so the
 builder's located message is the last thing printed.
+
+The GitHub layer is the one exception: on any failure of build_github_data.py
+derive passes its output through, then prints exactly
+
+    derive: build_github_data.py FAILED — previous GitHub data kept
+
+puts every byte of the GitHub-layer files back as it was before the step (the
+builder writes atomically at the end, and derive restores on top of that),
+and carries on to its summary line with exit 0 — so the search index and the
+graph still refresh when GitHub is down or the token's hourly cap is hit, and
+the next push catches the GitHub data up. derive.yml turns that line into a
+::warning annotation.
 
 --contributors-if-changed <ref>: in CI <ref> is the push's `before` sha, which a
 shallow checkout may not hold. derive resolves it locally, then tries
@@ -49,10 +68,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 DERIVED_DIRS = ("search", "data/graph")
-CONTRIBUTOR_INPUTS = ("data/projects.json", "data/org-repos.json", "data/people.json")
+CONTRIBUTOR_INPUTS = ("data/projects.json", "data/org-repos.json", "data/people.json",
+                      "data/github-links.json")
 GRAPH = ("build_wiki_graph.py", [])
 SITE_SHARD = ("build_search_index.py", ["--site-only"])
 CONTRIBUTORS = ("build_contributors.py", [])
+GITHUB_DATA = ("build_github_data.py", [])
+# what the GitHub step owns: restored byte for byte when it fails
+GITHUB_FILES = ("data/graph/org-activity.json", "data/graph/github-repos.json",
+                "data/graph/page-authors.json", "data/graph/people-public.json")
+GITHUB_DIRS = ("data/graph/avatars",)
+GITHUB_SOFT_FAIL = "derive: build_github_data.py FAILED — previous GitHub data kept"
 
 
 # --------------------------------------------------------------------------
@@ -70,6 +96,35 @@ def snapshot(root):
                 rel = p.relative_to(root).as_posix()
                 digests[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
     return digests
+
+
+def github_state(root):
+    """{relative path: bytes} of every file the GitHub step may write."""
+    root = Path(root)
+    state = {}
+    for rel in GITHUB_FILES:
+        p = root / rel
+        if p.is_file():
+            state[rel] = p.read_bytes()
+    for d in GITHUB_DIRS:
+        base = root / d
+        if base.is_dir():
+            for p in base.rglob("*"):
+                if p.is_file():
+                    state[p.relative_to(root).as_posix()] = p.read_bytes()
+    return state
+
+
+def restore_github_state(root, state):
+    """Put the GitHub-layer files back exactly as `state` recorded them."""
+    root = Path(root)
+    for rel in set(github_state(root)) - set(state):
+        (root / rel).unlink()
+    for rel, data in state.items():
+        p = root / rel
+        if not p.is_file() or p.read_bytes() != data:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
 
 
 def label(builder):
@@ -140,6 +195,17 @@ def regenerate(root, args):
         print(f"derive: {label(builder)} ok")
     if skip_reason:
         print(f"derive: {label(CONTRIBUTORS)} skipped ({skip_reason})")
+    if args.github_data:
+        # LAST, and soft: a GitHub outage never freezes the rest of derive
+        kept = github_state(root)
+        rc, output = run_builder(root, GITHUB_DATA)
+        if rc != 0:
+            restore_github_state(root, kept)
+            for line in output.splitlines():
+                print(f"  {line}" if line.strip() else "")
+            print(GITHUB_SOFT_FAIL)
+        else:
+            print(f"derive: {label(GITHUB_DATA)} ok")
 
     after = snapshot(root)
     changed = sorted(p for p in set(before) | set(after) if before.get(p) != after.get(p))
@@ -236,8 +302,13 @@ def main(argv=None, root=None):
                       help="run build_contributors.py only when its inputs differ from REF")
     mode.add_argument("--annotate", nargs="+", metavar="FILE",
                       help="print saved derive/check output as GitHub ::error annotations")
+    ap.add_argument("--github-data", action="store_true",
+                    help="also run tools/build_github_data.py, last and soft-failing "
+                         "(needs gh + GH_TOKEN)")
     args = ap.parse_args(argv)
     if args.annotate:
+        if args.github_data:
+            ap.error("--github-data does not combine with --annotate")
         return annotate(args.annotate)
     return regenerate(Path(root) if root is not None else ROOT, args)
 
