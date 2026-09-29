@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import build_contributors as bc  # noqa: E402
+import github_names as gn  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -113,10 +114,16 @@ USERS = {
 }
 
 
+EMPTY_LINKS = {"note": "test map", "links": {}, "exclude": []}
+
+
 def make_fixture(tmp, contributors=None, users=None,
-                 projects=None, org=None, people=None):
+                 projects=None, org=None, people=None, links=None):
     """Write a --fixture directory and return its path."""
     root = Path(tmp)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "github-links.json").write_text(
+        json.dumps(EMPTY_LINKS if links is None else links), encoding="utf-8")
     (root / "contributors").mkdir(parents=True, exist_ok=True)
     (root / "users").mkdir(parents=True, exist_ok=True)
     for repo, rows in (CONTRIBUTORS if contributors is None else contributors).items():
@@ -516,13 +523,108 @@ class TestEndToEndFailures(FixtureCase):
 
 
 # --------------------------------------------------------------------------
+# the shared matcher (plan D-L): tools/github_names.py + data/github-links.json
+# --------------------------------------------------------------------------
+REAL_PEOPLE = {"groups": [{"id": "alumni", "title": "Alumni", "people": [
+    {"name": n, "title": "", "photo": None, "link": None}
+    for n in ("Daniel-André Dücker", "Tim Hansen", "René Hochdahl", "Richard Wittmüß")]}]}
+
+
+class TestSharedMatcher(FixtureCase):
+    def flags(self, doc):
+        out = {}
+        for bucket in doc["projects"].values():
+            for row in bucket["contributors"]:
+                out[row["login"]] = row.get("roster")
+        return out
+
+    def run_real(self, links, users=None, contributors=None):
+        contributors = contributors or {
+            "alpha": [{"login": "DanielDuecker", "contributions": 9, "type": "User"},
+                      {"login": "timzarhansen", "contributions": 4, "type": "User"},
+                      {"login": "hippocampusmum", "contributions": 7, "type": "User"}],
+            "beta": [{"login": "RHochdahl", "contributions": 3, "type": "User"},
+                     {"login": "rw", "contributions": 2, "type": "User"}],
+            "gamma": [{"login": "stranger", "contributions": 1, "type": "User"}],
+        }
+        users = users or {"DanielDuecker": {"name": "Daniel Duecker"},
+                          "timzarhansen": {"name": "Tim"},
+                          "hippocampusmum": {"name": None},
+                          "RHochdahl": {"name": None},
+                          "rw": {"name": "Richard Wittmuss"},
+                          "stranger": {"name": "Richard Wittmüß"}}
+        code, log = self.build(contributors=contributors, users=users,
+                               people=REAL_PEOPLE, links=links)
+        return code, log, (json.loads(self.out.read_text(encoding="utf-8"))
+                           if code == 0 else None)
+
+    def test_auto_match_map_exclude_and_ambiguity(self):
+        links = {"note": "x", "links": {"timzarhansen": "Tim Hansen",
+                                         "RHochdahl": "René Hochdahl"},
+                 "exclude": ["hippocampusmum"]}
+        code, log, doc = self.run_real(links)
+        self.assertEqual(code, 0, log)
+        flags = self.flags(doc)
+        self.assertTrue(flags["DanielDuecker"])          # first + last token
+        self.assertTrue(flags["timzarhansen"])           # the map
+        self.assertTrue(flags["RHochdahl"])              # the map, no display name
+        self.assertNotIn("hippocampusmum", flags)        # excluded: no row at all
+        # rw (project p-one) and stranger (project p-two) both match one roster
+        # name: the match is global across projects, so neither is flagged
+        self.assertIsNone(flags["rw"])
+        self.assertIsNone(flags["stranger"])
+        self.assertIn("ambiguous", log)
+        self.assertIn("'rw'", log)
+
+    def test_null_override_and_unknown_map_value_warn_and_continue(self):
+        links = {"note": "x", "links": {"DanielDuecker": None,
+                                         "timzarhansen": "Tim Hansen-Renamed"},
+                 "exclude": []}
+        code, log, doc = self.run_real(links)
+        self.assertEqual(code, 0, log)
+        flags = self.flags(doc)
+        self.assertIsNone(flags["DanielDuecker"])
+        self.assertIsNone(flags["timzarhansen"])
+        self.assertIn("Tim Hansen-Renamed", log)
+
+    def test_roster_flag_agrees_with_the_matcher(self):
+        links = {"note": "x", "links": {"timzarhansen": "Tim Hansen"},
+                 "exclude": ["hippocampusmum"]}
+        code, log, doc = self.run_real(links)
+        self.assertEqual(code, 0, log)
+        names = {"DanielDuecker": "Daniel Duecker", "timzarhansen": "Tim",
+                 "RHochdahl": None, "rw": "Richard Wittmuss",
+                 "stranger": "Richard Wittmüß", "hippocampusmum": None}
+        linked, _ = gn.match(names, gn.roster_names(REAL_PEOPLE), links)
+        flags = self.flags(doc)
+        for login, value in linked.items():
+            self.assertEqual(bool(flags.get(login)), value is not None, login)
+
+    def test_excluded_login_is_not_even_looked_up(self):
+        links = {"note": "x", "links": {}, "exclude": ["hippocampusmum"]}
+        users = {"DanielDuecker": {"name": "Daniel Duecker"},
+                 "timzarhansen": {"name": "Tim"}, "RHochdahl": {"name": None},
+                 "rw": {"name": "R W"}, "stranger": {"name": "S T"}}
+        code, log, doc = self.run_real(links, users=users)   # no users/hippocampusmum
+        self.assertEqual(code, 0, log)
+
+    def test_missing_map_in_fixture_falls_back_to_the_repo_map(self):
+        fixture = make_fixture(self.tmp / "fx")
+        (fixture / "github-links.json").unlink()
+        _org, _projects, _people, links = bc.load_inputs(fixture)
+        self.assertEqual(links, gn.load_links(bc.ROOT / "data" / "github-links.json"))
+
+
+# --------------------------------------------------------------------------
 # hygiene
 # --------------------------------------------------------------------------
 class TestModuleHygiene(unittest.TestCase):
     def test_stdlib_only(self):
         src = Path(bc.__file__).read_text(encoding="utf-8")
+        # github_names is this repo's own matcher (tools/github_names.py,
+        # stdlib-only itself — test_github_names.py proves it), not a dependency
         allowed = {"argparse", "json", "os", "re", "subprocess", "sys",
-                   "tempfile", "time", "collections", "pathlib"}
+                   "tempfile", "time", "collections", "pathlib", "github_names"}
         for i, line in enumerate(src.splitlines(), 1):
             if line.startswith("import ") or line.startswith("from "):
                 mod = line.split()[1].split(".")[0]

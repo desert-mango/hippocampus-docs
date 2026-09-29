@@ -343,6 +343,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/github_names.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "1352941f2d8a01e17b5aac61865e289484a2007e2c6060326e154e5b3a47a747",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Match GitHub logins to People-roster names: one pure matcher plus a hand-kept map."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/rst_convert.py": {
       "classification": "included",
       "evidence": {
@@ -549,6 +564,21 @@
         "last_substantive_modification": "21 September 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test derived-data regeneration order, filters, failure pass-through, and CI annotations."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_github_names.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "be59634b274d000ccbf60114e59c14f7d403dfb71ffea9bcf41c343557ffb92f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the one GitHub-login-to-roster-name matcher and its hand-kept map."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },

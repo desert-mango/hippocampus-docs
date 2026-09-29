@@ -46,7 +46,8 @@
     {
      "login": "DanielDuecker",
      "name": "Daniel Duecker",
-     "contributions": 1
+     "contributions": 1,
+     "roster": true
     }
    ]
   },
@@ -76,7 +77,8 @@
     {
      "login": "JohTobi",
      "name": "JohTobi",
-     "contributions": 627
+     "contributions": 627,
+     "roster": true
     },
     {
      "login": "lennartalff",
@@ -93,12 +95,14 @@
     {
      "login": "DanielDuecker",
      "name": "Daniel Duecker",
-     "contributions": 56
+     "contributions": 56,
+     "roster": true
     },
     {
      "login": "EugenSol",
      "name": "EugenSol",
-     "contributions": 24
+     "contributions": 24,
+     "roster": true
     },
     {
      "login": "maxheld83",
@@ -131,7 +135,7 @@
      "contributions": 3
     }
    ],
-   "truncated": 39
+   "truncated": 40
   },
   "hippocampus-vehicle": {
    "contributors": [
@@ -150,7 +154,8 @@
     {
      "login": "DanielDuecker",
      "name": "Daniel Duecker",
-     "contributions": 3
+     "contributions": 3,
+     "roster": true
     },
     {
      "login": "VincentTUHH",
@@ -212,22 +217,20 @@
     {
      "login": "DanielDuecker",
      "name": "Daniel Duecker",
-     "contributions": 23
+     "contributions": 23,
+     "roster": true
     },
     {
      "login": "timzarhansen",
      "name": "Tim",
-     "contributions": 7
+     "contributions": 7,
+     "roster": true
     },
     {
      "login": "RHochdahl",
      "name": "RHochdahl",
-     "contributions": 2
-    },
-    {
-     "login": "hippocampusmum",
-     "name": "hippocampusmum",
-     "contributions": 2
+     "contributions": 2,
+     "roster": true
     }
    ]
   },
@@ -279,7 +282,7 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 32,
+     "contributions": 34,
      "roster": true
     },
     {
@@ -327,7 +330,8 @@
     {
      "login": "DanielDuecker",
      "name": "Daniel Duecker",
-     "contributions": 6
+     "contributions": 6,
+     "roster": true
     },
     {
      "login": "VincentTUHH",

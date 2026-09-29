@@ -1,0 +1,12 @@
+{
+ "note": "Hand-kept. Links a GitHub login to a People-roster name (data/people.json) where the automatic name match in tools/github_names.py cannot. The map always wins over the rule; a login mapped to null is never linked; a login in 'exclude' is left out of the people data entirely (org service accounts).",
+ "links": {
+  "EugenSol": "Eugen Solowjow",
+  "JohTobi": "Tobias Johannink",
+  "RHochdahl": "René Hochdahl",
+  "timzarhansen": "Tim Hansen"
+ },
+ "exclude": [
+  "hippocampusmum"
+ ]
+}

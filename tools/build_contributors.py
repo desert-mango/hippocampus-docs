@@ -37,10 +37,20 @@ Output schema (indent=1, project keys sorted, trailing newline):
         "truncated": <how many were cut, only when > 0>}}}
 
 A project with no contributors keeps its key with an empty list, so the UI can
-tell "nobody found" apart from "never built". "roster": true marks a display
-name that equals a name in data/people.json (exact after trimming, case-folding
-and collapsing runs of whitespace — nothing fuzzier: a false roster link is
-worse than a missed one).
+tell "nobody found" apart from "never built". "roster": true marks a login that
+the site's ONE name matcher, tools/github_names.py, links to a name in
+data/people.json, with the hand-kept map data/github-links.json.
+
+Change of principle (2026-09-28, plan D-L): this used to say "exact after
+trimming, case-folding and collapsing runs of whitespace — nothing fuzzier".
+Kyle chose auto-match with a map instead: two normal forms per name (German
+transliteration and plain accent-stripping), a first-and-last-token rule for
+names of two or more tokens, one-token names never auto-matched, ambiguity
+linking neither, and the map always winning (a login mapped to null is never
+linked). The match runs ONCE over every login of every project, so a login's
+flag is the same in every project and agrees with people-public.json's
+"roster". Logins in the map's "exclude" list (org service accounts) are
+dropped here like bots; their users/<login> is never fetched.
 
 Failure policy: loud and total. Any gh call that fails or returns unparseable
 JSON aborts the run with exit 1, and the file is written once, atomically, at
@@ -55,6 +65,7 @@ tests drive the whole pipeline offline. Layout:
     <dir>/projects.json              optional; else data/projects.json
     <dir>/org-repos.json             optional; else data/org-repos.json
     <dir>/people.json                optional; else data/people.json
+    <dir>/github-links.json          optional; else data/github-links.json
 
 A payload the run asks for and cannot find aborts, exactly like a failing gh
 call would.
@@ -69,6 +80,8 @@ import tempfile
 import time
 from collections import Counter
 from pathlib import Path
+
+import github_names
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "data" / "graph" / "contributors.json"
@@ -145,14 +158,15 @@ def select_repos(projects, org_rows, excluded=EXCLUDED_REPOS):
     return selected
 
 
-def tally(rows):
-    """Sum contributions per login over raw contributor rows; drop the bots."""
+def tally(rows, excluded=frozenset()):
+    """Sum contributions per login over raw contributor rows; drop the bots
+    and the map's excluded logins."""
     totals = Counter()
     for row in rows:
         login = (row.get("login") or "").strip()
         if not login:
             raise Abort(f"contributor row without a login: {row!r}")
-        if is_bot(row):
+        if is_bot(row) or login in excluded:
             continue
         count = row.get("contributions")
         if isinstance(count, bool) or not isinstance(count, int):
@@ -161,13 +175,21 @@ def tally(rows):
     return totals
 
 
-def rank(totals, names, roster, top=TOP_N):
-    """The stored projection: three fields, sorted, capped, truncation counted."""
+def rank(totals, names, roster, top=TOP_N, linked=None):
+    """The stored projection: three fields, sorted, capped, truncation counted.
+
+    `linked` is github_names.match()'s answer ({login: roster name or None});
+    without one, the matcher runs over these totals alone against `roster`
+    (any iterable of roster names), with no map.
+    """
+    if linked is None:
+        linked, _warnings = github_names.match(
+            {login: names.get(login) for login in totals}, roster)
     rows = []
     for login, count in totals.items():
         display = (names.get(login) or "").strip() or login
         entry = {"login": login, "name": display, "contributions": count}
-        if norm_name(display) in roster:
+        if linked.get(login) is not None:
             entry["roster"] = True
         rows.append(entry)
     rows.sort(key=lambda r: (-r["contributions"], r["login"]))
@@ -310,7 +332,7 @@ class FixtureSource(Source):
 
 
 def load_inputs(fixture=None):
-    """(org rows, projects, people) — from data/, or from a fixture override."""
+    """(org rows, projects, people, links) — from data/, or a fixture override."""
     def load(name):
         path = Path(fixture) / name if fixture else None
         if path is None or not path.exists():
@@ -319,7 +341,15 @@ def load_inputs(fixture=None):
             return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise Abort(f"cannot read {path}: {exc}") from None
-    return load("org-repos.json"), load("projects.json"), load("people.json")
+    links_path = Path(fixture) / "github-links.json" if fixture else None
+    if links_path is None or not links_path.exists():
+        links_path = ROOT / github_names.MAP_PATH
+    try:
+        links = github_names.load_links(links_path)
+    except (OSError, ValueError) as exc:
+        raise Abort(f"cannot read {links_path}: {exc}") from None
+    return (load("org-repos.json"), load("projects.json"), load("people.json"),
+            links)
 
 
 def display_names(source, logins):
@@ -334,22 +364,33 @@ def display_names(source, logins):
     return names
 
 
-def build(source, org_rows, projects, people, excluded=EXCLUDED_REPOS):
+def build(source, org_rows, projects, people, excluded=EXCLUDED_REPOS,
+          links=None):
     """Fetch, aggregate, project, and check. Returns the finished document."""
-    roster = roster_index(people)
     by_project = select_repos(projects, org_rows, excluded)
-    entries = {}
+    skip = github_names.excluded_logins(links)
+    per_project = {}
     for pid in sorted(by_project):
-        repos = by_project[pid]
         rows = []
-        for repo in repos:
+        for repo in by_project[pid]:
             payload = source.contributors(repo)
             if not isinstance(payload, list):
                 raise Abort(f"repos/{ORG}/{repo}/contributors: expected a list, "
                             f"got {type(payload).__name__}")
             rows.extend(payload)
-        totals = tally(rows)
-        entry = rank(totals, display_names(source, totals), roster)
+        per_project[pid] = tally(rows, skip)
+    # one match over every login of every project: a login's flag is the same
+    # everywhere, and the same as people-public.json's "roster"
+    names = display_names(source, {login for totals in per_project.values()
+                                   for login in totals})
+    linked, warnings = github_names.match(names, github_names.roster_names(people),
+                                          links)
+    for line in warnings:
+        print(f"  warning: {line}")
+    entries = {}
+    for pid in sorted(per_project):
+        repos, totals = by_project[pid], per_project[pid]
+        entry = rank(totals, names, (), linked=linked)
         entries[pid] = entry
         print(f"  {pid}: {len(repos)} repo(s), {len(totals)} contributor(s)"
               + (f", {entry['truncated']} beyond the top {TOP_N}"
@@ -389,12 +430,12 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     try:
-        org_rows, projects, people = load_inputs(args.fixture)
+        org_rows, projects, people, links = load_inputs(args.fixture)
         source = FixtureSource(args.fixture) if args.fixture else GhSource()
         print(f"contributors for {len(projects.get('projects', []))} projects"
               + (f" (fixture: {args.fixture})" if args.fixture else
                  f" via gh, org {ORG}"))
-        doc = build(source, org_rows, projects, people)
+        doc = build(source, org_rows, projects, people, links=links)
         write_atomic(args.out, dump(doc))
     except Abort as exc:
         print(f"\nABORT: {exc}", file=sys.stderr)
