@@ -18,7 +18,7 @@ const HC = require(new URL('../../js/graph.js', import.meta.url).pathname);
 
 const {
   buildTermMatcher, findMatches, currentNodeId, hrefFor,
-  contributorRows, truncatedLabel, commitLabel, safeHttpUrl,
+  contributorRows, contributorAction, truncatedLabel, commitLabel, safeHttpUrl,
 } = HC;
 
 // ---------------------------------------------------------------- safeHttpUrl
@@ -242,45 +242,66 @@ const PEOPLE = {
   ],
 };
 
-test('contributorRows links only roster rows that match a person with an http(s) link', () => {
+// people-public.json (plan D-B/D-L): login -> the roster name the build matched, or null.
+const PEOPLE_PUBLIC = {
+  people: {
+    lennartalff: { login: 'lennartalff', name: 'Thies Lennart Alff', avatar: null, html_url: 'https://github.com/lennartalff', roster: 'Thies Lennart Alff' },
+    NBauschmann: { login: 'NBauschmann', name: 'Nathalie Bauschmann', avatar: null, html_url: 'https://github.com/NBauschmann', roster: 'Nathalie Bauschmann' },
+    ntrekel: { login: 'ntrekel', name: 'Niklas Trekel', avatar: null, html_url: 'https://github.com/ntrekel', roster: 'Niklas Trekel' },
+    DanielDuecker: { login: 'DanielDuecker', name: 'Daniel Duecker', avatar: null, html_url: 'https://github.com/DanielDuecker', roster: 'Daniel-André Dücker' },
+    someone: { login: 'someone', name: 'Nathalie Bauschmann', avatar: null, html_url: 'https://github.com/someone', roster: null },
+    evil: { login: 'evil', name: 'Evil Person', avatar: null, html_url: 'https://github.com/evil', roster: 'Evil Person' },
+    gone: { login: 'gone', name: 'Gone Person', avatar: null, html_url: 'https://github.com/gone', roster: 'Renamed In The Editor' },
+    v: { login: 'v', name: 'vincent', avatar: null, html_url: 'https://github.com/v', roster: '  Vincent   Lenz ' },
+  },
+};
+
+test('contributorRows links a row through people-public.json by login, never by display name (D-L)', () => {
   const entry = {
     contributors: [
       { login: 'lennartalff', name: 'Thies Lennart Alff', contributions: 735, roster: true },
       { login: 'NBauschmann', name: 'Nathalie Bauschmann', contributions: 57, roster: true },
       { login: 'ntrekel', name: 'Niklas Trekel', contributions: 12, roster: true },
       { login: 'DanielDuecker', name: 'Daniel Duecker', contributions: 1 },
-      { login: 'someone', name: 'Nathalie Bauschmann', contributions: 4 },
+      { login: 'someone', name: 'Nathalie Bauschmann', contributions: 4, roster: true },
     ],
   };
-  const rows = contributorRows(entry, PEOPLE);
+  const rows = contributorRows(entry, PEOPLE, PEOPLE_PUBLIC);
   assert.equal(rows.length, 5);
   assert.equal(rows[0].label, 'Thies Lennart Alff');
   assert.equal(rows[0].linkUrl, 'https://www.tuhh.de/mum/team/wimi/thies-lennart-alff');
   assert.equal(rows[1].linkUrl, 'https://www.tuhh.de/mum/team/wimi/nathalie-bauschmann');
   assert.equal(rows[2].linkUrl, null, 'roster person without a link stays plain text');
-  assert.equal(rows[3].linkUrl, null, 'a near-miss name must not match Daniel-André Dücker');
-  assert.equal(rows[4].linkUrl, null, 'a non-roster row is never linked');
+  assert.equal(rows[3].linkUrl, 'https://www.tuhh.de/mum/team/wimi/daniel-duecker',
+    'DanielDuecker reaches Daniel-André Dücker through the login, not the display name');
+  assert.equal(rows[4].linkUrl, null, 'a matching display name alone never links');
 });
 
-test('contributorRows normalises names by trim, case and inner whitespace', () => {
+test('contributorRows ignores stale roster names and trims the roster side', () => {
   const entry = {
     contributors: [
-      { login: 'v', name: 'vincent lenz', contributions: 3, roster: true },
-      { login: 'v2', name: '  Vincent    Lenz  ', contributions: 3, roster: true },
-      { login: 'v3', name: 'VincentLenz', contributions: 3, roster: true },
-      { login: 'v4', name: 'Vincent Lenzz', contributions: 3, roster: true },
+      { login: 'gone', name: 'Gone Person', contributions: 3 },
+      { login: 'v', name: 'vincent', contributions: 3 },
+      { login: 'nobody-knows', name: 'Vincent Lenz', contributions: 3, roster: true },
     ],
   };
-  const rows = contributorRows(entry, PEOPLE);
-  assert.equal(rows[0].linkUrl, 'https://www.tuhh.de/mum/team/wimi/vincent-lenz');
+  const rows = contributorRows(entry, PEOPLE, PEOPLE_PUBLIC);
+  assert.equal(rows[0].linkUrl, null, 'a roster name people.json no longer has is ignored');
   assert.equal(rows[1].linkUrl, 'https://www.tuhh.de/mum/team/wimi/vincent-lenz');
-  assert.equal(rows[2].linkUrl, null);
-  assert.equal(rows[3].linkUrl, null);
+  assert.equal(rows[2].linkUrl, null, 'a login people-public does not know is never linked');
 });
 
 test('contributorRows rejects a non-http person link', () => {
-  const entry = { contributors: [{ login: 'e', name: 'Evil Person', contributions: 9, roster: true }] };
-  assert.equal(contributorRows(entry, PEOPLE)[0].linkUrl, null);
+  const entry = { contributors: [{ login: 'evil', name: 'Evil Person', contributions: 9, roster: true }] };
+  assert.equal(contributorRows(entry, PEOPLE, PEOPLE_PUBLIC)[0].linkUrl, null);
+});
+
+test('contributorAction: the popover when HCLab is there and the row has a login', () => {
+  assert.equal(contributorAction({ login: 'a', linkUrl: null }, true), 'popover');
+  assert.equal(contributorAction({ login: 'a', linkUrl: 'https://x.org' }, true), 'popover');
+  assert.equal(contributorAction({ login: '', linkUrl: 'https://x.org' }, true), 'visit');
+  assert.equal(contributorAction({ login: 'a', linkUrl: 'https://x.org' }, false), 'visit');
+  assert.equal(contributorAction({ login: 'a', linkUrl: null }, false), 'text');
 });
 
 test('contributorRows falls back to the login and pluralises the commit count', () => {
@@ -302,13 +323,18 @@ test('contributorRows falls back to the login and pluralises the commit count', 
   assert.equal(commitLabel(39), '39 commits');
 });
 
-test('contributorRows degrades to plain text when people.json is unavailable', () => {
-  const entry = { contributors: [{ login: 'a', name: 'Thies Lennart Alff', contributions: 5, roster: true }] };
+test('contributorRows degrades to plain text when people.json or people-public.json is unavailable', () => {
+  const entry = { contributors: [{ login: 'lennartalff', name: 'Thies Lennart Alff', contributions: 5, roster: true }] };
   for (const people of [null, undefined, {}, { groups: 'nope' }, { groups: [{}] }]) {
-    const rows = contributorRows(entry, people);
+    const rows = contributorRows(entry, people, PEOPLE_PUBLIC);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].linkUrl, null);
     assert.equal(rows[0].label, 'Thies Lennart Alff');
+  }
+  for (const pub of [null, undefined, {}, { people: 'nope' }, { people: [null, 3] }]) {
+    const rows = contributorRows(entry, PEOPLE, pub);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].linkUrl, null, 'no people-public, no link: display names are never matched');
   }
 });
 

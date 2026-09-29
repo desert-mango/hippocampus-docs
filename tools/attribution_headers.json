@@ -745,6 +745,36 @@
         "purpose": "Test librarian routing and preserve the local search ranking contract."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/lab.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "7cf7ae188472707e0e8e988a373b8e2395e6f9ffaac7f004b9d24b34afecf248",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_lab_ui.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "d4f8371c0f07c09f4ffa2e82202fce883831e260f520798b48aab0f126c79e30",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     }
   },
   "schema_version": 1

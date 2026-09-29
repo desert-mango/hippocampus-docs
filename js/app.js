@@ -344,6 +344,7 @@
       (i < flat.length - 1 ? `<a href="#/setup/${flat[i + 1].id}" style="text-align:right">${esc(flat[i + 1].title)} →</a>` : '<span></span>');
     body.appendChild(nav);
     content.appendChild(body);
+    if (window.HCLab) HCLab.renderAuthors(body, `setup/${page.id}`);
     scrollToAnchor(anchor);
   }
 
@@ -403,6 +404,7 @@
       </div>`;
     $('#project-md').appendChild(renderMarkdown(md));
     if (window.HCGraph) HCGraph.renderContributors(id, $('.aside-box'));
+    if (window.HCLab) { HCLab.renderRepoCards($('.aside-box')); HCLab.renderAuthors($('#project-md .page-body'), `project/${id}`); }
     scrollToAnchor(anchor);
   }
 
@@ -435,6 +437,7 @@
     content.innerHTML = '';
     content.appendChild(el(`<a class="back-link" href="#/tools">← All tools</a>`));
     content.appendChild(renderMarkdown(md));
+    if (window.HCLab) HCLab.renderAuthors($('.page-body', content), `tool/${id}`);
     scrollToAnchor(anchor);
   }
 
@@ -470,9 +473,14 @@
     const name = (person && typeof person.name === 'string') ? person.name.trim() : '';
     if (!name) return '';
     const photo = safeHttpUrl(person.photo);
+    // The photo/initials opens js/lab.js's person popover; its delegated click handler
+    // calls preventDefault, so a linked card does not also navigate (plan D-M).
+    const pop = window.HCLab
+      ? ` data-hc-person="${esc(name)}" role="button" tabindex="0" aria-label="${esc(`About ${name}`)}"` : '';
+    const trig = pop ? ' hc-pp-trigger' : '';
     const media = photo
-      ? `<img class="person-photo" src="${esc(cardPhotoUrl(photo))}" alt="" loading="lazy">`
-      : `<div class="person-initials" aria-hidden="true">${esc(initials(name))}</div>`;
+      ? `<img class="person-photo${trig}" src="${esc(cardPhotoUrl(photo))}" alt="" loading="lazy"${pop}>`
+      : `<div class="person-initials${trig}"${pop ? pop : ' aria-hidden="true"'}>${esc(initials(name))}</div>`;
     const title = (typeof person.title === 'string' && person.title.trim())
       ? `<span class="person-title">${esc(person.title)}</span>` : '';
     const inner = `${media}<span class="person-name">${esc(name)}</span>${title}`;
@@ -522,6 +530,7 @@
       if (root) root.remove();   // no stray empty mount under the heading
     }
     content.appendChild(body);
+    if (window.HCLab) { HCLab.wirePeople(body); HCLab.renderAuthors(body, 'about'); }
     scrollToAnchor(anchor);
   }
 
@@ -683,6 +692,10 @@
       else if (seg[0] === 'tools' && seg.length === 1) { navHighlight('tools'); viewTools(); }
       else if (seg[0] === 'tools') { navHighlight('tools'); await viewToolPage(seg[1], anchor); }
       else if (seg[0] === 'about') { navHighlight('about'); await viewAbout(anchor); }
+      else if (seg[0] === 'lab' && seg.length === 1 && window.HCLab) {
+        navHighlight('lab'); sidebar.innerHTML = ''; setTitle(['Lab activity']);
+        await HCLab.renderLab(content, () => epoch === routeEpoch);
+      }
       else if (seg[0] === 'search') {
         navHighlight(null);
         const q = new URLSearchParams(queryStr || '').get('q') || '';

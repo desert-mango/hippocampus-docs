@@ -9,9 +9,11 @@
      1. cross-reference linkifier — rewrites page prose in the DOM (never the
         Markdown sources) so allow-listed terms point at the node that owns them;
      2. a popover that previews the target node instead of navigating away;
-     3. a "Primary contributors" block on project pages, where only people who
-        already publish a link in data/people.json become clickable — and even then
-        only behind a visit-confirm modal.
+     3. a "Primary contributors" block on project pages. A row reaches its roster
+        card by LOGIN through data/graph/people-public.json (plan D-L), never by
+        display name; with js/lab.js loaded every name opens the person popover,
+        otherwise only a card's published link is clickable, behind a visit-confirm
+        modal.
 
    Every data file loads independently and every failure degrades to silence: a
    missing data/graph/*.json costs you the feature, never the page. The pure
@@ -143,10 +145,6 @@
     }
   }
 
-  function normName(value) {
-    return String(value == null ? '' : value).trim().replace(/\s+/g, ' ').toLowerCase();
-  }
-
   function commitLabel(n) {
     const count = Number(n) || 0;
     return count + ' commit' + (count === 1 ? '' : 's');
@@ -158,32 +156,43 @@
     return '+' + Math.round(count) + ' more on GitHub';
   }
 
-  // name -> published link, from data/people.json. Only non-null http(s) links get in.
-  function peopleLinkIndex(people) {
-    const index = new Map();
+  // login -> the roster card's published link (or null), through people-public.json:
+  // the build matched GitHub accounts to roster names once, with ONE matcher
+  // (tools/github_names.py); this client never compares display names. A roster name
+  // data/people.json no longer holds is ignored. js/lab.js's popover resolves the same
+  // way, and tools/tests/test_lab_ui.mjs proves the two agree.
+  function rosterLinkIndex(people, peoplePublic) {
+    const cards = new Map();
     const groups = (people && Array.isArray(people.groups)) ? people.groups : [];
     groups.forEach(function (group) {
       const list = (group && Array.isArray(group.people)) ? group.people : [];
       list.forEach(function (person) {
         if (!person || typeof person.name !== 'string') return;
-        const key = normName(person.name);
-        const url = safeHttpUrl(person.link);
-        if (!key || !url || index.has(key)) return;
-        index.set(key, url);
+        const key = person.name.trim();
+        if (key && !cards.has(key)) cards.set(key, safeHttpUrl(person.link));
       });
     });
-    return index;
+    const byLogin = new Map();
+    const raw = peoplePublic && typeof peoplePublic === 'object' ? peoplePublic.people : null;
+    const entries = Array.isArray(raw) ? raw
+      : (raw && typeof raw === 'object') ? Object.keys(raw).map(function (k) { return raw[k]; }) : [];
+    entries.forEach(function (e) {
+      if (!e || typeof e !== 'object' || typeof e.login !== 'string') return;
+      const login = e.login.trim();
+      if (!login || byLogin.has(login)) return;
+      const roster = typeof e.roster === 'string' ? e.roster.trim() : '';
+      byLogin.set(login, (roster && cards.get(roster)) || null);
+    });
+    return byLogin;
   }
 
-  // A contributor becomes clickable only when the build marked them as roster AND
-  // data/people.json already publishes a link for that exact name. GitHub profile
-  // URLs are deliberately never used.
-  function contributorRows(projectEntry, people) {
+  // GitHub profile URLs are deliberately never used as the row's link.
+  function contributorRows(projectEntry, people, peoplePublic) {
     const rows = [];
     const list = (projectEntry && Array.isArray(projectEntry.contributors))
       ? projectEntry.contributors : [];
     if (!list.length) return rows;
-    const index = peopleLinkIndex(people);
+    const index = rosterLinkIndex(people, peoplePublic);
     list.forEach(function (row) {
       if (!row || typeof row !== 'object') return;
       const name = typeof row.name === 'string' ? row.name.trim() : '';
@@ -191,13 +200,22 @@
       const label = name || login;
       if (!label) return;
       const count = Number(row.contributions) || 0;
-      const linkUrl = (row.roster === true && name) ? (index.get(normName(name)) || null) : null;
+      const linkUrl = login ? (index.get(login) || null) : null;
       rows.push({
         login: login, label: label, count: count,
         countLabel: commitLabel(count), linkUrl: linkUrl,
       });
     });
     return rows;
+  }
+
+  // What a contributor name does when clicked: the person popover (js/lab.js) for
+  // any row with a login, else the visit-confirm modal for a published link, else
+  // nothing (plain text, no hover affordance).
+  function contributorAction(row, hasLab) {
+    if (hasLab && row && row.login) return 'popover';
+    if (row && row.linkUrl) return 'visit';
+    return 'text';
   }
 
   // ==================================================================
@@ -211,6 +229,7 @@
     contributors: 'data/graph/contributors.json',
   };
   const PEOPLE_SRC = 'data/people.json';
+  const PEOPLE_PUBLIC_SRC = 'data/graph/people-public.json';
 
   const DATA = { wiki: null, xref: null, repos: null, contributors: null };
   let readyPromise = null;
@@ -219,6 +238,7 @@
   let repoIndex = null;      // repo name -> repos-index entry
   let matcher = null;        // built from the terms whose target node exists
   let peoplePromise = null;
+  let peoplePublicPromise = null;
   const pendingRoots = [];
   const pendingSeen = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
 
@@ -246,6 +266,10 @@
   function loadPeople() {
     if (!peoplePromise) peoplePromise = loadJSON(PEOPLE_SRC);
     return peoplePromise;
+  }
+  function loadPeoplePublic() {
+    if (!peoplePublicPromise) peoplePublicPromise = loadJSON(PEOPLE_PUBLIC_SRC);
+    return peoplePublicPromise;
   }
 
   function isConnected(el) {
@@ -644,10 +668,23 @@
     h.textContent = 'Primary contributors';
     wrap.appendChild(h);
     const ul = document.createElement('ul');
+    const lab = (window.HCLab && typeof window.HCLab.openPerson === 'function') ? window.HCLab : null;
     rows.forEach(function (row) {
       const li = document.createElement('li');
       li.className = 'contrib-row';
-      if (row.linkUrl) {
+      const action = contributorAction(row, !!lab);
+      if (action === 'popover') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'contrib-link';
+        btn.setAttribute('data-hc-login', row.login);
+        btn.textContent = row.label;
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          lab.openPerson(btn, { login: row.login });
+        });
+        li.appendChild(btn);
+      } else if (action === 'visit') {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'contrib-link';
@@ -678,7 +715,8 @@
   }
 
   // Renders nothing at all when the data is missing or empty — no heading, no
-  // placeholder. data/people.json is only fetched when a roster row exists.
+  // placeholder. Links resolve through people-public.json + data/people.json; either
+  // one missing leaves every name plain.
   function renderContributors(projectId, asideBox) {
     if (!BROWSER) return;
     if (!asideBox || !asideBox.querySelector) return;
@@ -689,10 +727,9 @@
       const entry = (all && typeof all === 'object') ? all[projectId] : null;
       if (!entry || !Array.isArray(entry.contributors) || !entry.contributors.length) return null;
       if (!isConnected(asideBox) || asideBox.querySelector('.hc-contributors')) return null;
-      const needPeople = entry.contributors.some(function (r) { return r && r.roster === true; });
-      return (needPeople ? loadPeople() : Promise.resolve(null)).then(function (people) {
+      return Promise.all([loadPeople(), loadPeoplePublic()]).then(function (parts) {
         if (!isConnected(asideBox) || asideBox.querySelector('.hc-contributors')) return;
-        const rows = contributorRows(entry, people);
+        const rows = contributorRows(entry, parts[0], parts[1]);
         if (!rows.length) return;
         asideBox.appendChild(buildContributorsBlock(rows, entry.truncated));
       });
@@ -752,6 +789,7 @@
     currentNodeId: currentNodeId,
     hrefFor: hrefFor,
     contributorRows: contributorRows,
+    contributorAction: contributorAction,
     commitLabel: commitLabel,
     truncatedLabel: truncatedLabel,
     safeHttpUrl: safeHttpUrl,
