@@ -869,13 +869,13 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d77d7b03c0eada1e2230074cd172cf404c6a8b596e0070b78932a944021249bb",
+        "baseline_sha256": "56d8c656e9451c4040c4f604a9c5cf94aa22d9aaa9d8230551b0b322c377da60",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "2 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
       },
@@ -884,13 +884,13 @@
     "tools/tests/fake_github.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d4b327aef1121828220d736649fddc2950b1976f168d5089d2f35f2c964ddc22",
+        "baseline_sha256": "f7f21b2300c82c2a99e5c49cc8c00c0cf9a68e336e6d4de0cee5eb7da7242caf",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "2 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "One fake GitHub route table over the U0 fixtures, for the node tests and the localhost Editor walk."
       },
@@ -899,13 +899,13 @@
     "tools/tests/test_editor.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "ff4684560a9b12bf436f2bd9bc76f371d913626bfc7fc3f67d0e8d413298829e",
+        "baseline_sha256": "461ad98b3ca54edf75e35903a6d7d80d6fa5f97cc86d2022e24b4d528c734cfe",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "2 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub."
       },

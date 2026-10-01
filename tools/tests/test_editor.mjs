@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 2 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub.
 /* js/editor.js runs in the site's own page once a session exists (plan D-C,
@@ -22,7 +22,10 @@
      - the tray: five tabs, the handle while closed, Proposals cards that
        expand in place and "Show on page", Changes (snippets, drafts with
        Propose… / Discard, registries, New forms), Media, View settings
-       (localStorage), Guide, ?editor=…&pr= / data= / new=, and body.hc-phone.
+       (localStorage), Guide, ?editor=…&pr= / data= / new=, and body.hc-phone;
+     - /cms/ parity on content pages: "Start from: your proposal #n" -> "Add
+       to proposal #n" (one commit on my branch, no new PR), and the
+       github.com pencil link (Read-only's "View only … github.com" line).
 
    No browser, no network, and every token is an obvious placeholder.
 
@@ -157,6 +160,7 @@ function openSite(opts) {
     },
     variant: o.variant,
     extra: o.extra,
+    onWrite: o.onWrite,
   });
   const calls = [];
   const opens = [];
@@ -694,6 +698,262 @@ test('Changes: the four registries as raw JSON (locked-ids line) and the New pro
   await page.follow(page.linkTo('#/pages'));
   await page.follow(page.linkTo('#/new/person'));
   assert.ok(page.action('add-person'), 'the New person form');
+});
+
+// --------------------------------------- /cms/ parity on content pages ---
+/* The two /cms/ actions a content page needed in Editor mode too: "Start
+   from: your proposal #n" (one more commit on my own proposal's branch) and
+   the github.com pencil link (Read-only's one way to propose). */
+
+const PAGE_ID = 'setup/hippocampus-bringup/fcu-firmware';
+const REPO_API = 'https://api.github.com/repos/desert-mango/hippocampus-docs';
+const OWN = 'cms/bob/fix-typo-260920';
+const HEAD_B = '3'.repeat(40);
+const TREE_B = '4'.repeat(40);
+
+/* Every write answered the way GitHub does (fresh shas), and recorded. */
+function recordWrites() {
+  const writes = [];
+  let k = 0;
+  const next = () => (k += 1).toString(16).padStart(40, 'a');
+  const onWrite = (method, url, body) => {
+    writes.push({ method, url, body });
+    const rest = url.slice(REPO_API.length);
+    if (method === 'POST' && ['/git/blobs', '/git/trees', '/git/commits'].indexOf(rest) >= 0) return { status: 201, body: { sha: next() } };
+    if (method === 'POST' && rest === '/git/refs') return { status: 201, body: { ref: body.ref, object: { sha: body.sha } } };
+    if (method === 'PATCH' && rest.startsWith('/git/refs/heads/')) return { status: 200, body: { object: { sha: body.sha } } };
+    if (method === 'POST' && rest === '/pulls') return { status: 201, body: { number: 42 } };
+    if (method === 'PATCH' && /^\/pulls\/[0-9]+$/.test(rest)) return { status: 200, body: { number: Number(rest.slice(7)) } };
+    return { status: 500, body: { message: `unexpected ${method} ${rest}` } };
+  };
+  return { writes, onWrite };
+}
+
+test('js/editor.js Propose: starting from my own proposal adds one commit and moves its branch — no new PR', async () => {
+  const onBranch = `${PAGE_TEXT}More.\n`;
+  const extra = {
+    pulls: [{ number: 7, title: 'Fix typo', state: 'open', user: { login: 'bob' }, created_at: '2026-09-20T10:00:00Z',
+      head: { ref: OWN, sha: HEAD_B, repo: { full_name: 'desert-mango/hippocampus-docs' } }, base: { ref: 'main' } }],
+    files: { 7: [{ filename: PAGE_FILE, status: 'modified' }] },
+    contents: { [HEAD_B]: { [PAGE_FILE]: onBranch } },
+    compare: { [HEAD_B]: MAIN_SHA },
+    trees: { [HEAD_B]: TREE_B },
+  };
+  const { writes, onWrite } = recordWrites();
+  const page = await editorOn({ extra, onWrite });
+  await openTab(page, 'changes');
+  assert.ok(page.linkTo(C.pencilUrl(PAGE_FILE)), 'the pencil link, for Write too');
+  const pick = page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
+  assert.ok(pick, 'a base picker when I have an open proposal');
+  pick.value = '7';
+  pick.fire('change');
+  await settle();
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(onBranch, page.nonce().slice(0, 16)),
+    'the page shows my proposal\'s head');
+  page.action('edit-whole-page').click();
+  await settle();
+  assert.equal(page.textarea().value, onBranch, 'the text at my proposal\'s head');
+  await page.type(page.textarea(), `${onBranch}Even more.\n`);
+  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 }, 'the draft keeps its base');
+  findAll(page.one((e) => e.attrs['data-draft'] === PAGE_ID), (e) => e.attrs['data-action'] === 'propose-draft')[0].click();
+  await settle();
+  assert.equal(page.action('send-proposal').textContent, 'Add to proposal #7');
+  page.action('send-proposal').click();
+  await settle();
+  assert.deepEqual(writes.map((c) => `${c.method} ${c.url.slice(REPO_API.length)}`),
+    ['POST /git/blobs', 'POST /git/trees', 'POST /git/commits', `PATCH /git/refs/heads/${OWN}`]);
+  assert.equal(writes[0].body.content, `${onBranch}Even more.\n`);
+  assert.equal(writes[1].body.base_tree, TREE_B);
+  assert.equal(writes[2].body.parents[0], HEAD_B, 'one commit on my proposal\'s head');
+  assert.match(page.tray().textContent, /Added to your proposal #7/);
+  assert.equal(C.createDraftStore(page.storage).get(PAGE_ID), null, 'the draft went into the proposal');
+});
+
+test('Start from my proposal: a link inside the frame to another page reloads it there at main; back again, the draft is on my proposal', async () => {
+  const onBranch = `${PAGE_TEXT}More.\n`;
+  const extra = {
+    pulls: [{ number: 7, title: 'Fix typo', state: 'open', user: { login: 'bob' }, created_at: '2026-09-20T10:00:00Z',
+      head: { ref: OWN, sha: HEAD_B, repo: { full_name: 'desert-mango/hippocampus-docs' } }, base: { ref: 'main' } }],
+    files: { 7: [] },
+    contents: { [HEAD_B]: { [PAGE_FILE]: onBranch } },
+  };
+  const page = await editorOn({ extra });
+  await openTab(page, 'changes');
+  const pick = page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
+  pick.value = '7';
+  pick.fire('change');
+  await settle();
+  assert.match(page.tray().textContent, /Building on your proposal #7\./);
+  page.action('edit-whole-page').click();
+  await settle();
+  await page.type(page.textarea(), `${onBranch}Even more.\n`);
+  const srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-route', route: OTHER_ROUTE });
+  for (const fn of page.listeners.hashchange || []) fn();
+  await settle();
+  assert.equal(page.frame().srcs.length, srcs + 1, 'the frame read that page at my proposal\'s head: reloaded at main');
+  const other = 'content/setup/lab-gantry/usage.md';
+  assert.equal((await page.asks(other)).text, C.withSentinels(readRepo(other), page.nonce().slice(0, 16)));
+  await page.go(`#${PAGE_ROUTE}`);
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(`${onBranch}Even more.\n`, page.nonce().slice(0, 16)),
+    'my draft, on my proposal\'s head');
+});
+
+test('js/editor.js editor: Read-only sees the page and its preview, view-only, with the pencil link', async () => {
+  const page = await editorOn({ variant: 'readonly' });
+  await openTab(page, 'changes');
+  const pencil = () => page.all((e) => e.tagName === 'A' && e.attrs.href === C.pencilUrl(PAGE_FILE));
+  const viewOnly = page.one((e) => e.tagName === 'P' && /^View only: /.test(e.textContent));
+  assert.ok(viewOnly, 'the view-only line, before any block is picked');
+  assert.match(viewOnly.textContent, /You can still propose a change on github\.com/);
+  const a = findAll(viewOnly, (e) => e.tagName === 'A')[0];
+  assert.equal(a.attrs.href, C.pencilUrl(PAGE_FILE), 'it carries the pencil link');
+  assert.equal(a.attrs.target, '_blank');
+  assert.equal(a.attrs.rel, 'noopener noreferrer');
+  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  const ta = page.textarea();
+  assert.equal(ta.readOnly, true);
+  assert.equal(page.action('propose-draft'), undefined);
+  assert.equal(page.one((e) => e.attrs['data-snippet'] === 'note'), undefined);
+  assert.equal(page.one((e) => e.attrs['data-base'] !== undefined), undefined, 'no base picker');
+  assert.ok(pencil().length, 'the pencil link');
+  assert.equal(page.frames().length, 1);
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(PAGE_TEXT, page.nonce().slice(0, 16)),
+    'the page still shows main');
+});
+
+/* My open proposal #7 (bob's), its head HEAD_B holding `onBranch` for the
+   page; `files` is what it changes. */
+function ownSeven(onBranch, files) {
+  return {
+    pulls: [{ number: 7, title: 'Fix typo', state: 'open', user: { login: 'bob' }, created_at: '2026-09-20T10:00:00Z',
+      head: { ref: OWN, sha: HEAD_B, repo: { full_name: 'desert-mango/hippocampus-docs' } }, base: { ref: 'main' } }],
+    files: { 7: files },
+    contents: { [HEAD_B]: { [PAGE_FILE]: onBranch } },
+    compare: { [HEAD_B]: MAIN_SHA },
+    trees: { [HEAD_B]: TREE_B },
+  };
+}
+const basePick = (page) => page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
+
+test('Start from while "Show on page" is on: the shown proposal goes, the draft on the picked base is on the page and editable', async () => {
+  const onBranch = `${PAGE_TEXT}More.\n`;
+  const page = await editorOn({ extra: ownSeven(onBranch, [{ filename: PAGE_FILE, status: 'modified' }]) });
+  await openTab(page, 'proposals');
+  await page.follow(page.linkTo('#/review/7'));
+  page.action('show-on-page').click();
+  await settle();
+  assert.match(page.tray().textContent, /Showing proposal #7/);
+  await openTab(page, 'changes');
+  const pick = basePick(page);
+  pick.value = '7';
+  pick.fire('change');
+  await settle();
+  assert.equal(page.action('show-off'), undefined, 'no "Back to your view": show mode is over');
+  assert.doesNotMatch(page.tray().textContent, /Showing proposal #7/, 'no show bar');
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(onBranch, page.nonce().slice(0, 16)),
+    'the frame serves the draft on the picked base');
+  await page.send({ type: 'hc-block-select', index: firstParagraph(onBranch) });
+  assert.ok(page.textarea(), 'a block of the page can be edited');
+  await page.type(page.textarea(), 'Changed.\n\n');
+  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  assert.ok(d && C.isDirty(d), 'the edit is kept');
+  assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
+});
+
+test('Start from: an edit made while the picked base is still being read is never thrown away without asking', async () => {
+  const onBranch = `${PAGE_TEXT}More.\n`;
+  const page = await editorOn({ extra: ownSeven(onBranch, []) });
+  await openTab(page, 'changes');
+  const real = page.win.fetch;
+  let open = null;
+  const gate = new Promise((r) => { open = r; });
+  page.win.fetch = (url, init) => (String(url).endsWith(`/git/ref/heads/${OWN}`)
+    ? gate.then(() => real(url, init)) : real(url, init));
+  const asked = [];
+  page.win.confirm = (text) => { asked.push(text); return false; };
+  const pick = basePick(page);
+  pick.value = '7';
+  pick.fire('change');
+  await settle();
+  // GitHub has not said where my proposal's branch is yet: the member edits meanwhile
+  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  await page.type(page.textarea(), 'Changed during the wait.\n\n');
+  open();
+  await settle();
+  assert.deepEqual(asked, [C.DISCARD_TEXT], 'asked before the edit could go');
+  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  assert.ok(d && C.isDirty(d), 'the edit is kept');
+  assert.equal(d.base.number, null, 'still on the live site');
+  assert.match(d.files[PAGE_FILE], /Changed during the wait\./);
+  assert.doesNotMatch(page.tray().textContent, /Building on your proposal #7/);
+  assert.match((await page.asks(PAGE_FILE)).text, /Changed during the wait\./);
+});
+
+test('a stored draft naming a proposal that is not my own open one is shown on main, and that branch is never read', async () => {
+  const ALICE = 'cms/alice/her-change-260921';
+  const HEAD_A = '5'.repeat(40);
+  const extra = {
+    pulls: [{ number: 9, title: 'Hers', state: 'open', user: { login: 'alice' }, created_at: '2026-09-21T10:00:00Z',
+      head: { ref: ALICE, sha: HEAD_A, repo: { full_name: 'desert-mango/hippocampus-docs' } }, base: { ref: 'main' } }],
+    files: { 9: [] },
+    contents: { [HEAD_A]: { [PAGE_FILE]: 'Her text.\n' } },
+  };
+  const storage = memoryStorage();
+  C.createDraftStore(storage).put({ key: PAGE_ID, label: 'FCU firmware', route: PAGE_ROUTE,
+    files: { [PAGE_FILE]: 'Tampered.\n' }, originals: { [PAGE_FILE]: 'Her text.\n' },
+    base: { ref: ALICE, sha: HEAD_A, number: 9 } });
+  const page = await editorOn({ extra, storage });
+  await openTab(page, 'changes');
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(PAGE_TEXT, page.nonce().slice(0, 16)),
+    'the page on main');
+  assert.doesNotMatch(page.tray().textContent, /Building on/);
+  assert.match(page.tray().textContent, /proposal #9, which is not one of your open proposals/);
+  assert.deepEqual(page.calls.filter((c) => c.url.indexOf(HEAD_A) >= 0 || c.url.indexOf(ALICE) >= 0), [],
+    'zero reads of that branch');
+});
+
+test('a link inside the frame to a page whose stored draft says #7 on another branch reloads it there: main, and the notice', async () => {
+  const onBranch = `${PAGE_TEXT}More.\n`;
+  const OTHER_ID = 'setup/lab-gantry/usage';
+  const OTHER_FILE = 'content/setup/lab-gantry/usage.md';
+  const STRAY = 'cms/mallory/same-number-260922';
+  const HEAD_S = '6'.repeat(40);
+  const MOTOR_ID = 'setup/hippocampus-bringup/motor-configuration';
+  const MOTOR_FILE = `content/${MOTOR_ID}.md`;
+  const storage = memoryStorage();
+  const store = C.createDraftStore(storage);
+  store.put({ key: OTHER_ID, label: 'Usage', route: OTHER_ROUTE,
+    files: { [OTHER_FILE]: 'Stray.\n' }, originals: { [OTHER_FILE]: readRepo(OTHER_FILE) },
+    base: { ref: STRAY, sha: HEAD_S, number: 7 } });
+  store.put({ key: MOTOR_ID, label: 'Motor configuration', route: `/${MOTOR_ID}`,
+    files: { [MOTOR_FILE]: 'Mine on seven.\n' }, originals: { [MOTOR_FILE]: readRepo(MOTOR_FILE) },
+    base: { ref: OWN, sha: HEAD_B, number: 7 } });
+  const page = await editorOn({ extra: ownSeven(onBranch, []), storage });
+  await openTab(page, 'changes');
+  const pick = basePick(page);
+  pick.value = '7';
+  pick.fire('change');
+  await settle();
+  assert.match(page.tray().textContent, /Building on your proposal #7\./);
+  const srcs = page.frame().srcs.length;
+  // first to a page whose draft is on my own #7 (number and branch): the frame already reads there
+  await page.send({ type: 'hc-route', route: `/${MOTOR_ID}` });
+  for (const fn of page.listeners.hashchange || []) fn();
+  await settle();
+  assert.equal(page.frame().srcs.length, srcs, 'the same proposal: no reload');
+  assert.match(page.tray().textContent, /Building on your proposal #7\./);
+  await page.send({ type: 'hc-route', route: OTHER_ROUTE });
+  for (const fn of page.listeners.hashchange || []) fn();
+  await settle();
+  assert.equal(page.frame().srcs.length, srcs + 1, 'same number, another branch: the frame reloads there');
+  assert.equal((await page.asks(OTHER_FILE)).text, C.withSentinels(readRepo(OTHER_FILE), page.nonce().slice(0, 16)),
+    'the page on main, not at my proposal\'s head');
+  assert.doesNotMatch(page.tray().textContent, /Building on/);
+  assert.match(page.tray().textContent, /proposal #7, which is not one of your open proposals/);
+  assert.deepEqual(page.calls.filter((c) => c.url.indexOf(HEAD_S) >= 0 || c.url.indexOf(STRAY) >= 0), [],
+    'zero reads of that branch');
 });
 
 test('Media: the Media view in its tab', async () => {

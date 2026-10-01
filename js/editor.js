@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 2 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte
@@ -943,6 +943,7 @@
      / Discard), the four registries as raw JSON, New project / New person. */
   function viewChanges(r, epoch) {
     const panel = changesPanel();
+    fillBase(panel.slot, epoch);
     draftList = h('section', { class: 'hc-drafts', 'aria-label': 'Your drafts' });
     drawDraftList(true);
     if (!paint(epoch, [
@@ -960,6 +961,17 @@
       panel.ta.focus();
       panel.ta.setSelectionRange(sel.start, sel.end);
     }
+  }
+
+  /* The page's "Start from" picker goes in once my open proposals are
+     known (none: no picker, every change starts a new proposal). */
+  function fillBase(slot, epoch) {
+    const page = ed.page;
+    if (!slot || !page) return;
+    ownOpen().then((own) => {
+      if (epoch !== routeEpoch || !samePage(page, ed.page) || !own.length || !canEdit()) return;
+      slot.replaceChildren(pageBasePicker(page, own));
+    }).catch(shown);
   }
 
   let draftList = null;          // the Changes tab's draft list, while drawn
@@ -1235,7 +1247,7 @@
       h('div', { class: 'cms-action-row' }, go), result));
   }
 
-  const stillOpen = (d, own) => !d.base.number || own.some((p) => p.number === d.base.number);
+  const stillOpen = (d, own) => !d.base.number || own.some((p) => p.number === d.base.number && p.branch === d.base.ref);
   const closedText = (d) => `Your proposal #${d.base.number} is no longer open: discard these changes and start `
     + 'from the live site.';
 
@@ -2051,6 +2063,7 @@
     cache: null,          // HCCore.cachedFetcher over this session's token
     pv: null,             // what this load shows (pageView): mode, the proposal, its overlay and marks
     barNote: null,        // {number, head, text}: Update from main's outcome, said on the bar at that head
+    baseNote: null,       // {key, number}: that page's stored draft names a proposal not my own open one
     props: null,          // Promise of the open proposals with their files, once per refresh
     bases: new Map(),     // 'main...head' -> Promise of the merge base sha
     checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
@@ -2317,11 +2330,28 @@
     ed.draft = null;
   }
 
-  /* My changed draft of this page, when it builds on the live site. */
+  /* My changed draft of this page: on the live site, or on a proposal (a
+     well-formed number). A draft on a proposal is used only through
+     checkedDraft (frameTo), which asks whether that proposal is my own and
+     open; Propose checks it again. */
   function storedDraft(page) {
     const d = page ? drafts.get(page.pageId) : null;
-    return d && C.isDirty(d) && d.base.number === null
+    return d && C.isDirty(d) && (d.base.number === null || PR_NO.test(String(d.base.number)))
       && Object.prototype.hasOwnProperty.call(d.files, page.file) ? d : null;
+  }
+  const PR_NO = /^[1-9][0-9]{0,8}$/;
+  const baseNo = (d) => (d ? d.base.number : null);
+
+  /* storedDraft, its base checked against my own open proposals (number and
+     branch) before the frame reads anything at its head. Not one of them:
+     the page shows the live site and the Changes tab says why. */
+  async function checkedDraft(page) {
+    const d = storedDraft(page);
+    if (!d || d.base.number === null) return d;
+    const own = await ownOpen();
+    if (own.some((p) => p.number === d.base.number && p.branch === d.base.ref)) return d;
+    ed.baseNote = { key: page.pageId, number: d.base.number };
+    return null;
   }
 
   /* Load the frame at `route` with a fresh nonce. keep: the tray keeps the
@@ -2350,7 +2380,16 @@
     }
     ed.route = route;
     ed.page = page;
-    if (!ed.draft) ed.draft = storedDraft(page);
+    if (!ed.draft) {
+      const stored = storedDraft(page);
+      ed.draft = stored && stored.base.number === null ? stored : null;
+      if (stored && !ed.draft) {
+        // a draft on a proposal: mine and open? (until then the frame reads nothing at its head)
+        const d = await checkedDraft(page);
+        if (mine !== ed.loads || !sessionGen.isCurrent(gen) || !ed.on) return;
+        if (!ed.draft && samePage(page, ed.page)) ed.draft = d;
+      }
+    }
     // what this load shows (D-G): the reads are memoized, so a reload after an edit asks nothing
     let pv;
     try {
@@ -2401,7 +2440,7 @@
   function draftFiles(sha) {
     const files = {};
     for (const d of drafts.dirty()) {
-      if (d.base.sha === sha && d.base.number === null) Object.assign(files, d.files);
+      if (d.base.sha === sha) Object.assign(files, d.files);   // one sha, one tree: main's or my proposal's head
     }
     if (ed.draft && ed.draft.base.sha === sha) Object.assign(files, ed.draft.files);
     return files;
@@ -2801,20 +2840,31 @@
      NOT reloaded — onHashChange knows this change is the frame's. */
   function frameRouted(route) {
     const page = pageForRoute(route);
-    if (!samePage(page, ed.page)) {
-      clearSelection();
-      ed.draft = storedDraft(page);
-    }
     const moved = !samePage(page, ed.page);
+    // the frame read the new page at the old draft's base: another base (my proposal's head, or main) reloads it
+    let reload = false;
+    if (moved) {
+      const was = ed.draft;
+      clearSelection();
+      const next = storedDraft(page);
+      // a draft on another proposal is checked first (frameTo, on the reload); the same proposal already was
+      const same = Boolean(next && was) && next.base.number === was.base.number && next.base.ref === was.base.ref;
+      ed.draft = next && (next.base.number === null || same) ? next : null;
+      // main to main, or the same proposal (number and branch): the frame already reads there
+      reload = !same && (baseNo(was) !== null || baseNo(next) !== null);
+    }
     ed.route = route;
     ed.page = page;
-    if (moved) {
+    if (moved && !reload) {
       markPage();
       refreshChanges();
       viewAfterRoute(page);
     }
-    if (currentRoute() === route) return;
-    ed.fromFrame = route;
+    if (currentRoute() === route) {
+      if (reload) frameTo(route, true);
+      return;
+    }
+    if (!reload) ed.fromFrame = route;     // a reload: onHashChange loads the frame there
     window.location.hash = `#${route}`;
   }
 
@@ -2835,14 +2885,87 @@
   }
 
   /* The draft of `page`: the one in memory, else a fresh one from main's
-     head (read through the cache: the frame has usually read it already). */
-  async function pageDraft(page) {
-    if (ed.draft && ed.draft.key === page.pageId) return ed.draft;
-    const sha = await mainSha();
-    const answer = await sessionCache().get(sha, page.file);
+     head (read through the cache: the frame has usually read it already).
+     at {ref, sha, number}: a fresh one from my proposal's head instead. */
+  async function pageDraft(page, at) {
+    if (!at && ed.draft && ed.draft.key === page.pageId) return ed.draft;
+    const base = at || { ref: 'main', sha: await mainSha(), number: null };
+    const answer = await sessionCache().get(base.sha, page.file);
     if (!answer.ok) throw new Error(`GitHub answered HTTP ${answer.status} for ${page.file}`);
     return { key: page.pageId, label: page.label, route: page.route, files: { [page.file]: answer.text },
-      originals: { [page.file]: answer.text }, base: { ref: 'main', sha, number: null } };
+      originals: { [page.file]: answer.text }, base: { ref: base.ref, sha: base.sha, number: base.number } };
+  }
+
+  /* My open proposals I may add this page to (HCCore.ownProposals over the
+     open proposals the page view reads once per refresh); [] when GitHub
+     does not answer. */
+  async function ownOpen() {
+    try {
+      const all = await openProposals();
+      return state.session ? C.ownProposals(all.map((t) => t.pull), state.session.login) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /* "Start from" for the page on screen (the registries' basePicker, for a
+     block draft): the live site (a new proposal) or one of my open
+     proposals (one more commit on its branch). Switching reads the page at
+     that head and shows it; changes not proposed are thrown away first,
+     after asking. */
+  function pageBasePicker(page, own) {
+    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
+    const sel = h('select', { class: 'cms-base-picker', 'data-base': '', 'aria-label': 'Start from' },
+      h('option', { value: '' }, 'the live site (a new proposal)'),
+      ...own.map((p) => h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`)));
+    const current = d && d.base.number ? String(d.base.number) : '';
+    sel.value = current;
+    const back = () => { sel.disabled = false; sel.value = current; };
+    sel.addEventListener('change', () => {
+      const v = String(sel.value);
+      const hit = PR_NO.test(v) ? own.find((p) => String(p.number) === v) : null;
+      if ((v && !hit) || v === current) { sel.value = current; return; }
+      if (d && C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) { sel.value = current; return; }
+      sel.disabled = true;
+      switchBase(page, hit, changesOf(page)).then((done) => { if (!done) back(); }, (e) => {
+        back();
+        shown(e);
+      });
+    });
+    return h('p', { class: 'cms-base' }, h('label', null, 'Start from: ', sel));
+  }
+
+  /* The page's changes not proposed, as one string ('' when none): what the
+     member had when a base was picked, against what is there after the read. */
+  function changesOf(page) {
+    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : drafts.get(page.pageId);
+    return d && C.isDirty(d) ? JSON.stringify([d.base, d.files]) : '';
+  }
+
+  /* The page's draft starts again at `hit`'s head (null: main's). The old
+     draft goes only once the new text was read — and, when the member
+     changed the page while it was read, only after asking again (cancel:
+     the edits stay, the base too). A proposal shown on the page goes
+     ("Back to your view"): the frame then shows the new draft, editable.
+     -> false when nothing was switched. */
+  async function switchBase(page, hit, had) {
+    const at = hit ? { ref: hit.branch, sha: await headOf(hit.branch), number: hit.number } : null;
+    const d = at ? await pageDraft(page, at) : null;
+    if (!samePage(page, ed.page) || !ed.on) return false;
+    const now = changesOf(page);
+    if (now && now !== had && !window.confirm(C.DISCARD_TEXT)) return false;
+    if (ed.show) {
+      ed.show = null;
+      say('');
+      drawShowBar();
+    }
+    drafts.remove(page.pageId);
+    clearSelection();
+    ed.draft = d;
+    drawDraftList(true);
+    refreshChanges();
+    frameTo(ed.route, true);
+    return true;
   }
 
   /* The index of the block a position starts, in the split of `text`
@@ -2932,13 +3055,30 @@
   function changesPanel() {
     const page = ed.page;
     const out = [h('h2', { class: 'hc-tray-title', text: 'Changes' })];
-    const box = (ta) => ({ node: h('section', { class: 'hc-changes', 'aria-label': 'Changes' }, ...out), ta });
+    let slot = null;
+    const box = (ta) => ({ node: h('section', { class: 'hc-changes', 'aria-label': 'Changes' }, ...out), ta, slot });
     if (!page) {
       out.push(h('p', { class: 'cms-muted', text: 'The editor opens setup, project, tool and About pages. '
         + 'Go to one of them to edit it.' }));
       return box(null);
     }
-    out.push(h('p', { class: 'cms-meta' }, h('code', { text: page.file })));
+    out.push(h('p', { class: 'cms-meta' }, h('code', { text: page.file }), ' · ',
+      link(C.pencilUrl(page.file), 'edit on github.com instead')));
+    if (!canEdit()) {
+      out.push(h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
+        + 'repository. You can still ', link(C.pencilUrl(page.file), 'propose a change on github.com'), '.'));
+    } else {
+      slot = h('div', { class: 'hc-base-slot' });
+      out.push(slot);
+      const on = ed.draft && ed.draft.key === page.pageId && ed.draft.base.number ? ed.draft.base.number : null;
+      if (on) out.push(h('p', { class: 'cms-muted', text: `Building on your proposal #${on}.` }));
+      const note = ed.baseNote;
+      const kept = note && note.key === page.pageId ? drafts.get(page.pageId) : null;
+      if (!on && kept && kept.base.number === note.number) {
+        out.push(h('p', { class: 'cms-muted', role: 'status', text: `Your saved changes to this page build on `
+          + `proposal #${note.number}, which is not one of your open proposals: the page shows the live site.` }));
+      }
+    }
     if (ed.wholeReason) {
       out.push(h('p', { class: 'hc-reason', role: 'status', text: `Block editing is off for this page: ${ed.wholeReason}.` }));
     }
@@ -2959,7 +3099,7 @@
     ta.value = ed.draft.files[sel.file].slice(sel.span.start, sel.span.end);
     ta.readOnly = !canEdit();
     const line = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: canEdit()
-      ? draftStateText(ed.draft) : 'View only: changing pages needs write access to this site\'s repository.' });
+      ? draftStateText(ed.draft) : 'View only.' });
     ta.addEventListener('input', () => blockChanged(ta, line));
     // a snippet, a link or an image goes in at the cursor, inside the span
     const replaceText = (next, selStart, selEnd) => {

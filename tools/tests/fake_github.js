@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 2 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: One fake GitHub route table over the U0 fixtures, for the node tests and the localhost Editor walk.
 /* The fake GitHub (plan D-C). ONE route table, used by
@@ -25,10 +25,15 @@
                             compare: {<head sha>: <merge base sha>},
                             checks: {<head sha>: check-runs payload},
                             updates: {<n>: <new head sha>},
+                            trees: {<commit sha>: <tree sha>},
                             orgCommits, repoCommits, orgDeny (U4, below)}
                          They join pulls?state=…, answer pulls/<n>,
                          pulls/<n>/files, contents at their head sha,
-                         compare/<x>...<head> and commits/<head>/check-runs.
+                         compare/<x>...<head>, commits/<head>/check-runs and
+                         git/ref/heads/<their branch> (their head sha).
+                         `trees`: git/commits/<sha> answers {sha, tree: {sha}}
+                         for those commits (what HCCore.runPropose reads
+                         before it adds a commit to a branch); others 404.
                          `updates`: PUT pulls/<n>/update-branch with the
                          current head as expected_head_sha moves PR n's head
                          to the new sha and answers 202 (GitHub's answer; the
@@ -57,6 +62,8 @@
                                                 the merge base: main has moved since
                                                 PR #1's base, the real case
      …/git/ref/heads/<PR #1's branch>           PR #1's head sha
+     …/git/ref/heads/<an extra PR's branch>     that PR's head sha
+     …/git/commits/<sha>                        extra.trees[sha] as its tree, else 404
      …/contents/<path>?ref=MAIN_SHA             readFile(path)
      …/contents/<path>?ref=<PR #1 head | merge base>   the git_show files of
                                                 index.json (others 404)
@@ -225,9 +232,12 @@
       let m = /^\/git\/ref\/heads\/(.+)$/.exec(rest);
       if (m) {
         const ref = decodeURIComponent(m[1]);
-        const sha = ref === 'main' ? MAIN_SHA : (ref === f.branch ? f.head : null);
+        const xb = xPulls.find((p) => p.head.ref === ref);
+        const sha = ref === 'main' ? MAIN_SHA : (ref === f.branch ? f.head : (xb ? xb.head.sha : null));
         return sha ? answer(200, { ref: `refs/heads/${ref}`, object: { sha, type: 'commit' } }) : notFound();
       }
+      m = /^\/git\/commits\/([0-9a-f]{40})$/.exec(rest);
+      if (m) return own(x.trees, m[1]) ? answer(200, { sha: m[1], tree: { sha: x.trees[m[1]] } }) : notFound();
       m = /^\/contents\/(.+)$/.exec(rest);
       if (m) return contents(f, m[1].split('/').map(decodeURIComponent).join('/'), q.ref);
       if (rest === '/pulls') return pulls(q);
