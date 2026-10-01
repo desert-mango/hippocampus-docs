@@ -439,3 +439,90 @@ test('in preview the librarian answers 405 locally, so search latches off', asyn
   assert.equal(await res.json().catch(() => 'threw'), null);
   assert.equal(win.posts.length, 0, 'the librarian call never reaches the parent');
 });
+
+// ------------------------------------------------ Editor mode (protocol 9) --
+
+function editorFrom(win, data, over) {
+  return win.dispatch('message', Object.assign(
+    { source: win.parentFake, origin: ORIGIN, data: Object.assign({ type: 'hc-editor', nonce: NONCE }, data) },
+    over,
+  ));
+}
+
+test('editor mode: HC.post sends the four frame messages, nonce added, to the parent at the site origin', () => {
+  const win = fakeWindow({ hash: previewHash('/about') });
+  const HC = SRC.create(win);
+  assert.equal(HC.post('hc-ready'), true);
+  assert.equal(HC.post('hc-route', { route: '/setup/lab-gantry/usage' }), true);
+  assert.equal(HC.post('hc-block-select', { index: 3 }), true);
+  assert.equal(HC.post('hc-block-insert', { index: 0, kind: 'note' }), true);
+  assert.deepEqual(win.posts.map((p) => p.msg), [
+    { type: 'hc-ready', nonce: NONCE },
+    { type: 'hc-route', route: '/setup/lab-gantry/usage', nonce: NONCE },
+    { type: 'hc-block-select', index: 3, nonce: NONCE },
+    { type: 'hc-block-insert', index: 0, kind: 'note', nonce: NONCE },
+  ]);
+  assert.ok(win.posts.every((p) => p.targetOrigin === ORIGIN));
+});
+
+test('editor mode: HC.post refuses unknown types and bad fields, and posts nothing outside a preview', () => {
+  const win = fakeWindow({ hash: previewHash('/about') });
+  const HC = SRC.create(win);
+  for (const [type, data] of [['hc-fetch', { path: 'content/about.md' }], ['hc-file', {}], ['hc-editor', {}],
+    ['hc-block-select', { index: -1 }], ['hc-block-select', { index: 1.5 }], ['hc-block-select', { index: '2' }],
+    ['hc-block-select', { index: 100001 }], ['hc-block-insert', { index: 1, kind: 'script' }],
+    ['hc-block-insert', { index: 1 }], ['hc-route', { route: 42 }], ['hc-route', null]]) {
+    assert.equal(HC.post(type, data), false, `${type} ${JSON.stringify(data)}`);
+  }
+  assert.equal(win.posts.length, 0);
+  // a route that is not a site route is posted as '/'
+  HC.post('hc-route', { route: '//evil.example/x' });
+  assert.equal(win.posts[0].msg.route, '/');
+  // no fields beyond the protocol's ride along
+  HC.post('hc-block-select', { index: 1, html: '<img src=x onerror=alert(1)>', token: PLANTED });
+  assert.deepEqual(Object.keys(win.posts[1].msg).sort(), ['index', 'nonce', 'type']);
+  const live = fakeWindow({ hash: '#/about', framed: false });
+  const HC2 = SRC.create(live);
+  assert.equal(HC2.post('hc-ready'), false);
+  assert.equal(HC2.onEditor(() => {}), false);
+  assert.equal(HC2.blockPrefix, null);
+  assert.equal(live.posts.length, 0);
+});
+
+test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, origin, nonce) is ignored', () => {
+  const win = fakeWindow({ hash: previewHash('/about') });
+  const HC = SRC.create(win);
+  const got = [];
+  assert.equal(HC.onEditor((m) => got.push(m)), true);
+  editorFrom(win, { on: true, selected: 2, settings: { diff: 'side', compact: true },
+    overlay: [{ index: 1, mark: 'add' }, { index: 2, mark: 'boom' }, { index: -1, mark: 'del' }, 'x'] });
+  editorFrom(win, { on: true }, { source: {} });                       // not window.parent
+  editorFrom(win, { on: true }, { origin: 'https://evil.example' });   // another origin
+  editorFrom(win, { on: true, nonce: 'another-nonce-123456' });        // another load's nonce
+  editorFrom(win, { type: 'hc-editorx', on: true });
+  assert.equal(got.length, 1);
+  assert.deepEqual(got[0], { on: true, selected: 2,
+    settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
+    overlay: [{ index: 1, mark: 'add' }] });
+  // a late listener gets the last message at once
+  const late = [];
+  HC.onEditor((m) => late.push(m));
+  assert.deepEqual(late, got);
+  // wrong types fall back, never throw
+  assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [] });
+  assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
+});
+
+test('editor mode: the sentinel prefix is the first 16 characters of this load\'s nonce', () => {
+  const win = fakeWindow({ hash: previewHash('/about') });
+  const HC = SRC.create(win);
+  assert.equal(HC.blockPrefix, NONCE.slice(0, 16));
+  assert.equal(SRC.sentinelPrefix(NONCE), NONCE.slice(0, 16));
+  assert.equal(SRC.sentinelPrefix('short'), null);
+  assert.equal(SRC.sentinelPrefix(null), null);
+  // the insert kinds are the editor's snippet catalog
+  const C = require(path.join(ROOT, 'js', 'cms-core.js'));
+  assert.deepEqual([...SRC.BLOCK_INSERT_KINDS].sort(), Object.keys(C.SNIPPET_CATALOG).sort());
+  assert.deepEqual([...SRC.OVERLAY_MARKS], ['add', 'del', 'change', 'conflict']);
+});

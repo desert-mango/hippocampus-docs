@@ -135,8 +135,10 @@
       t.parentNode.insertBefore(wrap, t);
       wrap.appendChild(t);
     });
-    // external links in new tabs
-    root.querySelectorAll('a[href^="http"]').forEach((a) => {
+    // external links in new tabs. The scheme's case is free (HCSanitize keeps
+    // HTTPS://…), so the match ignores it: an outside link that opened in place
+    // would load a foreign page inside the Editor's frame.
+    root.querySelectorAll('a[href^="http" i]').forEach((a) => {
       a.target = '_blank';
       a.rel = 'noopener';
     });
@@ -629,13 +631,16 @@
     paint(res);
   }
 
-  // ---------- "Edit this page" ----------
-  /* One footer link, pointed at the page on screen: cms/#/edit/<page-id>.
-     Relative, so it works on any host (Vercel's root, Pages' subpath). The
-     page id is site-mcp's page_index id — setup/<id>, project/<id>,
-     tool/<id>, about — which is also the id the CMS page tree uses. Only
-     Markdown pages have one; lists, home and search show no link, and a
-     CMS preview frame (HC.preview) never shows it. */
+  // ---------- the footer's Editor entry ----------
+  /* One footer link. For a guest it is "Sign in to edit" on every route
+     (the sign-in click below). Signed in, it is "Edit this page", pointed at
+     the page on screen with ?editor=changes — the Editor entry (plan D-H,
+     D-I): js/editor.js reads the parameter on hashchange, turns Editor mode
+     on and opens the tray's Changes tab. The page id is site-mcp's
+     page_index id — setup/<id>, project/<id>, tool/<id>, about — which is
+     also the id the editor's page list uses; lists, home and search have
+     none, and there the signed-in link hides. A preview frame (HC.preview)
+     never shows it. */
   function editPageId(seg) {
     if (seg[0] === 'setup') return seg.length === 1 ? 'setup/start/index' : `setup/${seg.slice(1).join('/')}`;
     if (seg[0] === 'projects' && seg.length === 2) return `project/${seg[1]}`;
@@ -643,17 +648,162 @@
     if (seg[0] === 'about' && seg.length === 1) return 'about';
     return null;
   }
-  function setEditLink(pageId) {
+  let editRoute = null;                     // the page route the link points at, or null
+  function setEditLink(route) {
+    editRoute = route;
     const link = $('#edit-page');
     if (!link) return;
-    if (pageId && !HC.preview) {
-      link.setAttribute('href', `cms/#/edit/${pageId}`);
+    link.removeAttribute('role');
+    if (HC.preview) {
+      link.removeAttribute('href');
+      link.hidden = true;
+    } else if (!editor.signedIn) {
+      link.setAttribute('href', '#');
+      link.setAttribute('role', 'button');
+      link.textContent = 'Sign in to edit';
+      link.hidden = false;
+    } else if (route) {
+      link.setAttribute('href', `#${route}?editor=changes`);
+      link.textContent = 'Edit this page';
       link.hidden = false;
     } else {
       link.removeAttribute('href');
       link.hidden = true;
     }
   }
+
+  // ---------- Editor mode: loaded for a session or the sign-in click only (plan D-C) ----------
+  /* Guests load no editor code and make no GitHub request: index.html has no
+     tag for js/cms-core.js, js/editor.js or css/editor.css. This file injects
+     them, and only (1) when this tab's sessionStorage holds a sign-in, or
+     (2) on the footer's "Sign in to edit" click, which opens the GitHub
+     window FIRST — synchronously inside the click, because a window opened
+     after an await is blocked — then injects, then hands that window to the
+     editor's sign-in. A preview frame (HC.preview) never reads storage and
+     never loads the editor; every storage access sits in try/catch, because
+     a sandboxed frame throws on sessionStorage.
+     The three literals repeat HCCore's (this file must not load HCCore
+     first); tools/tests/test_app_guest.mjs proves them equal.
+     window.HCApp.loadEditor(opts) is the test seam (opts.fetch, opts.session:
+     the localhost walk's fake GitHub and its in-memory session, never
+     written under SESSION_KEY); HC is frozen by js/source.js, so the seam is
+     its own frozen object. */
+  const SESSION_KEY = 'hc-cms-session';
+  const POPUP_NAME = 'hc-signin';
+  const POPUP_FEATURES = 'popup=yes,width=620,height=720';
+  const EDITOR_FILES = [
+    ['link', { rel: 'stylesheet', href: 'css/editor.css' }],
+    ['script', { src: 'js/cms-core.js' }],
+    ['script', { src: 'js/editor.js' }],
+  ];
+  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false };
+
+  function storedSession() {
+    if (HC.preview) return false;
+    try { return Boolean(window.sessionStorage.getItem(SESSION_KEY)); } catch (e) { return false; }
+  }
+
+  /* The line beside the footer link: sign-in progress and failures, as text. */
+  function footerStatus(text, kind) {
+    const link = $('#edit-page');
+    if (!link) return;
+    if (!editor.status) {
+      editor.status = document.createElement('span');
+      editor.status.className = 'edit-status';
+      editor.status.setAttribute('role', 'status');
+      link.after(editor.status);
+    }
+    editor.status.textContent = text || '';
+    editor.status.hidden = !text;
+    editor.status.classList.toggle('is-error', kind === 'error');
+  }
+
+  /* The ?editor= bootstrap (plan D-H, D-I: /cms/'s old links land on
+     #/<route>?editor=<tab>). With a session, js/editor.js is loaded at boot
+     and reads (and strips) the parameter itself. A guest cannot be signed
+     in without a click, so the footer asks for one; the parameter stays in
+     the address for the editor to read once the sign-in starts. */
+  function editorParamPrompt(hash) {
+    const want = !HC.preview && !editor.session && !editor.signedIn && !editor.loading
+      && /[?&]editor=/.test(String(hash).split('@')[0]);
+    if (want) { editor.prompt = true; footerStatus('Sign in to edit to open the Editor.'); }
+    else if (editor.prompt) { editor.prompt = false; footerStatus(''); }
+  }
+
+  function onEditorSession(signedIn) {
+    editor.signedIn = Boolean(signedIn);
+    setEditLink(editRoute);
+  }
+
+  /* One element into <head>, resolved when it loaded. A file that loaded
+     once is never injected again; one that failed is removed, so a later
+     click tries it afresh. */
+  function inject(tag, attrs) {
+    const name = attrs.src || attrs.href;
+    if (editor.loaded.has(name)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const node = document.createElement(tag);
+      for (const k of Object.keys(attrs)) node.setAttribute(k, attrs[k]);
+      node.addEventListener('load', () => { editor.loaded.add(name); resolve(); });
+      node.addEventListener('error', () => { node.remove(); reject(new Error(`${name} did not load`)); });
+      document.head.appendChild(node);
+    });
+  }
+
+  function injectEditor() {
+    if (!editor.loading) {
+      editor.loading = EDITOR_FILES.reduce((chain, [tag, attrs]) => chain.then(() => inject(tag, attrs)),
+        Promise.resolve()).then(() => {
+        if (!window.HCEditor || typeof window.HCEditor.start !== 'function') throw new Error('js/editor.js did not start');
+      });
+      editor.loading.catch(() => { editor.loading = null; });
+    }
+    return editor.loading;
+  }
+
+  /* Inject, then start the editor. opts.popup: the window the sign-in click
+     opened. -> Promise<boolean> (the editor started or signs in). */
+  function loadEditor(opts) {
+    const o = opts || {};
+    if (HC.preview) return Promise.resolve(false);
+    return injectEditor().then(() => window.HCEditor.start({
+      fetch: typeof o.fetch === 'function' ? o.fetch : undefined,
+      session: o.session && typeof o.session === 'object' ? o.session : undefined,
+      popup: o.popup || undefined,
+      status: footerStatus,
+      onSession: onEditorSession,
+    }) === true).catch(() => {
+      if (o.popup) { try { o.popup.close(); } catch (e) { /* already gone */ } }
+      footerStatus('The editor could not be loaded. Check the connection and try again.', 'error');
+      return false;
+    });
+  }
+
+  function initEditorEntry() {
+    const link = $('#edit-page');
+    if (!link || HC.preview) return;
+    link.addEventListener('click', (e) => {
+      if (editor.signedIn) return;             // "Edit this page": a plain link
+      e.preventDefault();
+      // first, before anything else: the browser allows this window only
+      // inside the click itself
+      const popup = window.open('about:blank', POPUP_NAME, POPUP_FEATURES);
+      if (!popup) {
+        footerStatus('The sign-in window was blocked. Allow pop-ups for this site and try again.', 'error');
+        return;
+      }
+      editor.prompt = false;
+      footerStatus('');
+      loadEditor({ popup });
+    });
+  }
+
+  window.HCApp = Object.freeze({
+    loadEditor(opts) {
+      const o = opts || {};
+      return loadEditor({ fetch: o.fetch, session: o.session });
+    },
+  });
 
   // ---------- the header search box, and who owns search on this route ----------
   /* On #/ the hero owns search, so the header's own box closes into its right
@@ -682,6 +832,7 @@
     const [path, queryStr] = pathPart.split('?');
     const seg = path.split('/').filter(Boolean);
     setEditLink(null);                      // no stale link while the next page loads
+    editorParamPrompt(hash);
     setHeaderSearch(hash);                  // the home route hands search to the hero
     try {
       if (seg.length === 0) { navHighlight(null); viewHome(); }
@@ -704,7 +855,7 @@
       // viewSearch scrolls on its own first paint, so it is excluded here —
       // otherwise this would fire only after the optional librarian round trip.
       if (!anchor && seg[0] !== 'search') window.scrollTo({ top: 0, behavior: 'instant' });
-      if (epoch === routeEpoch) setEditLink(editPageId(seg));
+      if (epoch === routeEpoch) setEditLink(editPageId(seg) ? `/${seg.join('/')}` : null);
     } catch (err) {
       errorPanel(err);
     }
@@ -743,6 +894,8 @@
   async function boot() {
     initTheme();
     initSearchBox();
+    initEditorEntry();
+    setEditLink(null);
     try {
       const [site, setup, projects, tools] = await Promise.all([
         fetchJSON('data/site.json'), fetchJSON('data/setup.json'),
@@ -753,8 +906,10 @@
       errorPanel(err);
       return;
     }
+    editor.session = storedSession();       // the one storage read (guarded)
     window.addEventListener('hashchange', route);
     route();
+    if (editor.session) loadEditor();
   }
 
   boot();

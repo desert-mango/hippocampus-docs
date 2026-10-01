@@ -11,7 +11,11 @@
      (b) render-equivalence: a page rendered with HCCore.withSentinels(text),
          sentinels then removed from the DOM, equals the page rendered
          without them;
-     (c) every sentinel is in the DOM and a DIRECT child of the page body.
+     (c) every sentinel is in the DOM and a DIRECT child of the page body;
+     (d) grouping (U6): once the parent page posts the frame hc-editor
+         {on: true}, js/editor-frame.js wraps the body's children between
+         sentinels into one .hc-block[data-index] per sentinel, in order,
+         losing and reordering nothing (oracle_parent.html has the rule).
 
    How: this file starts its OWN static server (node http, 127.0.0.1, an
    ephemeral port, the worktree root served as-is), finds Chrome (CHROME,
@@ -293,8 +297,11 @@ test('R3 oracles (b) and (c): every content page, with sentinels, renders the sa
     const num = (l, k) => Number((new RegExp(` ${k}=(\\d+)`).exec(l) || [])[1]);
     const sentinels = real.reduce((n, l) => n + num(l, 'sentinels'), 0);
     assert.ok(real.every((l) => num(l, 'sentinels') > 0 && num(l, 'dom') > 100), 'every page rendered a real body with sentinels');
+    assert.deepEqual(real.filter((l) => num(l, 'groups') !== num(l, 'sentinels')), [],
+      '(d) every page is grouped into exactly one block per sentinel');
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
-    console.log(`browser oracles: ${real.length} PASS over ${files.length} content pages (${sentinels} sentinels checked), `
+    console.log(`browser oracles: ${real.length} PASS over ${files.length} content pages (${sentinels} sentinels checked `
+      + 'and grouped), '
       + `negative FAIL as it must; ${secs} s`);
   } finally {
     for (const child of live) { try { child.kill('SIGKILL'); } catch { /* gone */ } }

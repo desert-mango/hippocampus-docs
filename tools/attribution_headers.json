@@ -835,6 +835,96 @@
         "purpose": "Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/editor-frame.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "dcd4f1887b00d8711429c90cc19c773da3205de16c58873c93e11d15ac1a251d",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_editor_frame.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "3e6f8ac85841454a6385580805c6a74ddd64ba7a93cac1e61a216228ed1d4c49",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "29 September 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "js/editor.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c7ee673d2849bf68dc48c19ff7803d03e7cffb5f6cb09e63549cae5bfdc9bb58",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "1 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/fake_github.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "fde3c81ad36488ce221f4eab1522ab35a6b5ad7f27610306b3b33ed3956557ff",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "1 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "One fake GitHub route table over the U0 fixtures, for the node tests and the localhost Editor walk."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_editor.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "8f0750cfc21fe216d125de1d486166b4c1c902be0d1a926dff60c074645e2c5f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "1 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_app_guest.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c057db47a4dbe0e0727ebd4422a13f7f7300e2df52c9e61a3c590b3796a1956e",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "1 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     }
   },
   "schema_version": 1

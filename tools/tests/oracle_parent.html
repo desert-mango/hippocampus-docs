@@ -17,7 +17,15 @@
     (b) render-equivalence: the sentinel render, sentinels removed from the
         DOM, equals the plain render (whitespace-only text between top-level
         children ignored: a removed sentinel leaves its line breaks behind);
-    (c) every sentinel is present and a DIRECT child of the page body.
+    (c) every sentinel is present and a DIRECT child of the page body;
+    (d) grouping (U6, js/editor-frame.js): after this page posts the frame
+        hc-editor {on: true}, the page body holds exactly one
+        .hc-block[data-index=i] per sentinel, each starting with sentinel i,
+        in order, no sentinel is left loose, and — rails, pencils and
+        sentinels removed, wrappers unwrapped — the body equals the sentinel
+        render before grouping (nothing lost, nothing moved out of order).
+  The sentinel prefix is the frame's own (the first 16 characters of the
+  load's nonce, js/source.js section 9), exactly as the editor serves it.
   ?neg=1 adds one synthetic page with a sentinel inside an unclosed <div>,
   which must come out FAIL. Verdicts go into THIS page's DOM (#verdicts,
   one line per page, then #done), which --dump-dom prints.
@@ -83,9 +91,13 @@
 
   /* Render `text` as `file` at `route`; resolve {doc, body, frame} once
      settled, or {error}. The caller removes the frame. */
-  async function render(route, file, text) {
+  const prefixOf = (nonce) => nonce.slice(0, 16);       // js/source.js sentinelPrefix
+
+  async function render(route, file, textOrFn) {
     const frame = document.createElement('iframe');
-    const cur = { nonce: hex(16), file, text, frame, pending: 0, last: performance.now() };
+    const nonce = hex(16);
+    const text = typeof textOrFn === 'function' ? textOrFn(prefixOf(nonce)) : textOrFn;
+    const cur = { nonce, file, text, frame, pending: 0, last: performance.now() };
     current = cur;
     let lastMut = performance.now();
     frame.src = '/index.html' + C.previewFragment(cur.nonce, route);
@@ -109,7 +121,7 @@
       const linked = !win.HCGraph || body.getAttribute('data-hc-xref') === '1';
       if (linked && cur.pending === 0 && now - cur.last >= SETTLE_MS && now - lastMut >= SETTLE_MS) {
         observer.disconnect();
-        return { frame, doc, body };
+        return { frame, doc, body, nonce, prefix: prefixOf(nonce) };
       }
     }
   }
@@ -132,14 +144,73 @@
       + JSON.stringify(b.slice(Math.max(0, i - 40), i + 60));
   }
 
-  async function judge(file, route, plainText, markedText, prefix, expected) {
+  /* (d): turn Editor mode on in the frame, wait for it to settle, judge the
+     grouping against the ungrouped sentinel render (markedCanon). */
+  async function grouping(b, markedCanon, expected) {
+    const why = [];
+    let lastMut = performance.now();
+    const obs = new MutationObserver(() => { lastMut = performance.now(); });
+    obs.observe(b.doc.documentElement, { subtree: true, childList: true, attributes: true });
+    b.frame.contentWindow.postMessage({ type: 'hc-editor', nonce: b.nonce, on: true, selected: null, overlay: [],
+      settings: { suggestions: true, diff: 'inline', compact: false, outlines: true } }, location.origin);
+    const t0 = performance.now();
+    for (;;) {
+      await sleep(50);
+      const now = performance.now();
+      const grouped = b.body.querySelector(':scope > .hc-block') || expected === 0;
+      if (grouped && now - lastMut >= SETTLE_MS) break;
+      if (now - t0 > 10000) { why.push('(d) the frame did not group within 10 s'); break; }
+    }
+    obs.disconnect();
+    const isMark = (el) => el && new RegExp('^hcb-' + b.prefix + '-([0-9]+)$').exec(el.id || '');
+    const kids = Array.from(b.body.children);
+    const blocks = kids.filter((el) => el.classList.contains('hc-block'));
+    if (blocks.length !== expected) why.push('(d) ' + blocks.length + ' of ' + expected + ' blocks grouped');
+    if (!b.doc.body.classList.contains('hc-framed')) why.push('(d) the frame did not set hc-framed');
+    let last = -1;
+    for (const w of blocks) {
+      const m = isMark(w.firstElementChild);
+      if (!m || String(m[1]) !== w.getAttribute('data-index')) {
+        why.push('(d) block ' + w.getAttribute('data-index') + ' does not start with its own sentinel');
+        break;
+      }
+      if (Number(m[1]) <= last) { why.push('(d) blocks out of order at ' + m[1]); break; }
+      last = Number(m[1]);
+    }
+    if (kids.some((el) => isMark(el))) why.push('(d) a sentinel was left outside every block');
+    // Wraps the RIGHT elements: from the first block on, every child of the
+    // body is a block or a rail until the page chrome app.js/lab.js append
+    // (nav.page-nav, hc-* sections), which must stay outside.
+    const chrome = (el) => el.classList.contains('page-nav')
+      || Array.from(el.classList).some((c) => c.indexOf('hc-') === 0 && c !== 'hc-block' && c !== 'hc-plus');
+    let seen = false;
+    for (const n of Array.from(b.body.childNodes)) {
+      if (n.nodeType === 1 && n.classList.contains('hc-block')) { seen = true; continue; }
+      if (!seen) continue;
+      if (n.nodeType === 3 && !n.data.trim()) continue;
+      if (n.nodeType === 1 && n.classList.contains('hc-plus')) continue;
+      if (n.nodeType === 1 && chrome(n)) break;
+      why.push('(d) content left outside its block: ' + (n.nodeType === 1 ? '<' + n.localName + '>' : JSON.stringify(String(n.data).slice(0, 40))));
+      break;
+    }
+    const copy = b.body.cloneNode(true);
+    copy.querySelectorAll('.hc-plus, .hc-pencil').forEach((el) => el.remove());
+    copy.querySelectorAll(':scope > .hc-block').forEach((w) => { w.replaceWith(...Array.from(w.childNodes)); });
+    copy.querySelectorAll('[id^="hcb-' + b.prefix + '-"]').forEach((el) => el.remove());
+    const groupedCanon = canon(copy, copy);
+    if (groupedCanon !== markedCanon) why.push('(d) grouping changed the page ' + firstDiff(markedCanon, groupedCanon));
+    return { why, count: blocks.length };
+  }
+
+  async function judge(file, route, plainText, markFn, expected) {
     const why = [];
     const a = await render(route, file, plainText);
     const plainCanon = a.error ? null : canon(a.body, a.body);
     a.frame.remove();
     if (a.error) return 'FAIL ' + file + ' plain render: ' + a.error;
-    const b = await render(route, file, markedText);
+    const b = await render(route, file, markFn);
     if (b.error) { b.frame.remove(); return 'FAIL ' + file + ' sentinel render: ' + b.error; }
+    const prefix = b.prefix;
     const found = Array.from(b.doc.querySelectorAll('[id^="hcb-' + prefix + '-"]'));
     const nested = found.filter((el) => el.parentElement !== b.body);
     if (found.length !== expected) why.push('(c) ' + found.length + ' of ' + expected + ' sentinels in the DOM');
@@ -150,10 +221,12 @@
     const copy = b.body.cloneNode(true);
     copy.querySelectorAll('[id^="hcb-' + prefix + '-"]').forEach((el) => el.remove());
     const markedCanon = canon(copy, copy);
-    b.frame.remove();
     if (markedCanon !== plainCanon) why.push('(b) render differs ' + firstDiff(plainCanon, markedCanon));
+    const g = await grouping(b, markedCanon, expected);
+    why.push(...g.why);
+    b.frame.remove();
     return why.length ? 'FAIL ' + file + ' ' + why.join('; ')
-      : 'PASS ' + file + ' sentinels=' + found.length + ' dom=' + plainCanon.length;
+      : 'PASS ' + file + ' sentinels=' + found.length + ' groups=' + g.count + ' dom=' + plainCanon.length;
   }
 
   async function main() {
@@ -173,14 +246,13 @@
         const route = routeOf(file);
         const res = await fetch('/' + file, { cache: 'no-store' });
         const text = res.ok ? await res.text() : null;
-        const prefix = hex(6);
         const split = text === null ? null : C.splitBlocks(text);
         if (!route) verdict = 'FAIL ' + file + ' no site route names this file';
         else if (text === null) verdict = 'FAIL ' + file + ' could not read the file (HTTP ' + res.status + ')';
         else if (!split.ok) verdict = 'FAIL ' + file + ' the page does not split: ' + split.reason;
         else {
           const expected = split.blocks.filter((b) => b.kind !== 'space').length;
-          verdict = await judge(file, route, text, C.withSentinels(text, prefix), prefix, expected);
+          verdict = await judge(file, route, text, (prefix) => C.withSentinels(text, prefix), expected);
         }
       } catch (e) {
         verdict = 'FAIL ' + file + ' oracle error: ' + (e && e.message);
@@ -191,12 +263,11 @@
       // A sentinel inside an unclosed <div>: (c) must catch it. Served in
       // place of a real page's file, on that page's route.
       const host = pages.find((p) => p.route.indexOf('/tools/') === 0) || pages[0];
-      const prefix = hex(6);
       const plain = 'Intro.\n\n<div>\n\nInside an unclosed div.\n\nStill inside.\n';
-      const withS = 'Intro.\n\n<div id="hcb-' + prefix + '-0"></div>\n\n<div>\n\nInside an unclosed div.\n\n'
+      const withS = (prefix) => 'Intro.\n\n<div id="hcb-' + prefix + '-0"></div>\n\n<div>\n\nInside an unclosed div.\n\n'
         + '<div id="hcb-' + prefix + '-1"></div>\n\nStill inside.\n';
       let verdict;
-      try { verdict = await judge(host.file, host.route, plain, withS, prefix, 2); } catch (e) { verdict = 'FAIL ' + host.file + ' oracle error'; }
+      try { verdict = await judge(host.file, host.route, plain, withS, 2); } catch (e) { verdict = 'FAIL ' + host.file + ' oracle error'; }
       line(verdict.replace(host.file, NEG_FILE));
     }
     current = null;

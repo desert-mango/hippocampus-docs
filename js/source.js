@@ -10,6 +10,9 @@
      HC.fetchJSON(path)          -> Promise<value>
      HC.callFunction(url, init)  -> Promise<Response-like>   (api/* POSTs)
      HC.preview                  -> true only inside a CMS preview frame
+     HC.post(type, data)         -> boolean  (Editor mode, frame -> parent; 9)
+     HC.onEditor(fn)             -> boolean  (Editor mode, parent -> frame; 9)
+     HC.blockPrefix              -> this load's sentinel prefix, or null (9)
 
    A failed read rejects with an Error whose message is "<path>: HTTP <status>"
    and whose .status is that status. On the live site all three are plain
@@ -95,7 +98,42 @@
       librarian latches off exactly as it does on GitHub Pages.
 
    8. Chrome. js/app.js hides the footer's "Edit this page" link when
-      HC.preview is true. */
+      HC.preview is true.
+
+   9. Editor mode (plan D-D; the parent side is js/editor.js, the frame side
+      js/editor-frame.js). Four more messages, frame -> parent, each sent
+      with HC.post(type, data) as
+        window.parent.postMessage({type, nonce, ...fields}, location.origin)
+      and only in preview mode:
+        hc-ready         {}                  the frame has loaded
+        hc-route         {route}             the reader followed a link in
+                                             the frame (route as in 1)
+        hc-block-select  {index}             a block was picked
+        hc-block-insert  {index, kind}       "+" at the boundary before
+                                             block `index`; kind is one of
+                                             BLOCK_INSERT_KINDS
+      index is a whole number 0..100000. HC.post builds the message itself
+      (frameMessage below): an unknown type or a bad field posts nothing.
+      The parent acts on one only when event.source is ITS frame's window
+      and the nonce is the one of the current load (as in 5).
+      One message parent -> frame:
+        iframe.contentWindow.postMessage(
+          {type: 'hc-editor', nonce, on, settings, selected, overlay}, '*')
+        on        true: draw the block marks (false: draw none)
+        settings  {suggestions, diff: 'inline'|'side', compact, outlines}
+        selected  a block index, or null
+        overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
+      The frame accepts it only when event.source === window.parent,
+      event.origin === its own location.origin and the nonce is its own
+      (as in 5), and cleans it field by field (editorMessage below); a
+      listener registered with HC.onEditor(fn) gets the cleaned copy (and,
+      when it registers late, the last one at once). No message in either
+      direction carries HTML, a token or a storage value.
+      Block marks. The parent serves the page's Markdown with an id-sentinel
+      <div id="hcb-<prefix>-<i>"></div> before block i, where <prefix> is
+      sentinelPrefix(nonce): the first 16 characters of THIS load's nonce,
+      exposed to the frame as HC.blockPrefix. Content cannot guess it, so a
+      content file cannot fake a mark. */
 (function () {
   'use strict';
 
@@ -104,6 +142,11 @@
   const BRIDGE_PATH_RE = /^(content\/[A-Za-z0-9_./-]+\.md|data\/[A-Za-z0-9_./-]+\.json|search\/[A-Za-z0-9_.-]+\.json)$/;
   const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
   const BRIDGE_TIMEOUT_MS = 20000;
+  const MAX_BLOCK_INDEX = 100000;
+  const BLOCK_INSERT_KINDS = Object.freeze(['note', 'warning', 'tabs', 'image', 'attention', 'video', 'repo']);
+  const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
+  const MAX_OVERLAY = 5000;
+  const DIFF_STYLES = Object.freeze(['inline', 'side']);
 
   function httpError(path, status, detail) {
     const err = new Error(`${path}: HTTP ${status}` + (detail ? ` (${detail})` : ''));
@@ -149,6 +192,58 @@
     } catch (e) {
       try { win.location.replace(hash); } catch (e2) { /* the router will report it */ }
     }
+  }
+
+  // The first 16 characters of a load's nonce: the id-sentinels' prefix (9).
+  function sentinelPrefix(nonce) {
+    return (typeof nonce === 'string' && NONCE_RE.test(nonce)) ? nonce.slice(0, 16) : null;
+  }
+
+  const isIndex = (v) => Number.isInteger(v) && v >= 0 && v <= MAX_BLOCK_INDEX;
+
+  /* A frame -> parent editor message (9), built from checked fields only:
+     -> {type, ...fields} | null. The nonce is added by HC.post. */
+  function frameMessage(type, data) {
+    const d = (data && typeof data === 'object') ? data : {};
+    if (type === 'hc-ready') return { type };
+    if (type === 'hc-route') {
+      if (typeof d.route !== 'string') return null;
+      return { type, route: safeRoute(d.route) };
+    }
+    if (type === 'hc-block-select') return isIndex(d.index) ? { type, index: d.index } : null;
+    if (type === 'hc-block-insert') {
+      return (isIndex(d.index) && BLOCK_INSERT_KINDS.indexOf(d.kind) >= 0)
+        ? { type, index: d.index, kind: d.kind } : null;
+    }
+    return null;
+  }
+
+  /* The parent's hc-editor message (9), cleaned field by field: wrong types
+     fall back to off / the defaults / nothing. -> {on, settings, selected,
+     overlay} | null (not an hc-editor message at all). */
+  function editorMessage(m) {
+    if (!m || typeof m !== 'object' || m.type !== 'hc-editor') return null;
+    const s = (m.settings && typeof m.settings === 'object') ? m.settings : {};
+    const bool = (v, dflt) => (typeof v === 'boolean' ? v : dflt);
+    const overlay = [];
+    if (Array.isArray(m.overlay)) {
+      for (const e of m.overlay.slice(0, MAX_OVERLAY)) {
+        if (e && typeof e === 'object' && isIndex(e.index) && OVERLAY_MARKS.indexOf(e.mark) >= 0) {
+          overlay.push({ index: e.index, mark: e.mark });
+        }
+      }
+    }
+    return {
+      on: m.on === true,
+      settings: {
+        suggestions: bool(s.suggestions, true),
+        diff: DIFF_STYLES.indexOf(s.diff) >= 0 ? s.diff : 'inline',
+        compact: bool(s.compact, false),
+        outlines: bool(s.outlines, true),
+      },
+      selected: isIndex(m.selected) ? m.selected : null,
+      overlay,
+    };
   }
 
   const fakeResponse = (status) => ({
@@ -204,9 +299,46 @@
       });
     }
 
+    // (9) the editor's messages
+    const editorListeners = [];
+    let lastEditor = null;
+
+    function post(type, data) {
+      if (!nonce) return false;
+      const msg = frameMessage(type, data);
+      if (!msg) return false;
+      msg.nonce = nonce;
+      try {
+        win.parent.postMessage(msg, origin);
+      } catch (e) {
+        return false;
+      }
+      return true;
+    }
+
+    function onEditor(fn) {
+      if (!nonce || typeof fn !== 'function') return false;
+      editorListeners.push(fn);
+      if (lastEditor) fn(lastEditor);
+      return true;
+    }
+
+    function onEditorMessage(d) {
+      const clean = editorMessage(d);
+      if (!clean) return;
+      lastEditor = clean;
+      for (const fn of editorListeners.slice()) {
+        try { fn(clean); } catch (e) { /* one listener must not silence the rest */ }
+      }
+    }
+
     function onMessage(event) {
       if (!event || event.source !== win.parent || event.origin !== origin) return;
       const d = event.data;
+      if (d && typeof d === 'object' && d.type === 'hc-editor' && d.nonce === nonce) {
+        onEditorMessage(d);
+        return;
+      }
       if (!d || typeof d !== 'object' || d.type !== 'hc-file' || d.nonce !== nonce) return;
       if (typeof d.id !== 'number' || !pending.has(d.id)) return;
       const req = pending.get(d.id);
@@ -238,7 +370,10 @@
       return nonce ? Promise.resolve(fakeResponse(405)) : Promise.resolve(fetchImpl(url, init));
     }
 
-    return Object.freeze({ preview: Boolean(nonce), fetchText, fetchJSON, callFunction });
+    return Object.freeze({
+      preview: Boolean(nonce), fetchText, fetchJSON, callFunction,
+      blockPrefix: sentinelPrefix(nonce), post, onEditor,
+    });
   }
 
   if (typeof window !== 'undefined') window.HC = create(window);
@@ -246,6 +381,7 @@
     module.exports = {
       create, previewFragment, parsePreviewFragment, isBridgePath,
       BRIDGE_PATH_RE, BRIDGE_TIMEOUT_MS,
+      sentinelPrefix, frameMessage, editorMessage, BLOCK_INSERT_KINDS, OVERLAY_MARKS,
     };
   }
 }());

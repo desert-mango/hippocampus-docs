@@ -1,0 +1,245 @@
+<!doctype html>
+<!--
+  The Editor walk — a TEST-ONLY page (plan D-C, U6). Never deployed
+  (.vercelignore: tools/tests/*.html) and inert anywhere but localhost /
+  127.0.0.1. Driven by the run's smoke.mjs (--shots <dir> --walk) through
+  headless Chrome, or open it by hand under ./tools/serve.sh:
+    http://localhost:8130/tools/tests/editor_walk.html?step=edit&page=/setup/lab-gantry/usage
+
+  It frames the REAL site (../../index.html#<page>, same origin, no sandbox:
+  a plain hash, so js/source.js does NOT turn preview mode on) and loads the
+  Editor through the site's own seam, window.HCApp.loadEditor({fetch,
+  session}): `fetch` is tools/tests/fake_github.js over the U0 fixtures and
+  this tree's files (no network, no GitHub), `session` a fake one held in
+  memory only (never written under the real session key). Then it drives
+  the Editor to one state:
+
+    on               the header switch on: the page frame at the route
+    select           on + the frame says hc-block-select (a paragraph block)
+    edit             select + typing in the tray's block editor; the frame
+                     reloads with a NEW nonce, the block still selected
+    insert           on + the frame says hc-block-insert {index, 'note'}
+    view             on + the tray's View tab (the settings form)
+    tray-proposals   on + the tray opened at Proposals (PR #1's card)
+    tray-media       on + the tray's Media tab (images from the manifest)
+    tray-guide       on + the tray's Guide tab
+    phone            on + the tray open, under 768 px (the bottom sheet); the
+                     site's frame is 390 px wide (smoke.mjs shoots it at 390)
+
+  The frame's own messages (hc-block-select / hc-block-insert) cannot be
+  clicked from here: the Editor's page frame is sandboxed (opaque origin).
+  The walk dispatches the SAME message to the site window with the frame
+  as its source and the frame's current nonce, so the parent's real
+  checks (event.source, nonce) and code path run; the frame-side click ->
+  message is proven by test_editor_frame.mjs and the browser oracle.
+
+  When the state is reached, THIS page's body gets
+  data-walk-step="<step>:ready" (smoke.mjs asserts it in --dump-dom, then
+  takes the screenshot); on failure "<step>:failed" and data-walk-why.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<title>Editor walk</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1117; }
+  iframe { display: block; width: 100%; height: 100vh; border: 0; }
+</style>
+</head>
+<body data-walk-step="starting">
+<script src="fake_github.js"></script>
+<script src="../../js/marked.min.js"></script>
+<script src="../../js/cms-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const body = document.body;
+  if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    body.setAttribute('data-walk-step', 'refused');
+    return;
+  }
+  const STEPS = ['on', 'select', 'edit', 'insert', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone'];
+  const params = new URLSearchParams(location.search);
+  const step = params.get('step') || 'on';
+  const page = params.get('page') || '/setup/hippocampus-bringup/fcu-firmware';
+  const LIMIT_MS = 20000;
+  const SETTLE_MS = 900;
+
+  const mark = (s) => body.setAttribute('data-walk-step', s);
+  const fail = (why) => { mark(`${step}:failed`); body.setAttribute('data-walk-why', String(why).slice(0, 300)); };
+  if (STEPS.indexOf(step) < 0) { fail(`unknown step ${step}`); return; }
+  if (!/^\/[A-Za-z0-9/_-]*$/.test(page)) { fail('page must be a site route like /setup/x/y'); return; }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function until(pred, what) {
+    const end = Date.now() + LIMIT_MS;
+    for (;;) {
+      let v = null;
+      try { v = pred(); } catch (e) { v = null; }
+      if (v) return v;
+      if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+      await sleep(50);
+    }
+  }
+
+  const readText = (url) => fetch(url, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.text() : null)).catch(() => null);
+  const fake = window.HCFakeGitHub.createFakeGitHub({
+    readFixture: (name) => readText(`fixtures/github-data/${name}`),
+    readFile: (p) => (/^[A-Za-z0-9._/-]+$/.test(p) && p.indexOf('..') < 0 ? readText(`../../${p}`) : Promise.resolve(null)),
+  });
+
+  const site = document.createElement('iframe');
+  site.title = 'The site';
+  site.src = `../../index.html#${page}`;
+  // headless Chrome will not make a window narrower than 500 px on a Mac: the
+  // phone step sizes the site's own viewport instead
+  if (step === 'phone') site.style.width = '390px';
+  body.appendChild(site);
+
+  let SW = null;               // the site's window
+  let SD = null;               // the site's document
+  const readies = [];          // nonces of the page frames that said hc-ready
+  const seen = {};             // message type -> count (the failure line)
+  const $ = (sel) => SD.querySelector(sel);
+  const pageFrame = () => $('#hc-frame-host iframe.hc-frame');
+  const nonceOf = (f) => {
+    const m = f ? /#preview=([A-Za-z0-9_-]+)/.exec(f.getAttribute('src') || '') : null;
+    return m ? m[1] : null;
+  };
+
+  // the page frame (the current load) said hc-ready, and its grouping had time to run
+  async function frameReady(notNonce) {
+    const nonce = await until(() => {
+      const n = nonceOf(pageFrame());
+      return n && n !== notNonce && readies.indexOf(n) >= 0 ? n : null;
+    }, 'the page frame\'s hc-ready');
+    await sleep(SETTLE_MS);
+    return nonce;
+  }
+
+  // what the frame would post: same source, the current load's nonce
+  function frameSays(type, data) {
+    const f = pageFrame();
+    const msg = Object.assign({ type, nonce: nonceOf(f) }, data);
+    SW.dispatchEvent(new SW.MessageEvent('message', { data: msg, origin: 'null', source: f.contentWindow }));
+  }
+
+  // the block to select / insert before: the page's first paragraph
+  async function paragraphIndex() {
+    const m = /^\/setup\/(.+)$/.exec(page);
+    const text = m ? await readText(`../../content/setup/${m[1]}.md`) : null;
+    const split = text ? window.HCCore.splitBlocks(text) : null;
+    const blocks = split && split.ok ? split.blocks : [];
+    const i = blocks.findIndex((b) => b.kind === 'paragraph');
+    return i >= 0 ? i : 1;
+  }
+
+  async function editorOn() {
+    const sw = await until(() => { const b = $('[data-editor-switch]'); return b && !b.disabled ? b : null; },
+      'the Editor switch (GitHub access confirmed)');
+    sw.click();
+    await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
+    return frameReady(null);
+  }
+
+  async function openTray(tab) {
+    const handle = await until(() => $('[data-action="tray-open"]'), 'the tray handle');
+    if (!SD.body.classList.contains('hc-tray-open')) handle.click();
+    await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
+    if (tab) {
+      const t = await until(() => $(`#hc-tray [role="tab"][data-tab="${tab}"]`), `the ${tab} tab`);
+      t.click();
+      await until(() => t.getAttribute('aria-selected') === 'true', `the ${tab} tab selected`);
+    }
+  }
+
+  const blockEditor = () => $('textarea[data-block-editor]');
+
+  // what a failure line carries: the page frame, the hc-ready count, the tray's notice
+  function diag() {
+    try {
+      const f = pageFrame();
+      const notice = $('#hc-tray .hc-notice');
+      return `frame=${f ? 'yes' : 'no'} nonce=${nonceOf(f) ? 'yes' : 'no'} readies=${readies.length} seen=${JSON.stringify(seen)}`
+        + ` body=${SD.body.className} notice=${notice ? notice.textContent.slice(0, 120) : ''}`;
+    } catch (e) { return 'no site document'; }
+  }
+
+  const RUN = {
+    on: async () => { await editorOn(); },
+    select: async () => {
+      await editorOn();
+      frameSays('hc-block-select', { index: await paragraphIndex() });
+      await until(() => { const t = blockEditor(); return t && t.value.trim(); }, 'the block\'s text in the tray');
+      await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
+    },
+    edit: async () => {
+      const before = await editorOn();
+      frameSays('hc-block-select', { index: await paragraphIndex() });
+      const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
+      ta.value += ' The walk typed this sentence.';
+      ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
+      await frameReady(before);            // reloaded with a NEW nonce, the block still selected
+      await until(() => /walk typed/.test(blockEditor().value), 'the edit kept in the tray');
+    },
+    insert: async () => {
+      const before = await editorOn();
+      frameSays('hc-block-insert', { index: await paragraphIndex(), kind: 'note' });
+      await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
+      await frameReady(before);
+    },
+    view: async () => {
+      await editorOn();
+      await openTray('view');
+      await until(() => $('#hc-tray [data-setting="suggestions"]'), 'the View settings');
+    },
+    'tray-proposals': async () => {
+      await editorOn();
+      await openTray('proposals');
+      await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+    },
+    'tray-media': async () => {
+      await editorOn();
+      await openTray('media');
+      await until(() => { const g = $('#hc-tray .cms-media-grid'); return g && g.children.length; }, 'the Media grid');
+    },
+    'tray-guide': async () => {
+      await editorOn();
+      await openTray('guide');
+      await until(() => $('#hc-tray ol.hc-guide'), 'the Guide');
+    },
+    phone: async () => {
+      await editorOn();
+      await openTray('proposals');
+      await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
+      await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+    },
+  };
+
+  site.addEventListener('load', async () => {
+    try {
+      SW = site.contentWindow;
+      SD = site.contentDocument;
+      SW.addEventListener('message', (e) => {
+        const m = e.data;
+        if (m && typeof m === 'object') seen[m.type] = (seen[m.type] || 0) + 1;
+        if (m && typeof m === 'object' && m.type === 'hc-ready' && typeof m.nonce === 'string') readies.push(m.nonce);
+      });
+      await until(() => SW.HCApp && SD.querySelector('#content h1'), 'the site\'s page');
+      const user = JSON.parse(await readText('fixtures/github-data/user.json'));
+      const started = await SW.HCApp.loadEditor({ fetch: fake.fetch,
+        session: { token: 'walk-fake-not-a-token', login: String(user.login), expiresAt: null } });
+      if (started !== true) throw new Error('HCApp.loadEditor did not start the editor');
+      await RUN[step]();
+      await sleep(SETTLE_MS);
+      mark(`${step}:ready`);
+    } catch (e) {
+      fail(`${(e && e.message) || e}; ${diag()}`);
+    }
+  });
+}());
+</script>
+</body>
+</html>
