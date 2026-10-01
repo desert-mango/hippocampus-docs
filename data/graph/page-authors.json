@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-09-29",
+ "read_at": "2026-10-01",
  "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository",
  "prs_read": [
   2,

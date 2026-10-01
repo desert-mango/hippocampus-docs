@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-09-29",
+ "read_at": "2026-10-01",
  "org": "HippoCampusRobotics",
  "note": "public GitHub data only: login, the display name GitHub publishes, a 64-px avatar copy, the profile link and the People-roster name it matches (tools/github_names.py)",
  "people": {
