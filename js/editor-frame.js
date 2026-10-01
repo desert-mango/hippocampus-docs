@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 2 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent.
 /* HCEditorFrame — the FRAME side of the Editor mode (plan D-D, D-E, D-N).
@@ -373,6 +373,40 @@
       HC.post('hc-route', { route: h.replace(/^#/, '') || '/' });
     });
     if (doc.addEventListener) doc.addEventListener('click', () => closePicker());
+
+    /* TEST-ONLY, for the localhost walk (tools/tests/editor_walk.html): the
+       walk cannot click inside this sandboxed frame, and the picker is the
+       frame's own (no message opens it). So on localhost / 127.0.0.1 only,
+       and only when a top window that is NOT the parent sits above the site
+       (the walk page; in the real Editor top is the parent), a message
+       {type: 'hc-walk-picker', index} from that top window clicks the "+"
+       rail before block `index` — the real click path — scrolls it into view
+       and answers the top window {type: 'hc-walk-picker-open', index, open,
+       kinds}. The parent is told nothing; anywhere else no listener exists. */
+    const host = String((win.location && win.location.hostname) || '');
+    if ((host === 'localhost' || host === '127.0.0.1') && win.top && win.parent && win.top !== win.parent) {
+      win.addEventListener('message', (e) => {
+        const d = e && e.data;
+        if (!e || e.source !== win.top || !d || typeof d !== 'object' || d.type !== 'hc-walk-picker'
+          || !Number.isInteger(d.index)) return;
+        const root = doc.getElementById('content') || doc.body;
+        let r = null;
+        for (const body of pageBodies(root, prefix)) {
+          r = r || Array.from(body.childNodes).find((n) => n.nodeType === ELEMENT && classesOf(n).indexOf('hc-plus') >= 0
+            && n.getAttribute('data-insert') === String(d.index)) || null;
+        }
+        if (r && !(openPicker && openPicker.rail === r)) {
+          const plus = Array.from(r.childNodes).find((n) => n.nodeType === ELEMENT && classesOf(n).indexOf('hc-plus-btn') >= 0);
+          if (plus) plus.click();
+        }
+        const open = Boolean(r && openPicker && openPicker.rail === r);
+        if (open && typeof r.scrollIntoView === 'function') {
+          try { r.scrollIntoView({ block: 'center' }); } catch (err) { /* a courtesy */ }
+        }
+        const kinds = open ? Array.from(openPicker.picker.childNodes).map((b) => b.getAttribute('data-kind')) : [];
+        e.source.postMessage({ type: 'hc-walk-picker-open', index: d.index, open, kinds }, e.origin);
+      });
+    }
 
     HC.post('hc-ready');
     return Object.freeze({ apply, state: () => state });

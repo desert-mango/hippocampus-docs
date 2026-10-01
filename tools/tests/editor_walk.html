@@ -18,9 +18,17 @@
     select           on + the frame says hc-block-select (a paragraph block)
     edit             select + typing in the tray's block editor; the frame
                      reloads with a NEW nonce, the block still selected
-    insert           on + the frame says hc-block-insert {index, 'note'}
+    insert           on + the "+" rail before the first paragraph with its
+                     picker OPEN (the kinds, before one is chosen; mockup
+                     a-3): the frame's own rail button is clicked through
+                     js/editor-frame.js's test-only walk hook (below)
+    inserted         on + the frame says hc-block-insert {index, 'note'}: the
+                     note inserted, selected, its Markdown in the tray
     view             on + the tray's View tab (the settings form)
-    tray-proposals   on + the tray opened at Proposals (PR #1's card)
+    tray-proposals   on + the tray opened at Proposals, PR #1's card OPEN in
+                     place (a click on its title, #/review/1): the check
+                     status, Show on page, the review buttons, the files
+                     (mockup a-2)
     tray-media       on + the tray's Media tab (images from the manifest)
     tray-guide       on + the tray's Guide tab
     phone            on + the tray open, under 768 px (the bottom sheet); the
@@ -55,6 +63,12 @@
   as its source and the frame's current nonce, so the parent's real
   checks (event.source, nonce) and code path run; the frame-side click ->
   message is proven by test_editor_frame.mjs and the browser oracle.
+  The "+" picker is the frame's own and no message opens it, so the insert
+  step uses js/editor-frame.js's TEST-ONLY hook (localhost / 127.0.0.1, and
+  only when a top window that is not the parent sits above the site): this
+  page posts {type: 'hc-walk-picker', index} into the page frame, the frame
+  clicks its real "+" button and answers {type: 'hc-walk-picker-open',
+  index, open, kinds}; insert is ready only when open with all the kinds.
 
   When the state is reached, THIS page's body gets
   data-walk-step="<step>:ready" (smoke.mjs asserts it in --dump-dom, then
@@ -82,7 +96,7 @@
     body.setAttribute('data-walk-step', 'refused');
     return;
   }
-  const STEPS = ['on', 'select', 'edit', 'insert', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
+  const STEPS = ['on', 'select', 'edit', 'insert', 'inserted', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
     'overlay-inline', 'overlay-side', 'two-prs', 'members'];
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
@@ -206,6 +220,12 @@
   let SW = null;               // the site's window
   let SD = null;               // the site's document
   const readies = [];          // nonces of the page frames that said hc-ready
+  const pickerReplies = [];    // the frame's answers to hc-walk-picker (the insert step)
+  window.addEventListener('message', (e) => {
+    const f = SD ? pageFrame() : null;
+    const m = e.data;
+    if (f && e.source === f.contentWindow && m && typeof m === 'object' && m.type === 'hc-walk-picker-open') pickerReplies.push(m);
+  });
   const seen = {};             // message type -> count (the failure line)
   const $ = (sel) => SD.querySelector(sel);
   const pageFrame = () => $('#hc-frame-host iframe.hc-frame');
@@ -290,6 +310,21 @@
       await until(() => /walk typed/.test(blockEditor().value), 'the edit kept in the tray');
     },
     insert: async () => {
+      await editorOn();
+      const index = await paragraphIndex();
+      const want = SW.HCEditorFrame.INSERT_KINDS.map((k) => k.kind);   // the site's own copy of the file
+      let reply = null;
+      await until(() => {
+        const f = pageFrame();
+        if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-picker', index }, '*');
+        reply = pickerReplies.length ? pickerReplies[pickerReplies.length - 1] : null;
+        return reply && reply.index === index && reply.open === true;
+      }, `the frame's "+" picker open before block ${index} (last answer ${JSON.stringify(reply)})`);
+      if (JSON.stringify(reply.kinds) !== JSON.stringify(want)) {
+        throw new Error(`the picker shows ${JSON.stringify(reply.kinds)}, not ${JSON.stringify(want)}`);
+      }
+    },
+    inserted: async () => {
       const before = await editorOn();
       frameSays('hc-block-insert', { index: await paragraphIndex(), kind: 'note' });
       await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
@@ -303,7 +338,17 @@
     'tray-proposals': async () => {
       await editorOn();
       await openTray('proposals');
-      await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+      const title = await until(() => $('#hc-tray article.hc-card[data-pr="1"] a.cms-title'), 'proposal #1\'s card');
+      title.click();                       // #/review/1: the card opens in place
+      const card = await until(() => {
+        const d = $('#hc-tray article.hc-card.is-open[data-pr="1"] .hc-card-detail');
+        return d && d.querySelector('ul.hc-files li .hc-here') && d.querySelector('.cms-actions button[data-action]')
+          && d.querySelector('button[data-action="show-on-page"]') && d.querySelector('.cms-check') ? d.parentNode : null;
+      }, 'proposal #1\'s card open: the check, Show on page, a review button, the files');
+      // the card's top at the tray's top, then (only as far as needed) down to the review buttons:
+      // at 900 px the files below them are off screen (the card lists them; the shot cannot hold all)
+      card.scrollIntoView({ block: 'start', behavior: 'instant' });
+      card.querySelector('.cms-actions .cms-action-row').scrollIntoView({ block: 'nearest', behavior: 'instant' });
     },
     'tray-media': async () => {
       await editorOn();

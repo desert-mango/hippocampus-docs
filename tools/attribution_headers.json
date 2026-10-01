@@ -839,13 +839,13 @@
     "js/editor-frame.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "fdbcd9d9a8e9f8bfb8adecac951f47c8a6ccbf58c22e5da35a7001c3c1a36acc",
+        "baseline_sha256": "cb18cf2e1a155d42ff9f57b18ca6790d7ddfcef0a3873e725f06a1cde02c115e",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "2 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
       },
@@ -854,13 +854,13 @@
     "tools/tests/test_editor_frame.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3e6f8ac85841454a6385580805c6a74ddd64ba7a93cac1e61a216228ed1d4c49",
+        "baseline_sha256": "44f1e521bb6afb2dd30ff0bd8496aa06b8d92970c9240998e19bf678414866bb",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "2 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site."
       },

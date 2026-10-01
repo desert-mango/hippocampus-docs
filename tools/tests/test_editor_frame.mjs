@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 2 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site.
 /* Unit tests for js/editor-frame.js over a small fake DOM (node has none).
@@ -269,4 +269,58 @@ test('editor-frame: pencil and click select a block; a link does not; "+" offers
   assert.deepEqual(HC.posts.at(-1), { type: 'hc-block-insert', index: 3, kind: 'warning' });
   assert.equal(kids(rails[2]).some((c) => c.classList.contains('hc-picker')), false, 'the picker closes');
   assert.ok(HC.posts.every((p) => Object.values(p).every((v) => typeof v !== 'string' || !/</.test(v))), 'no HTML in any message');
+});
+
+/* The walk's hook (TEST-ONLY): the localhost walk page cannot click inside
+   the sandboxed frame, so on localhost / 127.0.0.1, when the frame sits
+   under a top window that is not its parent (the walk page above the site),
+   a message {type: 'hc-walk-picker', index} from that top window clicks the
+   "+" rail before block `index` (the real click path) and answers the top
+   window. Anywhere else no listener is added. */
+function walkWin(hostname, framed) {
+  const win = fakeWin();
+  win.location.hostname = hostname;
+  win.parent = { name: 'the site' };
+  const answers = [];
+  win.top = framed ? { name: 'the walk', postMessage: (m, o) => answers.push([m, o]) } : win.parent;
+  return { win, answers };
+}
+
+test('editor-frame: on localhost under the walk, the top window\'s hc-walk-picker opens the real picker', () => {
+  const { doc, body } = setupPage();
+  const { win, answers } = walkWin('127.0.0.1', true);
+  const HC = fakeHC();
+  EF.create(win, doc, HC);
+  HC.send({ on: true });
+  assert.equal((win.listeners.message || []).length, 1, 'one listener, for the walk');
+  const say = (source, data) => win.listeners.message.forEach((fn) => fn({ source, origin: 'http://127.0.0.1:8130', data }));
+  say(win.parent, { type: 'hc-walk-picker', index: 3 });          // the parent is the Editor, not the walk
+  say(win.top, { type: 'hc-other', index: 3 });
+  say(win.top, { type: 'hc-walk-picker', index: '3' });
+  const rails = kids(body).filter((c) => c.classList.contains('hc-plus'));
+  assert.equal(rails.some((r) => r.classList.contains('is-open')), false, 'nothing else opens it');
+  assert.deepEqual(answers, []);
+  say(win.top, { type: 'hc-walk-picker', index: 3 });
+  const rail = rails.find((r) => r.getAttribute('data-insert') === '3');
+  const picker = kids(rail).find((c) => c.classList.contains('hc-picker'));
+  assert.ok(picker && rail.classList.contains('is-open'), 'the rail before block 3 is open');
+  assert.equal(rail.scrolled, 1, 'and scrolled into view');
+  const kinds = EF.INSERT_KINDS.map((k) => k.kind);
+  assert.deepEqual(answers, [[{ type: 'hc-walk-picker-open', index: 3, open: true, kinds }, 'http://127.0.0.1:8130']]);
+  say(win.top, { type: 'hc-walk-picker', index: 3 });             // asked again: stays open, says so again
+  assert.ok(rail.classList.contains('is-open'));
+  assert.equal(answers.length, 2);
+  assert.equal(answers[1][0].open, true);
+  say(win.top, { type: 'hc-walk-picker', index: 4 });             // no rail there (a blank-line block)
+  assert.deepEqual(answers[2][0], { type: 'hc-walk-picker-open', index: 4, open: false, kinds: [] });
+  assert.equal(HC.posts.filter((p) => p.type !== 'hc-ready').length, 0, 'the parent is told nothing');
+});
+
+test('editor-frame: the walk hook is absent off localhost and in the real Editor (top is the parent)', () => {
+  for (const [host, framed] of [['hippocampus-docs.vercel.app', true], ['localhost', false], ['127.0.0.1', false]]) {
+    const { doc } = setupPage();
+    const { win } = walkWin(host, framed);
+    EF.create(win, doc, fakeHC());
+    assert.equal(win.listeners.message, undefined, `${host} framed=${framed}: no message listener`);
+  }
 });
