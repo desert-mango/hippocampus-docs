@@ -27,6 +27,7 @@ and append the `dtoverlay=` lines for the required UARTs.
 
 ```sh
 dtoverlay=uart2
+dtoverlay=uart3
 dtoverlay=uart4
 dtoverlay=uart5
 ```
@@ -163,7 +164,7 @@ The output should show symbolic links for the serial devices:
 
 ```sh
 lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_debug -> ttyAMA1               
-lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_tele -> ttyAMA2 
+lrwxrwxrwx 1 root root 7 Dec 11 14:57 /dev/fcu_data -> ttyAMA2 
 ```
 
 </div>

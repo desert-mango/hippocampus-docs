@@ -34,6 +34,7 @@ package_update: true
 package_upgrade: true
 packages:
     - avahi-daemon
+    - chrony
 
 power_state: 
     mode: reboot
@@ -48,6 +49,30 @@ Make sure to connect the Raspberry Pi with the Internet via Ethernet before boot
 
 
 </div>
+
+<div class="adm adm-attention"><p class="adm-title">Attention</p>
+
+A Raspberry Pi has no battery-backed clock. On the first boot the system time can be months in the past. apt then rejects every repository as "not valid yet", and cloud-init finishes with `status: error` without installing its `packages:`. This is not a broken image. Listing `chrony` under `packages:` does not prevent this, because `chrony` is one of the packages that fail to install. Check the clock with `timedatectl` and `sudo cloud-init status --long`. The built-in time service sets the clock soon after the network comes up (`System clock synchronized: yes`). Then run `sudo apt-get update` first, and after it the installs from your `packages:` list; they succeed. Skipping the `update` gives `404 Not Found` errors, because apt still has the old package lists. `chrony` keeps the clock right from then on; to use the lab's NTP server, see [Time Synchronization: Client](#/setup/time-sync/client).
+
+</div>
+
+## First Boot: Let the Automatic Upgrade Finish
+
+Right after the first boot, Ubuntu's `unattended-upgrades` upgrades a large part of the fresh image (on an SD card this can take 10 to 30 minutes, including the kernel). It holds the dpkg lock the whole time, so any `apt` or `dpkg` command you start fails with `dpkg frontend lock was locked by another process`.
+
+Do **not** kill it and never delete the lock file. Stopping `dpkg` in the middle of a transaction can corrupt the package database. Let apt wait for the lock instead:
+
+```console
+$ sudo apt-get -o DPkg::Lock::Timeout=3600 install -y <packages>
+```
+
+To see whether the lock is still held (`pgrep unattended-upgrade` does not work, because the process name is truncated):
+
+```console
+$ sudo fuser -v /var/lib/dpkg/lock-frontend
+```
+
+No output means the lock is free. Do not power off the Pi while apt is running. While apt upgrades `openssh-server`, new SSH connections are refused (`Connection refused`) for a few minutes; the Pi still answers `ping`. Wait for apt to finish. If it was interrupted anyway, run `sudo dpkg --audit` and `sudo dpkg --configure -a` before any other apt command.
 
 ## Boot Config
 
@@ -69,8 +94,20 @@ See [the documentation](https://github.com/raspberrypi/firmware/blob/master/boot
 
 
 ```ini
+dtparam=i2c_arm=on
+dtoverlay=i2c6,pins_22_23
 dtoverlay=i2c4,pins_6_7
 ```
+
+The three lines create three buses on the GPIO header:
+
+| Line | Device | Pins |
+|---|---|---|
+| `dtparam=i2c_arm=on` | `/dev/i2c-1` | GPIO2 (SDA) / GPIO3 (SCL) |
+| `dtoverlay=i2c6,pins_22_23` | `/dev/i2c-6` | GPIO22 (SDA) / GPIO23 (SCL) |
+| `dtoverlay=i2c4,pins_6_7` | `/dev/i2c-4` | GPIO6 (SDA) / GPIO7 (SCL), the ESC bus on the UUV (see [Pinout](#/setup/raspberry-pi/pinout)) |
+
+`dtparam=i2c_arm=on` is a base device-tree parameter, so it must come before any `dtoverlay=` line. The stock Ubuntu 24.04 `config.txt` already has `dtparam=i2c_arm=on` in the right place, near the top. On a fresh image, add only the two `dtoverlay=` lines, and do not add the `dtparam` line a second time at the end of the file. After a reboot, `ls /dev/i2c-*` should list `i2c-1`, `i2c-4` and `i2c-6` (plus the GPU-internal `i2c-20` and `i2c-21`).
 
 ### UART
 
@@ -81,6 +118,21 @@ dtoverlay=uart3
 dtoverlay=uart4
 dtoverlay=uart5
 ```
+
+### Wifi and Bluetooth
+
+The lab's robot Pis switch both radios off in the device tree:
+
+```ini
+dtoverlay=disable-wifi
+dtoverlay=disable-bt
+```
+
+<div class="adm adm-warning"><p class="adm-title">Warning</p>
+
+With these two lines, **Ethernet is the only way into the Pi**. Before you add them, make sure the Pi is reachable over its Ethernet connection, and keep a fallback ready (an HDMI monitor and a USB keyboard, or a 3.3 V USB-serial adapter on GPIO14/GPIO15, which `enable_uart=1` keeps active). A bad cable then looks exactly like a Pi that has lost its network for good.
+
+</div>
 
 ## Disable Interactive Upgrade
 

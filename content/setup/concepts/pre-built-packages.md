@@ -24,34 +24,48 @@ This also implies if you want to work with the pre-built version of a package, m
 ## Which Packages can I Install via `apt`?
 
 
-To find out which packages can be installed from our repository, execute
-
+To find out which packages can be installed from our repository for the machine you are on, execute
 
 ```console
-$ curl -s https://repositories.hippocampus-robotics.net/ubuntu/dists/noble/main/binary-amd64/Packages \
+$ curl -s https://repositories.hippocampus-robotics.net/ubuntu/dists/noble/main/binary-$(dpkg --print-architecture)/Packages \
 | grep "^Package: " \
 | cut -d" " -f2 | sort -u
+```
+
+`$(dpkg --print-architecture)` is `amd64` on a desktop computer and `arm64` on a Raspberry Pi. The two lists are not the same. On 2026-09-16 the `amd64` list read:
+
+```console
 ros-jazzy-acoustic-msgs
 ros-jazzy-alpha-msgs
 ros-jazzy-buttons-msgs
 ros-jazzy-dvl
 ros-jazzy-dvl-msgs
 ros-jazzy-esc
+ros-jazzy-gantry
+ros-jazzy-gantry-gui
 ros-jazzy-gantry-msgs
 ros-jazzy-hardware
 ros-jazzy-hippo-common
 ros-jazzy-hippo-common-msgs
 ros-jazzy-hippo-control
 ros-jazzy-hippo-control-msgs
+ros-jazzy-hippo-full
+ros-jazzy-hippo-gz-plugins
 ros-jazzy-hippo-msgs
+ros-jazzy-hippo-robot
+ros-jazzy-hippo-sim
 ros-jazzy-mjpeg-cam
 ros-jazzy-path-planning
 ros-jazzy-px4-msgs
+ros-jazzy-qualisys-bridge
 ros-jazzy-rapid-trajectories-msgs
 ros-jazzy-remote-control
 ros-jazzy-state-estimation-msgs
 ros-jazzy-uvms-msgs
+ros-jazzy-visual-localization
 ```
+
+The `arm64` list had the same packages except `ros-jazzy-acoustic-msgs`. Because `ros-jazzy-hippo-robot` depends on it, `hippo_robot` cannot be installed on a Raspberry Pi until an `arm64` build of `acoustic_msgs` is published; install the packages you need one by one instead. The list changes over time, so run the command rather than trusting this copy.
 
 We can install them by
 
@@ -64,7 +78,7 @@ for example, if we want to install the remote control package the command would 
 
 
 ```console
-$ ros-${ROS_DISTRO}-remote-control
+$ sudo apt install ros-${ROS_DISTRO}-remote-control
 ```
 
 <div class="adm adm-tip"><p class="adm-title">Tip</p>
