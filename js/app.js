@@ -406,7 +406,7 @@
       </div>`;
     $('#project-md').appendChild(renderMarkdown(md));
     if (window.HCGraph) HCGraph.renderContributors(id, $('.aside-box'));
-    if (window.HCLab) { HCLab.renderRepoCards($('.aside-box')); HCLab.renderAuthors($('#project-md .page-body'), `project/${id}`); }
+    if (window.HCLab) { HCLab.renderRepoCards($('.aside-box')); HCLab.renderAuthors($('#project-md .page-body'), `projects/${id}`); }
     scrollToAnchor(anchor);
   }
 
@@ -439,7 +439,7 @@
     content.innerHTML = '';
     content.appendChild(el(`<a class="back-link" href="#/tools">← All tools</a>`));
     content.appendChild(renderMarkdown(md));
-    if (window.HCLab) HCLab.renderAuthors($('.page-body', content), `tool/${id}`);
+    if (window.HCLab) HCLab.renderAuthors($('.page-body', content), `tools/${id}`);
     scrollToAnchor(anchor);
   }
 

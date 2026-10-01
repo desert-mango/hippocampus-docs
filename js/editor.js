@@ -178,6 +178,7 @@
     sessionGen.next();
     if (ed.on) setEditor(false);
     C.clearSession(store());
+    membersClear();
     Object.assign(state, { session: null, client: null, user: null, role: null,
       access: 'none-yet', accessError: '', memoryOnly: null });
     // the file cache reads with this session's token: it goes with it (a
@@ -291,6 +292,32 @@
 
   // ---------------------------------------------------- who is signed in ---
 
+  /* The org reader's answers (HCCore.createOrgReader, sessionStorage keys
+     'hc-org-cache:<url>') belong to the login that read them. Sign-out drops
+     them (HCCore.clearSession); a sign-in that REPLACES a live session, with
+     no sign-out between, drops them here: the first person's answers are
+     never served to the second. ORG_CACHE_LOGIN records whose they are (it
+     shares the prefix, so clearSession drops it too); the same login again
+     (a reload, a refresh) keeps them. */
+  const ORG_CACHE_PREFIX = 'hc-org-cache:';
+  const ORG_CACHE_LOGIN = `${ORG_CACHE_PREFIX}login`;
+  function orgCacheFor(login) {
+    const st = store();
+    try {
+      // only a GitHub login is ever written as the owner; anything else owns
+      // nothing: the cache is dropped and no marker is written
+      const ok = typeof login === 'string' && GH_LOGIN_RE.test(login);
+      if (!st || (ok && st.getItem(ORG_CACHE_LOGIN) === login)) return;
+      const keys = [];
+      for (let i = 0; i < st.length; i += 1) {
+        const k = st.key(i);
+        if (typeof k === 'string' && k.startsWith(ORG_CACHE_PREFIX)) keys.push(k);
+      }
+      keys.forEach((k) => st.removeItem(k));
+      if (ok) st.setItem(ORG_CACHE_LOGIN, login);
+    } catch (e) { /* no storage: the reader keeps nothing either */ }
+  }
+
   /* Reads the session, then asks GitHub who this is and what they may do on
      THIS repository: GET /user and GET /repos/desert-mango/hippocampus-docs.
      A 404 from the repository means no access, and the page then says so
@@ -299,8 +326,10 @@
      answer is old and changes nothing. */
   async function refresh() {
     const gen = sessionGen.next();
+    membersClear();
     clearPreviews();
     const s = C.readSession(store(), Date.now()) || state.memoryOnly;
+    if (s) orgCacheFor(s.login);
     if (!s) {
       Object.assign(state, { session: null, client: null, user: null, role: null,
         access: 'none-yet', accessError: '' });
@@ -340,6 +369,7 @@
     }
     renderChrome();
     route();
+    membersSweep();
   }
 
   /* The header's Editor controls: the switch, then who is signed in — the
@@ -2114,6 +2144,7 @@
       dropFrame();
       clearSelection();
       clearPreviews();
+      membersSoon();             // the page under the frame: members-only detail again
       return;
     }
     if (ed.trayOpen) renderTray();
@@ -3016,6 +3047,599 @@
     }
   }
 
+  // ------------------------------------------- members-only detail (U4) ---
+
+  /* Plan D-A, D-B, D-B2, D-H. A member (HCCore.membersOnly: Admin,
+     Maintainer or Editor, i.e. a role with push) sees, with Editor mode OFF,
+     what is never committed under the public surfaces js/lab.js draws:
+       the Lab page        the author of each recent commit, and "People
+                           committing this year" (count, last active);
+       About cards         a GitHub strip: @login, projects and contributions
+                           (data/graph/contributors.json), last commit;
+       the person popover  commits this year, last active, projects, the
+                           five most recent commits;
+       who wrote this      per-author counts and date ranges, from the old
+                           docs repository's history (across its 2025-03-10
+                           folder move) and this repository's.
+     lab.js marks each surface (data-hc-surface) and announces it (HCLab.
+     onRender); a MutationObserver on #content catches every other repaint.
+     A surface is decorated once (data-hc-members-done); every node added
+     here carries data-hc-members, and sign-out removes them all. Nothing is
+     drawn for a read-only role or under body.hc-editor-on (the frame holds
+     no token, and #content is hidden then).
+
+     Every GitHub read goes through readOrg(path), a thin wrapper over
+     HCCore.createOrgReader: the paths come from HCCore's builders
+     (orgCommitsPath, pageCommitsPath) only; the reader's allowlist is the
+     public repositories data/graph/github-repos.json names; it sends the
+     member's token, retries ONCE without it on a 403 or 404, and keeps a
+     good answer 15 minutes in sessionStorage (dropped at sign-out, and
+     when another login signs in over the session). A commits read follows
+     pages while they come back full, up to 300 commits; a count that
+     reached that shows as "at least N" and the box says so. A
+     failure shows its HTTP status ("GitHub answered 403 for
+     HippoCampusRobotics/docs — tell Desert Mango"). Every live string is
+     set as text; a commit message is its first line, at most 100
+     characters, and an e-mail-shaped part of a message or a name is never
+     shown. No live avatar is ever loaded: faces are the committed copies. */
+  const GH_REPOS_FILE = 'data/graph/github-repos.json';
+  const PEOPLE_PUBLIC_FILE = 'data/graph/people-public.json';
+  const CONTRIBUTORS_FILE = 'data/graph/contributors.json';
+  const PAGE_AUTHORS_FILE = 'data/graph/page-authors.json';
+  const MEMBERS_YEAR_REPOS = 12;      // at most this many commits?since= reads for the year view
+  const MEMBERS_RECENT = 5;           // recent commits in the popover
+  const MEMBERS_MAX_FAILURES = 3;     // more distinct failures than this are summed up per status
+  const MEMBERS_PER_PAGE = 100;
+  // a read follows page=2, page=3 while a page is full, and stops there: at
+  // most 300 commits per repository (year view) or per file history read; a
+  // count that reached the cap shows as "at least N" (12 repositories x 3 pages per 15 minutes)
+  const MEMBERS_MAX_PAGES = 3;
+  const MEMBERS_CAP = MEMBERS_PER_PAGE * MEMBERS_MAX_PAGES;
+  const MEMBERS_YEAR_MS = 15 * 60 * 1000;   // the reader's cache life: the year view is read again after it
+  // the old docs repository moved every page under contents/ on 2025-03-10 and had
+  // renamed raspberry_pi_4b_setup/ the same day (tools/build_github_data.py, OLD_DOCS_*)
+  const OLD_DOCS = Object.freeze({ repo: `${C.ORG_OWNER}/docs`, moved: 'contents/', until: '2025-03-11T00:00:00Z',
+    renames: Object.freeze({ 'raspberry_pi_setup/': Object.freeze(['raspberry_pi_4b_setup/']) }) });
+  const GH_LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  const COMMIT_SHA_RE = /^[0-9a-f]{7,40}$/;
+  const PROJECT_ID_SAFE_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
+  const EMAIL_SHAPED_RE = /[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+/g;
+  const MEMBERS_NOTE = 'Members only: read live from GitHub with your sign-in, kept 15 minutes in this tab, never stored.';
+  const mem = {
+    gen: -1,              // the session generation the reader and the year view belong to
+    reader: null,         // Promise<HCCore org reader>
+    year: null,           // Promise<the year view>
+    yearAt: 0,            // when it was read
+    files: new Map(),     // public data file -> Promise<parsed | null>
+    nodes: new Set(),     // every node drawn here (data-hc-members), removed at sign-out
+    done: new Set(),      // every surface marked data-hc-members-done
+    observer: null,
+    timer: null,
+  };
+
+  const isPlain = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const textOf = (v) => (typeof v === 'string' ? v : '');
+  const countOf = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  // a count from a read that hit the page cap is a floor: there may be no next commit, so never "N+"
+  const commitsWord = (n, capped) => (capped ? `at least ${n} commit${n === 1 ? '' : 's'}`
+    : `${n} commit${n === 1 ? '' : 's'}`);
+  const ownKey = (o, k) => isPlain(o) && Object.prototype.hasOwnProperty.call(o, k);
+  const unmailed = (s) => textOf(s).replace(EMAIL_SHAPED_RE, '[e-mail]');
+
+  function dataFile(p) {
+    if (!mem.files.has(p)) mem.files.set(p, Promise.resolve().then(() => HC.fetchJSON(p)).catch(() => null));
+    return mem.files.get(p);
+  }
+
+  function membersOn() {
+    return Boolean(state.session) && state.access === 'ok' && C.membersOnly(state.role)
+      && !ed.on && !document.body.classList.contains('hc-editor-on');
+  }
+
+  // github-repos.json's public entries (an object keyed by name, or a list); every key guarded
+  function publicRepos(doc) {
+    const repos = isPlain(doc) ? doc.repos : null;
+    const list = Array.isArray(repos) ? repos : (isPlain(repos) ? Object.keys(repos).map((k) => repos[k]) : []);
+    return list.filter((r) => isPlain(r) && typeof r.name === 'string' && r.private === false);
+  }
+
+  // the reader and the year view belong to one session generation
+  function memberGen() {
+    const gen = sessionGen.current();
+    if (mem.gen !== gen) Object.assign(mem, { gen, reader: null, year: null });
+    return gen;
+  }
+
+  /* The reader's sessionStorage, for one session generation: an answer that
+     lands after a refresh, a sign-in over this session or a sign-out is not
+     kept (it was read with the old token, for the old person). */
+  function orgStore(gen) {
+    const st = store();
+    if (!st) return null;
+    return {
+      getItem: (k) => st.getItem(k),
+      setItem: (k, v) => { if (sessionGen.isCurrent(gen) && state.session) st.setItem(k, v); },
+      removeItem: (k) => st.removeItem(k),
+    };
+  }
+
+  function orgReader() {
+    const gen = memberGen();
+    if (!mem.reader) {
+      const token = state.session.token;
+      mem.reader = dataFile(GH_REPOS_FILE).then((doc) =>
+        C.createOrgReader(token, netFetch, orgStore(gen), publicRepos(doc).map((r) => r.name)));
+    }
+    return mem.reader;
+  }
+
+  /* THE one way this file reads GitHub outside this repository's client
+     (D-A): HCCore.createOrgReader's get. -> {ok, status, data, refused?};
+     an answer for an ended or replaced session is dropped (STALE). */
+  async function readOrg(apiPath) {
+    if (!state.session) throw new Error('signed out');
+    const gen = memberGen();
+    const reader = await orgReader();
+    const r = await reader.get(apiPath);
+    if (!sessionGen.isCurrent(gen) || !state.session) throw new Error(STALE);
+    return r;
+  }
+
+  // a path from a builder (a bad name or path throws there: refused, never fetched)
+  async function readOrgAs(build, label) {
+    let p = null;
+    try { p = build(); } catch (e) { return { ok: false, status: 403, data: null, refused: true, label }; }
+    return Object.assign({}, await readOrg(p), { label });
+  }
+
+  /* One commits read, page by page: build(page) -> a builder path (page 1
+     without page=, the cache key it always had). The next page is read only
+     while a page comes back full, and never past MEMBERS_MAX_PAGES; a failure
+     on any page is the read's answer (never counts from half a history).
+     A page counts at most MEMBERS_PER_PAGE rows (more cannot inflate a
+     count), and a commit seen on an earlier page is not kept again (page 1
+     may come from the 15-minute cache while page 2 is fresh, so rows slide
+     across a page edge). -> readOrgAs's answer, data: every page's rows,
+     each sha once, capped: the last page read was still full. */
+  async function readPagesAs(build, label) {
+    const data = [];
+    const seen = new Set();
+    for (let page = 1; page <= MEMBERS_MAX_PAGES; page += 1) {
+      const r = await readOrgAs(() => build(page > 1 ? page : undefined), label);
+      if (!r.ok) return r;
+      const list = (Array.isArray(r.data) ? r.data : []).slice(0, MEMBERS_PER_PAGE);
+      list.forEach((c) => {
+        const sha = isPlain(c) && typeof c.sha === 'string' ? c.sha : null;
+        if (sha !== null && seen.has(sha)) return;
+        if (sha !== null) seen.add(sha);
+        data.push(c);
+      });
+      if (list.length < MEMBERS_PER_PAGE) return Object.assign({}, r, { data, capped: false });
+    }
+    return { ok: true, status: 200, data, capped: true, label };
+  }
+
+  function cappedLine(text) {
+    return h('p', { class: 'hc-m-note hc-m-capped', text });
+  }
+  const yearCappedText = (labels) => `Only the newest ${MEMBERS_CAP} commits were read for ${labels.join(', ')}: `
+    + 'a count that says "at least" may be higher, and older commits there are not counted.';
+
+  function failureLines(list) {
+    const seen = new Map();
+    list.forEach((f) => {
+      const key = `${f.refused ? 'refused' : f.status} ${f.label}`;
+      if (!seen.has(key)) seen.set(key, f);
+    });
+    const text = (f, more) => {
+      const what = more ? `${f.label} and ${more} more ${more === 1 ? 'repository' : 'repositories'}` : f.label;
+      if (f.refused) return `Not read: ${what} ${more ? 'are' : 'is'} not in the committed repository list (${GH_REPOS_FILE}).`;
+      return f.status ? `GitHub answered ${f.status} for ${what} — tell Desert Mango`
+        : `GitHub could not be reached for ${what} — tell Desert Mango`;
+    };
+    const all = [...seen.values()];
+    let lines;
+    if (all.length <= MEMBERS_MAX_FAILURES) {
+      lines = all.map((f) => text(f, 0));
+    } else {
+      const byStatus = new Map();
+      all.forEach((f) => {
+        const k = f.refused ? 'refused' : String(f.status);
+        byStatus.set(k, (byStatus.get(k) || []).concat(f));
+      });
+      lines = [...byStatus.values()].map((fs) => text(fs[0], fs.length - 1));
+    }
+    return lines.map((t) => h('p', { class: 'hc-m-error', text: t }));
+  }
+
+  // one commit of GitHub's commits list, reduced to what is shown; null when malformed
+  function commitRow(c, repo) {
+    if (!isPlain(c) || typeof c.sha !== 'string' || !COMMIT_SHA_RE.test(c.sha) || !isPlain(c.commit)) return null;
+    const a = isPlain(c.commit.author) ? c.commit.author : {};
+    const t = Date.parse(textOf(a.date));
+    if (!Number.isFinite(t)) return null;
+    const login = isPlain(c.author) && typeof c.author.login === 'string' && GH_LOGIN_RE.test(c.author.login)
+      ? c.author.login : null;
+    return {
+      repo,
+      sha: c.sha.slice(0, 7),
+      date: new Date(t).toISOString(),
+      login,
+      name: unmailed(textOf(a.name).trim()).slice(0, 100),
+      msg: unmailed(textOf(c.commit.message).split('\n')[0].trim()).slice(0, 100),
+    };
+  }
+
+  // people-public.json: login -> the display name GitHub publishes
+  function displayNames(doc) {
+    const out = Object.create(null);
+    const people = isPlain(doc) && isPlain(doc.people) ? doc.people : {};
+    Object.keys(people).forEach((k) => {
+      const p = people[k];
+      if (isPlain(p) && typeof p.login === 'string' && GH_LOGIN_RE.test(p.login) && typeof p.name === 'string' && p.name.trim()) {
+        out[p.login] = p.name.trim().slice(0, 100);
+      }
+    });
+    return out;
+  }
+  const authorName = (r, names) => (r.login && names[r.login]) || r.name || r.login || 'unknown';
+
+  // rows -> one entry per author (login, else git name), most commits first
+  function tally(rows, names) {
+    const out = new Map();
+    const seen = new Set();
+    rows.forEach((r) => {
+      const id = `${r.repo}/${r.sha}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+      const key = r.login ? `@${r.login}` : `=${r.name}`;
+      let p = out.get(key);
+      if (!p) {
+        p = { login: r.login, name: authorName(r, names), count: 0, first: r.date, last: r.date, recent: [], capped: false };
+        out.set(key, p);
+      }
+      p.count += 1;
+      if (r.capped) p.capped = true;     // a row from a read that hit the page cap
+      if (r.date < p.first) p.first = r.date;
+      if (r.date > p.last) p.last = r.date;
+      p.recent.push(r);
+    });
+    const list = [...out.values()];
+    list.forEach((p) => {
+      p.recent.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+      p.recent = p.recent.slice(0, MEMBERS_RECENT);
+    });
+    return list.sort((a, b) => (b.count - a.count) || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0)
+      || a.name.localeCompare(b.name));
+  }
+
+  // GitHub's since= for the last 365 days, at day precision (one cache key per day)
+  const windowStart = (now) => `${new Date(now - 365 * 864e5).toISOString().slice(0, 10)}T00:00:00Z`;
+
+  // the non-fork public repositories pushed inside the window, busiest first, at most 12
+  function yearRepos(doc, since) {
+    const dayFrom = since.slice(0, 10);
+    return publicRepos(doc)
+      .filter((r) => r.fork !== true && textOf(r.pushed_at).slice(0, 10) >= dayFrom)
+      .sort((a, b) => (countOf(b.commits_365d) - countOf(a.commits_365d))
+        || textOf(b.pushed_at).localeCompare(textOf(a.pushed_at)) || a.name.localeCompare(b.name))
+      .slice(0, MEMBERS_YEAR_REPOS)
+      .map((r) => r.name);
+  }
+
+  /* The year view, once per session (each read cached 15 minutes by the reader):
+     {people: [tally], byLogin, bySha: 'repo/sha7' -> row, names, faces, failures,
+     capped: ['owner/repo' whose newest 300 commits were all read, and more exist]};
+     read again once the reader's 15 minutes are over. */
+  function yearView() {
+    memberGen();
+    const now = Date.now();
+    if (!mem.year || !(now - mem.yearAt >= 0 && now - mem.yearAt < MEMBERS_YEAR_MS)) {
+      mem.yearAt = now;
+      mem.year = (async () => {
+        const since = windowStart(now);
+        const [repos, pub] = await Promise.all([dataFile(GH_REPOS_FILE), dataFile(PEOPLE_PUBLIC_FILE)]);
+        const reads = await Promise.all(yearRepos(repos, since).map((name) =>
+          readPagesAs((page) => C.orgCommitsPath(name, { since, per_page: MEMBERS_PER_PAGE, page }), `${C.ORG_OWNER}/${name}`)
+            .then((r) => ({ name, r }))));
+        const names = displayNames(pub);
+        const rows = [];
+        const failures = [];
+        const capped = [];
+        reads.forEach(({ name, r }) => {
+          if (!r.ok) { failures.push(r); return; }
+          if (r.capped) capped.push(`${C.ORG_OWNER}/${name}`);
+          (Array.isArray(r.data) ? r.data : []).forEach((c) => {
+            const row = commitRow(c, name);
+            if (row && row.date >= since) rows.push(Object.assign(row, { capped: r.capped }));
+          });
+        });
+        const people = tally(rows, names);
+        return {
+          people,
+          byLogin: new Map(people.filter((p) => p.login).map((p) => [p.login, p])),
+          bySha: new Map(rows.map((r) => [`${r.repo}/${r.sha}`, r])),
+          names,
+          faces: avatarMap(pub),
+          failures,
+          capped,
+        };
+      })();
+    }
+    return mem.year;
+  }
+
+  // contributors.json (public): the projects a login contributed to, and the sum
+  function contributionsOf(doc, login) {
+    const projects = isPlain(doc) && isPlain(doc.projects) ? doc.projects : {};
+    const ids = [];
+    let total = 0;
+    Object.keys(projects).forEach((id) => {
+      const list = isPlain(projects[id]) && Array.isArray(projects[id].contributors) ? projects[id].contributors : [];
+      const me = list.find((x) => isPlain(x) && x.login === login);
+      if (!me) return;
+      ids.push(id);
+      total += countOf(me.contributions);
+    });
+    return { ids, total };
+  }
+
+  // data/projects.json: id -> name
+  function projectNames(doc) {
+    const out = new Map();
+    (isPlain(doc) && Array.isArray(doc.projects) ? doc.projects : []).forEach((p) => {
+      if (isPlain(p) && typeof p.id === 'string' && PROJECT_ID_SAFE_RE.test(p.id)) {
+        out.set(p.id, typeof p.name === 'string' && p.name.trim() ? p.name.trim() : p.id);
+      }
+    });
+    return out;
+  }
+
+  function face(login, name, faces) {
+    const src = login ? faces[login] : undefined;
+    if (src) return h('img', { class: 'hc-avatar md', src, alt: '', loading: 'lazy' });
+    return h('span', { class: 'hc-avatar md hc-avatar-empty', 'aria-hidden': 'true',
+      text: (Array.from(name.trim())[0] || '?').toUpperCase() });
+  }
+
+  /* Draw only while it is still this session, still a member, Editor still off
+     and the surface still in the page; Editor on meanwhile: try again later. */
+  function drawIf(el, gen, draw) {
+    if (!sessionGen.isCurrent(gen) || !state.session) return;
+    if (!membersOn()) { el.removeAttribute('data-hc-members-done'); mem.done.delete(el); return; }
+    if ('isConnected' in el && !el.isConnected) return;
+    draw();
+  }
+
+  // ---- the Lab page: authors on recent commits, "People committing this year"
+  async function decorateLab(root, gen) {
+    const v = await yearView();
+    drawIf(root, gen, () => {
+      root.querySelectorAll('[data-hc-sha]').forEach((row) => {
+        const hit = v.bySha.get(`${row.getAttribute('data-hc-repo')}/${row.getAttribute('data-hc-sha')}`);
+        if (!hit) return;
+        (row.querySelector('.s') || row).appendChild(kept(h('span', { class: 'hc-m-author', 'data-hc-members': true,
+          text: authorName(hit, v.names) })));
+      });
+      const slot = root.querySelector('[data-hc-slot="lab-people"]');
+      if (!slot) return;
+      const rows = v.people.map((p) => h(p.login ? 'button' : 'div',
+        { class: 'hc-m-row', type: p.login ? 'button' : null, 'data-hc-login': p.login },
+        face(p.login, p.name, v.faces),
+        h('span', { class: 'who' }, h('span', { class: 'nm', text: p.name }),
+          p.login ? h('span', { class: 'sub', text: `@${p.login}` }) : null),
+        h('span', { class: 'cnt', text: commitsWord(p.count, p.capped) }),
+        h('span', { class: 'last', text: `last active ${day(p.last)}` })));
+      slot.insertBefore(kept(h('section', { class: 'hc-m-people', 'data-hc-members': true },
+        h('h3', { text: 'People committing this year' }),
+        ...rows,
+        rows.length || v.failures.length ? null : h('p', { class: 'hc-empty', text: 'No commits read for the last 365 days.' }),
+        v.capped.length ? cappedLine(yearCappedText(v.capped)) : null,
+        ...failureLines(v.failures),
+        h('p', { class: 'hc-m-note', text: MEMBERS_NOTE }))), slot.firstChild);
+    });
+  }
+
+  // ---- About: the GitHub strip on every roster card with a login
+  async function decoratePeople(root, gen) {
+    const lab = window.HCLab;
+    if (!lab || typeof lab.buildPeopleIndex !== 'function') return;
+    const [v, pub, roster, contrib] = await Promise.all([yearView(), dataFile(PEOPLE_PUBLIC_FILE),
+      dataFile('data/people.json'), dataFile(CONTRIBUTORS_FILE)]);
+    const idx = lab.buildPeopleIndex(pub, roster);
+    drawIf(root, gen, () => {
+      let any = false;
+      root.querySelectorAll('.person-card').forEach((card) => {
+        const nameEl = card.querySelector('.person-name');
+        const name = nameEl ? nameEl.textContent.trim() : '';
+        const login = name && idx && idx.loginByRoster ? idx.loginByRoster.get(name) : null;
+        if (!login || !GH_LOGIN_RE.test(login) || card.querySelector('.hc-gh-strip')) return;
+        const c = contributionsOf(contrib, login);
+        const p = v.byLogin.get(login);
+        let last = 'no commits in the last year';
+        if (p) last = `last commit ${day(p.last)}`;
+        else if (v.failures.length) last = 'last commit not read';
+        card.appendChild(kept(h('span', { class: 'hc-gh-strip', 'data-hc-members': true },
+          h('span', { class: 'l', text: `@${login}` }),
+          h('span', { class: 'f', text: `${c.ids.length} project${c.ids.length === 1 ? '' : 's'} · `
+            + `${c.total} contribution${c.total === 1 ? '' : 's'}` }),
+          h('span', { class: p ? 'last' : 'last stale', text: last }))));
+        any = true;
+      });
+      if (any && v.failures.length) {
+        root.appendChild(kept(h('div', { class: 'hc-m-failures', 'data-hc-members': true }, ...failureLines(v.failures))));
+      }
+    });
+  }
+
+  // ---- the popover: this year, projects, recent commits
+  async function decoratePopover(box, gen) {
+    const login = box.getAttribute('data-hc-login');
+    if (!login || !GH_LOGIN_RE.test(login)) return;
+    const [v, contrib, projects] = await Promise.all([yearView(), dataFile(CONTRIBUTORS_FILE), dataFile('data/projects.json')]);
+    drawIf(box, gen, () => {
+      const p = v.byLogin.get(login);
+      const c = contributionsOf(contrib, login);
+      const known = projectNames(projects);
+      let facts = 'No commits in the last year.';
+      if (p) facts = `${commitsWord(p.count, p.capped)} this year · last active ${day(p.last)}`;
+      else if (v.failures.length) facts = 'This year\'s commits could not be read.';
+      const links = [];
+      c.ids.filter((id) => known.has(id)).forEach((id, i) => {
+        if (i) links.push(', ');
+        links.push(h('a', { href: `#/projects/${id}`, text: known.get(id) }));
+      });
+      box.appendChild(kept(h('div', { class: 'hc-pp-members', 'data-hc-members': true },
+        h('p', { class: 'hc-m-facts', text: facts }),
+        links.length ? h('p', { class: 'hc-m-projects' }, 'Projects: ', ...links) : null,
+        p && p.recent.length ? h('ul', { class: 'hc-m-commits', 'aria-label': 'Recent commits' },
+          ...p.recent.map((r) => h('li', { class: 'hc-m-commit' }, h('span', { class: 'm', text: r.msg }),
+            h('span', { class: 's', text: `${r.repo} · ${day(r.date)} · ${r.sha}` })))) : null,
+        v.capped.length ? cappedLine(yearCappedText(v.capped)) : null,
+        ...failureLines(v.failures),
+        h('p', { class: 'hc-m-note', text: 'Members only.' }))));
+    });
+  }
+
+  // ---- who wrote this: per-author counts and date ranges
+  function contentFileOf(pageId) {
+    if (pageId === 'about') return 'content/about.md';
+    const m = /^(setup|projects|tools)\/([A-Za-z0-9_/-]+)$/.exec(pageId);
+    return m ? `content/${m[1]}/${m[2]}.md` : null;
+  }
+
+  // the reads behind one "who wrote this" box: [{label, where, repo, reads: [build(page)], skip?}]
+  function authorReads(pageId, entry) {
+    const out = [];
+    const orig = isPlain(entry) && isPlain(entry.original) ? entry.original : null;
+    const repo = orig ? textOf(orig.repo) : '';
+    const file = orig ? textOf(orig.path) : '';
+    const here = contentFileOf(pageId);
+    const org = new RegExp(`^${C.ORG_OWNER}/([A-Za-z0-9._-]+)$`).exec(repo);
+    if (org && file) {
+      const name = org[1];
+      const reads = [(page) => C.orgCommitsPath(name, { path: file, per_page: MEMBERS_PER_PAGE, page })];
+      if (repo === OLD_DOCS.repo && file.indexOf(OLD_DOCS.moved) === 0) {
+        const pre = file.slice(OLD_DOCS.moved.length);
+        const older = [pre];
+        Object.keys(OLD_DOCS.renames).forEach((prefix) => {
+          if (pre.indexOf(prefix) === 0) OLD_DOCS.renames[prefix].forEach((o) => older.push(o + pre.slice(prefix.length)));
+        });
+        older.forEach((p) => reads.push((page) => C.orgCommitsPath(name,
+          { path: p, until: OLD_DOCS.until, per_page: MEMBERS_PER_PAGE, page })));
+      }
+      out.push({ label: `Original, in ${repo}`, where: repo, repo: name, reads });
+    } else if (repo === C.REPO_FULL && file && file !== here) {
+      out.push({ label: 'Original, on this site', where: C.REPO_FULL, repo: C.REPO_NAME,
+        reads: [(page) => C.pageCommitsPath(file, { per_page: MEMBERS_PER_PAGE, page })] });
+    } else if (repo && repo !== C.REPO_FULL) {
+      out.push({ label: `Original, in ${repo.slice(0, 100)}`, skip: `Not read: ${repo.slice(0, 100)} is not a ${C.ORG_OWNER} repository.` });
+    }
+    if (here) {
+      out.push({ label: 'On this site', where: C.REPO_FULL, repo: C.REPO_NAME,
+        reads: [(page) => C.pageCommitsPath(here, { per_page: MEMBERS_PER_PAGE, page })] });
+    }
+    return out;
+  }
+
+  async function decorateAuthors(box, gen) {
+    const pageId = box.getAttribute('data-hc-page') || '';
+    const [doc, pub] = await Promise.all([dataFile(PAGE_AUTHORS_FILE), dataFile(PEOPLE_PUBLIC_FILE)]);
+    const pages = isPlain(doc) && isPlain(doc.pages) ? doc.pages : null;
+    const entry = ownKey(pages, pageId) && isPlain(pages[pageId]) ? pages[pageId] : null;
+    const groups = authorReads(pageId, entry);
+    const results = await Promise.all(groups.map(async (g) => ({
+      g, rs: g.skip ? [] : await Promise.all(g.reads.map((build) => readPagesAs(build, g.where))) })));
+    const names = displayNames(pub);
+    drawIf(box, gen, () => {
+      const lines = [];
+      const notes = [];
+      const failures = [];
+      let anyCapped = false;
+      results.forEach(({ g, rs }) => {
+        if (g.skip) { notes.push(h('p', { class: 'hc-m-error', text: g.skip })); return; }
+        const bad = rs.filter((r) => !r.ok);
+        if (bad.length) { failures.push(...bad); return; }     // never counts from half a history
+        const rows = [];
+        rs.forEach((r) => (Array.isArray(r.data) ? r.data : []).forEach((c) => {
+          const row = commitRow(c, g.repo);
+          if (row) rows.push(Object.assign(row, { capped: r.capped }));
+        }));
+        if (rs.some((r) => r.capped)) anyCapped = true;
+        const people = tally(rows, names).map((p) => {
+          const range = day(p.first) === day(p.last) ? day(p.first) : `${day(p.first)} to ${day(p.last)}`;
+          return `${p.name} — ${commitsWord(p.count, p.capped)}, ${range}`;
+        });
+        lines.push(h('p', { class: 'hc-m-line', text: `${g.label}: ${people.length ? people.join('; ') : 'no commits found'}.` }));
+      });
+      if (!lines.length && !notes.length && !failures.length) return;
+      const node = kept(h('div', { class: 'hc-m-authors', 'data-hc-members': true },
+        h('p', { class: 'hc-m-label', text: 'Members only — commits per author, read live from git history' }),
+        ...lines,
+        anyCapped ? cappedLine(`Only the newest ${MEMBERS_CAP} commits of a file's history were read: `
+          + 'a count that says "at least" may be higher.') : null,
+        ...notes, ...failureLines(failures)));
+      const note = box.querySelector('.hc-authors-note');
+      if (note) box.insertBefore(node, note); else box.appendChild(node);
+    });
+  }
+
+  const MEMBER_SURFACES = Object.freeze({ lab: decorateLab, people: decoratePeople, popover: decoratePopover,
+    authors: decorateAuthors });
+
+  /* Decorate every marked surface not yet done; a no-op unless membersOn().
+     Members-only detail is a page-local extra: it never breaks the Editor. */
+  function membersSweep() {
+    clearTimeout(mem.timer);
+    mem.timer = null;
+    if (!membersOn()) return;
+    let found = [];
+    try { found = Array.from(document.querySelectorAll('[data-hc-surface]')); } catch (e) { found = []; }
+    found.forEach((el) => {
+      const decorate = MEMBER_SURFACES[el.getAttribute('data-hc-surface')];
+      if (typeof decorate !== 'function' || el.hasAttribute('data-hc-members-done')) return;
+      el.setAttribute('data-hc-members-done', '');
+      mem.done.add(el);
+      const gen = sessionGen.current();
+      Promise.resolve().then(() => decorate(el, gen)).catch((e) => {
+        if (quiet(e)) return;
+        try { console.info(`Members-only detail skipped — ${(e && e.message) || e}`); } catch (err) { /* ignore */ }
+      });
+    });
+  }
+  function membersSoon() {
+    clearTimeout(mem.timer);
+    mem.timer = setTimeout(membersSweep, 40);
+  }
+
+  /* Sign-out, or another session: every members node goes (the reader's
+     cache went with HCCore.clearSession). */
+  function membersClear() {
+    clearTimeout(mem.timer);
+    mem.timer = null;
+    Object.assign(mem, { gen: -1, reader: null, year: null });
+    mem.nodes.forEach((n) => n.remove());
+    mem.done.forEach((el) => el.removeAttribute('data-hc-members-done'));
+    mem.nodes.clear();
+    mem.done.clear();
+  }
+
+  // a members node: marked, and kept to be removed at sign-out
+  function kept(node) {
+    mem.nodes.add(node);
+    return node;
+  }
+
+  // lab.js announces its surfaces; the observer sees every other repaint of #content
+  function membersMount() {
+    if (window.HCLab && typeof window.HCLab.onRender === 'function') window.HCLab.onRender(() => membersSoon());
+    const content = document.getElementById('content');
+    if (content && typeof window.MutationObserver === 'function') {
+      mem.observer = new window.MutationObserver(() => membersSoon());
+      mem.observer.observe(content, { childList: true, subtree: true });
+    }
+  }
+
   let started = false;
 
   /* Boot once, for a session (sessionStorage's, or opts.session held in
@@ -3044,6 +3668,7 @@
     if (typeof o.fetch === 'function') fetchImpl = o.fetch;
     if (given) state.memoryOnly = given;
     mountChrome();
+    membersMount();
     loadAvatars();
     window.addEventListener('message', onMessage);
     window.addEventListener('hashchange', onHashChange);

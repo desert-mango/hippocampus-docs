@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 1 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this.
 /* HippoCampus Robotics docs — the public GitHub layer.
@@ -27,6 +27,19 @@
    - A missing file degrades: the Lab page says "GitHub data not built yet"; the
      footer and the repo cards simply stay as they were. Stale keys are ignored.
 
+   The decoration seam (U4, plan D-A): js/editor.js — loaded only for a signed-in session,
+   never for a guest — adds members-only detail under these surfaces. lab.js draws none of it;
+   it only marks each surface and announces it:
+     data-hc-surface="lab"      the Lab page root; its recent-commit rows carry
+                                data-hc-repo / data-hc-sha (7 hex), its people column
+                                data-hc-slot="lab-people";
+     data-hc-surface="authors"  a "who wrote this" box, with data-hc-page=<page key>;
+     data-hc-surface="people"   the About page root wirePeople() wired;
+     data-hc-surface="popover"  an open person popover, with data-hc-login when it has a
+                                GitHub login.
+   onRender(fn) -> unsubscribe: fn(surface, element) runs once the element is in the page.
+   A throwing listener is ignored; a guest page has no listener at all.
+
    The pure helpers at the top are exported for tools/tests/test_lab_ui.mjs;
    createLab() takes its document, window and fetch so the renderers run on a fake DOM. */
 (function () {
@@ -44,6 +57,8 @@
   const SOURCES = Object.freeze(Object.keys(SRC).map((k) => SRC[k]));
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+  const SHA_RE = /^[0-9a-f]{7,40}$/;
   const NOT_BUILT = 'GitHub data not built yet. This part fills in once the site’s derived data is rebuilt.';
   const NOT_LOADED = 'GitHub data could not be loaded. Reload the page to try again.';
 
@@ -323,6 +338,22 @@
     let pop = null;
     let popAnchor = null;
     let seq = 0;
+    const listeners = [];
+
+    // the decoration seam: tell each listener a surface is in the page
+    function onRender(fn) {
+      if (typeof fn !== 'function') return () => {};
+      listeners.push(fn);
+      return () => {
+        const i = listeners.indexOf(fn);
+        if (i >= 0) listeners.splice(i, 1);
+      };
+    }
+    function announce(surface, el) {
+      listeners.slice().forEach((fn) => {
+        try { fn(surface, el); } catch (e) { /* a decorator never breaks a render */ }
+      });
+    }
 
     // Every file loads at most once; a failure is remembered with its status.
     function need(keys) {
@@ -459,9 +490,12 @@
         if (q && q.roster && !model.link && !model.github) return;   // nothing to show
         closePerson();
         pop = buildPopover(model);
+        pop.setAttribute('data-hc-surface', 'popover');
+        if (model.github && LOGIN_RE.test(model.github.login)) pop.setAttribute('data-hc-login', model.github.login);
         popAnchor = anchor || null;
         doc.body.appendChild(pop);
         position();
+        announce('popover', pop);
       }).catch(() => { closePerson(); });
       return lastOp;
     }
@@ -499,6 +533,8 @@
           ['data-hc-person', 'role', 'tabindex', 'aria-label'].forEach((a) => el.removeAttribute(a));
           el.classList.remove('hc-pp-trigger');
         });
+        root.setAttribute('data-hc-surface', 'people');
+        if (connected(root)) announce('people', root);
       });
     }
 
@@ -516,6 +552,8 @@
         if (!lines.length) return;
         const box = h('section', 'hc-authors');
         box.setAttribute('aria-label', 'Who wrote this');
+        box.setAttribute('data-hc-surface', 'authors');
+        box.setAttribute('data-hc-page', pageId);
         box.appendChild(h('h4', '', 'Who wrote this'));
         lines.forEach((line, i) => {
           const row = h('p', 'hc-authors-line');
@@ -537,6 +575,7 @@
           + 'this one. Names as GitHub publishes them; updated when the site’s derived data is rebuilt.'));
         wire(box);
         body.appendChild(box);
+        announce('authors', box);
       });
     }
 
@@ -632,6 +671,10 @@
       if (!rows.length) col.appendChild(h('p', 'hc-empty', 'No commits in the last 365 days.'));
       rows.forEach((c) => {
         const row = h('div', 'hc-commit');
+        if (REPO_RE.test(str(c.repo)) && SHA_RE.test(str(c.sha))) {
+          row.setAttribute('data-hc-repo', c.repo);
+          row.setAttribute('data-hc-sha', c.sha.slice(0, 7));
+        }
         row.appendChild(h('div', 'm', str(c.msg)));
         const s = h('div', 's');
         if (str(c.repo)) s.appendChild(h('span', 'repo', str(c.repo)));
@@ -678,6 +721,7 @@
 
     function peopleColumn(d) {
       const col = column('People on GitHub');
+      col.setAttribute('data-hc-slot', 'lab-people');
       if (!d.people.ok) { col.appendChild(failNote(d.people.status)); return col; }
       const idx = indexOf(d);
       const models = [];
@@ -709,6 +753,7 @@
         if (typeof isCurrent === 'function' && !isCurrent()) return;
         clear(container);
         const root = h('div', 'page-body hc-lab');
+        root.setAttribute('data-hc-surface', 'lab');
         root.appendChild(h('p', 'kicker', 'HippoCampusRobotics on GitHub'));
         root.appendChild(h('h1', '', 'Lab activity'));
         const act = d.activity.ok && d.activity.value && typeof d.activity.value === 'object'
@@ -750,6 +795,7 @@
           + 'Your browser makes no request to GitHub.'));
         wire(root);
         container.appendChild(root);
+        announce('lab', root);
       });
     }
 
@@ -791,6 +837,7 @@
       openPerson: openPerson,
       closePerson: closePerson,
       whenReady: () => lastOp,
+      onRender: onRender,
     };
   }
 

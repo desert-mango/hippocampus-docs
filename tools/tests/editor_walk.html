@@ -32,10 +32,21 @@
     overlay-side     the same, with the View setting "Side by side"
     two-prs          proposal #2 and a newer #3 on this page: #3 is drawn, the
                      page bar lists #2 with its own "Show on page"
+    members          (U4) Editor OFF, a member (Write): the members-only detail
+                     js/editor.js draws through the org reader. On a setup
+                     page: "who wrote this" with per-author counts and date
+                     ranges, scrolled into view. On /lab: authors on recent
+                     commits, "People committing this year", and the popover
+                     of its first row opened (counts, projects, recent
+                     commits); on /about: the GitHub strips on the cards.
 
   The synthetic proposals (U7) are built here from the page's own Markdown
   with HCCore.splitBlocks and handed to the fake GitHub as `extra`; PR #1
-  (the real, read-only fixture) stays as it is. &width=<px> (smoke.mjs, for
+  (the real, read-only fixture) stays as it is. The members step (U4) hands
+  the fake the U0 Ubuntu page's old-docs history as the walk page's (the
+  fixtures hold three pages' histories, none of them a walk page) and one
+  synthetic commit of the page on this site; the year view reads the U0
+  year fixtures (docs) and [] for every other repository. &width=<px> (smoke.mjs, for
   widths headless Chrome will not make on a Mac) sizes the site's frame.
 
   The frame's own messages (hc-block-select / hc-block-insert) cannot be
@@ -72,7 +83,7 @@
     return;
   }
   const STEPS = ['on', 'select', 'edit', 'insert', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
-    'overlay-inline', 'overlay-side', 'two-prs'];
+    'overlay-inline', 'overlay-side', 'two-prs', 'members'];
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
@@ -151,6 +162,29 @@
       extra.checks[sha('b3')] = { total_count: 0, check_runs: [] };
     }
     return extra;
+  }
+
+  /* U4: the walk page's old-docs history = the Ubuntu page's U0 fixtures (current
+     path, pre-move path, pre-rename path), and one synthetic commit on this site. */
+  async function membersExtra() {
+    const m = /^\/setup\/(.+)$/.exec(page);
+    if (!m) return {};
+    const doc = JSON.parse(await readText('../../data/graph/page-authors.json') || 'null');
+    const entry = doc && doc.pages && doc.pages[`setup/${m[1]}`];
+    const file = entry && entry.original && typeof entry.original.path === 'string' ? entry.original.path : null;
+    const orgCommits = {};
+    if (file && /^contents\//.test(file)) {
+      const pre = file.slice('contents/'.length);
+      orgCommits[`docs/${file}`] = 'page-commits-ubuntu-current.json';
+      orgCommits[`docs/${pre}`] = 'page-commits-ubuntu-premove.json';
+      if (/^raspberry_pi_setup\//.test(pre)) {
+        orgCommits[`docs/raspberry_pi_4b_setup/${pre.slice('raspberry_pi_setup/'.length)}`] = 'page-commits-ubuntu-pre-restructure.json';
+      }
+    }
+    const repoCommits = { [`content/setup/${m[1]}.md`]: [{ sha: `b40ade4${'0'.repeat(33)}`,
+      commit: { author: { name: 'Kyle Nelson', date: '2026-08-28T12:00:00Z' }, message: 'walk: the conversion commit (synthetic)' },
+      author: { login: 'kyle-nelson-berkeley' } }] };
+    return { orgCommits, repoCommits };
   }
 
   const fakeFor = (extra) => window.HCFakeGitHub.createFakeGitHub({
@@ -306,6 +340,28 @@
   };
   const pageBar = () => { const b = $('#hc-frame-host .hc-pagebar'); return b && !b.hidden ? b : null; };
 
+  // U4: Editor stays OFF; the members-only detail under the page's public GitHub surfaces
+  RUN.members = async () => {
+    await until(() => $('[data-editor-switch]') && !$('[data-editor-switch]').disabled, 'the role read (the switch enabled)');
+    if (page === '/lab') {
+      const sec = await until(() => $('.hc-m-people'), '"People committing this year"');
+      await until(() => $('.hc-m-author') || $('.hc-m-people .hc-m-error'), 'an author on a recent commit');
+      (SD.querySelector('.hc-cols') || sec).scrollIntoView({ block: 'start', behavior: 'instant' });
+      const row = await until(() => $('.hc-m-people [data-hc-login]'), 'a row with a login');
+      row.click();
+      await until(() => $('.hc-person-pop .hc-pp-members'), 'the members-only part of the popover');
+      return;
+    }
+    if (page === '/about') {
+      const strip = await until(() => $('.hc-gh-strip'), 'a GitHub strip on a roster card');
+      strip.closest('.people-group').scrollIntoView({ block: 'start', behavior: 'instant' });
+      return;
+    }
+    const box = await until(() => $('.hc-authors .hc-m-authors'), 'the members-only lines under "who wrote this"');
+    await until(() => box.querySelector('.hc-m-line') || box.querySelector('.hc-m-error'), 'a counts line');
+    box.closest('.hc-authors').scrollIntoView({ block: 'start', behavior: 'instant' });
+  };
+
   site.addEventListener('load', async () => {
     try {
       SW = site.contentWindow;
@@ -317,7 +373,7 @@
       });
       await until(() => SW.HCApp && SD.querySelector('#content h1'), 'the site\'s page');
       const overlay = OVERLAY_STEPS.indexOf(step) >= 0;
-      const fake = fakeFor(overlay ? await synthetic() : undefined);
+      const fake = fakeFor(overlay ? await synthetic() : (step === 'members' ? await membersExtra() : undefined));
       // the View settings are this browser's: the walk sets them for its step (side by side only there)
       try {
         if (step === 'overlay-side') {

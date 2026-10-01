@@ -8,7 +8,9 @@
         proposal marks, view settings;
      2. the parent side: header switch and avatar, frame host, tray, handle,
         and the tray's contents (carried over from css/cms.css) — added with
-        the parent in js/editor.js. */
+        the parent in js/editor.js;
+     3. members-only detail (U4): what js/editor.js draws under js/lab.js's
+        public surfaces for a member, with Editor mode off. */
 
 :root {
   --hc-add: #3fb950; --hc-del: #f85149; --hc-tray-w: 340px;
@@ -375,6 +377,47 @@ a.cms-btn { display: inline-block; text-decoration: none; }
 .cms-media-rename:empty { display: none; }
 .cms-media-rename { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; font-size: .78rem; }
 .cms-photo { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; color: var(--heading); }
+
+/* ---------- 3. members-only detail (js/editor.js, U4) ---------- */
+/* Drawn under js/lab.js's public surfaces for a member, with Editor mode off. */
+.hc-m-people { margin: 0 0 1rem; padding-bottom: .6rem; border-bottom: 1px solid var(--edge); }
+.hc-m-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: .2rem .6rem; align-items: center;
+  width: 100%; padding: .45rem 0; border: 0; border-top: 1px solid var(--edge-soft); background: none;
+  color: inherit; font: inherit; font-size: .8rem; text-align: left; }
+button.hc-m-row { cursor: pointer; }
+button.hc-m-row:hover .nm { color: var(--accent); }
+button.hc-m-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.hc-m-row .who { display: flex; flex-direction: column; min-width: 0; }
+.hc-m-row .nm { color: var(--heading); font-weight: 600; overflow-wrap: anywhere; }
+.hc-m-row .sub { color: var(--muted); font-size: .72rem; font-family: var(--mono); overflow-wrap: anywhere; }
+.hc-m-row .cnt { font-family: var(--mono); font-size: .74rem; color: var(--body-soft); text-align: right; }
+.hc-m-row .last { grid-column: 2 / -1; color: var(--ok); font-size: .72rem; }
+.hc-m-author { color: var(--body-soft); }
+.hc-m-note { margin: .6rem 0 0; color: var(--muted); font-size: .72rem; }
+.hc-m-error { margin: .4rem 0 0; color: var(--warn); font-size: .76rem; overflow-wrap: anywhere; }
+/* About: the GitHub strip under a roster card */
+.hc-gh-strip { display: flex; flex-direction: column; gap: .15rem; margin-top: .5rem; padding-top: .45rem; width: 100%;
+  border-top: 1px solid var(--edge-soft); font-size: .72rem; color: var(--muted); text-align: left; }
+.hc-gh-strip .l { color: var(--body-soft); font-family: var(--mono); font-size: .7rem; overflow-wrap: anywhere; }
+.hc-gh-strip .last { color: var(--ok); }
+.hc-gh-strip .last.stale { color: var(--muted); }
+.hc-m-failures { margin-top: .8rem; }
+/* the person popover */
+.hc-pp-members { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid var(--edge-soft); font-size: .78rem; }
+.hc-pp-members p { margin: 0 0 .35rem; }
+.hc-m-facts { color: var(--heading); }
+.hc-m-projects { color: var(--body-soft); }
+.hc-m-projects a { color: var(--accent); text-decoration: none; }
+.hc-m-projects a:hover { text-decoration: underline; }
+.hc-m-commits { list-style: none; margin: .2rem 0 0; padding: 0; }
+.hc-m-commit { display: flex; flex-direction: column; padding: .3rem 0; border-top: 1px solid var(--edge-soft); min-width: 0; }
+.hc-m-commit .m { color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-m-commit .s { color: var(--muted); font-size: .7rem; font-family: var(--mono); }
+.hc-person-pop .hc-m-note { margin: .3rem 0 0; }
+/* who wrote this: counts and date ranges */
+.hc-m-authors { margin: .6rem 0 0; padding: .55rem .7rem; border: 1px dashed var(--edge); border-radius: 8px; }
+.hc-m-authors .hc-m-label { margin: 0 0 .3rem; color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+.hc-m-line { margin: .25rem 0; line-height: 1.6; color: var(--body); }
 
 /* Phones: the tray is a bottom sheet; the handle sits at the bottom edge. */
 @media (max-width: 767px) {

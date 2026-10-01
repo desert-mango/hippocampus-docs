@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 1 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy.
 /* Unit tests for js/lab.js (the Lab page, repo cards, the person popover and "who wrote
@@ -14,6 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const LAB = require(new URL('../../js/lab.js', import.meta.url).pathname);
@@ -647,4 +648,78 @@ test('a stale navigation never paints: renderLab respects isCurrent', async () =
 test('HCLab is frozen and loads under plain node without a DOM', () => {
   assert.ok(Object.isFrozen(LAB));
   assert.equal(typeof LAB.renderLab, 'function');
+});
+
+// ------------------------------------------------------------------ the decoration hook (U4)
+// js/editor.js (a signed-in member's page only) adds members-only detail under each public
+// surface. Its seam: every surface carries data-hc-surface (+ the context a decorator needs),
+// and onRender(fn) hears each surface once it is in the page. lab.js itself draws nothing more.
+test('decoration hook: each surface is marked and announced once it is in the page', async () => {
+  const { doc, lab } = setup();
+  const heard = [];
+  const off = lab.onRender((surface, el) => heard.push({ surface, el, connected: el.isConnected }));
+  assert.equal(typeof off, 'function');
+  const root = doc.createElement('main');
+  doc.body.appendChild(root);
+  await lab.renderLab(root, () => true);
+  const labRoot = root.querySelector('[data-hc-surface="lab"]');
+  assert.ok(labRoot, 'the Lab page root is marked');
+  const rows = labRoot.querySelectorAll('.hc-commit');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].getAttribute('data-hc-repo'), 'docs');
+  assert.equal(rows[0].getAttribute('data-hc-sha'), 'a6e80a4');
+  assert.ok(labRoot.querySelector('[data-hc-slot="lab-people"]'), 'the people column is a slot');
+  const body = doc.createElement('div');
+  doc.body.appendChild(body);
+  await lab.renderAuthors(body, 'setup/getting-started/ros-installation');
+  const box = body.querySelector('.hc-authors');
+  assert.equal(box.getAttribute('data-hc-surface'), 'authors');
+  assert.equal(box.getAttribute('data-hc-page'), 'setup/getting-started/ros-installation');
+  const grid = doc.createElement('div');
+  doc.body.appendChild(grid);
+  await lab.wirePeople(grid);
+  assert.equal(grid.getAttribute('data-hc-surface'), 'people');
+  await lab.openPerson(null, { login: 'NBauschmann' });
+  const pop = doc.body.querySelector('.hc-person-pop');
+  assert.equal(pop.getAttribute('data-hc-surface'), 'popover');
+  assert.equal(pop.getAttribute('data-hc-login'), 'NBauschmann');
+  assert.deepEqual(heard.map((x) => [x.surface, x.el, x.connected]),
+    [['lab', labRoot, true], ['authors', box, true], ['people', grid, true], ['popover', pop, true]]);
+  // a roster-only popover (no GitHub match) carries no login
+  await lab.openPerson(null, { roster: 'Lina Linked' });
+  assert.equal(doc.body.querySelector('.hc-person-pop').hasAttribute('data-hc-login'), false);
+  off();
+  const n = heard.length;
+  await lab.openPerson(null, { login: 'RHochdahl' });
+  assert.equal(heard.length, n, 'unsubscribed: not heard');
+});
+
+test('decoration hook: a throwing listener never breaks a render; a stale sha is not marked', async () => {
+  const files = Object.assign({}, ALL_FILES, { 'data/graph/org-activity.json': Object.assign({}, ORG, {
+    recent_commits: [{ repo: 'docs', sha: 'not-a-sha', date: '2026-09-17T10:00:00Z', msg: 'x' },
+      { repo: HOSTILE, sha: 'a6e80a4', date: '2026-09-17T10:00:00Z', msg: 'y' }] }) });
+  const { doc, lab } = setup(files);
+  lab.onRender(() => { throw new Error('a broken decorator'); });
+  const root = doc.createElement('main');
+  doc.body.appendChild(root);
+  await lab.renderLab(root, () => true);
+  assert.match(root.textContent, /Lab activity/);
+  const rows = root.querySelectorAll('.hc-commit');
+  assert.equal(rows[0].hasAttribute('data-hc-sha'), false, 'no sha mark for a bad sha');
+  assert.equal(rows[1].hasAttribute('data-hc-repo'), false, 'no repo mark for a bad repository name');
+  assert.ok(typeof LAB.onRender === 'function', 'the runtime exports onRender');
+  assertNoHostileElement(doc);
+});
+
+test('js/app.js asks "who wrote this" with the keys data/graph/page-authors.json uses', () => {
+  const read = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
+  const app = read('js/app.js');
+  const keys = [...app.matchAll(/HCLab\.renderAuthors\((.*?),\s*(`[^`]*`|'[^']*')\)/g)].map((m) => m[2].slice(1, -1));
+  assert.equal(keys.length, 4, keys.join(' | '));
+  // the literal part of each key: a page id follows a prefix's slash
+  const prefixes = keys.map((k) => k.replace(/\$\{[^}]+\}$/, '')).sort();
+  assert.deepEqual(prefixes, ['about', 'projects/', 'setup/', 'tools/']);
+  const pages = Object.keys(JSON.parse(read('data/graph/page-authors.json')).pages);
+  prefixes.forEach((p) => assert.ok(pages.some((k) => (p.endsWith('/') ? k.startsWith(p) : k === p)),
+    `page-authors.json has ${p} keys`));
 });

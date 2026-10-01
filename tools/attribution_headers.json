@@ -809,13 +809,13 @@
     "js/lab.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "7cf7ae188472707e0e8e988a373b8e2395e6f9ffaac7f004b9d24b34afecf248",
+        "baseline_sha256": "d7192b78562ec05c7af60a22a683735298a3e1753ad36fecbce35806e2051c96",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "1 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this."
       },
@@ -824,13 +824,13 @@
     "tools/tests/test_lab_ui.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d4f8371c0f07c09f4ffa2e82202fce883831e260f520798b48aab0f126c79e30",
+        "baseline_sha256": "d10a8b5e746898d8dc8b592f4c751a0b77be2d378af7a26cb9c69347e995ac4b",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "1 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy."
       },
@@ -869,7 +869,7 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "359034442f7a39f69e1112264e65b6d58e657b0fd92d0566981ef6b112f74a70",
+        "baseline_sha256": "d77d7b03c0eada1e2230074cd172cf404c6a8b596e0070b78932a944021249bb",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -884,7 +884,7 @@
     "tools/tests/fake_github.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "0a735f2cf73ef27b464d488e88dc005cc4da6a3f3b4e185874a7589c3247f52e",
+        "baseline_sha256": "d4b327aef1121828220d736649fddc2950b1976f168d5089d2f35f2c964ddc22",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -923,6 +923,21 @@
         "last_substantive_modification": "1 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_members_gating.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "0eacf3841b53d7de06cb4e7a9e11438efc8901861887ff919111b5ccecf5d6fe",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "1 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test that members-only GitHub detail reaches signed-in members only, through the org reader alone."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     }
