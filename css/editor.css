@@ -65,10 +65,32 @@ body.hc-edit-on .page-body > .hc-block:hover > .hc-pencil,
 .hc-block.hc-prop-conflict { border-left: 3px dashed var(--warn); padding-left: .9rem; margin-left: -1.05rem; }
 body.hc-hide-suggestions .hc-block.hc-prop-add,
 body.hc-hide-suggestions .hc-block.hc-prop-del { display: none; }
+/* main changed this block since the proposal: main's version, said in words (the frame gets no text) */
+.hc-block.hc-prop-conflict::before { content: "main changed this since the proposal \2014  Update from main";
+  display: block; margin-bottom: .3rem; font-size: .72rem; font-weight: 600; color: var(--warn); }
+
+/* Side by side (View: diff style): a replaced block and its new version in two columns
+   (js/editor-frame.js pairs them into .hc-side; inline keeps them stacked, old above new). */
+body.hc-edit-on .page-body > .hc-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: .9rem; align-items: start; margin: .2rem 0; }
+body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; min-width: 0; margin-left: 0; cursor: pointer;
+  border-radius: 0 6px 6px 0; }
+body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+body.hc-edit-on .page-body > .hc-side > .hc-block:hover > .hc-pencil { opacity: 1; }
+.hc-side > .hc-block.hc-prop-del::before, .hc-side > .hc-block.hc-prop-change::before { display: block;
+  margin-bottom: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.hc-side > .hc-block.hc-prop-del::before { content: "Now"; color: var(--hc-del); }
+.hc-side > .hc-block.hc-prop-change::before { content: "Proposed"; color: var(--hc-add); }
 
 /* View settings */
 body.hc-compact .page-body { font-size: .93em; line-height: 1.5; }
 body.hc-compact .page-body pre { font-size: .8em; }
+
+/* the frame's own viewport: beside the site's sidebar it is ~750 px wide, so two columns hold until 560 px */
+@media (max-width: 560px) {
+  body.hc-edit-on .page-body > .hc-side { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
+}
 
 @media (max-width: 767px) {
   body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
@@ -114,8 +136,28 @@ body.hc-compact .page-body pre { font-size: .8em; }
 /* Editor on: the frame takes the content cell; the site's own content is hidden. */
 body.hc-editor-on #content { display: none; }
 .hc-frame-host[hidden] { display: none; }
-.hc-frame-host { min-width: 0; }
-.hc-frame { display: block; width: 100%; height: calc(100vh - var(--header-h)); border: 0; background: var(--bg); }
+.hc-frame-host { min-width: 0; display: flex; flex-direction: column; height: calc(100vh - var(--header-h)); }
+.hc-frame { display: block; width: 100%; height: calc(100vh - var(--header-h)); flex: 1 1 auto; min-height: 0; border: 0;
+  background: var(--bg); }
+
+/* The page bar above the frame (U7): who proposes changes to this page, the gate, Review in tray. */
+.hc-pagebar { flex: none; display: flex; flex-direction: column; gap: .3rem; padding: .5rem 1rem; font-size: .82rem;
+  color: var(--body-soft); border-bottom: 1px solid color-mix(in srgb, var(--hc-add) 35%, var(--edge));
+  background: color-mix(in srgb, var(--hc-add) 7%, var(--bg)); }
+.hc-pagebar[hidden] { display: none; }
+.hc-pagebar-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin: 0; overflow-wrap: anywhere; }
+.hc-pagebar-line b { color: var(--heading); font-weight: 600; }
+.hc-pagebar-line.is-warn { color: var(--warn); }
+.hc-pagebar-sep { color: var(--muted); }
+.hc-pagebar-check { font-family: var(--mono); font-size: .76rem; }
+.hc-pagebar-check.is-pass { color: var(--hc-add); }
+.hc-pagebar-check.is-fail { color: var(--hc-del); }
+.hc-pagebar-check.is-checking, .hc-pagebar-check.is-unknown { color: var(--muted); }
+.hc-pagebar .cms-btn { padding: .2rem .6rem; font-size: .76rem; }
+.hc-pagebar-other { display: inline-flex; align-items: center; gap: .35rem; }
+.hc-pagebar-result { color: var(--body-soft); }
+.hc-pagebar-result.is-error { color: var(--danger); }
+.hc-pagebar-result[hidden] { display: none; }
 body.hc-editor-on.hc-tray-open .layout { padding-right: var(--hc-tray-w); }
 
 /* The tray: a fixed right panel (a bottom sheet on phones), five tabs. */
@@ -339,7 +381,9 @@ a.cms-btn { display: inline-block; text-decoration: none; }
   body.hc-editor-on.hc-tray-open .layout { padding-right: 0; padding-bottom: 46vh; }
   .hc-tray { top: auto; left: 0; width: auto; height: 46vh; border-left: 0; border-top: 1px solid var(--edge);
     border-radius: 14px 14px 0 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, .3); }
-  body.hc-tray-open .hc-frame { height: calc(54vh - var(--header-h)); min-height: 18rem; }
+  body.hc-tray-open .hc-frame-host { height: calc(54vh - var(--header-h)); min-height: 18rem; }
+  body.hc-tray-open .hc-frame { height: calc(54vh - var(--header-h)); min-height: 12rem; }
+  .hc-pagebar { padding: .4rem .7rem; font-size: .78rem; }
   .hc-handle { top: auto; bottom: 0; right: 50%; transform: translateX(50%); writing-mode: horizontal-tb;
     border-radius: 8px 8px 0 0; border: 1px solid var(--edge); border-bottom: 0; padding: .45rem .9rem; }
   .hc-switch-label, .hc-who .hc-login, .hc-who .hc-role { display: none; }

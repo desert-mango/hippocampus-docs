@@ -156,6 +156,7 @@ function openSite(opts) {
       try { return fs.readFileSync(path.join(ROOT, p), 'utf8'); } catch (e) { return null; }
     },
     variant: o.variant,
+    extra: o.extra,
   });
   const calls = [];
   const opens = [];
@@ -609,7 +610,7 @@ test('Proposals: a card per open proposal, "touches this page"; the card expands
   assert.equal(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'), false);
 });
 
-test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-only; Back returns to main', async () => {
+test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-only, its changes marked; Back returns', async () => {
   const page = await editorOn({ hash: `#${UBUNTU_ROUTE}` });
   page.handle().click();
   await settle();
@@ -618,8 +619,11 @@ test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-on
   page.action('show-on-page').click();
   await settle();
   assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded');
+  // U7 (D-G 3): the base is the PR's head, overlay on — its own changes marked against its merge base
+  const head = C.overlayOnMain(fixtureText('page-ubuntu-24-04-server.at-merge-base.md'),
+    fixtureText('page-ubuntu-24-04-server.at-merge-base.md'), fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'));
   const served = await page.asks(UBUNTU_FILE);
-  assert.equal(served.text, fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'), 'the PR head\'s text, no sentinels');
+  assert.equal(served.text, C.withSentinels(head.text, page.nonce().slice(0, 16), head.overlay), 'the PR head\'s text, marked');
   const other = await page.asks('data/projects.json');
   assert.equal(other.text, readRepo('data/projects.json'), 'a file the proposal does not change comes from main');
   assert.match(page.tray().textContent, /Showing proposal #1/);
@@ -629,7 +633,9 @@ test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-on
   page.action('show-off').click();
   await settle();
   const back = await page.asks(UBUNTU_FILE);
-  assert.equal(back.text, C.withSentinels(readRepo(UBUNTU_FILE), page.nonce().slice(0, 16)));
+  const over = C.overlayOnMain(readRepo(UBUNTU_FILE), fixtureText('page-ubuntu-24-04-server.at-merge-base.md'),
+    fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'));
+  assert.equal(back.text, C.withSentinels(over.text, page.nonce().slice(0, 16), over.overlay), 'main, PR #1 drawn over it');
   assert.doesNotMatch(page.tray().textContent, /Showing proposal #1/);
 });
 
@@ -950,4 +956,691 @@ test('header: no committed copy, a live or odd avatar path, or a hostile name ->
     assert.equal(page.all((e) => e.tagName === 'IMG').length, 0);
     assert.equal(page.one((e) => e.classList.contains('hc-initials')).textContent, 'K');
   }
+});
+
+// ------------------------------------------------- proposals in place (U7) ---
+/* Plan D-F, D-G: an open proposal that touches the page on screen is drawn
+   over main in the frame (the composite of HCCore.overlayOnMain, marked with
+   this load's sentinels), with a page bar above the frame. PR #1 is used
+   READ-ONLY: its files, compare and check-runs answers are U0 fixtures, and
+   main has moved since its merge base (MAIN_SHA is a different commit). */
+
+const F = require(path.join(ROOT, 'js', 'editor-frame.js'));
+const UB_BASE = fixtureText('page-ubuntu-24-04-server.at-merge-base.md');
+const UB_HEAD = fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md');
+const PR1 = JSON.parse(fixtureText('pull-1.json'));
+const PR1_HEAD = PR1.head.sha;
+const PR1_LOGIN = PR1.user.login;
+const STATUS_WORD = { pass: 'check green', fail: 'check red', checking: 'check pending', unknown: 'check unknown' };
+
+/* main, moved since PR #1's merge base: one paragraph the PR leaves alone
+   is reworded (no mark: it is simply main's text). */
+function movedMain() {
+  const bb = blocksOf(UB_BASE);
+  const same = C.blockDiff(UB_BASE, UB_HEAD).find((d) => d.status === 'same' && bb[d.a].kind === 'paragraph');
+  const b = bb[same.a];
+  const words = 'Main reworded this paragraph after the proposal was opened.';
+  return { text: UB_BASE.slice(0, b.start) + words + b.text.match(/\n*$/)[0] + UB_BASE.slice(b.end), words };
+}
+
+/* main, moved so that it ALSO changed a code block PR #1 changes: a conflict. */
+function conflictingMain() {
+  const bb = blocksOf(UB_BASE);
+  const ch = C.blockDiff(UB_BASE, UB_HEAD).find((d) => d.status === 'change' && bb[d.a].kind === 'code');
+  const b = bb[ch.a];
+  assert.ok(b.text.startsWith('```'), 'a fenced code block');
+  const changed = b.text.replace('\n```', '\n# main moved this line\n```');
+  return { text: UB_BASE.slice(0, b.start) + changed + UB_BASE.slice(b.end), changed };
+}
+
+const pageBar = (page) => page.one((e) => e.classList.contains('hc-pagebar'));
+const marksOf = (m) => [...m.overlay].map((x) => ({ index: x.index, mark: x.mark }));
+
+async function ubuntuOn(opts) {
+  const page = await editorOn(Object.assign({ hash: `#${UBUNTU_ROUTE}` }, opts));
+  await page.send({ type: 'hc-ready' });
+  return page;
+}
+
+/* A second open proposal on the Ubuntu page, newer than PR #1, built on
+   main (its merge base is MAIN_SHA): it adds one paragraph after the h1. */
+function secondProposal(mainText) {
+  const head = `b2${'0'.repeat(38)}`;
+  const bb = blocksOf(mainText);
+  const h1 = bb.findIndex((b) => b.kind === 'heading');
+  const at = bb[h1 + 1].start;
+  const text = `${mainText.slice(0, at)}A second proposal adds this paragraph.\n\n${mainText.slice(at)}`;
+  const pull = Object.assign({}, PR1, { number: 2, title: 'A second proposal', created_at: '2026-09-30T08:00:00Z',
+    user: Object.assign({}, PR1.user, { login: 'second-author' }),
+    head: Object.assign({}, PR1.head, { sha: head, ref: 'cms/second-author/x' }) });
+  return {
+    text, head,
+    extra: {
+      pulls: [pull],
+      files: { 2: [{ filename: UBUNTU_FILE, status: 'modified', additions: 2, deletions: 0, changes: 2, patch: '@@ -1 +1 @@' }] },
+      contents: { [head]: { [UBUNTU_FILE]: text } },
+      compare: { [head]: MAIN_SHA },
+      checks: { [head]: { total_count: 0, check_runs: [] } },
+    },
+  };
+}
+
+test('fake GitHub: maintain/admin variants and `extra` proposals answer like GitHub', async () => {
+  const read = { readFixture: async (n) => { try { return fs.readFileSync(path.join(FIXTURES, n), 'utf8'); } catch (e) { return null; } },
+    readFile: async (p) => fs.readFileSync(path.join(ROOT, p), 'utf8') };
+  const repo = async (variant) => (await (await createFakeGitHub(Object.assign({ variant }, read))
+    .fetch('https://api.github.com/repos/desert-mango/hippocampus-docs')).json()).permissions;
+  assert.equal(C.roleFromPermissions(await repo('readonly')).key, 'read');
+  assert.equal(C.roleFromPermissions(await repo('push')).key, 'push');
+  assert.equal(C.roleFromPermissions(await repo('maintain')).key, 'maintain');
+  assert.equal(C.roleFromPermissions(await repo('admin')).key, 'admin');
+  const two = secondProposal(readRepo(UBUNTU_FILE));
+  const fake = createFakeGitHub(Object.assign({ extra: two.extra }, read));
+  const get = async (p) => { const r = await fake.fetch(`https://api.github.com/repos/desert-mango/hippocampus-docs${p}`); return { status: r.status, body: r.ok ? await r.json() : null }; };
+  assert.deepEqual((await get('/pulls?state=open&per_page=100')).body.map((p) => p.number).sort(), [1, 2]);
+  assert.equal((await get('/pulls/2')).body.head.sha, two.head);
+  assert.equal((await get('/pulls/2/files?per_page=100&page=1')).body[0].filename, UBUNTU_FILE);
+  assert.equal((await get(`/compare/${MAIN_SHA}...${two.head}`)).body.merge_base_commit.sha, MAIN_SHA);
+  assert.equal((await get(`/commits/${two.head}/check-runs?check_name=check&per_page=100`)).body.total_count, 0);
+  const at = await fake.fetch(`https://api.github.com/repos/desert-mango/hippocampus-docs/contents/${UBUNTU_FILE}?ref=${two.head}`);
+  assert.equal(await at.text(), two.text);
+  assert.equal((await get('/pulls/3')).status, 404);
+});
+
+test('overlay: PR #1 at d0bdc64 drawn over a MOVED main — the composite with this load\'s sentinels, and its marks', async () => {
+  const main = movedMain();
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text } });
+  const ov = C.overlayOnMain(main.text, UB_BASE, UB_HEAD);
+  assert.ok(ov && ov.conflicts.length === 0);
+  const served = await page.asks(UBUNTU_FILE);
+  assert.equal(served.text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
+  assert.ok(served.text.includes(main.words), 'main\'s own (moved) wording is on the page');
+  // the merge base came from compare, and the texts were read at the three shas
+  const urls = page.github().map((c) => c.url);
+  assert.ok(urls.some((u) => u.includes(`/compare/${MAIN_SHA}...${PR1_HEAD}`)), 'merge base via compare');
+  for (const sha of [MAIN_SHA, PR1_HEAD, PR1.base.sha]) {
+    assert.ok(urls.some((u) => u.includes(`contents/${UBUNTU_FILE}?ref=${sha}`)), `read at ${sha.slice(0, 7)}`);
+  }
+  const marks = marksOf(page.editorMessages().at(-1));
+  const markAt = new Map(marks.map((x) => [x.index, x.mark]));
+  assert.equal(marks.length, ov.overlay.filter((e) => e.source !== 'main').length, 'one mark per proposal block');
+  ov.overlay.forEach((e, i) => {
+    if (e.source === 'main') assert.equal(markAt.has(i), false, `main block ${i} is unmarked`);
+    if (e.source === 'pr-del') assert.equal(markAt.get(i), 'del');
+    if (e.source === 'pr-add') assert.ok(['add', 'change'].includes(markAt.get(i)));
+    if (markAt.get(i) === 'change') assert.equal(markAt.get(i - 1), 'del', 'a changed block follows its old version');
+  });
+  const attention = ov.overlay.findIndex((e) => e.text.startsWith('<div class="adm adm-attention">'));
+  assert.equal(markAt.get(attention), 'add', 'the inserted Attention block is an addition');
+  const chrony = ov.overlay.findIndex((e) => e.source === 'pr-add' && /- chrony/.test(e.text) && e.text.startsWith('```'));
+  assert.equal(markAt.get(chrony), 'change', 'the changed cloud-init block is the new version…');
+  assert.equal(markAt.get(chrony - 1), 'del', '…right after the old one');
+  assert.ok(ov.overlay.some((e, i) => e.source === 'main' && e.text.includes(main.words) && !markAt.has(i)));
+  // the page bar
+  const bar = pageBar(page);
+  assert.ok(bar && !bar.hidden, 'the page bar is shown');
+  const status = C.checkStatus(JSON.parse(fixtureText('check-runs-d0bdc64.json'))).state;
+  assert.match(bar.textContent, new RegExp(`${PR1_LOGIN} proposes changes to this page`));
+  assert.match(bar.textContent, /PR #1/);
+  assert.match(bar.textContent, new RegExp(STATUS_WORD[status]));
+  assert.ok(findAll(bar, (e) => e.attrs['data-action'] === 'review-in-tray').length, 'Review in tray');
+});
+
+test('overlay: "Review in tray" opens PR #1\'s card in the tray; the inline/side setting reaches the frame', async () => {
+  const local = memoryStorage();
+  const page = await ubuntuOn({ localStorage: local });
+  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray')[0].click();
+  await settle();
+  assert.equal(page.tray().hidden, false);
+  assert.equal(selectedTab(page), 'proposals');
+  assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'));
+  assert.equal(page.editorMessages().at(-1).settings.diff, 'inline');
+  await openTab(page, 'view');
+  page.one((e) => e.attrs['data-setting'] === 'diff' && e.attrs['data-value'] === 'side').click();
+  await settle();
+  const m = page.editorMessages().at(-1);
+  assert.equal(m.settings.diff, 'side');
+  assert.ok(F.sidePairs(m.overlay).length > 0, 'the frame can pair old and new blocks side by side');
+});
+
+test('frame: sidePairs pairs a deleted block with the changed block right after it, nothing else', () => {
+  assert.deepEqual(F.sidePairs([{ index: 3, mark: 'change' }, { index: 2, mark: 'del' }, { index: 5, mark: 'add' },
+    { index: 7, mark: 'del' }, { index: 9, mark: 'change' }, { index: 11, mark: 'conflict' }]), [[2, 3]]);
+  assert.deepEqual(F.sidePairs([]), []);
+  assert.deepEqual(F.sidePairs(null), []);
+});
+
+test('overlay: a block main ALSO changed since the merge base shows main\'s version with the "main changed this" mark', async () => {
+  const main = conflictingMain();
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text } });
+  const ov = C.overlayOnMain(main.text, UB_BASE, UB_HEAD);
+  assert.equal(ov.conflicts.length, 1);
+  const k = ov.overlay.findIndex((e) => e.source === 'conflict');
+  assert.ok(ov.overlay[k].text.includes('# main moved this line'), 'main\'s version, never a guess');
+  const marks = marksOf(page.editorMessages().at(-1));
+  assert.deepEqual(marks.filter((x) => x.mark === 'conflict'), [{ index: k, mark: 'conflict' }]);
+  const bar = pageBar(page);
+  assert.match(bar.textContent, /main changed this since the proposal — Update from main/);
+  // Update from main: the one write, pinned to the head sha shown (Write role may)
+  const update = findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0];
+  assert.ok(update, 'Update from main, for a role that may');
+  const writes = [];
+  page.win.fetch = ((orig) => (url, init) => {
+    if (init && init.method && init.method !== 'GET') {
+      writes.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+      return Promise.resolve(answer(202, { message: 'Updating pull request branch.' }));
+    }
+    return orig(url, init);
+  })(page.win.fetch);
+  update.click();
+  await settle();
+  assert.deepEqual(writes.map((w) => [w.method, w.url.replace('https://api.github.com', '')]),
+    [['PUT', '/repos/desert-mango/hippocampus-docs/pulls/1/update-branch']]);
+  assert.equal(writes[0].body.expected_head_sha, PR1_HEAD);
+  // a read-only role gets the mark and the words, never the button
+  const ro = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, variant: 'readonly' });
+  assert.match(pageBar(ro).textContent, /main changed this since the proposal/);
+  assert.equal(findAll(pageBar(ro), (e) => e.attrs['data-action'] === 'pagebar-update').length, 0);
+});
+
+/* PR #2 on the Ubuntu page, newest, built on an OLD base where main has
+   since changed a block it changes too (a conflict). Update from main moves
+   its head (the fake's `updates`) to a merge of main: built on main, it only
+   adds a paragraph. */
+function updatableProposal(mainText) {
+  const oldHead = `a1${'0'.repeat(38)}`;
+  const newHead = `a2${'0'.repeat(38)}`;
+  const oldBase = `ba5e${'0'.repeat(36)}`;
+  const merged = secondProposal(mainText);
+  const pull = Object.assign({}, merged.extra.pulls[0], { head: Object.assign({}, merged.extra.pulls[0].head, { sha: oldHead }) });
+  return {
+    oldHead, newHead, newText: merged.text,
+    extra: {
+      pulls: [pull],
+      files: merged.extra.files,
+      contents: { [oldBase]: { [UBUNTU_FILE]: UB_BASE }, [oldHead]: { [UBUNTU_FILE]: UB_HEAD },
+        [newHead]: { [UBUNTU_FILE]: merged.text } },
+      compare: { [oldHead]: oldBase, [newHead]: MAIN_SHA },
+      checks: { [oldHead]: { total_count: 0, check_runs: [] }, [newHead]: { total_count: 0, check_runs: [] } },
+      updates: { 2: newHead },
+    },
+  };
+}
+
+test('overlay: Update from main re-reads the proposal and redraws the bar and the frame on its new head', async () => {
+  const main = conflictingMain();
+  const up = updatableProposal(main.text);
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
+  let bar = pageBar(page);
+  assert.match(bar.textContent, /second-author proposes changes to this page/);
+  assert.match(bar.textContent, /main changed this since the proposal/);
+  assert.ok(marksOf(page.editorMessages().at(-1)).some((x) => x.mark === 'conflict'), 'the old head conflicts');
+  const before = page.nonce();
+  const srcs = page.frame().srcs.length;
+  // GitHub refuses first: the old view stays, with the notice
+  const real = page.win.fetch;
+  let refuse = true;
+  page.win.fetch = (url, init) => {
+    if (refuse && init && init.method === 'PUT') {
+      refuse = false;
+      return Promise.resolve(answer(422, { message: 'merge conflict between base and head' }));
+    }
+    return real(url, init);
+  };
+  findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
+  await settle();
+  bar = pageBar(page);
+  assert.equal(page.frame().srcs.length, srcs, 'an error reloads nothing');
+  assert.equal(page.nonce(), before);
+  assert.match(bar.textContent, /main changed this since the proposal/, 'the old view stays');
+  const err = findAll(bar, (e) => e.classList.contains('hc-pagebar-result'))[0];
+  assert.ok(err && !err.hidden && err.classList.contains('is-error'), 'the error is shown');
+  // then it takes it: the head moves, and the page follows
+  findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
+  await settle();
+  const puts = page.calls.filter((c) => c.method === 'PUT').map((c) => c.url.replace('https://api.github.com', ''));
+  assert.equal(refuse, false, 'the first click was refused');
+  assert.deepEqual(puts, ['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch'], 'the second reached GitHub');
+  assert.notEqual(page.nonce(), before, 'the frame reloaded with a fresh nonce');
+  await page.send({ type: 'hc-ready' });
+  const ov = C.overlayOnMain(main.text, main.text, up.newText);
+  assert.equal(ov.conflicts.length, 0);
+  const marks = marksOf(page.editorMessages().at(-1));
+  assert.deepEqual(marks, [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }],
+    'the new head\'s marks: one added paragraph, no conflict');
+  const served = await page.asks(UBUNTU_FILE);
+  assert.equal(served.text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
+  bar = pageBar(page);
+  assert.match(bar.textContent, /second-author proposes changes to this page/);
+  assert.doesNotMatch(bar.textContent, /main changed this since the proposal/, 'no obsolete conflict line');
+  assert.match(bar.textContent, /Updated from main/, 'the outcome is said on the bar');
+  assert.ok(page.github().some((c) => c.url.endsWith(`/compare/${MAIN_SHA}...${up.newHead}`)), 'the new merge base was read');
+  // an unrelated edit after the refresh reloads with zero network
+  const k = ov.overlay.findIndex((e) => e.source === 'main' && blocksOf(main.text)[e.mainIndex].kind === 'paragraph');
+  await page.send({ type: 'hc-block-select', index: k });
+  const net = page.github().length;
+  await page.type(page.textarea(), 'An unrelated edit.\n\n');
+  await page.send({ type: 'hc-ready' });
+  assert.equal(page.github().length, net, 'no network call for the edit or its reload');
+});
+
+/* GitHub as it really is: it answers 202 to update-branch at once and moves
+   the head "a moment later" — here, when the editor's first poll wait (a
+   timer of a second or more) has passed. hold() keeps that moment from
+   coming until release(), so the reader can move on meanwhile. */
+function slowUpdate(page) {
+  const real = page.win.fetch;
+  const puts = [];
+  let deferred = null;
+  let gate = null;
+  let open = null;
+  page.win.fetch = (url, init) => {
+    if (init && init.method === 'PUT' && /\/update-branch$/.test(String(url))) {
+      puts.push({ url: String(url).replace('https://api.github.com', ''), body: JSON.parse(init.body) });
+      deferred = [url, init];
+      return Promise.resolve(answer(202, { message: 'Updating pull request branch.' }));
+    }
+    return real(url, init);
+  };
+  page.win.setTimeout = (fn, ms) => setTimeout(async () => {
+    if (ms >= 1000 && deferred) {
+      if (gate) await gate;
+      const d = deferred;
+      deferred = null;
+      await real(...d);          // the fake moves the head now
+    }
+    fn();
+  }, 0);
+  return {
+    puts,
+    hold() { gate = new Promise((r) => { open = r; }); },
+    release() { open(); gate = null; },
+  };
+}
+
+/* Page B (the gantry usage page), touched by the same proposal: at its OLD
+   head it changes a paragraph main has reworded since the old merge base (a
+   conflict); at its NEW head (built on main) it only adds a paragraph. */
+const GANTRY_FILE = 'content/setup/lab-gantry/usage.md';
+function gantryTexts() {
+  const mainText = readRepo(GANTRY_FILE);
+  const bb = blocksOf(mainText);
+  const para = bb.findIndex((b, i) => i > 3 && b.kind === 'paragraph');
+  const b = bb[para];
+  const tail = b.text.match(/\n*$/)[0];
+  const swap = (words) => mainText.slice(0, b.start) + words + tail + mainText.slice(b.end);
+  const at = bb[bb.findIndex((x) => x.kind === 'paragraph')].start;
+  return {
+    mainText,
+    base: swap('The old merge base said this.'),
+    oldHead: swap('The old head changed what the merge base said.'),
+    newHead: `${mainText.slice(0, at)}The new head adds this paragraph.\n\n${mainText.slice(at)}`,
+  };
+}
+
+function updatableOnTwoPages(mainText) {
+  const up = updatableProposal(mainText);
+  const g = gantryTexts();
+  const [oldBase] = Object.keys(up.extra.contents).filter((sha) => sha.startsWith('ba5e'));
+  const extra = Object.assign({}, up.extra, {
+    files: { 2: [...up.extra.files[2], { filename: GANTRY_FILE, status: 'modified', additions: 2, deletions: 0,
+      changes: 2, patch: '@@ -1 +1 @@' }] },
+    contents: {
+      [oldBase]: Object.assign({}, up.extra.contents[oldBase], { [GANTRY_FILE]: g.base }),
+      [up.oldHead]: Object.assign({}, up.extra.contents[up.oldHead], { [GANTRY_FILE]: g.oldHead }),
+      [up.newHead]: Object.assign({}, up.extra.contents[up.newHead], { [GANTRY_FILE]: g.newHead }),
+    },
+  });
+  return Object.assign({}, up, { extra, gantry: g });
+}
+
+test('overlay: Update from main redraws the page the reader moved to while the proposal was read again', async () => {
+  const main = conflictingMain();
+  const up = updatableOnTwoPages(main.text);
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
+  assert.match(pageBar(page).textContent, /main changed this since the proposal/);
+  const slow = slowUpdate(page);
+  slow.hold();
+  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
+  await settle();
+  assert.deepEqual(slow.puts.map((w) => w.url), ['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch']);
+  // while GitHub has not moved the branch yet, the reader opens page B (also in the proposal)
+  await page.go(`#${OTHER_ROUTE}`);
+  await page.send({ type: 'hc-ready' });
+  assert.ok(marksOf(page.editorMessages().at(-1)).some((x) => x.mark === 'conflict'), 'page B at the old head conflicts');
+  assert.match(pageBar(page).textContent, /main changed this since the proposal/);
+  const onB = page.nonce();
+  // then the head moves, the poll sees it, and page B — the page on screen — follows
+  slow.release();
+  await settle();
+  assert.notEqual(page.nonce(), onB, 'page B reloaded with a fresh nonce on the new head');
+  assert.match(page.frame().srcs.at(-1), new RegExp(`&route=${encodeURIComponent(OTHER_ROUTE)}$`), 'still page B');
+  await page.send({ type: 'hc-ready' });
+  const g = up.gantry;
+  const ov = C.overlayOnMain(g.mainText, g.mainText, g.newHead);
+  assert.equal(ov.conflicts.length, 0);
+  assert.deepEqual(marksOf(page.editorMessages().at(-1)),
+    [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }], 'the new head\'s marks on page B');
+  assert.equal((await page.asks(GANTRY_FILE)).text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
+  const bar = pageBar(page);
+  assert.doesNotMatch(bar.textContent, /main changed this since the proposal/, 'no obsolete conflict line on page B');
+  assert.match(bar.textContent, /Updated from main/);
+});
+
+test('tray: the card\'s Update from main waits for the head to move, then redraws the page on it', async () => {
+  const main = conflictingMain();
+  const up = updatableProposal(main.text);
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
+  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray' && e.attrs['data-proposal'] === '2')[0].click();
+  await settle();
+  const card = page.one((e) => e.attrs['data-pr'] === '2');
+  assert.ok(card && card.classList.contains('is-open'), 'PR #2\'s card is open');
+  const slow = slowUpdate(page);
+  const before = page.nonce();
+  findAll(card, (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === 'update')[0].click();
+  await settle();
+  assert.deepEqual(slow.puts.map((w) => [w.url, w.body.expected_head_sha]),
+    [['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch', up.oldHead]]);
+  assert.notEqual(page.nonce(), before, 'the frame reloaded');
+  await page.send({ type: 'hc-ready' });
+  const ov = C.overlayOnMain(main.text, main.text, up.newText);
+  assert.deepEqual(marksOf(page.editorMessages().at(-1)),
+    [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }],
+    'the frame shows the new head\'s marks, not the old head\'s conflict');
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
+  assert.doesNotMatch(pageBar(page).textContent, /main changed this since the proposal/, 'no obsolete conflict line');
+  assert.ok(page.github().some((c) => c.url.endsWith(`/compare/${MAIN_SHA}...${up.newHead}`)), 'the new merge base was read');
+});
+
+test('tray: the card\'s Update from main stays pending until the head moved, then the card is drawn on the new head', async () => {
+  const main = conflictingMain();
+  const up = updatableProposal(main.text);
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
+  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray' && e.attrs['data-proposal'] === '2')[0].click();
+  await settle();
+  const cardOf = () => page.one((e) => e.attrs['data-pr'] === '2');
+  const updateButton = () => findAll(cardOf(), (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === 'update')[0];
+  const slow = slowUpdate(page);
+  slow.hold();                         // GitHub has not moved the branch yet
+  updateButton().click();
+  await settle();
+  // a second click while the first is pending sends nothing
+  updateButton().click();
+  await settle();
+  assert.deepEqual(slow.puts.map((w) => [w.url, w.body.expected_head_sha]),
+    [['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch', up.oldHead]],
+    'one update request while the first is pending');
+  assert.ok(updateButton().disabled, 'the card\'s Update from main is disabled while pending');
+  const pending = findAll(cardOf(), (e) => e.classList.contains('cms-action-result'))[0];
+  assert.ok(pending && !pending.hidden && /Updating…/.test(pending.textContent), 'the card says it is updating');
+  // the head moves: the card is drawn again from the proposal as it is now
+  slow.release();
+  await settle();
+  const btn = updateButton();
+  assert.ok(btn && !btn.disabled, 'the redrawn card\'s Update from main is enabled again');
+  assert.match(cardOf().textContent, /Updated from main/, 'the outcome is said on the card');
+  btn.click();
+  await settle();
+  assert.deepEqual(slow.puts.map((w) => w.body.expected_head_sha), [up.oldHead, up.newHead],
+    'the redrawn card acts on the new head, not the old one');
+});
+
+test('overlay: clicking the block right after a PR-inserted block edits the right main block (composite -> mainIndex)', async () => {
+  const main = movedMain();
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text } });
+  const ov = C.overlayOnMain(main.text, UB_BASE, UB_HEAD);
+  const k = ov.overlay.findIndex((e, i) => i > 0 && e.source === 'main' && ov.overlay[i - 1].source === 'pr-add');
+  assert.ok(k > 0, 'PR #1 inserts a block before a main block');
+  const mi = ov.overlay[k].mainIndex;
+  assert.notEqual(mi, k, 'composite and main indices differ here');
+  const srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-block-select', index: k });
+  const ta = page.textarea();
+  assert.ok(ta, 'the block editor is open');
+  assert.equal(ta.value, blocksOf(main.text)[mi].text, 'main\'s block at mainIndex, not the composite\'s k-th');
+  // the frame goes to the draft view (D-G 1): main with plain sentinels, that block selected
+  assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded to the draft view');
+  await page.send({ type: 'hc-ready' });
+  const m = page.editorMessages().at(-1);
+  assert.equal(m.selected, mi);
+  assert.deepEqual([...m.overlay], []);
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(main.text, page.nonce().slice(0, 16)));
+  // an edit changes main's block only
+  await page.type(page.textarea(), 'Edited from the overlay.\n');
+  const b = blocksOf(main.text)[mi];
+  const d = C.createDraftStore(page.storage).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
+  assert.equal(d, main.text.slice(0, b.start) + 'Edited from the overlay.\n' + main.text.slice(b.end));
+  // with a draft, the page bar says the proposal also touches this page, with "Show on page"
+  await settle();
+  const bar = pageBar(page);
+  assert.match(bar.textContent, /1 open proposal also touches this page/);
+  assert.ok(findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-show' && e.attrs['data-proposal'] === '1').length);
+});
+
+test('overlay: "+" after a PR-inserted block inserts after the nearest preceding main block', async () => {
+  const main = movedMain();
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text } });
+  const ov = C.overlayOnMain(main.text, UB_BASE, UB_HEAD);
+  const k = ov.overlay.findIndex((e, i) => i > 0 && e.source === 'pr-add' && ov.overlay[i - 1].source === 'main');
+  let j = k;
+  while (ov.overlay[j].source !== 'main') j -= 1;
+  // the rail BEFORE composite block k+1 (right after the PR-inserted block k)
+  await page.send({ type: 'hc-block-insert', index: k + 1, kind: 'note' });
+  const want = C.insertAt(main.text, ov.overlay[j].mainIndex + 1, 'note');
+  const d = C.createDraftStore(page.storage).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
+  assert.equal(d, want.text);
+});
+
+test('overlay: clicking a PR-only block opens that proposal\'s card and starts no draft', async () => {
+  const page = await ubuntuOn();
+  const ov = C.overlayOnMain(readRepo(UBUNTU_FILE), UB_BASE, UB_HEAD);
+  for (const source of ['pr-add', 'pr-del']) {
+    const k = ov.overlay.findIndex((e) => e.source === source);
+    const srcs = page.frame().srcs.length;
+    await page.send({ type: 'hc-block-select', index: k });
+    assert.equal(page.tray().hidden, false, source);
+    assert.equal(selectedTab(page), 'proposals');
+    assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'), 'PR #1\'s card, open');
+    assert.equal(page.textarea(), undefined, 'no block editor');
+    assert.equal(C.createDraftStore(page.storage).list().length, 0, 'no draft');
+    assert.equal(page.frame().srcs.length, srcs, 'the frame stays on the overlay');
+  }
+});
+
+test('roles (D8) exactly as reviewActionsFor: read-only no buttons, Write no Merge, Maintainer and Admin all', async () => {
+  const actionsIn = async (variant) => {
+    const page = await ubuntuOn({ variant });
+    findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray')[0].click();
+    await settle();
+    const card = page.one((e) => e.attrs['data-pr'] === '1');
+    return ['approve', 'request-changes', 'merge', 'update', 'close']
+      .filter((a) => findAll(card, (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === a).length);
+  };
+  assert.deepEqual(await actionsIn('readonly'), []);
+  assert.deepEqual(await actionsIn('push'), ['approve', 'request-changes', 'update', 'close']);
+  assert.deepEqual(await actionsIn('maintain'), ['approve', 'request-changes', 'merge', 'update', 'close']);
+  assert.deepEqual(await actionsIn('admin'), ['approve', 'request-changes', 'merge', 'update', 'close']);
+});
+
+test('two proposals on one page: the newest is overlaid; the bar lists the other with its own "Show on page"', async () => {
+  const mainText = readRepo(UBUNTU_FILE);
+  const two = secondProposal(mainText);
+  const page = await ubuntuOn({ extra: two.extra });
+  const ov2 = C.overlayOnMain(mainText, mainText, two.text);
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov2.text, page.nonce().slice(0, 16), ov2.overlay));
+  assert.deepEqual(marksOf(page.editorMessages().at(-1)).map((x) => x.mark), ['add']);
+  const bar = pageBar(page);
+  assert.match(bar.textContent, /second-author proposes changes to this page/);
+  assert.match(bar.textContent, /PR #2/);
+  assert.match(bar.textContent, /check pending/);
+  const other = findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-show' && e.attrs['data-proposal'] === '1')[0];
+  assert.ok(other, 'PR #1 is listed with "Show on page"');
+  assert.match(bar.textContent, new RegExp(`#1 by ${PR1_LOGIN}`));
+  other.click();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  // "Show on page" (D-G 3): the base is PR #1's head, overlay on, read-only
+  const ov1 = C.overlayOnMain(UB_BASE, UB_BASE, UB_HEAD);
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov1.text, page.nonce().slice(0, 16), ov1.overlay));
+  assert.match(pageBar(page).textContent, /Showing proposal #1/);
+  assert.ok(page.editorMessages().at(-1).overlay.length > 0, 'overlay on');
+  const mainBlock = ov1.overlay.findIndex((e) => e.source === 'main' && e.text.trim());
+  await page.send({ type: 'hc-block-select', index: mainBlock });
+  assert.equal(page.textarea(), undefined, 'read-only: no editing');
+  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  page.action('show-off').click();
+  await settle();
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov2.text, page.nonce().slice(0, 16), ov2.overlay),
+    'back to the newest proposal over main');
+});
+
+test('"Show others\' suggestions" off: main alone, no marks; the bar still says a proposal touches this page', async () => {
+  const local = memoryStorage();
+  C.viewSettings.save(local, Object.assign({}, C.viewSettings.DEFAULTS, { suggestions: false }));
+  const page = await ubuntuOn({ localStorage: local });
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(readRepo(UBUNTU_FILE), page.nonce().slice(0, 16)));
+  assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
+  assert.match(pageBar(page).textContent, /1 open proposal touches this page/);
+  // turned on in the View tab: the frame reloads with the overlay
+  await openTab(page, 'view');
+  page.one((e) => e.attrs['data-setting'] === 'suggestions').click();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  assert.ok(page.editorMessages().at(-1).overlay.length > 0);
+});
+
+test('a proposal whose texts do not split is not drawn: the bar says to open it in the tray', async () => {
+  const crlf = readRepo(UBUNTU_FILE).replace(/\n/g, '\r\n');
+  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: crlf } });
+  assert.equal((await page.asks(UBUNTU_FILE)).text, crlf);
+  assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
+  assert.match(pageBar(page).textContent, /this proposal can't be shown in place — open it in the tray/);
+  assert.ok(findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray').length);
+});
+
+test('a page no proposal touches has no page bar and no marks', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  assert.ok(!pageBar(page) || pageBar(page).hidden);
+  assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
+});
+
+/* The frame side of "side by side" over a small DOM (js/editor-frame.js
+   create(), the same code the real frame runs). */
+class MiniNode {
+  constructor(doc, type) { this.ownerDocument = doc; this.nodeType = type; this.parentNode = null; this.childNodes = []; }
+  get previousSibling() { const s = this.parentNode ? this.parentNode.childNodes : []; return s[s.indexOf(this) - 1] || null; }
+  get nextSibling() { const s = this.parentNode ? this.parentNode.childNodes : []; const i = s.indexOf(this); return i < 0 ? null : s[i + 1] || null; }
+  get textContent() { return this.nodeType === 3 ? this.data : this.childNodes.map((c) => c.textContent).join(''); }
+}
+class MiniEl extends MiniNode {
+  constructor(doc, tag) {
+    super(doc, 1);
+    this.tagName = tag.toUpperCase();
+    this.attrs = {};
+    this.id = '';
+    this.cls = new Set();
+    const self = this;
+    this.classList = { add: (c) => self.cls.add(c), remove: (c) => self.cls.delete(c), contains: (c) => self.cls.has(c),
+      toggle: (c, on) => { const want = on === undefined ? !self.cls.has(c) : Boolean(on); if (want) self.cls.add(c); else self.cls.delete(c); return want; } };
+  }
+  get className() { return [...this.cls].join(' '); }
+  set className(v) { this.cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
+  set textContent(t) { this.childNodes = []; if (t) { const n = new MiniNode(this.ownerDocument, 3); n.data = String(t); this.appendChild(n); } }
+  get textContent() { return this.childNodes.map((c) => c.textContent).join(''); }
+  setAttribute(k, v) { this.attrs[k] = String(v); }
+  getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+  detach(c) { if (c.parentNode) { const s = c.parentNode.childNodes; s.splice(s.indexOf(c), 1); } }
+  appendChild(c) { this.detach(c); this.childNodes.push(c); c.parentNode = this; return c; }
+  insertBefore(c, ref) {
+    if (!ref) return this.appendChild(c);
+    this.detach(c);
+    this.childNodes.splice(this.childNodes.indexOf(ref), 0, c);
+    c.parentNode = this;
+    return c;
+  }
+  removeChild(c) { this.detach(c); c.parentNode = null; return c; }
+  addEventListener() {}
+  scrollIntoView() {}
+}
+
+function sidePage(prefix) {
+  const doc = { addEventListener() {} };
+  doc.createElement = (t) => new MiniEl(doc, t);
+  doc.head = new MiniEl(doc, 'head');
+  doc.body = new MiniEl(doc, 'body');
+  const content = new MiniEl(doc, 'main');
+  content.id = 'content';
+  doc.getElementById = (id) => (id === 'content' ? content : null);
+  const body = new MiniEl(doc, 'div');
+  body.className = 'page-body';
+  for (let i = 0; i < 4; i += 1) {
+    const s = new MiniEl(doc, 'div');
+    s.id = `hcb-${prefix}-${i}`;
+    body.appendChild(s);
+    body.appendChild(new MiniEl(doc, i === 0 ? 'h1' : 'p'));
+  }
+  content.appendChild(body);
+  doc.body.appendChild(content);
+  let listener = null;
+  const HC = { preview: true, blockPrefix: prefix, post: () => true, onEditor: (fn) => { listener = fn; return true; } };
+  const win = { addEventListener() {}, setTimeout, location: { hash: '' } };
+  F.create(win, doc, HC);
+  const send = (diff) => listener({ on: true, selected: 2, overlay: [{ index: 1, mark: 'del' }, { index: 2, mark: 'change' }],
+    settings: { suggestions: true, diff, compact: false, outlines: true } });
+  return { body, send };
+}
+
+test('frame: "side by side" puts the old block and its new version in one hc-side pair; "inline" unwraps it', () => {
+  const { body, send } = sidePage('0123456789abcdef');
+  const cls = (n) => (n.nodeType === 1 ? n.className : '');
+  const sides = () => body.childNodes.filter((n) => cls(n).split(' ').includes('hc-side'));
+  const order = () => F.blocksIn(body).map((w) => w.getAttribute('data-index'));
+  send('side');
+  send('side');                          // idempotent
+  assert.equal(sides().length, 1);
+  const pair = sides()[0];
+  assert.deepEqual(pair.childNodes.map((w) => w.getAttribute('data-index')), ['1', '2']);
+  assert.ok(pair.childNodes[0].classList.contains('hc-prop-del') && pair.childNodes[1].classList.contains('hc-prop-change'));
+  assert.ok(pair.childNodes[1].classList.contains('hc-selected'), 'a block inside a pair is still marked');
+  assert.equal(pair.childNodes.filter((n) => cls(n).includes('hc-plus')).length, 0, 'no rail between old and new');
+  assert.deepEqual(order(), ['0', '1', '2', '3']);
+  send('inline');
+  assert.equal(sides().length, 0);
+  assert.deepEqual(order(), ['0', '1', '2', '3']);
+  assert.ok(body.childNodes.includes(F.blocksIn(body)[1]), 'back as a direct child of the page body');
+  send('side');
+  assert.equal(sides().length, 1, 'and paired again');
+});
+
+test('a link inside the frame: to a page a proposal touches reloads with the overlay; away from it clears the marks', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  let srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-route', route: UBUNTU_ROUTE });
+  assert.equal(page.frame().srcs.length, srcs + 1, 'reloaded: the proposal is drawn on the new page');
+  await page.send({ type: 'hc-ready' });
+  const ov = C.overlayOnMain(readRepo(UBUNTU_FILE), UB_BASE, UB_HEAD);
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
+  assert.ok(page.editorMessages().at(-1).overlay.length > 0);
+  srcs = page.frame().srcs.length;
+  const told = page.editorMessages().length;
+  await page.send({ type: 'hc-route', route: PAGE_ROUTE });
+  assert.equal(page.frame().srcs.length, srcs, 'no reload for a page nothing is proposed on');
+  assert.ok(page.editorMessages().length > told, 'the frame is told at once…');
+  assert.deepEqual([...page.editorMessages().at(-1).overlay], [], '…that the old marks are gone');
+  assert.ok(!pageBar(page) || pageBar(page).hidden);
+});
+
+test('overlay: "Edit whole page as Markdown" edits main and shows it (the draft view), not the composite', async () => {
+  const page = await ubuntuOn();
+  await openTab(page, 'changes');
+  const srcs = page.frame().srcs.length;
+  page.action('edit-whole-page').click();
+  await settle();
+  assert.equal(page.textarea().value, readRepo(UBUNTU_FILE), 'main\'s whole text');
+  assert.equal(page.frame().srcs.length, srcs + 1);
+  await page.send({ type: 'hc-ready' });
+  assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
+  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(readRepo(UBUNTU_FILE), page.nonce().slice(0, 16)));
 });

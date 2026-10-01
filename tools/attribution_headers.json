@@ -839,13 +839,13 @@
     "js/editor-frame.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "dcd4f1887b00d8711429c90cc19c773da3205de16c58873c93e11d15ac1a251d",
+        "baseline_sha256": "fdbcd9d9a8e9f8bfb8adecac951f47c8a6ccbf58c22e5da35a7001c3c1a36acc",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "1 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
       },
@@ -869,7 +869,7 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c7ee673d2849bf68dc48c19ff7803d03e7cffb5f6cb09e63549cae5bfdc9bb58",
+        "baseline_sha256": "359034442f7a39f69e1112264e65b6d58e657b0fd92d0566981ef6b112f74a70",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -884,7 +884,7 @@
     "tools/tests/fake_github.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "fde3c81ad36488ce221f4eab1522ab35a6b5ad7f27610306b3b33ed3956557ff",
+        "baseline_sha256": "0a735f2cf73ef27b464d488e88dc005cc4da6a3f3b4e185874a7589c3247f52e",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -899,7 +899,7 @@
     "tools/tests/test_editor.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "8f0750cfc21fe216d125de1d486166b4c1c902be0d1a926dff60c074645e2c5f",
+        "baseline_sha256": "ff4684560a9b12bf436f2bd9bc76f371d913626bfc7fc3f67d0e8d413298829e",
         "commit": "new-in-this-change"
       },
       "header": {

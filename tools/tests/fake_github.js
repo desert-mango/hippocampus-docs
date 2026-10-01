@@ -14,8 +14,25 @@
        readFixture(name) -> Promise<string|null>   a fixture file's text
        readFile(path)    -> Promise<string|null>   a working-tree file's text
                                                    (main's content)
-       variant           'push' (default) | 'readonly'
+       variant           'push' (default, Write) | 'readonly' | 'maintain' | 'admin'
+                         (maintain / admin: repo-push.json with those
+                         permissions set, in memory; the fixture is unchanged)
        onWrite(method, url, body) -> {status, body}   optional; else 405
+       extra             optional more open proposals, for the overlay
+                         tests and walk steps (U7), all synthetic:
+                           {pulls: [pull], files: {<n>: [file rows]},
+                            contents: {<head sha>: {<path>: text}},
+                            compare: {<head sha>: <merge base sha>},
+                            checks: {<head sha>: check-runs payload},
+                            updates: {<n>: <new head sha>}}
+                         They join pulls?state=…, answer pulls/<n>,
+                         pulls/<n>/files, contents at their head sha,
+                         compare/<x>...<head> and commits/<head>/check-runs.
+                         `updates`: PUT pulls/<n>/update-branch with the
+                         current head as expected_head_sha moves PR n's head
+                         to the new sha and answers 202 (GitHub's answer; the
+                         real move is asynchronous, the fake's is at once);
+                         another expected_head_sha answers 422.
      -> {fetch(url, init), calls, MAIN_SHA}
 
    Routes (GET, https://api.github.com):
@@ -72,8 +89,18 @@
     return ka.length === kb.length && ka.every((k, i) => k === kb[i] && String(a[k]) === String(b[k]));
   }
 
+  const PERMISSIONS = Object.freeze({
+    maintain: { admin: false, maintain: true, push: true, triage: true, pull: true },
+    admin: { admin: true, maintain: true, push: true, triage: true, pull: true },
+  });
+
   function createFakeGitHub(opts) {
     const o = opts || {};
+    const x = o.extra && typeof o.extra === 'object' ? o.extra : {};
+    const xPulls = Array.isArray(x.pulls) ? x.pulls.slice() : [];   // own copy: an update replaces a pull
+    const own = (obj, k) => Boolean(obj) && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, k);
+    const xHead = (sha) => (typeof sha === 'string' && sha.length >= 7
+      ? xPulls.map((p) => p.head.sha).find((h) => h.indexOf(sha) === 0) || null : null);
     if (typeof o.readFixture !== 'function' || typeof o.readFile !== 'function') {
       throw new Error('createFakeGitHub: readFixture and readFile are needed');
     }
@@ -105,6 +132,7 @@
     }
 
     async function contents(f, p, ref) {
+      if (own(x.contents, ref)) return own(x.contents[ref], p) ? answer(200, x.contents[ref][p]) : notFound();
       if (ref === MAIN_SHA) {
         const t = await o.readFile(p);
         return t === null || t === undefined ? notFound() : answer(200, t);
@@ -118,13 +146,33 @@
 
     async function pulls(q) {
       if (Number(q.page || 1) > 1) return answer(200, []);
-      const all = await json('pulls-all.json');
+      const all = (await json('pulls-all.json') || []).concat(xPulls);
       const state = q.state || 'open';
-      return answer(200, (all || []).filter((p) => state === 'all' || p.state === state));
+      return answer(200, all.filter((p) => state === 'all' || p.state === state));
     }
 
     async function repoRoute(f, rest, q) {
-      if (rest === '') return fixture(o.variant === 'readonly' ? 'repo-readonly.json' : 'repo-push.json');
+      if (rest === '') {
+        if (own(PERMISSIONS, o.variant)) {
+          const repo = await json('repo-push.json');
+          return answer(200, Object.assign({}, repo, { permissions: Object.assign({}, PERMISSIONS[o.variant]) }));
+        }
+        return fixture(o.variant === 'readonly' ? 'repo-readonly.json' : 'repo-push.json');
+      }
+      let n = /^\/pulls\/([0-9]+)(\/files)?$/.exec(rest);
+      const xp = n ? xPulls.find((p) => String(p.number) === n[1]) : null;
+      if (xp) {
+        if (!n[2]) return answer(200, xp);
+        return answer(200, Number(q.page || 1) > 1 ? [] : (x.files && x.files[n[1]]) || []);
+      }
+      n = /^\/compare\/([0-9a-f]{7,40})\.\.\.([0-9a-f]{7,40})$/.exec(rest);
+      if (n && xHead(n[2]) && own(x.compare, xHead(n[2]))) {
+        return answer(200, { status: 'ahead', merge_base_commit: { sha: x.compare[xHead(n[2])] } });
+      }
+      n = /^\/commits\/([0-9a-f]{7,40})\/check-runs$/.exec(rest);
+      if (n && xHead(n[1])) {
+        return own(x.checks, xHead(n[1])) ? answer(200, x.checks[xHead(n[1])]) : notFound();
+      }
       let m = /^\/git\/ref\/heads\/(.+)$/.exec(rest);
       if (m) {
         const ref = decodeURIComponent(m[1]);
@@ -159,6 +207,21 @@
           format: (/\.([a-z0-9]+)$/i.exec(a.url) || [null, null])[1], created_at: null }));
       return answer(200, { assets, next_cursor: null });
     }
+    // `updates`: Update from main on an extra proposal moves its head (a new pull object)
+    function updateBranch(s, init) {
+      const m = /^https:\/\/api\.github\.com\/repos\/desert-mango\/hippocampus-docs\/pulls\/([0-9]+)\/update-branch$/.exec(s);
+      const i = m && own(x.updates, m[1]) ? xPulls.findIndex((p) => String(p.number) === m[1]) : -1;
+      if (i < 0) return null;
+      let body = null;
+      try { body = JSON.parse((init && init.body) || 'null'); } catch (e) { body = null; }
+      const p = xPulls[i];
+      if (!body || body.expected_head_sha !== p.head.sha) {
+        return answer(422, { message: 'expected head sha didn’t match current head ref.' });
+      }
+      xPulls[i] = Object.assign({}, p, { head: Object.assign({}, p.head, { sha: x.updates[m[1]] }) });
+      return answer(202, { message: 'Updating pull request branch.' });
+    }
+
     function mediaAction(init) {
       try { return JSON.parse((init && init.body) || 'null').action; } catch (e) { return null; }
     }
@@ -168,6 +231,10 @@
       const s = String(url);
       calls.push({ method, url: s });
       if (s === '/api/media' && method === 'POST' && mediaAction(init) === 'list') return mediaList();
+      if (method === 'PUT') {
+        const moved = updateBranch(s, init);
+        if (moved) return moved;
+      }
       if (method !== 'GET') {
         if (typeof o.onWrite === 'function') {
           let body;

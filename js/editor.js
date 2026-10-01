@@ -34,7 +34,17 @@
        (trayHash), never the site's; a handle ("Editor · N proposals") while
        it is closed. Proposals = home + review list + review page, one card
        per proposal that expands in place ("Show on page" shows its head in
-       the frame, read-only). Changes = the picked block (snippets over
+       the frame, read-only, its changes marked).
+     - proposals in place (U7, plan D-F, D-G): an open proposal that touches
+       the page on screen is drawn over main in the frame — the composite of
+       HCCore.overlayOnMain (the PR's block diff from its merge base, read
+       with compare), marked add / del / change / conflict — with a page bar
+       above the frame ("X proposes changes to this page · PR #n · check …
+       · Review in tray"). The frame's indices are then the composite's: a
+       main block is edited at its index in main, a proposal's block opens
+       that proposal's card. My draft of the page is shown instead when I
+       have one; the newest of several proposals is drawn, the others are
+       listed with their own "Show on page". Changes = the picked block (snippets over
        HCCore.SNIPPET_CATALOG, "Image from Media"), my drafts with Propose… /
        Discard, "Edit whole page as Markdown", the four registries as raw
        JSON, New project / New person. Media = the Media view. View = my
@@ -70,6 +80,7 @@
   let countEl = null;      // the open proposals' count on the Proposals tab
   let handle = null;       // the tray's handle while it is closed
   let showBar = null;      // "Showing proposal #n on the page", while it is
+  let pageBar = null;      // the bar above the frame: who proposes changes to this page (U7)
   let trayHash = '#/';     // the tray's own route (HCCore.parseRoute), never the site's hash
   let avatarBtn = null;    // the header's avatar (its menu holds Sign out)
   let menu = null;         // the avatar's menu
@@ -173,6 +184,7 @@
     // sign-in's refresh() builds the next one; sessionCache() refuses meanwhile)
     ed.cache = null;
     ed.mainSha = null;
+    forgetProposals();
     renderChrome();
     if (message) tell(message, 'error');
     route();
@@ -307,6 +319,7 @@
     };
     ed.cache = C.cachedFetcher((sha, p) => refFor(sha)(p));
     ed.mainSha = null;
+    forgetProposals();
     renderChrome();
     route();
     const [me, repo] = await Promise.all([client.get('/user'), client.get(C.REPO_API_PATH)]);
@@ -615,31 +628,53 @@
 
   /* One review action. Nothing sent (no comment, no sha) -> say why here and
      keep what was typed. Sent -> refresh the proposal and show the outcome
-     on it. An answer for a session that has since ended changes nothing. */
+     on it. An answer for a session that has since ended changes nothing.
+     Update from main that GitHub took stays pending (`acting`, the buttons
+     disabled, "updating…" on the card) until the head moved, the wait timed
+     out or the read failed (followUpdate): only then is the card drawn
+     again, from the proposal as it is now — so no second update goes out
+     with the same expected head, and a Merge from the redrawn card pins the
+     new head, not the old one. */
   async function act(action, ctx, ui) {
     if (acting || !state.client) return;
     acting = true;
     ui.buttons.forEach((b) => { b.disabled = true; });
     const gen = sessionGen.current();
     let out;
+    let moved = null;
     try {
-      out = await C.runReviewAction(state.client, action, ctx);
-    } catch (e) {
-      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
+      try {
+        out = await C.runReviewAction(state.client, action, ctx);
+      } catch (e) {
+        out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
+      }
+      if (!sessionGen.isCurrent(gen)) return;
+      if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
+      if (!out.sent) {
+        ui.buttons.forEach((b) => { b.disabled = false; });
+        ui.result.textContent = out.message;
+        ui.result.hidden = false;
+        ui.result.classList.toggle('is-error', true);
+        return;
+      }
+      forgetProposals();               // the proposal moved on: the page bar and overlay read it again
+      // Update from main: GitHub moves the branch a moment later, so the card
+      // and the page follow once the head moved; every other action at once
+      if (action === 'update' && out.ok && ed.on) {
+        ui.result.textContent = `${out.message} Updating…`;
+        ui.result.hidden = false;
+        ui.result.classList.toggle('is-error', false);
+        moved = await followUpdate(ctx.number, ctx.sha, gen);
+        if (!sessionGen.isCurrent(gen)) return;
+      } else if (ed.on) {
+        frameTo(ed.route, true);
+      }
     } finally {
       acting = false;
     }
-    if (!sessionGen.isCurrent(gen)) return;
-    if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
-    if (!out.sent) {
-      ui.buttons.forEach((b) => { b.disabled = false; });
-      ui.result.textContent = out.message;
-      ui.result.hidden = false;
-      ui.result.classList.toggle('is-error', true);
-      return;
-    }
-    if (ui.epoch !== routeEpoch) { say(out.message, out.ok ? null : 'error'); return; }
-    flash = { number: ctx.number, text: out.message, ok: out.ok };
+    const text = moved ? `Updated from main: the card shows proposal #${ctx.number} as it is now.` : out.message;
+    if (ui.epoch !== routeEpoch) { say(text, out.ok ? null : 'error'); return; }
+    flash = { number: ctx.number, text, ok: out.ok };
     route();
   }
 
@@ -784,6 +819,9 @@
         step('Propose…', ' turns your drafts into a proposal: a pull request on GitHub, checked by the site\'s gate.'),
         step('Nothing is live', ' until someone with write access merges it, in the ', link('#/', 'Proposals tab'),
           '. "Show on page" shows a proposal on its page; a merge can be undone on GitHub.'),
+        step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"): green is added or '
+          + 'new, red is removed or old, a dashed mark means main changed that block since the proposal (Update '
+          + 'from main). Click a marked block to open its proposal; the bar above the page links to it.'),
         step('View', ' holds your own settings for the page. They stay in this browser.')),
       h('p', { class: 'cms-muted', text: 'Per-line diff inside code blocks is out of v1: a changed code block is shown '
         + 'whole, the old one and then the new one.' }),
@@ -1768,6 +1806,8 @@
     if (ls) C.viewSettings.save(ls, next);
     ed.view = C.viewSettings.load({ getItem: () => JSON.stringify(next) });   // cleaned, kept for this page
     postEditor();
+    // "Show others' suggestions" changes what the page file IS (the composite or main): reload
+    if (key === 'suggestions' && ed.on) frameTo(ed.route, false);
     route();
   }
 
@@ -1979,6 +2019,11 @@
     wholeReason: null,    // why block editing is off for this page, or null
     mainSha: null,        // Promise of main's head sha, once per refresh
     cache: null,          // HCCore.cachedFetcher over this session's token
+    pv: null,             // what this load shows (pageView): mode, the proposal, its overlay and marks
+    barNote: null,        // {number, head, text}: Update from main's outcome, said on the bar at that head
+    props: null,          // Promise of the open proposals with their files, once per refresh
+    bases: new Map(),     // 'main...head' -> Promise of the merge base sha
+    checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
   };
   let frameTimer = null;
 
@@ -2191,7 +2236,9 @@
   function mountFrame() {
     const frame = h('iframe', { class: 'hc-frame', title: 'This page, in Editor mode',
       sandbox: 'allow-scripts allow-popups', referrerpolicy: 'no-referrer' });
-    frameHost.replaceChildren(frame);
+    pageBar = h('div', { class: 'hc-pagebar', role: 'status', 'aria-label': 'Proposals on this page' });
+    pageBar.hidden = true;
+    frameHost.replaceChildren(pageBar, frame);
     ed.frame = frame;
     ed.host = C.createPreviewHost({
       getFrameWindow: () => frame.contentWindow,
@@ -2204,10 +2251,13 @@
   function dropFrame() {
     if (ed.host) ed.host.dispose();
     if (ed.frame) ed.frame.remove();
+    if (pageBar) pageBar.remove();
+    pageBar = null;
     ed.frame = null;
     ed.host = null;
     ed.prefix = null;
     ed.ready = false;
+    ed.pv = null;
   }
 
   /* main's head, resolved once per refresh (D-D: files at a sha never
@@ -2250,8 +2300,9 @@
     ed.loads += 1;
     const mine = ed.loads;
     const gen = sessionGen.current();
+    let sha;
     try {
-      await Promise.all([mainSha(), registries()]);
+      [sha] = await Promise.all([mainSha(), registries()]);
     } catch (e) {
       if (mine === ed.loads && sessionGen.isCurrent(gen)) {
         say(`This page could not be opened in Editor mode: ${(e && e.message) || e}.`, 'error');
@@ -2262,10 +2313,24 @@
     if (!ed.frame) mountFrame();
     const page = pageForRoute(route);
     const moved = !keep || !samePage(page, ed.page);
-    if (moved) clearSelection();
+    if (moved) {
+      clearSelection();
+      ed.barNote = null;
+    }
     ed.route = route;
     ed.page = page;
     if (!ed.draft) ed.draft = storedDraft(page);
+    // what this load shows (D-G): the reads are memoized, so a reload after an edit asks nothing
+    let pv;
+    try {
+      pv = await pageView(page, sha);
+    } catch (e) {
+      if (quiet(e)) return;
+      pv = blankView(page);
+    }
+    if (mine !== ed.loads || !sessionGen.isCurrent(gen) || !ed.on || !ed.host) return;
+    ed.pv = pv;
+    drawPageBar();
     ed.prefix = null;
     ed.ready = false;     // a new document: it hears nothing until its own hc-ready
     const nonce = ed.host.load(route, frameFetcher);
@@ -2284,6 +2349,11 @@
     const prefix = ed.prefix;
     const page = ed.page;
     const show = ed.show;
+    const pv = ed.pv;
+    // a proposal drawn on this page: the composite, its blocks marked with this load's sentinels
+    if (pv && pv.ov && page && pv.file === page.file && p === page.file && prefix) {
+      return { ok: true, status: 200, text: C.withSentinels(pv.ov.text, prefix, pv.ov.overlay) };
+    }
     if (show) {
       const st = show.changed.get(p);
       if (st === 'removed') return { ok: false, status: 404, text: '' };
@@ -2306,6 +2376,366 @@
     return files;
   }
 
+  // ------------------------------------------------ proposals in place ---
+  /* Plan D-F, D-G (U7). What a load shows, decided before it starts:
+       show     "Show on page": that proposal's head, read-only, its own
+                changes marked (the composite of its merge base and head);
+       draft    my draft of this page (the bar says when a proposal also
+                touches it);
+       overlay  main, with the NEWEST open proposal that touches the page
+                drawn over it (View: "Show others' suggestions" on);
+       hidden   the same proposals exist, but the setting is off;
+       main     nothing proposed here.
+     The open proposals and their files are read once per refresh; a merge
+     base (compare main...head) and a gate status once per head sha; the
+     texts through the session's sha cache. So a reload after an edit asks
+     GitHub nothing. */
+
+  function forgetProposals() {
+    ed.props = null;
+    ed.bases = new Map();
+    ed.checks = new Map();
+  }
+
+  // a promise kept under key until it fails (a failure is asked again next time)
+  function memo(map, key, make) {
+    if (!map.has(key)) {
+      const p = Promise.resolve().then(make);
+      map.set(key, p);
+      p.catch(() => { if (map.get(key) === p) map.delete(key); });
+    }
+    return map.get(key);
+  }
+
+  /* The open proposals, each with its changed files (null when GitHub
+     would not list them). */
+  function openProposals() {
+    if (!ed.props) {
+      const p = (async () => {
+        const open = C.orderOpenPulls(await openPulls(), null);
+        const files = await Promise.all(open.map((x) => filesOrNull(x.number)));
+        return open.map((pull, i) => ({ pull, files: files[i] }));
+      })();
+      ed.props = p;
+      p.catch(() => { if (ed.props === p) ed.props = null; });
+    }
+    return ed.props;
+  }
+
+  const FULL_SHA = /^[0-9a-f]{40}$/;
+  const headShaOf = (pull) => (pull && pull.head && FULL_SHA.test(String(pull.head.sha)) ? pull.head.sha : null);
+  const newestFirst = (a, b) => ((Date.parse(b.pull.created_at) || 0) - (Date.parse(a.pull.created_at) || 0))
+    || (b.pull.number - a.pull.number);
+  const fileRow = (files, file) => (files || []).find((f) => f && f.filename === file)
+    || (files || []).find((f) => f && f.previous_filename === file) || null;
+
+  const mergeBaseOf = (main, head) => memo(ed.bases, `${main}...${head}`, async () => {
+    const res = await apiResponse(C.comparePath(main, head));
+    const base = res.ok && res.data && res.data.merge_base_commit ? res.data.merge_base_commit.sha : null;
+    if (typeof base !== 'string' || !FULL_SHA.test(base)) {
+      throw new Error(`GitHub answered HTTP ${res.status} for the proposal's merge base`);
+    }
+    return base;
+  });
+
+  const checkOf = (head) => memo(ed.checks, head, async () => {
+    const res = await apiResponse(`${C.REPO_API_PATH}/commits/${head}/check-runs?check_name=check&per_page=100`);
+    return res.ok ? C.checkStatus(res.data) : { state: 'unknown' };
+  });
+
+  /* A file's text at a sha; a file that is not there is '' when missing is
+     allowed (added at the head, removed by it). */
+  async function textAt(sha, file, missingOk) {
+    const a = await sessionCache().get(sha, file);
+    if (a.ok) return a.text;
+    if (a.status === 404 && missingOk) return '';
+    throw new Error(`GitHub answered HTTP ${a.status} for ${file}`);
+  }
+
+  /* HCCore.overlayOnMain for proposal t on `file`. over: 'main' (the
+     overlay, drawn over main) or 'head' (Show on page: the head's text
+     with the proposal's own changes marked). -> {text, overlay, conflicts} | null */
+  async function proposalOverlay(t, file, main, over) {
+    const head = headShaOf(t.pull);
+    const row = fileRow(t.files, file);
+    if (!head || !row) return null;
+    const away = row.filename !== file;      // renamed away from this page: gone at the head
+    const basePath = !away && typeof row.previous_filename === 'string' ? row.previous_filename : file;
+    const base = await mergeBaseOf(main, head);
+    const [baseText, headText] = await Promise.all([
+      row.status === 'added' && !away ? '' : textAt(base, basePath, true),
+      away || row.status === 'removed' ? '' : textAt(head, file, true)]);
+    if (over === 'head') return C.overlayOnMain(baseText, baseText, headText);
+    return C.overlayOnMain(await textAt(main, file, false), baseText, headText);
+  }
+
+  /* The frame's marks for the composite (js/source.js OVERLAY_MARKS): a
+     block the proposal removes or replaces -> del; its replacement, right
+     after it -> change; a new block -> add; a block main changed too ->
+     conflict. Main's own blocks carry no mark. */
+  function overlayMarks(entries) {
+    const out = [];
+    entries.forEach((e, i) => {
+      const prev = entries[i - 1];
+      let mark = null;
+      if (e.source === 'pr-del') mark = 'del';
+      else if (e.source === 'conflict') mark = 'conflict';
+      else if (e.source === 'pr-add') {
+        const replaces = Boolean(prev) && prev.source === 'pr-del' && e.pr.base !== null
+          && prev.pr.base === e.pr.base && prev.pr.head === e.pr.head;
+        mark = replaces ? 'change' : 'add';
+      }
+      if (mark) out.push({ index: i, mark });
+    });
+    return out;
+  }
+
+  const blankView = (page) => ({ mode: ed.show ? 'show' : 'main', file: page ? page.file : null, pr: null, files: null,
+    ov: null, marks: [], touching: [], others: [], check: null, failed: false });
+
+  async function pageView(page, main) {
+    const pv = blankView(page);
+    if (!page) return pv;
+    let all;
+    try {
+      all = await openProposals();
+    } catch (e) {
+      if (quiet(e)) throw e;
+      return pv;                         // no proposals to draw: the page works without them
+    }
+    pv.touching = all.filter((t) => fileRow(t.files, page.file)).sort(newestFirst);
+    let t = null;
+    if (ed.show) {
+      t = pv.touching.find((x) => x.pull.number === ed.show.number) || null;
+    } else if (ed.draft) {
+      pv.mode = 'draft';
+    } else if (pv.touching.length) {
+      pv.mode = currentView().suggestions ? 'overlay' : 'hidden';
+      if (pv.mode === 'overlay') {
+        t = pv.touching[0];
+        pv.others = pv.touching.slice(1);
+      }
+    }
+    if (!t) return pv;
+    pv.pr = t.pull;
+    pv.files = t.files;
+    const head = headShaOf(t.pull);
+    const [ov, check] = await Promise.all([
+      proposalOverlay(t, page.file, main, pv.mode === 'show' ? 'head' : 'main')
+        .catch((e) => { if (quiet(e)) throw e; return null; }),
+      head ? checkOf(head).catch((e) => { if (quiet(e)) throw e; return { state: 'unknown' }; }) : { state: 'unknown' }]);
+    pv.ov = ov;
+    pv.failed = !ov;
+    pv.marks = ov ? overlayMarks(ov.overlay) : [];
+    pv.check = check;
+    return pv;
+  }
+
+  /* The reader followed a link inside the frame to another page: its bar
+     follows; a page with a proposal to draw is loaded again with it. */
+  async function viewAfterRoute(page) {
+    const mine = ed.loads;
+    ed.pv = blankView(page);
+    drawPageBar();
+    postEditor();                        // the frame repaints from its last message: the old marks go now
+    let pv;
+    try {
+      pv = await pageView(page, await mainSha());
+    } catch (e) {
+      return;
+    }
+    if (mine !== ed.loads || ed.page !== page || !ed.on) return;
+    if (pv.ov) { frameTo(ed.route, false); return; }
+    ed.pv = pv;
+    drawPageBar();
+  }
+
+  /* A pick in the frame. Over a drawn proposal the index is the
+     composite's (D-F): a main block is edited at ITS index in main (the
+     frame then shows the draft), a proposal's block opens that proposal's
+     card and starts nothing. */
+  async function pick(k) {
+    const pv = ed.pv;
+    if (!pv || !pv.ov) return selectBlock(k);
+    const e = pv.ov.overlay[k];
+    if (!e) return undefined;
+    if (e.source !== 'main') { openCard(pv.pr.number); return undefined; }
+    return selectBlock(e.mainIndex, true);
+  }
+
+  /* "+" over a drawn proposal: after the nearest preceding block of main
+     (a conflict block is main's text too). */
+  async function pickInsert(k, kind) {
+    const pv = ed.pv;
+    if (!pv || !pv.ov) return insertBlock(k, kind);
+    const list = pv.ov.overlay;
+    let j = Math.min(k, list.length) - 1;
+    while (j >= 0 && list[j].mainIndex === null) j -= 1;
+    return insertBlock(j >= 0 ? list[j].mainIndex + 1 : 0, kind);
+  }
+
+  /* The proposal's card, open, in the tray's Proposals tab. */
+  function openCard(n) {
+    ed.trayOpen = true;
+    applyTray();
+    trayGo(`#/review/${n}`);
+  }
+
+  /* The bar's Update from main (the one write here; D8 roles, exactly as
+     the card's button). GitHub takes it (202) and moves the branch a moment
+     later: the proposal is read again, a few times a moment apart, until its
+     head moved; then the page view, the bar and the frame are drawn again
+     from it by frameTo, the same path as a route load (its reads are
+     memoized again, so a later edit's reload still asks nothing). The page
+     redrawn is the one on screen THEN (the reader may have moved on while
+     the proposal was read again; it may touch that page too). An error
+     keeps the view on screen, with GitHub's answer beside the button. The
+     tray card's own Update from main follows the same way (act). */
+  const UPDATE_POLLS = 6;
+  const UPDATE_POLL_MS = 1500;
+
+  async function updateFromMain(pull, btn, line) {
+    if (acting || !state.client) return;
+    acting = true;
+    btn.disabled = true;
+    const gen = sessionGen.current();
+    const old = headShaOf(pull);
+    let out;
+    try {
+      out = await C.runReviewAction(state.client, 'update', { number: pull.number, sha: old });
+    } catch (e) {
+      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
+    } finally {
+      acting = false;
+    }
+    if (!sessionGen.isCurrent(gen)) return;
+    if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
+    line.textContent = out.message;
+    line.hidden = false;
+    line.classList.toggle('is-error', !out.ok);
+    if (!out.ok) { btn.disabled = false; return; }
+    const now = await followUpdate(pull.number, old, gen);
+    if (!now && sessionGen.isCurrent(gen) && ed.on) btn.disabled = false;   // "Reload in a moment" stays said
+  }
+
+  /* After GitHub took an Update from main on PR n (head `old`): wait for
+     the head to move, forget the proposal reads (moved or not), and draw
+     the page on screen NOW again from them — whichever page that is, so a
+     page the reader moved to while waiting does not keep the old head's
+     marks. -> the moved pull, or null (not in time, signed out, Editor off:
+     then nothing is redrawn). */
+  async function followUpdate(n, old, gen) {
+    const now = await headMoved(n, old, gen);
+    if (!sessionGen.isCurrent(gen) || !ed.on) return null;
+    forgetProposals();                   // the next load reads the proposal again, moved or not
+    if (!now) return null;
+    ed.barNote = { number: n, head: headShaOf(now),
+      text: `Updated from main: the page shows proposal #${n} as it is now.` };
+    frameTo(ed.route, true);
+    return now;
+  }
+
+  /* PR n read again until its head is no longer `old` (or it closed):
+     -> that pull; null when it did not move in time or could not be read. */
+  async function headMoved(n, old, gen) {
+    for (let i = 0; i < UPDATE_POLLS; i += 1) {
+      await new Promise((r) => { setTimeout(r, UPDATE_POLL_MS); });
+      if (!sessionGen.isCurrent(gen) || !ed.on) return null;
+      let res;
+      try {
+        res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}`);
+      } catch (e) {
+        return null;
+      }
+      if (!res.ok || !res.data) return null;
+      if (res.data.state !== 'open' || headShaOf(res.data) !== old) return res.data;
+    }
+    return null;
+  }
+
+  const CHECK_WORD = Object.freeze({ pass: 'check green', fail: 'check red', checking: 'check pending',
+    unknown: 'check unknown' });
+  const plural = (n, one, many) => (n === 1 ? one : many);
+
+  function pageBarButton(action, n, text, onClick, primary) {
+    const b = h('button', { type: 'button', class: primary ? 'cms-btn cms-btn-primary' : 'cms-btn',
+      'data-action': action, 'data-proposal': n === null ? null : String(n) }, text);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // "Show on page" for proposal t (its head and files are known), else nothing
+  function showButton(t, text) {
+    const sha = headShaOf(t.pull);
+    if (!sha || !t.files) return null;
+    return pageBarButton('pagebar-show', t.pull.number, text, () => showProposal(t.pull.number, sha, t.files, null));
+  }
+
+  function touchingLine(pv, words) {
+    const n = pv.touching.length;
+    return h('p', { class: 'hc-pagebar-line' }, h('span', { text: words(n) }),
+      ...pv.touching.map((t) => showButton(t, `Show #${t.pull.number} on page`)));
+  }
+
+  /* The page bar above the frame (D-G): who proposes changes to this page,
+     the gate, and the way to the card; the others; my draft's note. All
+     GitHub words go in as text. */
+  function drawPageBar() {
+    if (!pageBar) return;
+    const pv = ed.pv;
+    const rows = [];
+    const back = () => pageBarButton('show-off', null, 'Back to your view', showOff);
+    if (pv && pv.pr) {
+      const n = pv.pr.number;
+      const state2 = pv.check && CHECK_WORD[pv.check.state] ? pv.check.state : 'unknown';
+      rows.push(h('p', { class: 'hc-pagebar-line' },
+        h('b', { text: pv.mode === 'show' ? `Showing proposal #${n} by ${loginOf(pv.pr)} on the page (read-only)`
+          : `${loginOf(pv.pr)} proposes changes to this page` }),
+        h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }), link(prLink(n), `PR #${n}`),
+        h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }),
+        h('span', { class: `hc-pagebar-check is-${state2}`, text: CHECK_WORD[state2] }),
+        pageBarButton('review-in-tray', n, 'Review in tray', () => openCard(n), true),
+        pv.mode === 'show' ? back() : null));
+      const note = ed.barNote;
+      if (note && note.number === n && note.head === headShaOf(pv.pr)) {
+        rows.push(h('p', { class: 'hc-pagebar-line' },
+          h('span', { class: 'hc-pagebar-result', role: 'status', text: note.text })));
+      }
+      if (pv.failed) {
+        rows.push(h('p', { class: 'hc-pagebar-line is-warn',
+          text: `PR #${n}: this proposal can't be shown in place — open it in the tray.` }));
+      }
+      const conflicts = pv.ov ? pv.ov.conflicts.length : 0;
+      if (conflicts) {
+        const result = h('span', { class: 'hc-pagebar-result', role: 'status' });
+        result.hidden = true;
+        const may = pv.mode === 'overlay' && C.reviewActionsFor(state.role, pv.pr).indexOf('update') >= 0;
+        let btn = null;
+        if (may) {
+          btn = pageBarButton('pagebar-update', n, 'Update from main', () => { updateFromMain(pv.pr, btn, result); });
+        }
+        rows.push(h('p', { class: 'hc-pagebar-line is-warn' },
+          h('span', { text: `${conflicts} ${plural(conflicts, 'block', 'blocks')} marked: main changed this since the `
+            + 'proposal — Update from main to bring it up to date.' }), btn, result));
+      }
+      if (pv.others.length) {
+        rows.push(h('p', { class: 'hc-pagebar-line' }, h('span', { text: 'Also proposing changes here:' }),
+          ...pv.others.map((t) => h('span', { class: 'hc-pagebar-other' },
+            h('span', { text: `#${t.pull.number} by ${loginOf(t.pull)}` }), showButton(t, 'Show on page')))));
+      }
+    } else if (pv && pv.mode === 'show' && ed.show) {
+      rows.push(h('p', { class: 'hc-pagebar-line' },
+        h('b', { text: `Showing proposal #${ed.show.number} on the page (read-only)` }), back()));
+    } else if (pv && pv.mode === 'draft' && pv.touching.length) {
+      rows.push(touchingLine(pv, (k) => `${k} open ${plural(k, 'proposal also touches', 'proposals also touch')} this page`));
+    } else if (pv && pv.mode === 'hidden') {
+      rows.push(touchingLine(pv, (k) => `${k} open ${plural(k, 'proposal touches', 'proposals touch')} this page `
+        + '("Show others’ suggestions" is off in View)'));
+    }
+    pageBar.replaceChildren(...rows);
+    pageBar.hidden = !rows.length;
+  }
+
   /* hc-editor goes to the frame only once THIS load said hc-ready: before
      that the window may still hold another document. A post held back is
      not queued: the hc-ready answer carries the state as it is then. */
@@ -2314,7 +2744,7 @@
     const nonce = ed.host && ed.host.nonce();
     if (!w || !nonce || !ed.ready) return;
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(),
-      selected: ed.selected, overlay: [] }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [] }, '*');
   }
 
   /* A message from the frame. -> true when it was the frame's (acted on or
@@ -2329,8 +2759,8 @@
     const index = Number.isInteger(m.index) && m.index >= 0 && m.index <= MAX_INDEX ? m.index : null;
     if (m.type === 'hc-ready') { ed.ready = true; postEditor(); }
     else if (m.type === 'hc-route' && typeof m.route === 'string' && ROUTE_RE.test(m.route)) frameRouted(m.route);
-    else if (m.type === 'hc-block-select' && index !== null) selectBlock(index).catch(shown);
-    else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') insertBlock(index, m.kind).catch(shown);
+    else if (m.type === 'hc-block-select' && index !== null) pick(index).catch(shown);
+    else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') pickInsert(index, m.kind).catch(shown);
     return true;
   }
   const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };
@@ -2350,6 +2780,7 @@
     if (moved) {
       markPage();
       refreshChanges();
+      viewAfterRoute(page);
     }
     if (currentRoute() === route) return;
     ed.fromFrame = route;
@@ -2392,7 +2823,9 @@
     return i < 0 ? null : i;
   }
 
-  async function selectBlock(index) {
+  /* reload: the frame shows something else (a proposal's overlay): go to
+     the draft view with this block selected, instead of telling the old view. */
+  async function selectBlock(index, reload) {
     const page = ed.page;
     if (!page || showing()) return;
     const d = await pageDraft(page);
@@ -2410,7 +2843,8 @@
     Object.assign(ed, { wholeReason: null, selected: index,
       sel: { key: d.key, file: page.file, span, whole: false } });
     showChanges(null);
-    postEditor();
+    if (reload) frameTo(ed.route, true);
+    else postEditor();
   }
 
   async function insertBlock(index, kind) {
@@ -2438,7 +2872,8 @@
     Object.assign(ed, { selected: null,
       sel: { key: d.key, file: page.file, span: { start: 0, end: d.files[page.file].length }, whole: true } });
     showChanges(null);
-    postEditor();
+    if (ed.pv && ed.pv.ov) frameTo(ed.route, true);    // a proposal was drawn: show the page I edit
+    else postEditor();
   }
 
   const draftStateText = (d) => (C.isDirty(d) ? 'Changed — kept as a draft in this tab, not proposed yet.'

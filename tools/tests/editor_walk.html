@@ -25,6 +25,18 @@
     tray-guide       on + the tray's Guide tab
     phone            on + the tray open, under 768 px (the bottom sheet); the
                      site's frame is 390 px wide (smoke.mjs shoots it at 390)
+    overlay-inline   (U7) on, with a synthetic open proposal #2 on this page
+                     drawn over main: an added note, a changed paragraph (old
+                     above new), a paragraph main also changed (the "main
+                     changed this" mark), and the page bar above the frame
+    overlay-side     the same, with the View setting "Side by side"
+    two-prs          proposal #2 and a newer #3 on this page: #3 is drawn, the
+                     page bar lists #2 with its own "Show on page"
+
+  The synthetic proposals (U7) are built here from the page's own Markdown
+  with HCCore.splitBlocks and handed to the fake GitHub as `extra`; PR #1
+  (the real, read-only fixture) stays as it is. &width=<px> (smoke.mjs, for
+  widths headless Chrome will not make on a Mac) sizes the site's frame.
 
   The frame's own messages (hc-block-select / hc-block-insert) cannot be
   clicked from here: the Editor's page frame is sandboxed (opaque origin).
@@ -59,7 +71,9 @@
     body.setAttribute('data-walk-step', 'refused');
     return;
   }
-  const STEPS = ['on', 'select', 'edit', 'insert', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone'];
+  const STEPS = ['on', 'select', 'edit', 'insert', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
+    'overlay-inline', 'overlay-side', 'two-prs'];
+  const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
   const page = params.get('page') || '/setup/hippocampus-bringup/fcu-firmware';
@@ -85,9 +99,64 @@
 
   const readText = (url) => fetch(url, { cache: 'no-store' })
     .then((r) => (r.ok ? r.text() : null)).catch(() => null);
-  const fake = window.HCFakeGitHub.createFakeGitHub({
+  const pageFile = () => { const m = /^\/setup\/(.+)$/.exec(page); return m ? `content/setup/${m[1]}.md` : null; };
+
+  /* U7: synthetic open proposals on this page, from its own Markdown.
+     #2 (on a merge base where one paragraph had an older wording, so main
+     has changed it since): adds a note after the title, changes the second
+     paragraph, and rewrites the first one too (a conflict with main). #3
+     (built on main, newer): adds one paragraph after the title. */
+  async function synthetic() {
+    const file = pageFile();
+    const main = file ? await readText(`../../${file}`) : null;
+    const split = main ? window.HCCore.splitBlocks(main) : null;
+    if (!split || !split.ok) throw new Error(`the walk page ${page} does not split into blocks`);
+    const texts = split.blocks.map((b) => b.text);
+    const tail = (t) => t.match(/\n*$/)[0] || '\n';
+    const core = (t) => t.replace(/\n+$/, '');
+    const paras = split.blocks.map((b, i) => (b.kind === 'paragraph' ? i : -1)).filter((i) => i >= 0);
+    const h1 = Math.max(0, split.blocks.findIndex((b) => b.kind === 'heading'));
+    const base = texts.slice();
+    const head = texts.slice();
+    if (paras.length) {
+      base[paras[0]] = `An older wording of this paragraph, before main changed it.${tail(texts[paras[0]])}`;
+      head[paras[0]] = `The proposal rewrote this paragraph as well.${tail(texts[paras[0]])}`;
+    }
+    if (paras.length > 1) {
+      head[paras[1]] = `${core(texts[paras[1]])} The proposal adds this sentence to the paragraph.${tail(texts[paras[1]])}`;
+    }
+    head[h1] = `${core(head[h1])}\n\n<div class="adm adm-note"><p class="adm-title">Note</p>\n\nThe proposal adds this note `
+      + `right after the title.\n\n</div>${tail(head[h1])}`;
+    const three = texts.slice();
+    three[h1] = `${core(three[h1])}\n\nA second, newer proposal adds this paragraph.${tail(three[h1])}`;
+    const pull1 = JSON.parse(await readText('fixtures/github-data/pull-1.json'));
+    const checks = JSON.parse(await readText('fixtures/github-data/check-runs-d0bdc64.json'));
+    const sha = (c) => c.repeat(40).slice(0, 40);
+    const pull = (n, login, created, headSha) => Object.assign({}, pull1, { number: n, title: `Walk proposal #${n}`,
+      created_at: created, user: Object.assign({}, pull1.user, { login }),
+      head: Object.assign({}, pull1.head, { sha: headSha, ref: `cms/${login}/walk-${n}` }) });
+    const row = { filename: file, status: 'modified', additions: 3, deletions: 2, changes: 5, patch: '@@ -1 +1 @@' };
+    const extra = {
+      pulls: [pull(2, 'walk-proposer', '2026-09-29T09:00:00Z', sha('b2'))],
+      files: { 2: [row] },
+      contents: { [sha('ba5e')]: { [file]: base.join('') }, [sha('b2')]: { [file]: head.join('') } },
+      compare: { [sha('b2')]: sha('ba5e') },
+      checks: { [sha('b2')]: checks },
+    };
+    if (step === 'two-prs') {
+      extra.pulls.push(pull(3, 'newer-proposer', '2026-09-30T09:00:00Z', sha('b3')));
+      extra.files[3] = [Object.assign({}, row, { additions: 2, deletions: 0, changes: 2 })];
+      extra.contents[sha('b3')] = { [file]: three.join('') };
+      extra.compare[sha('b3')] = window.HCFakeGitHub.MAIN_SHA;
+      extra.checks[sha('b3')] = { total_count: 0, check_runs: [] };
+    }
+    return extra;
+  }
+
+  const fakeFor = (extra) => window.HCFakeGitHub.createFakeGitHub({
     readFixture: (name) => readText(`fixtures/github-data/${name}`),
     readFile: (p) => (/^[A-Za-z0-9._/-]+$/.test(p) && p.indexOf('..') < 0 ? readText(`../../${p}`) : Promise.resolve(null)),
+    extra,
   });
 
   const site = document.createElement('iframe');
@@ -96,6 +165,8 @@
   // headless Chrome will not make a window narrower than 500 px on a Mac: the
   // phone step sizes the site's own viewport instead
   if (step === 'phone') site.style.width = '390px';
+  const width = Number(params.get('width'));
+  if (step !== 'phone' && Number.isInteger(width) && width >= 200 && width <= 2000) site.style.width = `${width}px`;
   body.appendChild(site);
 
   let SW = null;               // the site's window
@@ -216,7 +287,24 @@
       await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
       await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
     },
+    'overlay-inline': async () => {
+      await editorOn();
+      await until(() => { const b = pageBar(); return b && /walk-proposer proposes changes to this page/.test(b.textContent); },
+        'the page bar for proposal #2');
+      await until(() => /main changed this since the proposal/.test(pageBar().textContent), 'the conflict line');
+    },
+    'overlay-side': async () => {
+      await RUN['overlay-inline']();
+    },
+    'two-prs': async () => {
+      await editorOn();
+      await until(() => { const b = pageBar(); return b && /newer-proposer proposes changes to this page/.test(b.textContent); },
+        'the page bar for the newest proposal, #3');
+      await until(() => /Also proposing changes here:\s*#2 by walk-proposer/.test(pageBar().textContent)
+        && $('.hc-pagebar [data-action="pagebar-show"][data-proposal="2"]'), '#2 listed with its own Show on page');
+    },
   };
+  const pageBar = () => { const b = $('#hc-frame-host .hc-pagebar'); return b && !b.hidden ? b : null; };
 
   site.addEventListener('load', async () => {
     try {
@@ -228,6 +316,14 @@
         if (m && typeof m === 'object' && m.type === 'hc-ready' && typeof m.nonce === 'string') readies.push(m.nonce);
       });
       await until(() => SW.HCApp && SD.querySelector('#content h1'), 'the site\'s page');
+      const overlay = OVERLAY_STEPS.indexOf(step) >= 0;
+      const fake = fakeFor(overlay ? await synthetic() : undefined);
+      // the View settings are this browser's: the walk sets them for its step (side by side only there)
+      try {
+        if (step === 'overlay-side') {
+          SW.localStorage.setItem('hc-editor-view', JSON.stringify({ suggestions: true, diff: 'side', compact: false, outlines: true }));
+        } else if (overlay) SW.localStorage.removeItem('hc-editor-view');
+      } catch (e) { /* the defaults */ }
       const user = JSON.parse(await readText('fixtures/github-data/user.json'));
       const started = await SW.HCApp.loadEditor({ fetch: fake.fetch,
         session: { token: 'walk-fake-not-a-token', login: String(user.login), expiresAt: null } });

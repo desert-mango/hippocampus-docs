@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 1 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent.
 /* HCEditorFrame — the FRAME side of the Editor mode (plan D-D, D-E, D-N).
@@ -35,7 +35,11 @@
          * applies the classes the message names: hc-selected on the
            selected block (scrolled into view), hc-prop-<mark> from the
            overlay, and the View settings as body classes (hc-outlines,
-           hc-compact, hc-hide-suggestions, hc-diff-side).
+           hc-compact, hc-hide-suggestions, hc-diff-side);
+         * with the diff style "side by side" (U7, plan D-F), puts each
+           replaced block (mark del) and its new version (mark change, the
+           block right after it) into one two-column <div class="hc-side">;
+           with "inline" they stay stacked, old above new.
        No text is ever typed into the frame: editing happens in the parent's
        tray. No message carries HTML.
    The page renders after this file runs (js/app.js is later in the page),
@@ -105,7 +109,8 @@
   function pageBodies(root, prefix) {
     const bodies = [];
     for (const s of findSentinels(root, prefix)) {
-      const p = isBlock(s.parentNode) ? s.parentNode.parentNode : s.parentNode;
+      let p = isBlock(s.parentNode) ? s.parentNode.parentNode : s.parentNode;
+      if (isSide(p)) p = p.parentNode;
       if (p && bodies.indexOf(p) < 0) bodies.push(p);
     }
     return bodies;
@@ -133,6 +138,32 @@
       }
     }
     return Array.from(body.childNodes).filter(isBlock);
+  }
+
+  const isSide = (node) => Boolean(node) && node.nodeType === ELEMENT && classesOf(node).indexOf('hc-side') >= 0;
+
+  /* The overlay's [old, new] pairs for "side by side": a block marked del
+     and the block right after it marked change (its new version, plan
+     D-F). -> [[delIndex, changeIndex]] */
+  function sidePairs(overlay) {
+    const list = (Array.isArray(overlay) ? overlay : []).filter((o) => o && Number.isInteger(o.index))
+      .slice().sort((a, b) => a.index - b.index);
+    const out = [];
+    list.forEach((o, i) => {
+      const next = list[i + 1];
+      if (o.mark === 'del' && next && next.mark === 'change' && next.index === o.index + 1) out.push([o.index, next.index]);
+    });
+    return out;
+  }
+
+  /* Every block wrapper of a page body, also those inside an hc-side pair. */
+  function blocksIn(body) {
+    const out = [];
+    for (const node of Array.from(body.childNodes)) {
+      if (isBlock(node)) out.push(node);
+      else if (isSide(node)) Array.from(node.childNodes).filter(isBlock).forEach((w) => out.push(w));
+    }
+    return out;
   }
 
   function indexOfBlock(w) {
@@ -237,6 +268,36 @@
       }
     }
 
+    /* "Side by side": pairs into div.hc-side (the "+" rail between the two
+       goes: nothing is inserted between an old block and its new version);
+       "inline": any pair is unwrapped again, old above new. */
+    function arrangeSides(body, blocks, s) {
+      const side = s.settings.diff === 'side';
+      for (const node of Array.from(body.childNodes)) {
+        if (!isSide(node)) continue;
+        if (side) continue;
+        for (const c of Array.from(node.childNodes)) body.insertBefore(c, node);
+        body.removeChild(node);
+      }
+      if (!side) return;
+      const byIndex = new Map(blocks.map((w) => [indexOfBlock(w), w]));
+      for (const [d, c] of sidePairs(s.overlay)) {
+        const old = byIndex.get(d);
+        const neu = byIndex.get(c);
+        if (!old || !neu || old.parentNode !== body || neu.parentNode !== body) continue;
+        const pair = doc.createElement('div');
+        pair.className = 'hc-side';
+        body.insertBefore(pair, old);
+        for (let n = old.nextSibling; n && n !== neu;) {
+          const next = n.nextSibling;
+          if (n.nodeType === ELEMENT && classesOf(n).indexOf('hc-plus') >= 0) body.removeChild(n);
+          n = next;
+        }
+        pair.appendChild(old);
+        pair.appendChild(neu);
+      }
+    }
+
     function paintMarks(blocks, s) {
       const marks = new Map(s.overlay.map((o) => [o.index, o.mark]));
       let chosen = null;
@@ -279,9 +340,10 @@
       addCss();
       const root = doc.getElementById('content') || doc.body;
       for (const body of pageBodies(root, prefix)) {
-        const blocks = groupBlocks(doc, body, prefix);
-        decorate(body, blocks);
+        decorate(body, groupBlocks(doc, body, prefix));
+        const blocks = blocksIn(body);
         const chosen = paintMarks(blocks, s);
+        arrangeSides(body, blocks, s);
         if (chosen && scrolledTo !== chosen && typeof chosen.scrollIntoView === 'function') {
           scrolledTo = chosen;
           try { chosen.scrollIntoView({ block: 'center' }); } catch (e) { /* a courtesy */ }
@@ -316,7 +378,8 @@
     return Object.freeze({ apply, state: () => state });
   }
 
-  const api = { INSERT_KINDS, MARK_CLASS, sentinelIndex, isChrome, findSentinels, pageBodies, groupBlocks, create };
+  const api = { INSERT_KINDS, MARK_CLASS, sentinelIndex, isChrome, findSentinels, pageBodies, groupBlocks, sidePairs,
+    blocksIn, create };
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     api.runtime = create(window, document, window.HC);
     window.HCEditorFrame = Object.freeze(api);
