@@ -3,9 +3,9 @@
 // Last substantive modification: 22 September 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the CMS Media tab: signed uploads, the manifest entry, duplicates, the in-use guard, image insertion.
-/* Unit tests for the Media half of js/cms-core.js (U9) and for js/cms.js's
-   Media views, run in a vm context over a fake DOM, a fake /api/media, a
-   fake Cloudinary and a fake GitHub.
+/* Unit tests for the Media half of js/cms-core.js (U9), run against a fake
+   /api/media, a fake Cloudinary and a fake GitHub. The tests of the old
+   /cms/ page's Media views moved, by name, to tools/tests/test_editor.mjs (U8).
 
    Pure logic first: the manifest entry (exact keys, in the manifest's own
    order), duplicate detection by sha256, the in-use guard for rename and
@@ -13,7 +13,7 @@
    plus api_key, signature and the file — never the token), the gateway
    client, and `![alt](url)` at the cursor.
 
-   Then js/cms.js itself: #/media lists the images with thumbnails and a
+   The moved tests (now against Editor mode): #/media lists the images with thumbnails and a
    next page; an upload from a page's editor goes sign -> Cloudinary ->
    one manifest draft entry -> "Insert into page" -> Propose with both
    files; a duplicate offers the site's URL and uploads nothing; delete of

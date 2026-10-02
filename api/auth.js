@@ -7,8 +7,8 @@
    `code`; turning it into a user access token needs the App's client SECRET,
    and a secret cannot live in a browser. So this one small function holds it.
 
-   Flow (the opener side lives in js/cms.js):
-     1. js/cms.js opens GitHub's authorize page in a popup, with a random
+   Flow (the opener side lives in js/editor.js, Editor mode on the site's pages):
+     1. js/editor.js opens GitHub's authorize page in a popup, with a random
         `state` it keeps in memory.
      2. GitHub sends the popup to /cms/callback.html?code=…&state=… .
         js/cms-callback.js posts {type:"hc-code", code, state} to the opener

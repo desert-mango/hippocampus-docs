@@ -839,7 +839,7 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "56d8c656e9451c4040c4f604a9c5cf94aa22d9aaa9d8230551b0b322c377da60",
+        "baseline_sha256": "e889bcc57726505cdd7fc30575030b6b73562c75dde5d271470fd34e7e270c67",
         "commit": "new-in-this-change"
       },
       "header": {

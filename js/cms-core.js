@@ -4,7 +4,7 @@
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test
-   it (tools/tests/test_cms_core.mjs). js/cms.js is the DOM glue around it.
+   it (tools/tests/test_cms_core.mjs). js/editor.js is the DOM glue around it.
 
    ONE REPOSITORY. The token a signed-in person holds may reach other
    repositories; this code never lists or writes any of them, and reads
@@ -41,7 +41,7 @@
        <PR head sha>); U7b uses draftFetcher(files, refFetcher(token, <main
        sha>)) for the in-memory draft.
      - The route table ROUTES names each route's owner; the views live in
-       js/cms.js's VIEWS map.
+       js/editor.js's VIEWS map (the tray's routes).
      - The Review tab's logic (badges, check status, annotations, the action
        requests and what their answers mean, the Undo-on-GitHub URL, the
        changed page -> preview route map) is the "review" section below.
@@ -170,7 +170,7 @@
      beat it and paging stops. Paging also stops at a short (last) page and
      after CLOSED_PAGE_CAP pages; the answer is then the best of what was
      read. A PR seen twice (it moved between pages while paging) counts once.
-     get(path) resolves to the parsed JSON of a GET — js/cms.js's api(), or a
+     get(path) resolves to the parsed JSON of a GET — js/editor.js's api(), or a
      fake in the tests; a rejection is passed on and ends the paging. */
   async function loadRecentMerges(get, limit) {
     const n = Number.isInteger(limit) && limit > 0 ? limit : 5;
@@ -197,7 +197,7 @@
 
   /* A generation counter for work that outlives its moment. next() starts a
      new generation and so retires every earlier one; current() reads it
-     without starting one; isCurrent(g) is true only for the newest. js/cms.js
+     without starting one; isCurrent(g) is true only for the newest. js/editor.js
      starts one on every refresh, sign-in and sign-out, and drops a GitHub
      answer whose generation is no longer current: an older refresh landing
      after a sign-out or a new sign-in must not write its user, role or
@@ -775,7 +775,7 @@
   const FILES_PAGE_CAP = 30;                // GitHub lists at most 3000 files
 
   /* Every changed file of PR n, paged 100 at a time. get(path) resolves to
-     the parsed JSON of a GET (js/cms.js's api()); a rejection is passed on. */
+     the parsed JSON of a GET (js/editor.js's api()); a rejection is passed on. */
   async function loadPullFiles(get, n) {
     if (!Number.isInteger(n) || n < 1) throw new Error('loadPullFiles: n must be a PR number');
     const out = [];
@@ -1309,9 +1309,9 @@
   });
 
   /* U5: the block picker's catalog = SNIPPETS plus four. It is a separate
-     table because /cms/ (js/cms.js) draws one button per SNIPPETS key and
-     tools/tests/test_cms_editor.mjs pins those three keys; the two fold
-     together when /cms/ is retired (U8). The site serves images only from
+     table because the old /cms/ editor drew one button per SNIPPETS key and
+     its test file pinned those three keys; both are retired (U8), and the
+     two tables may now fold together. The site serves images only from
      its Cloudinary manifest, so the image snippet has no address: `media`
      tells the picker to take one from the Media tab (imageMarkdown); the
      bare snippet renders its alt text and passes the gate. The sanitizer

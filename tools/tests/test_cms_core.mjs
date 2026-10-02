@@ -15,8 +15,9 @@
    the review actions' exact requests and what their answers mean, and the
    client's write allowlist.
 
-   The last sections run js/cms.js itself in a vm context over a fake DOM, to
-   pin what only the page can get wrong: a GitHub answer for a session that
+   The sections that ran the old /cms/ page in a vm context over a fake DOM
+   moved, by name, to tools/tests/test_editor.mjs (U8). They pin what only the
+   page can get wrong: a GitHub answer for a session that
    has since ended or been replaced changes nothing, "Recently merged" pages
    the closed PRs, and the Review tab lists, shows, previews and acts (each
    button sends exactly its one request to a fake GitHub).
@@ -313,7 +314,7 @@ test('generation: next() retires every earlier generation; current() starts none
 });
 
 test('generation: an answer that lands after a newer start is told apart and dropped', async () => {
-  // the shape js/cms.js uses: take a generation, await, apply only if current
+  // the shape js/editor.js uses: take a generation, await, apply only if current
   const gen = C.createGeneration();
   const applied = [];
   const load = async (name, answer) => {

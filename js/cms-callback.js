@@ -8,7 +8,7 @@
    It does ONE thing: post {type: "hc-code", code, state} to the window that
    opened this popup — addressed to this site's own origin only — and close.
    It never touches storage, never calls /api/auth, and never sees a token.
-   The opener (js/cms.js) checks that the message came from the popup it
+   The opener (js/editor.js) checks that the message came from the popup it
    opened and that `state` matches its own copy, then does the exchange.
 
    The code is also scrubbed from the address bar straight away, so it does

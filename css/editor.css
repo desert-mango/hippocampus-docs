@@ -7,7 +7,7 @@
      1. the frame side: hc-framed, block marks, pencil, "+" rails, picker,
         proposal marks, view settings;
      2. the parent side: header switch and avatar, frame host, tray, handle,
-        and the tray's contents (carried over from css/cms.css) — added with
+        and the tray's contents (carried over from the retired css/cms.css) — added with
         the parent in js/editor.js;
      3. members-only detail (U4): what js/editor.js draws under js/lab.js's
         public surfaces for a member, with Editor mode off. */
@@ -260,7 +260,7 @@ body.hc-editor-on.hc-tray-open .layout { padding-right: var(--hc-tray-w); }
 .hc-guide { padding-left: 1.1rem; margin: .3rem 0; }
 .hc-guide li { margin: .45rem 0; }
 
-/* Carried over from css/cms.css (the /cms/ views the tray draws), sized for a 340px panel. */
+/* Carried over from the retired css/cms.css (the old /cms/ views the tray draws), sized for a 340px panel. */
 .cms-muted { color: var(--muted); }
 .cms-btn { font: inherit; font-size: .8rem; cursor: pointer; background: var(--surface); color: var(--heading);
   border: 1px solid var(--edge); border-radius: 8px; padding: .32rem .7rem; white-space: nowrap; }

@@ -5,7 +5,9 @@ Author: Fable 5.1 (Chief Architect role). Receiver: /plan-review with an Opus 5 
 the orchestrator. This is a plan, not code. Nothing in either repo was edited.*
 
 *Revision 4, 2026-10-02: Editor mode replaces `/cms/`; `/cms/` is a redirect. See "Revision 4" before §12 for
-the parity table (every `/cms/` route and action, its Editor-mode home, and its tests).*
+the plan it follows, its units with their dates, and the parity table (every `/cms/` route and action, its
+Editor-mode home, and its tests). §5 is rewritten for it: the token's document is now `/`, and the one stated
+exception to the ONE-REPOSITORY rule is written out.*
 
 **One sentence.** Keep "the CMS is GitHub", add a thin signed-in area at `/cms/` on the site itself
 (vanilla JS, no bundle, no framework) where lab members sign in with a GitHub App, edit pages and
@@ -944,10 +946,10 @@ Any failure is fixed at its root; no step is skipped.
 | Credential | Lives in | Reaches the browser? | Reaches the repo? |
 |---|---|---|---|
 | Editor App client secret | Vercel env `GH_APP_CLIENT_SECRET` (the new Desert Mango account) | never | never |
-| Editor App client id | Vercel env + the CMS page (public by design) | yes | as a public id only |
+| Editor App client id | Vercel env; `/api/auth` hands it to the sign-in click (public by design) | yes | as a public id only |
 | Viewer App client secret / id (after the handoff, U10) | Vercel env `GH_VIEWER_CLIENT_SECRET` / `GH_VIEWER_CLIENT_ID` | secret never; id yes | id only |
 | GitHub App private keys (both Apps) | **none generated.** The App owner (`desert-mango`) could generate one at any time and mint installation tokens with no user involved — a standing capability, not a guarantee (R1-F6). What bounds it: each App's permission set (the viewer App is read-only) and each installing account's own repository selection — we install the editor App only on this repo; both Apps are public, so another account could install one on its own repositories, which is that account's choice and relevant only if a key were ever made (R2-F1). | — | — |
-| User access token (8 h) | the signed-in user's `sessionStorage` | yes (it is theirs) | never |
+| User access token (8 h) | the signed-in user's `sessionStorage` on the site's origin (rev 4: the document that holds it is `/`, see "script injection" below) | yes (it is theirs) | never |
 | `GITHUB_TOKEN` | the Actions run, `contents: write` only in `derive.yml` | never | never |
 | Cloudinary API secret | Vercel env `CLOUDINARY_API_SECRET` (a key pair made for this site) | never | never |
 | Cloudinary API key | Vercel env; returned with signed upload params | yes (public by Cloudinary's design [S55]) | never |
@@ -964,8 +966,9 @@ private App can be authorized only by members of the owning organization and the
 collaborators [S92]; we install it on the docs repo alone. Being public, anyone could install it
 on their own repositories — their choice, and it matters only if a private key were ever
 generated (none is); a user token still reaches only repositories where both the App is installed
-and the user has access, and `js/cms.js` ignores every repository except
-`desert-mango/hippocampus-docs` (R2-F1). The viewer App (after the handoff) is installed by the
+and the user has access, and the editor's GitHub client (`js/cms-core.js`, `assertRepoPath`)
+refuses every repository except `desert-mango/hippocampus-docs` before `fetch` is called, with
+the one stated exception below (R2-F1). The viewer App (after the handoff) is installed by the
 lab org on the lab repos it selected, read-only. An OAuth
 `repo`-scope token would have reached every private repo the user can see [S31]; rejected. Each
 token is in `sessionStorage` (gone when the tab closes), expires in 8 hours [S29], and is sent
@@ -975,6 +978,23 @@ for Contents and Pull requests (read and write), Checks (read), Commit statuses 
 Metadata — no Administration, no Workflows [S33]; so a token cannot change collaborators, settings
 or `.github/workflows` files through the App. The `state` check runs in the opener, so a forged
 popup message cannot start an exchange (U5).
+
+**The one stated exception to the ONE-REPOSITORY rule (R2-F1, revision 4, decision D-A).**
+Members-only detail (who committed what, shown to signed-in members with Editor mode off) is
+read at view time in the member's browser with their own token; there is no `api/` function
+and no new credential. Exactly one GET-only reader, `createOrgReader` in `js/cms-core.js`, may
+send the user token to `repos/HippoCampusRobotics/<repo>/commits…` for a `<repo>` named in the
+committed `data/graph/github-repos.json` (a fixed allowlist built from that file when the
+reader is made), plus this repository's `commits?path=` and `compare`. Never a list call,
+never another owner, never another endpoint, never a write: anything else is refused locally
+before `fetch`. A 403 or 404 from an authenticated org read is retried once without the token
+(public data is readable anonymously; the editor App is installed only on this repository, so
+GitHub may refuse the token there), and answers are cached for 15 minutes in `sessionStorage`.
+The existing client's `assertRepoPath` still refuses every `HippoCampusRobotics` path (a test
+proves it), so the exception lives in that one reader; `readOrg` in `js/editor.js` is a thin
+wrapper around it. The header comment of `js/cms-core.js` states the same rule. If 60 anonymous
+reads an hour per address prove too few (a shared TUHH address), the follow-up is
+`api/members.js` with a public-read-only token behind the same `readOrg` seam.
 
 **Threat: the Cloudinary secret.** Only `api/media.js` holds it. The function signs uploads with
 server-chosen folder and public_id; a signed parameter cannot be altered client-side [S54]. Delete
@@ -1007,23 +1027,52 @@ repo is private on the Free plan [S26], live if it goes public); (5) `pull_reque
 never used [S51]. Nothing here blocks a merge; it makes the risk visible, which is Kyle's chosen
 posture.
 
-**Threat: script injection through CMS preview or content.** Four layers, three of them in the
-must-have tier. (1) Previews render in a sandboxed iframe without `allow-same-origin`: an
-injected script runs in an opaque origin with no access to the parent's `sessionStorage`, the
-token or the API; the bridge answers only the current nonce, only the iframe's own window, only
-`content/`, `data/` and `search/` paths at the previewed ref (R1-F13). (2) `js/sanitize.js`
-allowlists what the Markdown renderer may output, on the live site and in previews (relative
-`assets/` links and `align` kept, R1-F7). (3) `check.py` 6d rejects scripts, handlers and
-`javascript:` URLs before merge. (4) CSP `script-src 'self'` — no inline scripts anywhere, no
-third-party scripts, `object-src 'none'` — ships after the handoff (U4b) once the three-browser
-pass with the bridge is done. Cross-origin requests to the functions are refused (`Origin` check,
-like the librarian). The opener compares `state` before it will exchange a code (U5).
+**Threat: script injection — the token's document is `/` (revision 4, decision D-C).** Until
+revision 4 the token lived in the separate `/cms/` page. Editor mode moves it into the site's own
+page: a signed-in member's token sits in `sessionStorage` on the same origin as `index.html`, so
+any script that runs in `/` could read it. The defence is in layers:
+
+(0) **Guests load no editor code.** `index.html` loads only the public scripts
+(`js/source.js`, `js/editor-frame.js` (a no-op outside the Editor's frame), `js/sanitize.js`,
+the vendored `js/marked.min.js`, `js/search.js`, `js/graph.js`, `js/lab.js`, `js/app.js`).
+`js/app.js` injects `js/cms-core.js`, `js/editor.js` and `css/editor.css` only when
+`sessionStorage` holds a session or the person clicks "Sign in to edit"; a guest makes zero
+GitHub requests (tests prove both).
+
+(1) **The renderers that share the document** are `js/app.js`, `js/graph.js`, `js/lab.js` and
+(signed in) `js/editor.js`. `js/app.js` is the only one that writes HTML: pages and project
+stories are Markdown rendered by marked and written with `innerHTML` only after
+`js/sanitize.js` (an allowlist of tags, attributes and URL schemes; relative `assets/` links and
+`align` kept, R1-F7); search results and the librarian's hits are templates whose every value
+is escaped. `js/graph.js`, `js/lab.js` and `js/editor.js` build DOM nodes and set text only;
+they never write `innerHTML`, so GitHub's words (titles, logins, commit messages) stay text.
+
+(2) **The page frame is sandboxed.** In Editor mode the page under edit, and any proposal shown
+on it, render in an `<iframe>` sandboxed without `allow-same-origin`: a script that slipped into
+a proposal runs in an opaque origin, with no access to the parent's `sessionStorage`, the token
+or the API. The bridge (`js/source.js`) answers only the current nonce, only the frame's own
+window, only `content/`, `data/` and `search/` paths at the shown commit (R1-F13); the frame's
+block messages are checked the same way.
+
+(3) **The gate.** `check.py` 6d rejects scripts, handlers and `javascript:` URLs in content
+before merge. `index.html` is judged like the old shell pages: no inline `<script>`, no `on*=`
+attribute, scripts and styles only from the site's own files (the one remote
+`<link rel="icon">` on `res.cloudinary.com` is allowed the way an `<img>` is). `index.html`
+also sends `<meta name="referrer" content="no-referrer">`.
+
+(4) **CSP — a stated follow-up, not shipped.** A Content Security Policy header
+(`script-src 'self'`, no inline scripts, no third-party scripts, `object-src 'none'`) is U4b,
+after the handoff, once the three-browser pass with the bridge is done. In revision 4 it applies
+to `/` (the whole site), not only to `/cms/`. Until it ships, layers 0–3 carry the risk.
+
+Cross-origin requests to the functions are refused (`Origin` check, like the librarian). The
+opener compares `state` before it will exchange a code (U5).
 
 **Also:** rate limits on both functions; body caps; no Vercel-injected helpers (the raw-Node
-pattern); `noindex` stays; the CMS page is public HTML that does nothing without a token. Any
-GitHub account can authorize the public App; while the repo is private, a non-collaborator stops
-at the 404 from the repository lookup; if E1-C makes it public, they get the read-only state —
-every write path checks `permissions.push` (D8, R2-F1).
+pattern); `noindex` stays; `/cms/` is now a redirect page that loads only `js/cms-redirect.js`, and
+the site's pages load the editor's code only for a session (layer 0 above). Any GitHub account
+can authorize the public App; the repository is public (E1-C), so a non-collaborator gets the
+Read-only state — every write path checks `permissions.push` (D8, R2-F1).
 
 ---
 
@@ -1623,6 +1672,26 @@ tray's five tabs (Proposals, Changes, Media, View, Guide). `/cms/` is retired:
   as "js/editor.js …" against Editor mode).
 - §3's `cms/index.html` / `css/cms.css` / `js/cms.js` rows and U7a–U9's file lists describe the
   build as it was; the parity table below is where each of their routes and actions lives now.
+
+**The plan and its units.** Revision 4 follows the Editor-mode build plan (run
+`2026-09-28-1614-hippocampus-editor-mode-build`, plan revision 4 by Fable 5.1, 2026-09-28,
+agreed through plan-review rounds 1–4; it is kept with Kyle's run records, not in this
+repository). Its decisions D-A (members-only detail read in the browser, the ONE-REPOSITORY
+exception) and D-C (guests load no editor code; the token's document is `/`) are written into
+§5 above. The units, by the date their commits landed on `main`:
+
+| Unit | What it built | Landed |
+|---|---|---|
+| U0 | Bookkeeping and the raw GitHub fixtures (`tools/tests/fixtures/github-data/`) | 2026-09-29 |
+| U1 | `tools/build_github_data.py`, its gate section and the derive wiring | 2026-09-29 |
+| U2 | Name auto-match between GitHub logins and the People roster | 2026-09-29 |
+| U3 | The guest GitHub surfaces: the Lab page, repo cards, the person pop-up, "who wrote this" | 2026-09-29 |
+| U5 | The block model, span editor, diff, org reader (`createOrgReader`) and `/cms/` redirect map in `js/cms-core.js` / `js/cms-redirect.js` | 2026-09-29 |
+| U6 | The Editor-mode shell: sign-in from the footer, the header switch, the sandboxed page frame, the tray | 2026-10-01 |
+| U7 | Proposals drawn in place on the page, the page bar, Update from main | 2026-10-01 |
+| U4 | Members-only detail (D-A) | 2026-10-01 |
+| U8 | The parity table below and the retirement of `/cms/` | 2026-10-02 |
+| U9 | These docs: `docs/maintainer-protocols.md`, this §5, the three edit-map copies | 2026-10-02 |
 
 **The parity table.** Every route and action `/cms/` offered, its Editor-mode home, and the tests
 that cover it. `tools/tests/test_parity_table.mjs` reads this table: every route of HCCore's route

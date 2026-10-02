@@ -21,7 +21,7 @@
    because it reads and rewrites the URL fragment before the router looks.
 
    ====================================================================
-   THE PREVIEW PROTOCOL — the parent side (js/cms.js, unit U7a) is written
+   THE PREVIEW PROTOCOL — the parent side (js/editor.js; first U7a) is written
    against this comment; tools/tests/test_preview_bridge.mjs pins it.
    ====================================================================
 

@@ -4,7 +4,7 @@
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte
-   copy of js/cms.js (which keeps serving /cms/ until U8) and runs in the
+   copy of the old /cms/ editor (retired in U8; /cms/ now redirects) and runs in the
    SITE's page (index.html): js/app.js injects js/cms-core.js, this file and
    css/editor.css only for a signed-in session or the "Sign in to edit"
    click (D-C), then calls HCEditor.start(opts). Guests never load it.
