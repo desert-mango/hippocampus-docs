@@ -127,21 +127,6 @@
       },
       "reason": "First-party site code or test written for the editor-mode build (unit U5); the baseline is the file as introduced."
     },
-    "js/cms.js": {
-      "classification": "included",
-      "evidence": {
-        "baseline_sha256": "4835710751a3b34ec9418b95ddc57ac1ae0e97aea5ba3e4a6e448ea2dd380ad1",
-        "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
-      },
-      "header": {
-        "affiliation": "TUHH HippoCampus Robotics",
-        "author": "Kyle Nelson",
-        "last_substantive_modification": "22 September 2026",
-        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Draw the CMS signed-in area: sign-in popup, role badge, hash routes, the preview frame and the editor."
-      },
-      "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
-    },
     "js/graph.js": {
       "classification": "included",
       "evidence": {
@@ -627,21 +612,6 @@
       },
       "reason": "First-party site code or test written for the CMS v2 build (unit U7a); the baseline is the file as introduced, on top of the recorded parent commit."
     },
-    "tools/tests/test_cms_editor.mjs": {
-      "classification": "included",
-      "evidence": {
-        "baseline_sha256": "d589ee6be082ecdcc2c9fd738c45ac24446ea4b975fbda319ec907dbd6cf0e3d",
-        "commit": "b9d7cbefbba0e7bdf10186d2c294dc9e29895e88"
-      },
-      "header": {
-        "affiliation": "TUHH HippoCampus Robotics",
-        "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
-        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Test the CMS editor: page tree, raw-JSON registry guards, drafts, snippets, live preview, Propose."
-      },
-      "reason": "First-party site code or test written for the CMS v2 build (unit U7b); the baseline is the file as introduced, on top of the recorded parent commit."
-    },
     "tools/tests/test_cms_media.mjs": {
       "classification": "included",
       "evidence": {
@@ -899,7 +869,7 @@
     "tools/tests/test_editor.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "461ad98b3ca54edf75e35903a6d7d80d6fa5f97cc86d2022e24b4d528c734cfe",
+        "baseline_sha256": "7391a9dbb4fb80fa998952ee3943c882723eb580ade3dde5d31297c59769c843",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -940,6 +910,21 @@
         "purpose": "Test that members-only GitHub detail reaches signed-in members only, through the org reader alone."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_parity_table.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c62afa87b11782196938d28bc0b7e5b505ca8180367f00075ab5cb7620234384",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "2 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Prove the /cms/ parity table: every retired /cms/ route and action names a green Editor-mode test."
+      },
+      "reason": "First-party site code or test written for the editor-mode build (unit U8); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

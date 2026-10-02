@@ -122,7 +122,7 @@ CONTRIB_MAX_ROWS = 12
 # below are only today's instance of it:
 #   api/media.js (manifest only: it reads data/cloudinary-manifest.json,
 #   which section 6a covers), js/app.js, js/cms-core.js, js/cms-redirect.js,
-#   js/cms.js, js/editor.js, js/editor-frame.js, js/graph.js, js/lab.js,
+#   js/editor.js, js/editor-frame.js, js/graph.js, js/lab.js,
 #   tools/bench_librarian.mjs, tools/build_contributors.py,
 #   tools/build_github_data.py, tools/build_repo_graphs.py,
 #   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
