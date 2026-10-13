@@ -153,6 +153,7 @@
   "ir_field_hardware": "repo:ir_field_hardware",
   "Lab & tank infrastructure": "projects/lab-infrastructure",
   "Learning to Swim replication": "projects/learning-to-swim",
+  "Learning to Swim: simulation run guide": "projects/learning-to-swim-run-guide",
   "Legacy ROS 1 stack": "projects/legacy-ros1",
   "mavlink_headers": "repo:mavlink_headers",
   "mavros": "repo:mavros",

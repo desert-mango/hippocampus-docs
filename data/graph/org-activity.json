@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-02",
+ "read_at": "2026-10-13",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
@@ -9,35 +9,11 @@
   "authors_365d": 5,
   "repos_touched_365d": 12,
   "stars": 30,
-  "forks": 58,
+  "forks": 60,
   "open_issues": 4,
   "releases": 0
  },
  "weeks": [
-  {
-   "week": "2025-09-29",
-   "days": [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ]
-  },
-  {
-   "week": "2025-10-06",
-   "days": [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ]
-  },
   {
    "week": "2025-10-13",
    "days": [
@@ -646,6 +622,30 @@
     0,
     0,
     0,
+    0,
+    0
+   ]
+  },
+  {
+   "week": "2026-10-05",
+   "days": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "week": "2026-10-12",
+   "days": [
+    0,
+    0,
+    null,
+    null,
+    null,
     null,
     null
    ]

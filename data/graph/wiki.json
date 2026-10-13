@@ -2,11 +2,11 @@
  "generated": "run tools/build_wiki_graph.py to regenerate",
  "note": "Index nodes (#/, #/projects, #/tools) are landing views, not content pages: they are EXCLUDED from the page-kind parity count — the same rule the search index uses (it indexes 90 pages, not landing views). Edges: 'links-to' is an explicit #/ link, 'member' a project's repository, 'mentions' a word-boundary name match in prose (code stripped; terms that spray — stoplisted, vetoed, or matching more than 15 pages — are muted), 'related' a hand-authored edge from data/graph/edges-authored.json.",
  "counts": {
-  "pages": 92,
+  "pages": 93,
   "index": 3,
   "repos": 94,
   "edges": {
-   "links-to": 61,
+   "links-to": 63,
    "member": 94,
    "mentions": 84,
    "related": 39
@@ -123,6 +123,15 @@
    "where": "Project",
    "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
    "file": "content/projects/learning-to-swim.md"
+  },
+  {
+   "id": "projects/learning-to-swim-run-guide",
+   "kind": "project",
+   "title": "Learning to Swim: simulation run guide",
+   "route": "#/projects/learning-to-swim-run-guide",
+   "where": "Project",
+   "summary": "This guide runs one simulated HippoCampus flight and tells you how to see that it worked.",
+   "file": "content/projects/learning-to-swim-run-guide.md"
   },
   {
    "id": "projects/legacy-ros1",
@@ -1781,6 +1790,18 @@
    "t": "setup/lab-qualisys/calibration",
    "type": "links-to",
    "why": "explicit link"
+  },
+  {
+   "s": "projects/learning-to-swim",
+   "t": "projects/learning-to-swim-run-guide",
+   "type": "links-to",
+   "why": "see-also link"
+  },
+  {
+   "s": "projects/learning-to-swim-run-guide",
+   "t": "projects/learning-to-swim",
+   "type": "links-to",
+   "why": "see-also link"
   },
   {
    "s": "projects/localization",

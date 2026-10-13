@@ -1,10 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-02",
+ "read_at": "2026-10-13",
  "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository",
  "prs_read": [
   2,
-  3
+  3,
+  4
  ],
  "pages": {
   "about": {
@@ -170,6 +171,28 @@
    },
    "converted": null,
    "edited_here": []
+  },
+  "projects/learning-to-swim-run-guide": {
+   "original": {
+    "repo": "desert-mango/hippocampus-docs",
+    "path": "content/projects/learning-to-swim-run-guide.md",
+    "authors": [
+     {
+      "login": "kyle-nelson-berkeley",
+      "name": "Kyle Nelson"
+     }
+    ],
+    "history_read": true,
+    "blob": "0ef6319bd766167a52d502aae44394150dbbd207"
+   },
+   "converted": null,
+   "edited_here": [
+    {
+     "pr": 4,
+     "by": "kyle-nelson-berkeley",
+     "state": "merged"
+    }
+   ]
   },
   "projects/legacy-ros1": {
    "original": {
