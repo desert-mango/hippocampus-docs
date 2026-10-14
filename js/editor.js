@@ -2061,7 +2061,8 @@
     sel: null,            // {key, file, span, whole}: the text the tray's textarea edits
     selected: null,       // the block index the frame shows selected
     inPage: null,         // {index, editor}: the frame said that block is typed in the page (U2), else null
-    asMarkdown: null,     // the block index the person chose to edit as Markdown in the tray instead
+    asMarkdown: null,     // the block index the person chose to edit in the in-place Markdown box (U3)
+    trayEdit: null,       // the block index being edited in the tray's textarea: the frame opens nothing for it
     inPageReason: '',     // why the frame said the selected block must be edited as Markdown
     wholeReason: null,    // why block editing is off for this page, or null
     mainSha: null,        // Promise of main's head sha, once per refresh
@@ -2334,6 +2335,7 @@
     ed.selected = null;
     ed.inPage = null;
     ed.asMarkdown = null;
+    ed.trayEdit = null;
     ed.inPageReason = '';
     ed.wholeReason = null;
     ed.draft = null;
@@ -2835,14 +2837,14 @@
     const sel = ed.sel;
     const d = ed.draft;
     if (!sel || sel.whole || ed.selected === null || !d || d.key !== sel.key || !canEdit() || showing()) return null;
-    if (ed.asMarkdown === ed.selected) return null;
+    if (ed.trayEdit === ed.selected) return null;           // typed in the tray: the tray's textarea owns it
     if (ed.pv && ed.pv.ov) return null;                    // a proposal is drawn over the page
     const md = d.files[sel.file].slice(sel.span.start, sel.span.end);
     if (md.length > MAX_BLOCK_MD) return null;
     const split = C.splitBlocks(md);
     const b = split.ok ? split.blocks.find((x) => x.kind !== 'space') : null;
     if (!b || OPEN_KINDS.indexOf(b.kind) < 0) return null;
-    return { index: ed.selected, md, kind: b.kind };
+    return { index: ed.selected, md, kind: b.kind, as: ed.asMarkdown === ed.selected ? 'markdown' : null };
   }
 
   /* hc-block-md: the open block's new Markdown, written into the draft by its SPAN (the text outside
@@ -2861,10 +2863,20 @@
     drawDraftList(false);
   }
 
+  /* "Edit this part as Markdown": the frame closes the typed block (open: null), then opens it again
+     as the in-place Markdown box (open.as = 'markdown'): two messages, in that order. */
+  function closeInFrame() {
+    const keep = ed.selected;
+    ed.selected = null;
+    postEditor();
+    ed.selected = keep;
+    postEditor();
+  }
+
   /* hc-block-state: the frame typed in the page, or needs the Markdown box, or closed the block. */
   function blockState(index, editor, reason) {
     if (index !== ed.selected) return;
-    if (editor === 'visual' || editor === 'code' || editor === 'box') ed.inPage = { index, editor };
+    if (editor === 'visual' || editor === 'code' || editor === 'box' || editor === 'mdbox') ed.inPage = { index, editor };
     else {
       ed.inPage = null;
       if (editor === 'markdown') ed.inPageReason = reason || '';
@@ -3052,7 +3064,7 @@
     }
     const span = C.spanOf(text, index);
     if (!span) return;
-    if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, inPageReason: '' });
+    if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, trayEdit: null, inPageReason: '' });
     Object.assign(ed, { wholeReason: null, selected: index,
       sel: { key: d.key, file: page.file, span, whole: false } });
     showChanges(null);
@@ -3098,8 +3110,8 @@
     const d = ed.draft;
     const sel = ed.sel;
     if (!d || !sel || !canEdit() || d.key !== sel.key) return;
-    // typing in the Markdown box: this block stays a Markdown edit (the frame must not open it for typing)
-    if (!sel.whole && ed.selected !== null) ed.asMarkdown = ed.selected;
+    // typing in the tray's textarea: the tray owns this block (the frame must not open it as well)
+    if (!sel.whole && ed.selected !== null) ed.trayEdit = ed.selected;
     const out = C.replaceSpan(d.files[sel.file], sel.span, ta.value);
     d.files[sel.file] = out.text;
     sel.span = out.span;
@@ -3157,10 +3169,13 @@
     }
     if (!sel.whole && ed.inPage && ed.inPage.index === ed.selected) {
       inPageLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: draftStateText(ed.draft) });
-      const asMd = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-as-markdown' }, 'Edit this part as Markdown');
-      asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; postEditor(); showChanges(null); });
-      out.push(h('p', { class: 'hc-block-label', text: 'Typing in the page' }),
-        h('p', { class: 'cms-muted', 'data-in-page': ed.inPage.editor, text: 'Type right in the page: your changes are marked there as suggestions '
+      const md = ed.inPage.editor === 'mdbox';
+      const asMd = md ? null : h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-as-markdown' }, 'Edit this part as Markdown');
+      if (asMd) asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; closeInFrame(); showChanges(null); });
+      out.push(h('p', { class: 'hc-block-label', text: md ? 'Editing as Markdown in the page' : 'Typing in the page' }),
+        h('p', { class: 'cms-muted', 'data-in-page': ed.inPage.editor, text: md
+          ? 'This part is edited as Markdown right in the page, with a live preview. Done shows the result.'
+          : 'Type right in the page: your changes are marked there as suggestions '
           + '(new text underlined, removed text struck through). Escape stops typing.' }),
         inPageLine, h('div', { class: 'cms-action-row' }, asMd, whole));
       return box(null);

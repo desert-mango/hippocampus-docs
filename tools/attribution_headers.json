@@ -985,6 +985,21 @@
         "purpose": "Make typing in an open block a Google Docs-style suggestion: inserted text marked, deleted text struck, kept."
       },
       "reason": "First-party site code written for the editor redesign (unit U2, typing in the page); the baseline is the file as introduced."
+    },
+    "js/editor-blocks.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "902bf3260377cc62664017d45db764e83ea4c86fd346cad1a617bc344c06d97c",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "14 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Draw the in-page block editors: the Markdown box with live preview, the note-box bar, code language, format bar."
+      },
+      "reason": "First-party site code written for the editor redesign (unit U3, the block editors in the page); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

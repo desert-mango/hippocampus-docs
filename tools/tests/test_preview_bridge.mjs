@@ -542,7 +542,9 @@ test('vercel.json: every route may be framed by the site itself only (the editor
 test('typing in the page (U2): hc-editor `open` is cleaned field by field; the frame gets Markdown, never HTML', () => {
   const base = { type: 'hc-editor', on: true };
   const ok = SRC.editorMessage({ ...base, open: { index: 4, md: 'A paragraph.\n\n', kind: 'paragraph', html: '<b>x</b>' } });
-  assert.deepEqual(ok.open, { index: 4, md: 'A paragraph.\n\n', kind: 'paragraph' }, 'only index, md and kind cross');
+  assert.deepEqual(ok.open, { index: 4, md: 'A paragraph.\n\n', kind: 'paragraph', as: null }, 'only index, md, kind and as cross');
+  assert.equal(SRC.editorMessage({ ...base, open: { index: 4, md: 'x', kind: 'table', as: 'markdown' } }).open.as, 'markdown');
+  assert.equal(SRC.editorMessage({ ...base, open: { index: 4, md: 'x', kind: 'table', as: '<b>' } }).open.as, null);
   for (const bad of [{ index: -1, md: 'x', kind: 'paragraph' }, { index: 1, md: 7, kind: 'paragraph' },
     { index: 1, md: 'x', kind: 'script' }, { index: 1, md: 'x'.repeat(SRC.MAX_BLOCK_MD + 1), kind: 'paragraph' }, 'x', null]) {
     assert.equal(SRC.editorMessage({ ...base, open: bad }).open, null, JSON.stringify(bad && bad.kind));

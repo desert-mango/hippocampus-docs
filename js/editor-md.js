@@ -287,7 +287,10 @@
     const raw = tok && tok.type === 'code' ? tok.raw.replace(/\n+$/, '') : '';
     const lines = raw.split('\n');
     if (raw && /^ {0,3}(`{3,}|~{3,})/.test(lines[0])) {
-      const open = lines[0];
+      // the code box's language picker sets data-hc-lang on the <pre> (an editor-only attribute: the
+      // sanitizer drops data-* from content): it replaces the fence's info string, nothing else
+      const lang = attr(pre, 'data-hc-lang');
+      const open = lang === null ? lines[0] : lines[0].replace(/^( {0,3}(?:`{3,}|~{3,}))[^\s`]*/, (m, f) => `${f}${/^[A-Za-z0-9_+.#-]{0,40}$/.test(lang) ? lang : ''}`);
       const fence = /^ {0,3}(`{3,}|~{3,})/.exec(open)[1];
       const last = lines[lines.length - 1];
       const close = lines.length > 1 && new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`).test(last) ? last : '';

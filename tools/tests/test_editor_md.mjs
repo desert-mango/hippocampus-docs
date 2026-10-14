@@ -218,6 +218,10 @@ test('code blocks: the fence lines are kept verbatim, only the inside changes', 
   assert.equal(M.editorFor({ kind: 'code', text: md }), 'code');
   const { out } = edit(md, 'code', 'xyz_motors', 'xyz_motors_v2');
   assert.equal(out, '```console\n$ ros2 launch gantry xyz_motors_v2.launch.py\n```\n\n');
+  // the language picker (data-hc-lang on the <pre>) rewrites the fence's info string only
+  const picked = M.renderBlock(md);
+  picked.childNodes.find((c) => c.nodeType === 1).setAttribute('data-hc-lang', 'bash');
+  assert.equal(M.serialize(picked, md, 'code'), '```bash\n$ ros2 launch gantry xyz_motors.launch.py\n```\n\n');
   // a typed fence line inside the code would end the block early: refused, never written
   const root = M.renderBlock(md);
   const code = root.childNodes.find((c) => c.nodeType === 1).childNodes[0];

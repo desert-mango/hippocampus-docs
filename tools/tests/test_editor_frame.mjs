@@ -431,7 +431,7 @@ test('editor-frame (U2): the typing scripts load only when the parent opens a bl
   assert.deepEqual(scripts(), [], 'a selection alone loads nothing');
   HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
   HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
-  assert.deepEqual(scripts(), ['js/editor-md.js', 'js/editor-type.js'], 'the converter and the typing engine, once');
+  assert.deepEqual(scripts(), ['js/editor-md.js', 'js/editor-type.js', 'js/editor-blocks.js'], 'the converter, the typing engine and the block editors, once');
 });
 
 test('editor-frame (U2): Escape while the typing scripts are still loading cancels the open and tells the parent', () => {

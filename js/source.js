@@ -114,9 +114,11 @@
                                              BLOCK_INSERT_KINDS
         hc-block-state   {index, editor,     the open block is typed in the
                           reason}            page ('visual' | 'code' |
-                                             'box'), must be edited as
-                                             Markdown ('markdown'), or was
-                                             closed ('closed'); reason is
+                                             'box'), is edited in the
+                                             in-place Markdown box ('mdbox'),
+                                             needs the tray's Markdown box
+                                             ('markdown'), or was closed
+                                             ('closed'); reason is
                                              plain text, at most 300 characters
         hc-block-md      {index, md}         the open block's Markdown after
                                              typing (the editor redesign, U2):
@@ -137,10 +139,11 @@
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
-        open      {index, md, kind} | null: the block to type in, its Markdown
-                  (a string of at most MAX_BLOCK_MD characters) and its
-                  HCCore.splitBlocks kind (OPEN_KINDS); the frame renders the
-                  Markdown itself, so no HTML crosses
+        open      {index, md, kind, as} | null: the block to type in, its Markdown
+                  (a string of at most MAX_BLOCK_MD characters), its
+                  HCCore.splitBlocks kind (OPEN_KINDS), and as: 'markdown' when
+                  the person chose the in-place Markdown box (else null); the
+                  frame renders the Markdown itself, so no HTML crosses
       The frame accepts it only when event.source === window.parent,
       event.origin === its own location.origin and the nonce is its own
       (as in 5), and cleans it field by field (editorMessage below); a
@@ -165,7 +168,7 @@
   const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
   const MAX_OVERLAY = 5000;
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
-  const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'markdown', 'closed']);
+  const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'mdbox', 'markdown', 'closed']);
   const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
   const MAX_BLOCK_MD = 200000;
 
@@ -274,7 +277,7 @@
       overlay,
       open: (m.open && typeof m.open === 'object' && isIndex(m.open.index) && typeof m.open.md === 'string'
         && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
-        ? { index: m.open.index, md: m.open.md, kind: m.open.kind } : null,
+        ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
     };
   }
 

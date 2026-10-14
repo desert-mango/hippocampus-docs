@@ -548,3 +548,129 @@ test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by sp
     rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+/* The DevTools harness of the walks above, as one helper: the real site in Editor mode at `page`
+   (editor_walk.html?step=on), with the sandboxed page frame's context found (it runs out of process). */
+async function editorWalk(page, scratch) {
+  const chrome = findChrome();
+  const server = await startServer(ROOT, []);
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const child = spawn(chrome, ['--headless=new', '--disable-gpu', ...HERMETIC, '--window-size=1280,900',
+    `--user-data-dir=${mkdtempSync(path.join(scratch, 'profile-'))}`, '--remote-debugging-port=0', 'about:blank'],
+  { stdio: ['ignore', 'ignore', 'pipe'] });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let port = null;
+  for (let i = 0; i < 150 && !port; i++) { const m = /ws:\/\/127\.0\.0\.1:(\d+)\//.exec(err); if (m) port = m[1]; else await sleep(100); }
+  const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((r) => { ws.onopen = r; });
+  let id = 0;
+  const pend = new Map();
+  const contexts = new Map();
+  const sendTo = (sessionId, method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r);
+    ws.send(JSON.stringify(Object.assign({ id: n, method, params }, sessionId ? { sessionId } : {}))); });
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    const sid = m.sessionId || null;
+    if (m.method === 'Runtime.executionContextCreated') contexts.set(`${sid}:${m.params.context.id}`, { sid, id: m.params.context.id, ctx: m.params.context });
+    if (m.method === 'Runtime.executionContextDestroyed') contexts.delete(`${sid}:${m.params.executionContextId}`);
+    if (m.method === 'Target.attachedToTarget') {
+      const s2 = m.params.sessionId;
+      sendTo(s2, 'Runtime.enable');
+      sendTo(s2, 'Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+      sendTo(s2, 'Runtime.runIfWaitingForDebugger');
+    }
+    if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
+  };
+  const send = (method, params = {}) => sendTo(null, method, params);
+  const ev = async (expression, where) => {
+    const r = await sendTo(where ? where.sid : null, 'Runtime.evaluate', Object.assign({ expression, returnByValue: true, awaitPromise: true }, where ? { contextId: where.id } : {}));
+    if (r.result && r.result.exceptionDetails) throw new Error(`${expression.slice(0, 80)}: ${JSON.stringify(r.result.exceptionDetails.exception && r.result.exceptionDetails.exception.description)}`);
+    return r.result && r.result.result ? r.result.result.value : undefined;
+  };
+  const until = async (fn, what, ms = 20000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${what}`); await sleep(100); } };
+  await send('Page.enable');
+  await send('Runtime.enable');
+  await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+  await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=on&page=${page}` });
+  await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === 'on:ready' || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), 'the walk at "on"');
+  const frameCtx = async () => {
+    for (const c of contexts.values()) {
+      if (!c.ctx.auxData || !c.ctx.auxData.isDefault) continue;
+      try { if (await ev("typeof HC !== 'undefined' && HC.preview === true && !!document.querySelector('.hc-block')", c)) return c; } catch (e) { /* gone */ }
+    }
+    return null;
+  };
+  const F = await until(frameCtx, 'the page frame grouped');
+  const site = "document.querySelector('iframe').contentWindow";
+  const draft = (key, file) => ev(`(() => { const d = ${site}.HCCore.createDraftStore(${site}.sessionStorage).get('${key}'); return d ? d.files['${file}'] : null; })()`);
+  // click the block whose text matches `needle` (a JS regexp source), at a point inside it
+  const clickBlock = (needle, sel = 'p, li, td, pre, h2, h3') => ev(`(() => { const re = new RegExp(${JSON.stringify(needle)});
+    const el = [...document.querySelectorAll('.hc-block :is(${sel})')].find((x) => re.test(x.textContent) && x.getClientRects().length);
+    if (!el) return false; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 6, clientY: r.top + 6 })); return true; })()`, F);
+  const close = () => { try { ws.close(); } catch { /* closed */ } try { child.kill('SIGKILL'); } catch { /* gone */ } server.closeAllConnections?.(); server.close(); };
+  // HC_WALK_SHOTS=<dir>: a PNG per named state, to look at (nothing is written otherwise)
+  const shot = async (name) => {
+    const dir = process.env.HC_WALK_SHOTS;
+    if (!dir) return;
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    if (r.result && r.result.data) { mkdirSync(dir, { recursive: true }); writeFileSync(path.join(dir, `${name}.png`), Buffer.from(r.result.data, 'base64')); }
+  };
+  return { send, ev, F, site, until, sleep, draft, clickBlock, close, shot };
+}
+
+test('U3 walk: the block editors in the page, in a real Chrome: note box type, Markdown box, code language, format bar', { timeout: 120000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u3-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch);
+    const { send, ev, F, until, sleep, draft, clickBlock, shot } = W;
+    const KEY = 'setup/lab-gantry/usage';
+    const FILE = 'content/setup/lab-gantry/usage.md';
+    const openIs = (editor) => until(() => ev(`(HCEditorFrame.runtime.open() || {}).editor === '${editor}'`, F), `a block open as ${editor}`);
+    // 1. a note box: the type bar on its edge; Warning
+    assert.ok(await clickBlock('motor position is stored inside the motion controller'));
+    await openIs('box');
+    assert.ok(await ev("!!document.querySelector('.hc-block.hc-open .hc-boxbar .hc-box-type')", F), 'the note box bar');
+    await ev("document.querySelector('.hc-block.hc-open .hc-box-type').click()", F);
+    await ev("[...document.querySelectorAll('.hc-boxmenu .hc-pm-item')].find((b) => b.textContent === 'Warning').click()", F);
+    await sleep(200);
+    await shot('u3-note-box');
+    assert.match(await draft(KEY, FILE), /<div class="adm adm-warning"><p class="adm-title">Warning<\/p>\n\nThe motor position is stored/, 'the box type changed in the draft');
+    // 2. a tabs block: the in-place Markdown box with live preview
+    assert.ok(await clickBlock('Homing Using the GUI|Run the GUI', 'p, li'));
+    await openIs('mdbox');
+    assert.ok(await ev("!!document.querySelector('.hc-block.hc-open .hc-mdbox .hc-md-src')", F), 'the Markdown box in place');
+    await ev("(() => { const t = document.querySelector('.hc-open .hc-md-src'); t.focus(); t.setSelectionRange(0, 0); })()", F);
+    await send('Input.insertText', { text: 'Before the tabs.\n\n' });
+    await sleep(200);
+    assert.match(await ev("document.querySelector('.hc-open .hc-md-prev').textContent", F), /Before the tabs\./, 'the preview follows the typing');
+    await shot('u3-markdown-box');
+    assert.match(await draft(KEY, FILE), /Before the tabs\.\n\n<div class="tabs">/, 'the box text reaches the draft as typed');
+    await ev("document.querySelector('.hc-open .hc-md-done').click()", F);
+    await until(() => ev('HCEditorFrame.runtime.open() === null', F), 'Done closes the box');
+    // 3. a code block: the language picker rewrites the fence's info string
+    assert.ok(await clickBlock('^\\$ ros2 launch gantry xyz_motors\\.launch\\.py\\s*$', 'pre'));
+    await openIs('code');
+    await ev("(() => { const s = document.querySelector('.hc-block.hc-open .hc-codebar select'); s.value = 'bash'; s.dispatchEvent(new Event('change')); })()", F);
+    await sleep(200);
+    assert.match(await draft(KEY, FILE), /```bash\n\$ ros2 launch gantry xyz_motors\.launch\.py\n```/, 'the fence says bash now');
+    // 4. a paragraph: select a word, the format bar, Bold -> a format suggestion
+    assert.ok(await clickBlock('As a physical check'));
+    await openIs('visual');
+    await ev("(() => { const p = document.querySelector('.hc-block.hc-open p'); const t = p.firstChild; const i = t.data.indexOf('physical'); const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 8); getSelection().removeAllRanges(); getSelection().addRange(r); })()", F);
+    await until(() => ev("!!document.querySelector('.hc-formatbar') && !document.querySelector('.hc-formatbar').hidden", F), 'the format bar over the selection');
+    await shot('u3-format-bar');
+    await ev("document.querySelector('.hc-formatbar .hc-fb-strong').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await sleep(200);
+    assert.equal(await ev("(document.querySelector('.hc-open b[data-hc-sug=fmt]') || {}).textContent", F), 'physical');
+    assert.match(await draft(KEY, FILE), /As a \*\*physical\*\* check/, 'Bold in the draft');
+    console.log('U3 walk: note box type, Markdown box with preview, code language, format bar: all in the page');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

@@ -78,7 +78,7 @@
     conflict: 'hc-prop-conflict' });
   const SETTING_CLASS = Object.freeze({ outlines: 'hc-outlines', compact: 'hc-compact' });
   const CSS_HREF = 'css/editor.css';
-  const TYPING_SCRIPTS = Object.freeze(['js/editor-md.js', 'js/editor-type.js']);
+  const TYPING_SCRIPTS = Object.freeze(['js/editor-md.js', 'js/editor-type.js', 'js/editor-blocks.js']);
   const MAX_BLOCK_MD = 200000;  // js/source.js MAX_BLOCK_MD: a longer hc-block-md is refused by the bridge
   const OPEN_EDITORS = Object.freeze(['visual', 'code', 'box']);
   const ELEMENT = 1;
@@ -391,13 +391,13 @@
     function loadScripts() {
       if (scriptsP) return scriptsP;
       scriptsP = new Promise((resolve) => {
-        if (win.HCEditorMd && win.HCEditorType) { resolve(true); return; }
+        if (win.HCEditorMd && win.HCEditorType && win.HCEditorBlocks) { resolve(true); return; }
         let left = TYPING_SCRIPTS.length;
         let ok = true;
         for (const src of TYPING_SCRIPTS) {
           const el = doc.createElement('script');
           el.src = src;
-          el.addEventListener('load', () => { left -= 1; if (!left) resolve(ok && Boolean(win.HCEditorMd && win.HCEditorType)); });
+          el.addEventListener('load', () => { left -= 1; if (!left) resolve(ok && Boolean(win.HCEditorMd && win.HCEditorType && win.HCEditorBlocks)); });
           el.addEventListener('error', () => { ok = false; left -= 1; if (!left) resolve(false); });
           (doc.head || doc.body).appendChild(el);
         }
@@ -439,11 +439,11 @@
       const M = win.HCEditorMd;
       const w = wrapperFor(o.index);
       if (!w) return;
-      const editor = M.editorFor({ kind: o.kind, text: o.md });
-      if (OPEN_EDITORS.indexOf(editor) < 0) {
-        report(o.index, 'markdown', editor === 'image' ? 'images are chosen from Media' : (M.gate(o.md, o.kind).reason || 'this part is edited as Markdown'));
-        return;
-      }
+      // U3: what cannot be typed in the page (a table, tabs, raw HTML, a block the gate refuses, an image
+      // line) or what the person chose to edit as Markdown opens as the in-place Markdown box
+      let editor = o.as === 'markdown' ? 'mdbox' : M.editorFor({ kind: o.kind, text: o.md });
+      if (OPEN_EDITORS.indexOf(editor) < 0) editor = 'mdbox';
+      if (editor === 'mdbox') { openMarkdownBox(o, w); return; }
       let root = null;
       for (const c of Array.from(w.childNodes)) if (c.nodeType === ELEMENT && classesOf(c).indexOf('hc-edit-root') >= 0) root = c;
       if (!root || root.getAttribute('data-hc-md-sent') !== o.md) {
@@ -479,8 +479,106 @@
         }
       }
       w.classList.add('hc-open');
+      const B = win.HCEditorBlocks;
+      if (editor === 'box') {
+        const adm = root.querySelector('.adm');
+        const bar = B.boxBar(doc, adm, {
+          onType: (k, l) => {
+            for (const [kk] of B.BOX_TYPES) adm.classList.remove(`adm-${kk}`);
+            adm.classList.add(`adm-${k}`);
+            const title = adm.querySelector('.adm-title');
+            if (title) title.textContent = l;
+            schedule(now);
+          },
+          onRemove: () => removeBlock(now),
+        });
+        w.insertBefore(bar, root);                // beside the typed DOM, never inside what is serialized
+        now.handles.push({ detach() { bar.remove(); } });
+      }
+      if (editor === 'code') {
+        const pre = root.querySelector('pre');
+        const cur = (/(?:^|\s)language-(\S+)/.exec(targets[0].className || '') || [])[1] || '';
+        const bar = B.codeBar(doc, pre, { current: cur, onChange: (l) => { pre.setAttribute('data-hc-lang', l); schedule(now); } });
+        w.insertBefore(bar, root);                // beside the typed DOM, never inside what is serialized
+        now.handles.push({ detach() { bar.remove(); } });
+      }
+      if (editor !== 'code') now.targets = targets;
       placeCaret(targets);
       report(o.index, editor, '');
+    }
+
+    /* The in-place Markdown box (U3): the block's own DOM is set aside, the box takes its place; every
+       keystroke posts the box's text (Markdown, exactly as typed); Done shows the result rendered. */
+    function openMarkdownBox(o, w) {
+      const M = win.HCEditorMd;
+      const kept = Array.from(w.childNodes).filter((c) => sentinelIndex(c, prefix) === null && !isPencil(c));
+      kept.forEach((c) => { if (c.nodeType === ELEMENT) c.style.display = 'none'; });
+      const label = o.kind === 'table' ? 'Table' : (/class="tabs"/.test(o.md) ? 'Tabs'
+        : (o.kind === 'html' || o.kind === 'wrapper' ? 'HTML' : 'Markdown'));
+      const now = { index: o.index, w, root: null, md: o.md, kind: o.kind, editor: 'mdbox', handles: [], sent: o.md, box: null };
+      const box = win.HCEditorBlocks.markdownBox(doc, { md: o.md, label, render: (md) => M.renderBlock(md),
+        onInput: () => schedule(now), onDone: () => { if (openNow === now) closeBlock(true); } });
+      now.box = box;
+      const pencil = Array.from(w.childNodes).find(isPencil) || null;
+      w.insertBefore(box.el, pencil);
+      now.handles.push({ detach() {
+        box.el.remove();
+        if (now.sent === now.md) { kept.forEach((c) => { if (c.nodeType === ELEMENT) c.style.display = ''; }); return; }
+        // the block now shows what the new Markdown renders to (a clean render; the page's own on the next load)
+        kept.forEach((c) => { if (c.parentNode === w) w.removeChild(c); });
+        const fresh = doc.createElement('div');
+        fresh.className = 'hc-edit-root';
+        const body = M.renderBlock(now.sent);
+        while (body.firstChild) fresh.appendChild(body.firstChild);
+        fresh.setAttribute('data-hc-md-sent', now.sent);
+        w.insertBefore(fresh, pencil);
+      } });
+      openNow = now;
+      w.classList.add('hc-open', 'hc-open-md');
+      if (box.el.offsetWidth && box.el.offsetWidth < 640) box.setView('text');
+      box.focus();
+      lastClick = null;
+      report(o.index, 'mdbox', '');
+    }
+
+    /* A note box's Remove: the block's Markdown becomes empty in the draft; it stays on the page, struck,
+       until the next load. */
+    function removeBlock(now) {
+      if (openNow !== now) return;
+      now.removed = true;
+      now.sent = '';
+      HC.post('hc-block-md', { index: now.index, md: '' });
+      closeBlock(true);
+      now.w.classList.add('hc-removed');
+    }
+
+    /* The formatting bar over a selection inside the open block (U3): Bold, Italic, as suggestions. */
+    let fbar = null;
+    function formatBar() {
+      if (fbar || !win.HCEditorBlocks || !doc.body) return fbar;
+      fbar = win.HCEditorBlocks.formatBar(doc, { onFormat: (what) => {
+        const now = openNow;
+        const sel = doc.getSelection();
+        if (!now || !now.targets || !sel || !sel.rangeCount) return;
+        const host = now.targets.find((t) => t.contains(sel.anchorNode));
+        if (!host) return;
+        win.HCEditorType.format(host, what);
+        schedule(now);
+        fbar.hide();
+      } });
+      doc.body.appendChild(fbar.el);
+      return fbar;
+    }
+    if (doc.addEventListener) {
+      doc.addEventListener('selectionchange', () => {
+        const now = openNow;
+        const sel = doc.getSelection ? doc.getSelection() : null;
+        const fb = now && now.targets ? formatBar() : fbar;
+        if (!fb) return;
+        if (!now || !now.targets || !sel || sel.isCollapsed || !sel.rangeCount || !now.targets.some((t) => t.contains(sel.anchorNode))) { fb.hide(); return; }
+        const r = sel.getRangeAt(0).getBoundingClientRect();
+        if (r && (r.width || r.height)) fb.showAt(r); else fb.hide();
+      });
     }
 
     function placeCaret(targets) {
@@ -512,9 +610,10 @@
 
     /* The block's Markdown, from the edited DOM, to the parent (only when it changed). */
     function flush(now) {
+      if (now.removed) return;
       let md;
       try {
-        md = win.HCEditorMd.serialize(now.root, now.md, now.kind);
+        md = now.editor === 'mdbox' ? now.box.value() : win.HCEditorMd.serialize(now.root, now.md, now.kind);
       } catch (e) {
         report(now.index, 'markdown', (e && e.message) || 'this part can no longer be typed into');
         if (openNow === now) closeBlock(false);
@@ -527,7 +626,7 @@
         return;
       }
       now.sent = md;
-      now.root.setAttribute('data-hc-md-sent', md);
+      if (now.root) now.root.setAttribute('data-hc-md-sent', md);
       HC.post('hc-block-md', { index: now.index, md });
     }
 
@@ -538,8 +637,9 @@
       flush(now);                                 // anything not yet sent (a composition that just ended)
       openNow = null;
       for (const hd of now.handles) hd.detach();
-      for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
-      now.w.classList.remove('hc-open');
+      if (now.root) for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
+      if (fbar) fbar.hide();
+      now.w.classList.remove('hc-open', 'hc-open-md');
       if (tellParent) report(now.index, 'closed', '');
     }
 

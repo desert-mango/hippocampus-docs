@@ -419,7 +419,7 @@ test('U2: a picked block goes to the frame as `open` {index, md, kind}: its Mark
   const i = firstParagraph(PAGE_TEXT);
   await page.send({ type: 'hc-block-select', index: i });
   const m = page.editorMessages().at(-1);
-  assert.deepEqual({ ...m.open }, { index: i, md: blocksOf(PAGE_TEXT)[i].text, kind: 'paragraph' });
+  assert.deepEqual({ ...m.open }, { index: i, md: blocksOf(PAGE_TEXT)[i].text, kind: 'paragraph', as: null });
 });
 
 test('U2: the frame says it types in the page -> the tray drops the Markdown textarea and says so', async () => {
@@ -472,19 +472,58 @@ test('U2: hc-block-md is dropped unless it names the open, in-page block in auth
   assert.match(store().files[PAGE_FILE], /Accepted\./);
 });
 
-test('U2: the frame needs the Markdown box -> the textarea shows with the reason; "Edit this part as Markdown" closes the in-page block', async () => {
+test('U2/U3: the frame cannot open the editor -> the tray textarea shows with the reason', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
   await page.send({ type: 'hc-block-select', index: i });
-  await page.send({ type: 'hc-block-state', index: i, editor: 'markdown', reason: 'a reference-style link' });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'markdown', reason: 'the in-page editor could not load' });
   assert.ok(page.textarea(), 'the Markdown textarea');
-  assert.match(page.one((e) => e.attrs['data-markdown-reason'] !== undefined).textContent, /reference-style link/);
+  assert.match(page.one((e) => e.attrs['data-markdown-reason'] !== undefined).textContent, /could not load/);
+});
+
+test('U3: "Edit this part as Markdown" closes the typed block, then opens it again as the in-place Markdown box', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  const before = page.editorMessages().length;
   page.action('edit-as-markdown').click();
   await new Promise((r) => setImmediate(r));
-  assert.equal(page.editorMessages().at(-1).open, null, 'the frame is told to stop typing');
-  assert.ok(page.textarea(), 'and the textarea is back');
+  const sent = page.editorMessages().slice(before);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].open, null, 'first the typed block closes');
+  assert.equal(sent[1].open.index, i);
+  assert.equal(sent[1].open.as, 'markdown', 'then it opens as the Markdown box');
+  await page.send({ type: 'hc-block-state', index: i, editor: 'mdbox', reason: '' });
+  assert.ok(page.one((e) => e.attrs['data-in-page'] === 'mdbox'), '"Editing as Markdown in the page"');
+  assert.equal(page.textarea(), undefined, 'no second editor in the tray');
+  await page.send({ type: 'hc-block-md', index: i, md: '| a | b |\n|---|---|\n| 1 | 2 |\n\n' });
+  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  assert.match(d, /\| a \| b \|/, 'the box\'s Markdown, exactly as typed, in the span');
+});
+
+test('U3: typing in the tray textarea keeps the frame from opening the same block (one editor at a time)', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.type(page.textarea(), 'Typed in the tray.\n\n');
+  await page.send({ type: 'hc-ready' });
+  assert.equal(page.editorMessages().at(-1).open, null, 'the reloaded frame is not told to open it');
+});
+
+test('U3: a note box Remove (an empty hc-block-md) takes the block out of the draft by its span', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  const b = blocksOf(PAGE_TEXT)[i];
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'box', reason: '' });
+  await page.send({ type: 'hc-block-md', index: i, md: '' });
+  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  assert.equal(d, PAGE_TEXT.slice(0, b.start) + PAGE_TEXT.slice(b.end));
 });
 
 test('U2: Escape in the frame (hc-block-state closed) deselects the block', async () => {
