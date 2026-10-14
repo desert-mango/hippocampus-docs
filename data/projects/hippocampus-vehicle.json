@@ -1,0 +1,104 @@
+{
+ "name": "HippoCampus vehicle",
+ "status": "active",
+ "tagline": "The lab's own micro AUV: hull, electronics, ESCs, and the CAD that defines it.",
+ "file": "content/projects/hippocampus-vehicle.md",
+ "repos": [
+  {
+   "name": "hippocampus-cad",
+   "role": "CAD (external, canonical)",
+   "url": "https://github.com/FinnBreu/hippocampus-cad",
+   "desc": "Autodesk Inventor CAD of the HippoCampus vehicle (canonical, external to the org)",
+   "lang": "CAD",
+   "external": true
+  },
+  {
+   "name": "hippocampus_pcbs",
+   "role": "PCB designs",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_pcbs",
+   "desc": "",
+   "lang": "",
+   "pushed": "2021-03-04",
+   "fork": false
+  },
+  {
+   "name": "hardware",
+   "role": "ROS 2 hardware bring-up",
+   "url": "https://github.com/HippoCampusRobotics/hardware",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-08-06",
+   "fork": false
+  },
+  {
+   "name": "hardware_interfaces",
+   "role": "sensor/actuator interfaces (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/hardware_interfaces",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-11-03",
+   "fork": false
+  },
+  {
+   "name": "esc",
+   "role": "ESC I2C driver",
+   "url": "https://github.com/HippoCampusRobotics/esc",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2026-05-05",
+   "fork": false
+  },
+  {
+   "name": "esc_serial",
+   "role": "ESC serial protocol",
+   "url": "https://github.com/HippoCampusRobotics/esc_serial",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2023-09-29",
+   "fork": false
+  },
+  {
+   "name": "teensy_esc_controller",
+   "role": "Teensy ESC controller",
+   "url": "https://github.com/HippoCampusRobotics/teensy_esc_controller",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2023-10-18",
+   "fork": false
+  },
+  {
+   "name": "tgy",
+   "role": "upstream fork — AfroESC firmware",
+   "url": "https://github.com/HippoCampusRobotics/tgy",
+   "desc": "Turnigy/TowerPro/AfroESC/BlueSeries AVR ESC software",
+   "lang": "Assembly",
+   "pushed": "2013-11-02",
+   "fork": true
+  },
+  {
+   "name": "TeensyST7735",
+   "role": "display driver",
+   "url": "https://github.com/HippoCampusRobotics/TeensyST7735",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2021-03-31",
+   "fork": false
+  },
+  {
+   "name": "camera",
+   "role": "camera/barometer interfacing (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/camera",
+   "desc": "",
+   "lang": "C",
+   "pushed": "2022-09-09",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "HippoCampus micro AUV",
+  "AfroESC 12A ESCs",
+  "Raspberry Pi 4",
+  "Pixhawk-class FCU"
+ ],
+ "links": []
+}

@@ -1,0 +1,49 @@
+{
+ "name": "Acoustics & DVL",
+ "status": "maintained",
+ "tagline": "Acoustic ranging, modems, and the doppler velocity log driver.",
+ "file": "content/projects/acoustics.md",
+ "repos": [
+  {
+   "name": "dvl",
+   "role": "DVL driver",
+   "url": "https://github.com/HippoCampusRobotics/dvl",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-08-06",
+   "fork": false
+  },
+  {
+   "name": "dvl_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/dvl_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "acoustic_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "acoustic_msgs-release",
+   "role": "release automation",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_msgs-release",
+   "desc": "",
+   "lang": "",
+   "pushed": "2024-08-02",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "Water-linked / lab DVL",
+  "Acoustic modems"
+ ],
+ "links": []
+}

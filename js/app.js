@@ -372,8 +372,8 @@
         <div class="card-grid">${cards}</div>
         <p class="provenance">Coverage rule: every repository in the
         <a href="https://github.com/HippoCampusRobotics">HippoCampusRobotics org</a> belongs to exactly
-        one project above (or is listed with a reason in the exclusions inside
-        <code>data/projects.json</code>); <code>tools/check.py</code> enforces this.</p>
+        one project above (in its own file under <code>data/projects/</code>, or listed with a reason in the
+        exclusions inside <code>data/projects.json</code>); <code>tools/check.py</code> enforces this.</p>
       </div>`;
   }
 
@@ -963,7 +963,7 @@
     try {
       const [site, setup, projects, tools] = await Promise.all([
         fetchJSON('data/site.json'), fetchJSON('data/setup.json'),
-        fetchJSON('data/projects.json'), fetchJSON('data/tools.json'),
+        HC.fetchProjects(), fetchJSON('data/tools.json'),   // the project index + each project's facts file
       ]);
       Object.assign(DATA, { site, setup, projects, tools });
     } catch (err) {

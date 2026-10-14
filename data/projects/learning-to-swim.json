@@ -1,0 +1,17 @@
+{
+ "name": "Learning to Swim replication",
+ "status": "active",
+ "tagline": "A simulation replication and vehicle-specific evaluation of the published reinforcement-learning control pipeline.",
+ "file": "content/projects/learning-to-swim.md",
+ "repos": [],
+ "hardware": [
+  "HippoCampus micro AUV",
+  "BlueROV2 Heavy"
+ ],
+ "links": [
+  {
+   "href": "#/projects/learning-to-swim-run-guide",
+   "label": "Run guide: fly the heat-course simulation"
+  }
+ ]
+}

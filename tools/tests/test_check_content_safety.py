@@ -591,6 +591,12 @@ class EndToEndOrdering(unittest.TestCase):
                 if p["id"] == "scalar-field":
                     p["id"] = "scalar-field-v2"
             path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+            # a rename in the split registry (2026-10-14) moves the project's facts file with its id
+            old = dst / "data" / "projects" / "scalar-field.json"
+            facts = json.loads(old.read_text(encoding="utf-8"))
+            facts["file"] = "content/projects/scalar-field-v2.md"
+            (dst / "data" / "projects" / "scalar-field-v2.json").write_text(json.dumps(facts, indent=1), encoding="utf-8")
+            old.unlink()
             run = subprocess.run([sys.executable, str(dst / "tools" / "check.py")],
                                  capture_output=True, text=True)
             self.assertEqual(run.returncode, 1, run.stdout + run.stderr)

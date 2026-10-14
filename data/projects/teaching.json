@@ -1,0 +1,28 @@
+{
+ "name": "Teaching — Formulas and Vehicles",
+ "status": "active",
+ "tagline": "The course side of the lab: the Formulas and Vehicles class docs and the python onramp.",
+ "file": "content/projects/teaching.md",
+ "repos": [
+  {
+   "name": "fav_docs",
+   "role": "course documentation",
+   "url": "https://github.com/HippoCampusRobotics/fav_docs",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-07-28",
+   "fork": false
+  },
+  {
+   "name": "python-onramp",
+   "role": "python introduction",
+   "url": "https://github.com/HippoCampusRobotics/python-onramp",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-10-16",
+   "fork": false
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

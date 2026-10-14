@@ -45,6 +45,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const SOURCE = require('../../js/source.js');   // mergeProjects: the site's own merge of the project registry
 const ROOT = path.resolve(new URL('../..', import.meta.url).pathname);
 const C = require(path.join(ROOT, 'js', 'cms-core.js'));
 const { createFakeGitHub } = require(path.join(ROOT, 'tools', 'tests', 'fake_github.js'));
@@ -273,7 +274,11 @@ function openSite(opts) {
         dataReads.push(p);
         if (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p)) return JSON.parse(JSON.stringify(o.hc[p]));
         return JSON.parse(readRepo(p));
-      } }),
+      },
+      // as js/source.js: the project index merged with each project's facts file (2026-10-14)
+      fetchProjects: async () => { dataReads.push('data/projects.json');
+        const index = JSON.parse(readRepo('data/projects.json'));
+        return SOURCE.mergeProjects(index, index.projects.map((e) => JSON.parse(readRepo(`data/projects/${e.id}.json`)))); } }),
     URLSearchParams,
     MutationObserver: FakeObserver,
     setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref(); return t; }, clearInterval, clearTimeout,
@@ -493,6 +498,13 @@ test('push role: the popover gains counts, projects, five recent commits and las
   const ids = Object.keys(contrib).filter((k) => (contrib[k].contributors || []).some((x) => x.login === 'NBauschmann'));
   const links = box.querySelectorAll('a').map((a) => a.getAttribute('href'));
   ids.filter((id) => projects.some((p) => p.id === id)).forEach((id) => assert.ok(links.includes(`#/projects/${id}`), id));
+  // the links say the project's name, from its own facts file (2026-10-14), not its id
+  const named = box.querySelectorAll('a').filter((a) => /^#\/projects\//.test(a.getAttribute('href')));
+  assert.ok(named.length > 0);
+  for (const a of named) {
+    const id = a.getAttribute('href').slice('#/projects/'.length);
+    assert.equal(a.textContent, readJSON(`data/projects/${id}.json`).name, id);
+  }
   const recent = box.querySelectorAll('.hc-m-commit');
   assert.equal(recent.length, 5);
   assert.match(recent[0].textContent, /Add instruction for enabling motors/);

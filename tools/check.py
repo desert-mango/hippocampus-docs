@@ -87,6 +87,7 @@ from github_layer_rules import (  # noqa: E402  (one copy, shared with the build
     EMAIL_OK, EMAIL_RE, EVENT_ATTR_RE, LINK_TARGET_RES, SRCDOC_RE, UNSAFE_SCHEMES,
     UNSAFE_TAG_RE, UNSAFE_TAGS, scan_markup, unsafe_scheme)
 import github_layer_rules  # noqa: E402
+import projects_registry  # noqa: E402  (the project index + each project's facts file)
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKED_SHA256 = "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
@@ -128,9 +129,10 @@ CONTRIB_MAX_ROWS = 12
 #   tools/build_search_index.py, tools/build_wiki_graph.py, tools/check.py,
 #   tools/check_urls.py, tools/derive.py (paths only: it passes registry paths
 #   to git diff and dereferences no key), tools/github_names.py (people.json
-#   and github-links.json only, both excluded below), tools/rst_convert.py
-# (js/source.js does not match the grep: it fetches registry files on the
-# readers' behalf and dereferences no key.)
+#   and github-links.json only, both excluded below), tools/projects_registry.py
+#   and js/source.js (2026-10-14: both read data/projects.json's projects[].id
+#   to fetch each project's facts file, data/projects/<id>.json, and merge it;
+#   the facts files' own spec is PROJECT_FACTS_SPEC), tools/rst_convert.py
 # Re-derive that list, never trust it:
 #   grep -rln "data/[a-z_-]*\.json" . --exclude-dir=.git --exclude-dir=data \
 #     --exclude-dir=search
@@ -241,24 +243,25 @@ READER_REQUIRED_KEYS = {
         "objects": {"source": {"keys": ("old_base_url", "repo",
                                         "commit_date_cloned")}},
     },
+    # The project index (since 2026-10-14 each project's facts are in their own
+    # file, data/projects/<id>.json, owner-approved; the index keeps what stays
+    # admin-owned: the list of ids in display order and each project's owners).
+    # Every reader reads the two merged (tools/projects_registry.py,
+    # HC.fetchProjects in js/source.js); the facts files' spec is
+    # PROJECT_FACTS_SPEC below, applied to every data/projects/*.json.
     "data/projects.json": {
         "keys": ("projects", "intro"),
         "each": {"projects": {
-                     "keys": ("id", "name", "tagline", "status", "file", "repos", "owners"),
-                     "types": {"id": str, "file": str},
-                     # optional; app.js renders (p.hardware || []).map(…).
+                     "keys": ("id", "owners"),
+                     "types": {"id": str},
                      # 'owners' (Kyle, 2026-10-14): the GitHub logins who may approve
                      # this project's edits. js/cms-core.js ownsAll() iterates it and
                      # compares each member with a login, and tools/build_codeowners.py
                      # writes each member into .github/CODEOWNERS: a string in the
                      # list's place would iterate as characters, and a non-string
                      # member would silently never match (str_lists).
-                     "lists": ("hardware", "owners"),
-                     "str_lists": ("owners",),
-                     "each": {"repos": {"keys": ("name", "url")},
-                              # 'links' is optional; when present the About-style
-                              # "See also" list dereferences both fields.
-                              "links": {"keys": ("href", "label")}}},
+                     "lists": ("owners",),
+                     "str_lists": ("owners",)},
                  # 'exclusions' is optional (section 4 reads it with .get()).
                  "exclusions": {"keys": ("name",)}},
     },
@@ -347,6 +350,68 @@ READER_REQUIRED_KEYS = {
 }
 # Registries with an entry above that may be absent (checked when present).
 READER_OPTIONAL = frozenset(github_layer_rules.FILES.values())
+
+# One project's facts, data/projects/<id>.json (2026-10-14): the keys every
+# reader dereferences on a merged project entry. Not a READER_REQUIRED_KEYS
+# entry (that dict is keyed by one exact path); section 1b applies it to every
+# file under data/projects/ by name.
+PROJECT_FACTS_SPEC = {
+    "keys": ("name", "tagline", "status", "file", "repos"),
+    "types": {"file": str},
+    # optional; app.js renders (p.hardware || []).map(…)
+    "lists": ("hardware",),
+    "each": {"repos": {"keys": ("name", "url")},
+             # 'links' is optional; when present the About-style
+             # "See also" list dereferences both fields.
+             "links": {"keys": ("href", "label")}},
+}
+PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
+
+
+def check_project_files(index, facts, root=None):
+    """The split registry's own rules (2026-10-14). index: parsed
+    data/projects.json; facts: {relative path: parsed doc} for every file under
+    data/projects/. -> list of error strings; never raises on a bad shape.
+
+    - an index entry is exactly {id, owners}: the facts live in the project's
+      own file, so an owner never has to touch the shared index;
+    - every id has its facts file and every facts file is in the index;
+    - a facts file never says id or owners (an owner cannot widen ownership);
+    - its 'file' is content/projects/<id>.md (the page the id names)."""
+    out = []
+    rows = index.get("projects") if isinstance(index, dict) else None
+    ids = []
+    for i, e in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(e, dict):
+            continue
+        pid = e.get("id")
+        extra = sorted(set(e) - {"id", "owners"})
+        if extra:
+            out.append(f"data/projects.json: projects[{i}] (id '{pid}') carries {extra}: a project's facts go in "
+                       f"data/projects/{pid}.json; the index keeps only id and owners")
+        if isinstance(pid, str):
+            if not PROJECT_ID_RE.match(pid):
+                out.append(f"data/projects.json: projects[{i}] id '{pid[:60]}' must be lowercase letters, digits and dashes")
+                continue
+            if pid in ids:
+                out.append(f"data/projects.json: id '{pid}' is listed twice")
+            ids.append(pid)
+            if f"data/projects/{pid}.json" not in facts:
+                out.append(f"data/projects.json: '{pid}' has no facts file data/projects/{pid}.json")
+    for rel in sorted(facts):
+        pid = rel[len("data/projects/"):-len(".json")]
+        if pid not in ids:
+            out.append(f"{rel}: not in data/projects.json's list — add {{\"id\": \"{pid}\", \"owners\": []}} there "
+                       f"(a new project needs an admin) or remove the file")
+        doc = facts[rel]
+        if not isinstance(doc, dict):
+            continue
+        for k in ("id", "owners"):
+            if k in doc:
+                out.append(f"{rel}: '{k}' belongs in data/projects.json (admins), never in a project's own file")
+        if isinstance(doc.get("file"), str) and doc["file"] != f"content/projects/{pid}.md":
+            out.append(f"{rel}: file must be content/projects/{pid}.md (the page this id names), not '{doc['file']}'")
+    return out
 
 # Content files the readers open by HARDCODED name. Files reached through a
 # registry ('file' fields) are already checked by sections 2, 4 and 5.
@@ -1466,6 +1531,9 @@ def main():
     setup = load("data/setup.json")
     structure = load("data/setup-structure.json")
     projects = load("data/projects.json")
+    # each project's facts file (2026-10-14): loaded one by one, so a syntax error is located
+    project_facts = {f"data/projects/{p.name}": load(f"data/projects/{p.name}")
+                     for p in sorted((ROOT / "data" / "projects").glob("*.json"))}
     tools = load("data/tools.json")
     old_pages = load("data/old-docs-pages.json")
     org = load("data/org-repos.json")
@@ -1508,11 +1576,18 @@ def main():
     for rel, spec in READER_REQUIRED_KEYS.items():
         if rel in registries and not (rel in READER_OPTIONAL and registries[rel] is None):
             check_reader_registry(rel, registries[rel], spec)
+    for rel, doc in project_facts.items():
+        check_reader_registry(rel, doc, PROJECT_FACTS_SPEC)
+    for msg in check_project_files(projects, project_facts):
+        err(msg)
     for rel, consumers in READER_FIXED_PATHS.items():
         if not (ROOT / rel).is_file():
             err(f"{rel}: missing — {consumers}")
     if errors:
         report()
+    # every section below reads the registry as its readers do: the index merged with the facts files
+    projects = projects_registry.merge(projects, {rel[len("data/projects/"):-len(".json")]: doc
+                                                   for rel, doc in project_facts.items()})
 
     # ---- 9a. authored overlays name current ids (run FIRST, see the helper) ----
     for msg in check_overlay_ids(authored, summaries, setup, projects, tools, org):
@@ -1573,9 +1648,9 @@ def main():
     for pr in projects["projects"]:
         f = ROOT / pr["file"]
         if not f.exists():
-            err(f"projects.json: {pr['id']} points at missing file {pr['file']}")
+            err(f"data/projects/{pr['id']}.json: points at missing file {pr['file']}")
         if pr["status"] not in ("active", "maintained", "legacy", "archive"):
-            err(f"projects.json: {pr['id']} has unknown status '{pr['status']}'")
+            err(f"data/projects/{pr['id']}.json: unknown status '{pr['status']}'")
         for r in pr["repos"]:
             if r.get("external"):
                 continue
@@ -1591,7 +1666,7 @@ def main():
         elif n > 1:
             err(f"projects coverage: org repo '{name}' appears {n} times ({seen[name]})")
     for name in sorted(set(seen) - org_names):
-        err(f"projects.json names unknown org repo '{name}' (update data/org-repos.json?)")
+        err(f"a project names unknown org repo '{name}' ({', '.join(f'data/projects/{x}.json' for x in seen[name] if x != 'excluded')}; update data/org-repos.json?)")
 
     # ---- 5. tools ----
     tool_ids = set()

@@ -1,0 +1,145 @@
+{
+ "name": "Core software stack (ROS 2)",
+ "status": "active",
+ "tagline": "The shared ROS 2 packages every vehicle runs: control, estimation, messages, and the meta packages that tie them together.",
+ "file": "content/projects/core-stack.md",
+ "repos": [
+  {
+   "name": "hippo_core",
+   "role": "core packages/libraries",
+   "url": "https://github.com/HippoCampusRobotics/hippo_core",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-07-16",
+   "fork": false
+  },
+  {
+   "name": "hippo_common",
+   "role": "shared C++ utilities",
+   "url": "https://github.com/HippoCampusRobotics/hippo_common",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2026-05-13",
+   "fork": false
+  },
+  {
+   "name": "hippo_common_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/hippo_common_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "hippo_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/hippo_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2025-05-14",
+   "fork": false
+  },
+  {
+   "name": "hippo_control",
+   "role": "attitude/rate/trajectory control",
+   "url": "https://github.com/HippoCampusRobotics/hippo_control",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2026-06-24",
+   "fork": false
+  },
+  {
+   "name": "hippo_control_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/hippo_control_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "state_estimation",
+   "role": "state estimation",
+   "url": "https://github.com/HippoCampusRobotics/state_estimation",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-07-06",
+   "fork": false
+  },
+  {
+   "name": "state_estimation_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/state_estimation_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "hippo_robot",
+   "role": "meta package (robot, no sim)",
+   "url": "https://github.com/HippoCampusRobotics/hippo_robot",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-08-12",
+   "fork": false
+  },
+  {
+   "name": "hippo_full",
+   "role": "meta package (everything)",
+   "url": "https://github.com/HippoCampusRobotics/hippo_full",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-08-12",
+   "fork": false
+  },
+  {
+   "name": "remote_control",
+   "role": "remote control",
+   "url": "https://github.com/HippoCampusRobotics/remote_control",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "stabilizer",
+   "role": "attitude/depth stabilizer (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/stabilizer",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-07-07",
+   "fork": false
+  },
+  {
+   "name": "switch",
+   "role": "utility package (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/switch",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-11-16",
+   "fork": false
+  },
+  {
+   "name": "Firmware",
+   "role": "upstream fork — PX4 autopilot",
+   "url": "https://github.com/HippoCampusRobotics/Firmware",
+   "desc": "PX4 Autopilot Software",
+   "lang": "C++",
+   "pushed": "2020-06-30",
+   "fork": true
+  },
+  {
+   "name": "px4_msgs",
+   "role": "upstream fork — PX4 ROS 2 messages",
+   "url": "https://github.com/HippoCampusRobotics/px4_msgs",
+   "desc": "ROS/ROS2 messages that match the uORB messages counterparts on the PX4 Firmware",
+   "lang": "CMake",
+   "pushed": "2024-07-18",
+   "fork": true
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

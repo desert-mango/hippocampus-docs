@@ -1,0 +1,40 @@
+{
+ "name": "UVMS — BlueROV2 + Alpha arm",
+ "status": "maintained",
+ "tagline": "Underwater vehicle-manipulator system: end-effector trajectory tracking with a BlueROV2 Heavy carrying a Reach Robotics Alpha 5 arm.",
+ "file": "content/projects/uvms.md",
+ "repos": [
+  {
+   "name": "uvms",
+   "role": "trajectory-tracking framework (paper code)",
+   "url": "https://github.com/HippoCampusRobotics/uvms",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2025-09-17",
+   "fork": false
+  },
+  {
+   "name": "uvms_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/uvms_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-26",
+   "fork": false
+  },
+  {
+   "name": "alpha_msgs",
+   "role": "Alpha arm messages",
+   "url": "https://github.com/HippoCampusRobotics/alpha_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2025-05-06",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "BlueROV2 Heavy",
+  "Reach Robotics Alpha 5 manipulator"
+ ],
+ "links": []
+}

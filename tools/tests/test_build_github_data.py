@@ -781,9 +781,10 @@ class Avatars(BuildCase):
 class Hygiene(unittest.TestCase):
     def test_stdlib_only(self):
         src = Path(bgd.__file__).read_text(encoding="utf-8")
+        # projects_registry: the repo's own stdlib-only project-registry loader (test_check_projects.py)
         allowed = {"argparse", "datetime", "hashlib", "json", "os", "re", "subprocess",
                    "sys", "tempfile", "urllib", "collections", "pathlib",
-                   "github_layer_rules", "github_names"}
+                   "github_layer_rules", "github_names", "projects_registry"}
         for i, line in enumerate(src.splitlines(), 1):
             if line.startswith(("import ", "from ")):
                 self.assertIn(line.split()[1].split(".")[0], allowed, f"line {i}")

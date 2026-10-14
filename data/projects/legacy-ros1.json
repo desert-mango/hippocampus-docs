@@ -1,0 +1,64 @@
+{
+ "name": "Legacy ROS 1 stack",
+ "status": "archive",
+ "tagline": "The pre-ROS 2 HippoCampus software, kept for history and for reading old experiments.",
+ "file": "content/projects/legacy-ros1.md",
+ "repos": [
+  {
+   "name": "hippocampus_common",
+   "role": "common (ROS 1)",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_common",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-06-20",
+   "fork": false
+  },
+  {
+   "name": "hippocampus_msgs",
+   "role": "messages (ROS 1)",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2022-12-21",
+   "fork": false
+  },
+  {
+   "name": "hippocampus_sim",
+   "role": "Gazebo simulation (ROS 1)",
+   "url": "https://github.com/HippoCampusRobotics/hippocampus_sim",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-06-02",
+   "fork": false
+  },
+  {
+   "name": "control",
+   "role": "control (ROS 1)",
+   "url": "https://github.com/HippoCampusRobotics/control",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-11-29",
+   "fork": false
+  },
+  {
+   "name": "multi_uuv",
+   "role": "multi-vehicle experiments (ROS 1)",
+   "url": "https://github.com/HippoCampusRobotics/multi_uuv",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-06-02",
+   "fork": false
+  },
+  {
+   "name": "howto",
+   "role": "old how-to notes",
+   "url": "https://github.com/HippoCampusRobotics/howto",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2020-09-24",
+   "fork": false
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

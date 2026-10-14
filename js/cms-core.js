@@ -507,6 +507,12 @@
   // --------------------------------------- page id -> file (pencil link) ---
 
   const listOf = (v) => (Array.isArray(v) ? v : []);
+  /* The projects of a registry set: the merged list (HC.fetchProjects), or a bare index read at some commit
+     (a proposal's head): an entry with no `file` is its page, content/projects/<id>.md (tools/check.py holds
+     every project's file to exactly that), and its label falls back to the id. */
+  const projectRows = (r) => listOf(r && r.projects && r.projects.projects).map((x) => (x && typeof x === 'object'
+    && typeof x.id === 'string' && typeof x.file !== 'string' ? Object.assign({}, x, { file: `content/projects/${x.id}.md` }) : x));
+
   const findFile = (list, id) => {
     const hit = listOf(list).find((x) => x && typeof x === 'object' && x.id === id);
     return hit && typeof hit.file === 'string' ? hit.file : null;
@@ -531,10 +537,10 @@
         if (file) break;
       }
     } else if (pageId.indexOf('project/') === 0) {
-      file = findFile(r.projects && r.projects.projects, pageId.slice(8));
+      file = findFile(projectRows(r), pageId.slice(8));
     } else if (pageId.indexOf('tool/') === 0) {
       file = findFile(r.tools && r.tools.tools, pageId.slice(5));
-    } else if (/^data\/[a-z0-9][a-z0-9-]*$/.test(pageId)) {
+    } else if (/^data\/[a-z0-9][a-z0-9-]*$/.test(pageId) || /^data\/projects\/[a-z0-9][a-z0-9-]{0,80}$/.test(pageId)) {
       return `${pageId}.json`;
     }
     return file && /^content\//.test(file) && isBridgePath(file) ? file : null;
@@ -1075,9 +1081,11 @@
       return x && typeof x.id === 'string' && SLUG_RE.test(x.id)
         ? { route: `${prefix}/${x.id}`, label: textOr(x.name, `${prefix}/${x.id}`) } : null;
     };
-    if (file.indexOf('content/projects/') === 0) return inList(r.projects && r.projects.projects, '/projects');
+    if (file.indexOf('content/projects/') === 0) return inList(projectRows(r), '/projects');
     if (file.indexOf('content/tools/') === 0) return inList(r.tools && r.tools.tools, '/tools');
-    return null;
+    const facts = PROJECT_FACTS_FILE_RE.exec(file);           // a project's facts file: its project page
+    const x = facts ? projectRows(r).find((p) => p && p.id === facts[1]) : null;
+    return x ? { route: `/projects/${x.id}`, label: textOr(x.name, `/projects/${x.id}`) } : null;
   }
 
   function previewPages(files, regs) {
@@ -1096,19 +1104,34 @@
   const REGISTRY_FOR = Object.freeze([
     ['content/setup/', 'setup', 'data/setup.json'],
     ['content/projects/', 'projects', 'data/projects.json'],
+    ['data/projects/', 'projects', 'data/projects.json'],
     ['content/tools/', 'tools', 'data/tools.json'],
   ]);
 
   async function loadHeadRegistries(fetcher, files) {
     const names = listOf(files).filter(isFileRow).map((f) => f.filename);
     const regs = { setup: null, projects: null, tools: null };
-    await Promise.all(REGISTRY_FOR.map(async ([prefix, key, file]) => {
-      if (!names.some((p) => p.indexOf(prefix) === 0)) return;
+    const wanted = new Map();
+    for (const [prefix, key, file] of REGISTRY_FOR) if (names.some((p) => p.indexOf(prefix) === 0)) wanted.set(key, file);
+    await Promise.all([...wanted].map(async ([key, file]) => {
       try {
         const res = await fetcher(file);
         if (res && res.ok === true && typeof res.text === 'string') regs[key] = JSON.parse(res.text);
       } catch (e) { /* a registry that cannot be read maps no page */ }
     }));
+    // the changed projects' own facts at the head, for their names (the index holds only ids and owners)
+    const ids = new Set(names.map((n) => (/^content\/projects\/([a-z0-9][a-z0-9-]*)\.md$/.exec(n) || PROJECT_FACTS_FILE_RE.exec(n) || [])[1])
+      .filter(Boolean));
+    if (regs.projects && Array.isArray(regs.projects.projects) && ids.size) {
+      const facts = {};
+      await Promise.all([...ids].map(async (id) => {
+        try {
+          const res = await fetcher(projectFactsFile(id));
+          if (res && res.ok === true && typeof res.text === 'string') facts[id] = JSON.parse(res.text);
+        } catch (e) { /* the id is its label */ }
+      }));
+      regs.projects = mergeProjects(regs.projects, regs.projects.projects.map((x) => (x && facts[x.id]) || null));
+    }
     return regs;
   }
 
@@ -1128,7 +1151,25 @@
      the handoff). data/setup.json is not one: tools/rst_convert.py owns it. */
   const RAW_REGISTRIES = Object.freeze(['data/people.json', 'data/projects.json', 'data/site.json',
     'data/tools.json']);
-  const isRawRegistry = (f) => RAW_REGISTRIES.indexOf(f) >= 0;
+  /* A project's facts file (2026-10-14): data/projects/<id>.json, owner-approved; edited as raw JSON too. */
+  const PROJECT_FACTS_FILE_RE = /^data\/projects\/([a-z0-9][a-z0-9-]{0,80})\.json$/;
+  const projectFactsFile = (id) => `data/projects/${id}.json`;
+  const isRawRegistry = (f) => RAW_REGISTRIES.indexOf(f) >= 0 || PROJECT_FACTS_FILE_RE.test(String(f));
+  /* The index merged with each project's facts (factsList[i] for index entry i; js/source.js's
+     HC.fetchProjects does the same): an entry keeps the index's id and owners, then the facts. */
+  function mergeProjects(index, factsList) {
+    if (!index || typeof index !== 'object' || !Array.isArray(index.projects)) return index;
+    const facts = listOf(factsList);
+    return Object.assign({}, index, { projects: index.projects.map((e, i) => {
+      if (!e || typeof e !== 'object') return e;
+      const f = facts[i] && typeof facts[i] === 'object' && !Array.isArray(facts[i]) ? facts[i] : {};
+      const out = {};
+      if ('id' in e) out.id = e.id;
+      if ('owners' in e) out.owners = e.owners;
+      for (const k of Object.keys(f)) if (k !== 'id' && k !== 'owners') out[k] = f[k];
+      return Object.assign(out, e);
+    }) });
+  }
 
   /* 'page' for a content page, 'registry' for a raw-JSON registry, null for
      anything the editor does not open. */
@@ -1156,7 +1197,7 @@
     const listed = (list, prefix, route) => listOf(list).filter((x) => x && typeof x.id === 'string'
       && SLUG_RE.test(x.id) && editPath(`${prefix}/${x.id}`, r) === x.file)
       .map((x) => pageRow(`${prefix}/${x.id}`, textOr(x.name, x.id), x.file, `${route}/${x.id}`));
-    out.push({ key: 'projects', title: 'Projects', pages: listed(r.projects && r.projects.projects, 'project', '/projects') });
+    out.push({ key: 'projects', title: 'Projects', pages: listed(projectRows(r), 'project', '/projects') });
     out.push({ key: 'tools', title: 'Agent tools', pages: listed(r.tools && r.tools.tools, 'tool', '/tools') });
     out.push({ key: 'about', title: 'About', pages: [pageRow('about', 'About', 'content/about.md', '/about')] });
     out.push({ key: 'registries', title: 'Registries (raw JSON)', pages: RAW_REGISTRIES.map((f) => pageRow(
@@ -1178,7 +1219,10 @@
   }
 
   function routeForPage(pageId, regs) {
-    if (editKind(pageId) === 'registry') return DATA_ROUTES[`${pageId}.json`].route;
+    if (editKind(pageId) === 'registry') {
+      const facts = PROJECT_FACTS_FILE_RE.exec(`${pageId}.json`);     // a project's facts: its project page
+      return facts ? `/projects/${facts[1]}` : DATA_ROUTES[`${pageId}.json`].route;
+    }
     const hit = pageList(regs).find((p) => p.pageId === pageId);
     return hit ? hit.route : null;
   }
@@ -1455,11 +1499,12 @@
   }
 
   /* form = {id, name, status, tagline, repos (one name per line), story}.
-     -> {problem, id, files}: files = exactly data/projects.json (the entry
-     appended, keys id,name,status,tagline,file,repos) and the story at
-     content/projects/<id>.md. A repository already in a project (or in the
-     exclusions) is refused: check.py wants each org repo in exactly one. */
-  function newProjectDraft(form, projectsText) {
+     -> {problem, id, files}: files = exactly data/projects.json (the index entry {id, owners: []} appended:
+     a new project needs an admin's approval, who also names its owners), data/projects/<id>.json (its facts:
+     name, status, tagline, file, repos; 2026-10-14) and the story at content/projects/<id>.md. A repository
+     already in a project (merged: the projects with their facts, HC.fetchProjects; else the index's own
+     entries) or in the exclusions is refused: check.py wants each org repo in exactly one. */
+  function newProjectDraft(form, projectsText, merged) {
     const f = form || {};
     const fail = (problem) => ({ problem, id: null, files: null });
     const id = trimmed(f.id);
@@ -1482,7 +1527,8 @@
     const projects = reg.doc.projects.filter(isObj);
     if (projects.some((p) => p.id === id)) return fail(`a project with the id '${id}' already exists — pick another id`);
     const owner = new Map();
-    for (const p of projects) {
+    const withRepos = merged && Array.isArray(merged.projects) ? merged.projects.filter(isObj) : projects;
+    for (const p of withRepos) {
       for (const r of listOf(p.repos)) {
         if (isObj(r) && typeof r.name === 'string' && r.external !== true) owner.set(r.name, `project '${p.id}'`);
       }
@@ -1496,10 +1542,11 @@
     }
     const file = `content/projects/${id}.md`;
     // owners: [] (Kyle, 2026-10-14): a new project starts admin-owned; an admin names its owners
-    reg.doc.projects.push({ id, owners: [], name, status, tagline, file,
-      repos: names.map((n) => ({ name: n, url: `${ORG_WEB}/${n}` })) });
+    reg.doc.projects.push({ id, owners: [] });
+    const facts = { name, status, tagline, file, repos: names.map((n) => ({ name: n, url: `${ORG_WEB}/${n}` })) };
     const story = String(typeof f.story === 'string' ? f.story : '').replace(/\s+$/, '');
-    return { problem: null, id, files: { 'data/projects.json': formatLike(projectsText, reg.doc), [file]: `${story}\n` } };
+    return { problem: null, id, files: { 'data/projects.json': formatLike(projectsText, reg.doc),
+      [projectFactsFile(id)]: formatLike(projectsText, facts), [file]: `${story}\n` } };
   }
 
   /* The groups of a people.json text -> [{id, title}] ([] when unreadable). */
@@ -2825,6 +2872,7 @@
     MEDIA_TYPES, SIZE_HINT_TEXT, REMOVE_FIRST_TEXT, IN_USE_TEXT, IN_DRAFT_TEXT, THUMB_TRANSFORM, MEDIA_SLUG_RE,
     thumbUrl, parseManifest, manifestAssets, findBySha, mediaChangeProblem, mediaFileProblem, mediaFailure,
     createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
+    PROJECT_FACTS_FILE_RE, projectFactsFile, mergeProjects,
     BLOCK_KINDS, imageParts, imageWith, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
     blockDiff, overlayOnMain, cachedFetcher, resolveRef, viewSettings, membersOnly,
     ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,

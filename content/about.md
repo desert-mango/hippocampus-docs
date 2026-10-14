@@ -44,5 +44,5 @@ documentation for the lab's agent tools.
 
 Small fixes: edit the Markdown, run the check, commit. New setup pages: add the file under
 `content/setup/<group>/` and a manifest entry in `data/setup.json`. New projects: add the
-entry in `data/projects.json` and a body in `content/projects/`. The check gate will tell
+id to `data/projects.json`, the facts in `data/projects/<id>.json` and a body in `content/projects/`. The check gate will tell
 you what is missing — its failure messages are written to be followed.

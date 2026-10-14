@@ -1,0 +1,19 @@
+{
+ "name": "Holiday fun",
+ "status": "archive",
+ "tagline": "hippo-christmas: the lab's holiday hardware humor, preserved.",
+ "file": "content/projects/holiday-fun.md",
+ "repos": [
+  {
+   "name": "hippo-christmas",
+   "role": "festive firmware",
+   "url": "https://github.com/HippoCampusRobotics/hippo-christmas",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2022-11-16",
+   "fork": false
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

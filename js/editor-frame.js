@@ -276,6 +276,7 @@
        keyboard focus. The frame only says {index, to}; the parent moves it in the draft and reloads. */
     let dragFrom = null;
     let dropLine = null;
+    const dndBodies = new WeakSet();
     const blocksIn = (body) => Array.from(body.childNodes).filter((c) => c.nodeType === ELEMENT && classesOf(c).indexOf('hc-block') >= 0);
     function moveTo(i, to) { if (to !== i && to !== i + 1) HC.post('hc-block-move', { index: i, to }); }
     function dropAt(body, e) {
@@ -325,8 +326,8 @@
           moveTo(i, after ? indexOfBlock(after) : indexOfBlock(list[k + 1]) + 1);
         }
       });
-      if (body.getAttribute('data-hc-dnd') !== '1') {
-        body.setAttribute('data-hc-dnd', '1');
+      if (!dndBodies.has(body)) {                 // once per page body; no attribute: grouping never changes the page's own DOM
+        dndBodies.add(body);
         body.addEventListener('dragover', (e) => {
           if (dragFrom === null) return;
           const at = dropAt(body, e);

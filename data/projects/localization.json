@@ -1,0 +1,113 @@
+{
+ "name": "Localization",
+ "status": "active",
+ "tagline": "Knowing where the vehicle is: visual localization with AprilTags, EKF fusion, and the older acoustic and RF approaches.",
+ "file": "content/projects/localization.md",
+ "repos": [
+  {
+   "name": "visual_localization",
+   "role": "camera + AprilTag localization",
+   "url": "https://github.com/HippoCampusRobotics/visual_localization",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-05-13",
+   "fork": false
+  },
+  {
+   "name": "apriltag_ros",
+   "role": "upstream fork — AprilTag ROS 2 node",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_ros",
+   "desc": "ROS2 node for AprilTag detection",
+   "lang": "C++",
+   "pushed": "2024-01-08",
+   "fork": true
+  },
+  {
+   "name": "apriltag_msgs",
+   "role": "upstream fork — messages",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_msgs",
+   "desc": "AprilTag message definitions",
+   "lang": "CMake",
+   "pushed": "2022-12-28",
+   "fork": true
+  },
+  {
+   "name": "apriltag_viz",
+   "role": "detection visualization",
+   "url": "https://github.com/HippoCampusRobotics/apriltag_viz",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2026-04-28",
+   "fork": false
+  },
+  {
+   "name": "apriltags",
+   "role": "tag36h11 tag sheets",
+   "url": "https://github.com/HippoCampusRobotics/apriltags",
+   "desc": "",
+   "lang": "",
+   "pushed": "2020-10-15",
+   "fork": false
+  },
+  {
+   "name": "vision",
+   "role": "vision package (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/vision",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2023-03-27",
+   "fork": false
+  },
+  {
+   "name": "mu_auv_localization",
+   "role": "upstream fork — microAUV EKF localization",
+   "url": "https://github.com/HippoCampusRobotics/mu_auv_localization",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2023-01-19",
+   "fork": true
+  },
+  {
+   "name": "ext_auv_localization",
+   "role": "upstream fork — multi-camera EKF localization",
+   "url": "https://github.com/HippoCampusRobotics/ext_auv_localization",
+   "desc": "ROS-package which features a multi-camera systems with EKF-based sensor fusion for micro underwater robot tracking tracking",
+   "lang": "Python",
+   "pushed": "2020-01-13",
+   "fork": true
+  },
+  {
+   "name": "acoustic_localization",
+   "role": "acoustic localization",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_localization",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-07-06",
+   "fork": false
+  },
+  {
+   "name": "RF_Localization",
+   "role": "upstream fork — RF localization framework",
+   "url": "https://github.com/HippoCampusRobotics/RF_Localization",
+   "desc": "Radio Frequency based localization (@433MHz) framework for micro underwater robots in confined tanks using software defined radio (SDR)",
+   "lang": "Python",
+   "pushed": "2024-04-16",
+   "fork": true
+  },
+  {
+   "name": "rf_localization_ros",
+   "role": "upstream fork — RF localization ROS wrapper",
+   "url": "https://github.com/HippoCampusRobotics/rf_localization_ros",
+   "desc": "ROS package for RF localization",
+   "lang": "Python",
+   "pushed": "2020-01-22",
+   "fork": true
+  }
+ ],
+ "hardware": [
+  "AprilTag markers on the tank floor",
+  "Vehicle cameras",
+  "Qualisys as ground truth"
+ ],
+ "links": []
+}

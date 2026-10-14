@@ -1,0 +1,55 @@
+{
+ "name": "Deployment & dev infrastructure",
+ "status": "active",
+ "tagline": "How code gets onto robots and packages get released: systemd deployment, the build bot, rosdep definitions, and release tooling.",
+ "file": "content/projects/dev-infrastructure.md",
+ "repos": [
+  {
+   "name": "hippo_deployment",
+   "role": "systemd services + device rules",
+   "url": "https://github.com/HippoCampusRobotics/hippo_deployment",
+   "desc": "",
+   "lang": "Shell",
+   "pushed": "2026-05-04",
+   "fork": false
+  },
+  {
+   "name": "hippo_infrastructure",
+   "role": "rosdep definitions",
+   "url": "https://github.com/HippoCampusRobotics/hippo_infrastructure",
+   "desc": "",
+   "lang": "",
+   "pushed": "2024-08-12",
+   "fork": false
+  },
+  {
+   "name": "buildbot",
+   "role": "package build bot",
+   "url": "https://github.com/HippoCampusRobotics/buildbot",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2025-07-18",
+   "fork": false
+  },
+  {
+   "name": "hippo-release",
+   "role": "release automation",
+   "url": "https://github.com/HippoCampusRobotics/hippo-release",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-07-30",
+   "fork": false
+  },
+  {
+   "name": "bag2to1",
+   "role": "ROS 2→1 bag converter",
+   "url": "https://github.com/HippoCampusRobotics/bag2to1",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-02-20",
+   "fork": false
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

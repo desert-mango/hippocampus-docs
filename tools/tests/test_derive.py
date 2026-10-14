@@ -287,8 +287,9 @@ class TestContributorsIfChanged(DeriveCase):
                             and self.first in l for l in self.lines), self.out)
 
     def test_each_input_file_triggers_contributors(self):
-        for name in ("data/projects.json", "data/org-repos.json", "data/people.json",
-                     "data/github-links.json"):
+        # a project's facts file (2026-10-14): a repo added there changes the counts too
+        for name in ("data/projects.json", "data/projects/learning-to-swim.json", "data/org-repos.json",
+                     "data/people.json", "data/github-links.json"):
             with self.subTest(name=name):
                 (self.root / "order.log").unlink(missing_ok=True)
                 before = git(self.root, "rev-parse", "HEAD")

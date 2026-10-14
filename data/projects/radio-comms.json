@@ -1,0 +1,103 @@
+{
+ "name": "Radio & communications",
+ "status": "legacy",
+ "tagline": "Radio links for vehicles at and under the surface: HippoLink telemetry over Si1000 radios, MAVLink plumbing, and software-defined radio experiments.",
+ "file": "content/projects/radio-comms.md",
+ "repos": [
+  {
+   "name": "hippolink",
+   "role": "HippoLink python library",
+   "url": "https://github.com/HippoCampusRobotics/hippolink",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2021-07-12",
+   "fork": false
+  },
+  {
+   "name": "hippolink_ros",
+   "role": "HippoLink ROS wrapper",
+   "url": "https://github.com/HippoCampusRobotics/hippolink_ros",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2021-07-16",
+   "fork": false
+  },
+  {
+   "name": "SiK",
+   "role": "upstream fork — Si1000 radio firmware (HippoLink branch)",
+   "url": "https://github.com/HippoCampusRobotics/SiK",
+   "desc": "Tools and firmware for the Si1000 - Si102x/3x",
+   "lang": "C",
+   "pushed": "2021-04-28",
+   "fork": true
+  },
+  {
+   "name": "radio_firmware",
+   "role": "radio firmware",
+   "url": "https://github.com/HippoCampusRobotics/radio_firmware",
+   "desc": "",
+   "lang": "C",
+   "pushed": "2021-09-30",
+   "fork": false
+  },
+  {
+   "name": "radio_tools",
+   "role": "radio tools",
+   "url": "https://github.com/HippoCampusRobotics/radio_tools",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2021-07-14",
+   "fork": false
+  },
+  {
+   "name": "mavlink",
+   "role": "upstream fork — MAVLink release packaging",
+   "url": "https://github.com/HippoCampusRobotics/mavlink",
+   "desc": "git-buildpackage repository for releasing mavlink as 3-rd party library for ROS",
+   "lang": "Python",
+   "pushed": "2020-05-20",
+   "fork": true
+  },
+  {
+   "name": "mavlink_headers",
+   "role": "MAVLink headers",
+   "url": "https://github.com/HippoCampusRobotics/mavlink_headers",
+   "desc": "",
+   "lang": "C",
+   "pushed": "2020-06-30",
+   "fork": false
+  },
+  {
+   "name": "mavros",
+   "role": "upstream fork — MAVLink↔ROS gateway",
+   "url": "https://github.com/HippoCampusRobotics/mavros",
+   "desc": "MAVLink to ROS gateway with proxy for Ground Control Station",
+   "lang": "C++",
+   "pushed": "2020-04-13",
+   "fork": true
+  },
+  {
+   "name": "sdr",
+   "role": "software-defined radio",
+   "url": "https://github.com/HippoCampusRobotics/sdr",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-08-02",
+   "fork": false
+  },
+  {
+   "name": "sdr_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/sdr_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-04-17",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "Si1000-based telemetry radios",
+  "DVB-T SDR sticks"
+ ],
+ "links": []
+}

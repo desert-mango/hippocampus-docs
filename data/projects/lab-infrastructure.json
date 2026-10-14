@@ -1,0 +1,86 @@
+{
+ "name": "Lab & tank infrastructure",
+ "status": "active",
+ "tagline": "Everything around the water: Qualisys motion capture, the gantry over the tank, and the physical button boxes.",
+ "file": "content/projects/lab-infrastructure.md",
+ "repos": [
+  {
+   "name": "qualisys_bridge",
+   "role": "QTM → ROS 2 odometry bridge",
+   "url": "https://github.com/HippoCampusRobotics/qualisys_bridge",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2025-04-14",
+   "fork": false
+  },
+  {
+   "name": "gantry",
+   "role": "gantry control (current)",
+   "url": "https://github.com/HippoCampusRobotics/gantry",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2025-06-05",
+   "fork": false
+  },
+  {
+   "name": "gantry_control",
+   "role": "gantry control (ROS 1 era)",
+   "url": "https://github.com/HippoCampusRobotics/gantry_control",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-09-13",
+   "fork": false
+  },
+  {
+   "name": "gantry_gui",
+   "role": "gantry GUI",
+   "url": "https://github.com/HippoCampusRobotics/gantry_gui",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-08-06",
+   "fork": false
+  },
+  {
+   "name": "gantry_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/gantry_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "rqt_gantry",
+   "role": "rqt plugin",
+   "url": "https://github.com/HippoCampusRobotics/rqt_gantry",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2021-11-25",
+   "fork": false
+  },
+  {
+   "name": "buttons",
+   "role": "physical buttons + GUI",
+   "url": "https://github.com/HippoCampusRobotics/buttons",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-05-04",
+   "fork": false
+  },
+  {
+   "name": "buttons_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/buttons_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "Qualisys motion-capture system",
+  "Tank gantry",
+  "Emergency/utility button boxes"
+ ],
+ "links": []
+}

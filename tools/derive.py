@@ -22,8 +22,9 @@ process, exactly as a maintainer would run them:
     2. tools/build_search_index.py --site-only   search/{site,manifest}.json
     3. tools/build_contributors.py               data/graph/contributors.json
        (only with --contributors, or with --contributors-if-changed <ref> when
-       data/projects.json, data/org-repos.json, data/people.json or
-       data/github-links.json differ from <ref>; it needs `gh` and GH_TOKEN, so
+       data/projects.json, a project's facts file under data/projects/,
+       data/org-repos.json, data/people.json or data/github-links.json differ
+       from <ref>; it needs `gh` and GH_TOKEN, so
        it stays off the pull-request path)
     4. tools/build_github_data.py                data/graph/{org-activity,
        github-repos,page-authors,people-public}.json + data/graph/avatars/
@@ -68,7 +69,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 DERIVED_DIRS = ("search", "data/graph")
-CONTRIBUTOR_INPUTS = ("data/projects.json", "data/org-repos.json", "data/people.json",
+# data/projects/ (a pathspec: every project's facts file, 2026-10-14): a repo added to one changes the counts
+CONTRIBUTOR_INPUTS = ("data/projects.json", "data/projects", "data/org-repos.json", "data/people.json",
                       "data/github-links.json")
 GRAPH = ("build_wiki_graph.py", [])
 SITE_SHARD = ("build_search_index.py", ["--site-only"])

@@ -58,6 +58,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from build_search_index import excerpt  # noqa: E402  (hoisted to module level for this)
+import projects_registry  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 GRAPH_DIR = "data/graph"
@@ -158,7 +159,8 @@ def load_registries(root):
     reg = {
         "site": read_json(root, "data/site.json"),
         "setup": read_json(root, "data/setup.json"),
-        "projects": read_json(root, "data/projects.json"),
+        # the index merged with each project's facts file (tools/projects_registry.py, 2026-10-14)
+        "projects": projects_registry.with_facts(root, read_json(root, "data/projects.json")),
         "tools": read_json(root, "data/tools.json"),
         "org": read_json(root, "data/org-repos.json"),
         "repos_index": read_json(root, f"{GRAPH_DIR}/repos-index.json"),

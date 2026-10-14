@@ -1473,3 +1473,27 @@ test('owners: approve and merge for Write only inside its own projects; never it
   assert.equal(C.ownsAll({ login: 'kyle-nelson-berkeley', files: ['content/projects/learning-to-swim.md'], projects }), true);
   assert.equal(C.ownsAll({ login: '', files: ['content/projects/hippocampus-vehicle.md'], projects }), false);
 });
+
+/* Each project's facts in its own file (2026-10-14): a bare index (a proposal's head) still maps every project
+   to its page; a facts file maps to its project page; the head registries read the changed projects' facts. */
+test('split projects: bare index -> pages; a facts file -> its project page; head registries merge the changed facts', async () => {
+  const index = { intro: 'x', projects: [{ id: 'learning-to-swim', owners: ['k'] }, { id: 'scalar-field', owners: [] }] };
+  const regs = { projects: index };
+  assert.equal(C.editPath('project/learning-to-swim', regs), 'content/projects/learning-to-swim.md');
+  assert.equal(C.editPath('data/projects/learning-to-swim', regs), 'data/projects/learning-to-swim.json');
+  assert.equal(C.editKind('data/projects/learning-to-swim'), 'registry');
+  assert.equal(C.editKind('data/projects/Bad'), null);
+  assert.equal(C.routeForPage('data/projects/scalar-field', regs), '/projects/scalar-field');
+  assert.deepEqual(C.previewPages([{ filename: 'data/projects/scalar-field.json', status: 'modified' },
+    { filename: 'content/projects/learning-to-swim.md', status: 'modified' }], regs).map((p) => p.route),
+  ['/projects/scalar-field', '/projects/learning-to-swim']);
+  const files = { 'data/projects.json': index, 'data/projects/scalar-field.json': { name: 'Scalar field', file: 'content/projects/scalar-field.md' } };
+  const fetcher = async (p) => (files[p] ? { ok: true, status: 200, text: JSON.stringify(files[p]) } : { ok: false, status: 404, text: '' });
+  const head = await C.loadHeadRegistries(fetcher, [{ filename: 'data/projects/scalar-field.json', status: 'modified' }]);
+  assert.equal(head.projects.projects[1].name, 'Scalar field', 'the changed project\'s name, from its facts at the head');
+  assert.deepEqual(head.projects.projects[1].owners, [], 'the index keeps the owners');
+  assert.deepEqual(C.previewPages([{ filename: 'data/projects/scalar-field.json', status: 'modified' }], head)[0],
+    { route: '/projects/scalar-field', label: 'Scalar field', file: 'data/projects/scalar-field.json' });
+  assert.deepEqual(C.mergeProjects(index, [{ name: 'L', owners: ['x'], id: 'y' }, null]).projects,
+    [{ id: 'learning-to-swim', owners: ['k'], name: 'L' }, { id: 'scalar-field', owners: [] }]);
+});

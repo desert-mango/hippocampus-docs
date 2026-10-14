@@ -36,6 +36,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import projects_registry  # noqa: E402  (the project index + each project's facts file)
+
 ROOT = Path(__file__).resolve().parent.parent
 MAX_SHARD_BYTES = 300_000
 SKIP_DIRS = {".git", "node_modules", "build", "install", "log", "__pycache__"}
@@ -130,7 +133,7 @@ def build_site_shard():
             entries.append({"t": p["title"], "r": f"#/setup/{p['id']}",
                             "w": f"Setup · {sec['title']}",
                             "h": headings(text), "x": excerpt(text)})
-    projects = json.loads((ROOT / "data/projects.json").read_text())
+    projects = projects_registry.load(ROOT)     # the index + each project's facts file
     for pr in projects["projects"]:
         text = (ROOT / pr["file"]).read_text(encoding="utf-8")
         entries.append({"t": pr["name"], "r": f"#/projects/{pr['id']}", "w": "Project",

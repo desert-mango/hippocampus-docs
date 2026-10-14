@@ -388,6 +388,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/projects_registry.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "4a45564472bc2095331ef108cf42dca567d5a38a01ec998f1ade9c6a773e2ccc",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "14 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Load the project registry: the shared index (ids, order, owners) merged with each project's facts file."
+      },
+      "reason": "First-party site tool written for the editor redesign (per-project facts files, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
+    },
     "tools/rst_convert.py": {
       "classification": "included",
       "evidence": {

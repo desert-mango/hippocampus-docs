@@ -623,8 +623,10 @@ class TestModuleHygiene(unittest.TestCase):
         src = Path(bc.__file__).read_text(encoding="utf-8")
         # github_names is this repo's own matcher (tools/github_names.py,
         # stdlib-only itself — test_github_names.py proves it), not a dependency
+        # projects_registry is this repo's own project-registry loader (tools/projects_registry.py,
+        # stdlib-only itself — test_check_projects.py proves it)
         allowed = {"argparse", "json", "os", "re", "subprocess", "sys",
-                   "tempfile", "time", "collections", "pathlib", "github_names"}
+                   "tempfile", "time", "collections", "pathlib", "github_names", "projects_registry"}
         for i, line in enumerate(src.splitlines(), 1):
             if line.startswith("import ") or line.startswith("from "):
                 mod = line.split()[1].split(".")[0]

@@ -1,0 +1,64 @@
+{
+ "name": "Simulation",
+ "status": "maintained",
+ "tagline": "Gazebo worlds, plugins, and vehicle models for testing in software before the tank.",
+ "file": "content/projects/simulation.md",
+ "repos": [
+  {
+   "name": "hippo_sim",
+   "role": "simulation launch + models",
+   "url": "https://github.com/HippoCampusRobotics/hippo_sim",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-11-30",
+   "fork": false
+  },
+  {
+   "name": "hippo_gz_plugins",
+   "role": "Gazebo plugins",
+   "url": "https://github.com/HippoCampusRobotics/hippo_gz_plugins",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-11-28",
+   "fork": false
+  },
+  {
+   "name": "hippo_simulation",
+   "role": "simulation resources",
+   "url": "https://github.com/HippoCampusRobotics/hippo_simulation",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-06-04",
+   "fork": false
+  },
+  {
+   "name": "sitl_gazebo",
+   "role": "upstream fork — PX4 SITL Gazebo",
+   "url": "https://github.com/HippoCampusRobotics/sitl_gazebo",
+   "desc": "Set of plugins, models and worlds to use with OSRF Gazebo Simulator in SITL and HITL.",
+   "lang": "C++",
+   "pushed": "2020-05-25",
+   "fork": true
+  },
+  {
+   "name": "acoustic_simulator",
+   "role": "acoustic ranging simulator",
+   "url": "https://github.com/HippoCampusRobotics/acoustic_simulator",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2024-04-15",
+   "fork": false
+  },
+  {
+   "name": "UWRange_acoustic_simulator",
+   "role": "upstream fork — TWR acoustic simulation paper code",
+   "url": "https://github.com/HippoCampusRobotics/UWRange_acoustic_simulator",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2022-10-27",
+   "fork": true
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

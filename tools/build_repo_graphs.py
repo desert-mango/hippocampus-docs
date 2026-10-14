@@ -49,6 +49,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import projects_registry  # noqa: E402  (the project index + each project's facts file)
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "data" / "graph"
 
@@ -516,7 +519,7 @@ def main():
     args = ap.parse_args()
 
     org = json.loads((ROOT / "data/org-repos.json").read_text(encoding="utf-8"))
-    projects = json.loads((ROOT / "data/projects.json").read_text(encoding="utf-8"))
+    projects = projects_registry.load(ROOT)     # the index + each project's facts file
     roles, _ = role_and_project_maps(projects)
     by_name = {r["name"]: r for r in org}
     nonforks = sorted(r["name"] for r in org if not r.get("isFork"))

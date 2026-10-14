@@ -1,0 +1,84 @@
+{
+ "name": "Scalar-field exploration",
+ "status": "active",
+ "tagline": "Informative path planning over scalar fields: a Gaussian-process belief, a field simulator, trajectory generation, and an infrared benchmark rig.",
+ "file": "content/projects/scalar-field.md",
+ "repos": [
+  {
+   "name": "scalar_field_belief",
+   "role": "GP belief over a 2D field",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_belief",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-07-03",
+   "fork": false
+  },
+  {
+   "name": "scalar_field_sim",
+   "role": "field measurement simulator",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_sim",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-06-11",
+   "fork": false
+  },
+  {
+   "name": "scalar_field_interfaces",
+   "role": "messages/services",
+   "url": "https://github.com/HippoCampusRobotics/scalar_field_interfaces",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2026-07-03",
+   "fork": false
+  },
+  {
+   "name": "path_planning",
+   "role": "path planning",
+   "url": "https://github.com/HippoCampusRobotics/path_planning",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-10-21",
+   "fork": false
+  },
+  {
+   "name": "rapid_trajectories",
+   "role": "trajectory generation",
+   "url": "https://github.com/HippoCampusRobotics/rapid_trajectories",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2023-03-27",
+   "fork": false
+  },
+  {
+   "name": "rapid_trajectories_msgs",
+   "role": "messages",
+   "url": "https://github.com/HippoCampusRobotics/rapid_trajectories_msgs",
+   "desc": "",
+   "lang": "CMake",
+   "pushed": "2024-07-28",
+   "fork": false
+  },
+  {
+   "name": "ir_field_hardware",
+   "role": "IR benchmark field hardware",
+   "url": "https://github.com/HippoCampusRobotics/ir_field_hardware",
+   "desc": "",
+   "lang": "",
+   "pushed": "2026-08-24",
+   "fork": false
+  },
+  {
+   "name": "ir_adc_read",
+   "role": "IR sensor readout",
+   "url": "https://github.com/HippoCampusRobotics/ir_adc_read",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2025-09-09",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "Infrared benchmark field over the tank"
+ ],
+ "links": []
+}

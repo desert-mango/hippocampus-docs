@@ -98,6 +98,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import github_layer_rules as rules  # noqa: E402
 import github_names  # noqa: E402
+import projects_registry  # noqa: E402  (the project index + each project's facts file)
 
 ROOT = Path(__file__).resolve().parent.parent
 ORG = rules.ORG
@@ -794,7 +795,8 @@ class Build:
             raise Abort(f"{github_names.MAP_PATH}: {exc}") from None
         self.excluded = github_names.excluded_logins(self.links)
         setup = self.load("data/setup.json")
-        projects = self.projects = self.load("data/projects.json")
+        # the index merged with each project's facts file (tools/projects_registry.py, 2026-10-14)
+        projects = self.projects = projects_registry.with_facts(self.root, self.load("data/projects.json"))
         tools = self.load("data/tools.json")
         repos = self.repo_rows = self.repositories()
         activity, repo_doc = self.activity(repos)

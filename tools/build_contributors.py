@@ -82,6 +82,7 @@ from collections import Counter
 from pathlib import Path
 
 import github_names
+import projects_registry
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT = ROOT / "data" / "graph" / "contributors.json"
@@ -333,10 +334,12 @@ class FixtureSource(Source):
 
 def load_inputs(fixture=None):
     """(org rows, projects, people, links) — from data/, or a fixture override."""
-    def load(name):
+    def where(name):
         path = Path(fixture) / name if fixture else None
-        if path is None or not path.exists():
-            path = ROOT / "data" / name
+        return path if path is not None and path.exists() else ROOT / "data" / name
+
+    def load(name):
+        path = where(name)
         try:
             return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -348,8 +351,11 @@ def load_inputs(fixture=None):
         links = github_names.load_links(links_path)
     except (OSError, ValueError) as exc:
         raise Abort(f"cannot read {links_path}: {exc}") from None
-    return (load("org-repos.json"), load("projects.json"), load("people.json"),
-            links)
+    # the project index merged with each project's facts file (2026-10-14): the facts are the projects/ folder
+    # beside the projects.json that was read (a fixture's own, or data/projects/); a fixture's projects.json
+    # may still carry the facts itself (they win)
+    projects = projects_registry.with_facts(ROOT, load("projects.json"), where("projects.json").parent / "projects")
+    return (load("org-repos.json"), projects, load("people.json"), links)
 
 
 def display_names(source, logins):

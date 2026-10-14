@@ -1,0 +1,40 @@
+{
+ "name": "Cameras",
+ "status": "maintained",
+ "tagline": "Getting image streams into ROS: USB MJPEG cameras and event cameras.",
+ "file": "content/projects/cameras.md",
+ "repos": [
+  {
+   "name": "mjpeg_cam",
+   "role": "MJPEG USB camera driver (ROS 2)",
+   "url": "https://github.com/HippoCampusRobotics/mjpeg_cam",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-08-03",
+   "fork": false
+  },
+  {
+   "name": "mjpeg_cam_ros1",
+   "role": "upstream fork — ROS 1 driver",
+   "url": "https://github.com/HippoCampusRobotics/mjpeg_cam_ros1",
+   "desc": "An alternative to usb_cam package for grabbing mjpeg frames from a webcam",
+   "lang": "C++",
+   "pushed": "2022-06-20",
+   "fork": true
+  },
+  {
+   "name": "event_camera_example",
+   "role": "event-camera example",
+   "url": "https://github.com/HippoCampusRobotics/event_camera_example",
+   "desc": "",
+   "lang": "C++",
+   "pushed": "2024-03-20",
+   "fork": false
+  }
+ ],
+ "hardware": [
+  "USB cameras",
+  "Event camera (collaboration)"
+ ],
+ "links": []
+}

@@ -210,7 +210,11 @@ function openSite(opts) {
     confirm: () => true,
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     HC: Object.freeze({ preview: false,
-      fetchJSON: async (p) => { hcReads.push(p); return (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p) ? o.hc[p] : JSON.parse(readRepo(p))); } }),
+      fetchJSON: async (p) => { hcReads.push(p); return (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p) ? o.hc[p] : JSON.parse(readRepo(p))); },
+      // as js/source.js: the project index, then each project's facts file, merged
+      fetchProjects: async () => { hcReads.push('data/projects.json');
+        const index = o.hc && o.hc['data/projects.json'] ? o.hc['data/projects.json'] : JSON.parse(readRepo('data/projects.json'));
+        return C.mergeProjects(index, index.projects.map((e) => { try { return JSON.parse(readRepo(`data/projects/${e.id}.json`)); } catch (x) { return null; } })); } }),
     URLSearchParams,
     // the sign-in's popup watch must not keep node alive after a test
     setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref(); return t; }, clearInterval, clearTimeout,
@@ -2169,7 +2173,9 @@ test('overlay: "Edit whole page as Markdown" edits main and shows it (the draft 
 const readRepo = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const REGS = {
   setup: JSON.parse(readRepo('data/setup.json')),
-  projects: JSON.parse(readRepo('data/projects.json')),
+  // the project index merged with each project's facts file, as HC.fetchProjects reads it (2026-10-14)
+  projects: (() => { const index = JSON.parse(readRepo('data/projects.json'));
+    return C.mergeProjects(index, index.projects.map((e) => JSON.parse(readRepo(`data/projects/${e.id}.json`)))); })(),
   tools: JSON.parse(readRepo('data/tools.json')),
 };
 const TOKEN = '<yours>-editor-token';
@@ -2459,10 +2465,12 @@ test('new project: exactly two files — the registry entry with the six keys, a
   const out = C.newProjectDraft(form, text);
   assert.equal(out.problem, null);
   assert.equal(out.id, 'sonar-rig');
-  assert.deepEqual(Object.keys(out.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json']);
+  // three files since 2026-10-14 (the name keeps "two": the index entry and the page, plus the facts file)
+  assert.deepEqual(Object.keys(out.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
   assert.equal(out.files['content/projects/sonar-rig.md'], '## What it is\n\nA rig.\n');
   const doc = JSON.parse(out.files['data/projects.json']);
-  const entry = doc.projects.at(-1);
+  assert.deepEqual(doc.projects.at(-1), { id: 'sonar-rig', owners: [] }, 'the index keeps only id and owners');
+  const entry = Object.assign({ id: 'sonar-rig', owners: [] }, JSON.parse(out.files['data/projects/sonar-rig.json']));
   assert.deepEqual(Object.keys(entry), ['id', 'owners', 'name', 'status', 'tagline', 'file', 'repos']);
   // (the six keys of the name, plus owners since 2026-10-14: a new project starts with none; an admin names them)
   assert.deepEqual(entry.owners, [], 'a new project starts with no owners');
@@ -2470,14 +2478,14 @@ test('new project: exactly two files — the registry entry with the six keys, a
     { name: 'sonar_rig', url: 'https://github.com/HippoCampusRobotics/sonar_rig' },
     { name: 'sonar-rig-cad', url: 'https://github.com/HippoCampusRobotics/sonar-rig-cad' }]);
   assert.equal(entry.file, 'content/projects/sonar-rig.md');
-  // the only change to the registry is the added entry
+  // the only change to the index is the added entry
   const before = JSON.parse(text);
-  before.projects.push(entry);
+  before.projects.push({ id: 'sonar-rig', owners: [] });
   assert.equal(out.files['data/projects.json'], C.formatLike(text, before));
   assert.equal(C.registryDraftProblem('data/projects.json', text, out.files['data/projects.json']), null);
   const listed = REGS.projects.projects[0].repos.find((r) => !r.external).name;
   const bad = (patch, re) => {
-    const o = C.newProjectDraft(Object.assign({}, form, patch), text);
+    const o = C.newProjectDraft(Object.assign({}, form, patch), text, REGS.projects);
     assert.match(String(o.problem), re, JSON.stringify(patch));
     assert.equal(o.files, null);
   };
@@ -2715,7 +2723,9 @@ test('Propose: a 401 anywhere stops at once and says so; a refused path or branc
 const TREE_M = '7'.repeat(40);          // main's tree, for git/commits/<main sha>
 const REGS_NOW = {
   setup: JSON.parse(readRepo('data/setup.json')),
-  projects: JSON.parse(readRepo('data/projects.json')),
+  // the project index merged with each project's facts file, as HC.fetchProjects reads it (2026-10-14)
+  projects: (() => { const index = JSON.parse(readRepo('data/projects.json'));
+    return C.mergeProjects(index, index.projects.map((e) => JSON.parse(readRepo(`data/projects/${e.id}.json`)))); })(),
   tools: JSON.parse(readRepo('data/tools.json')),
 };
 const PAGE_LABEL = C.pageList(REGS_NOW).find((p) => p.pageId === PAGE_ID).title;
@@ -2749,7 +2759,9 @@ test('js/editor.js page tree (#/pages): one edit link per page and registry, plu
   await openTab(page, 'changes');
   // the registries and the New forms: tray links, as on /cms/
   const links = page.all((e) => e.tagName === 'A' && /^#\/(edit|new)\//.test(e.attrs.href || '')).map((a) => a.attrs.href);
-  assert.deepEqual(links, [...C.RAW_REGISTRIES.map((f) => `#/edit/${f.slice(0, -5)}`), '#/new/project', '#/new/person']);
+  // (since 2026-10-14 each project's own facts file follows the registries, in the index's order)
+  assert.deepEqual(links, [...C.RAW_REGISTRIES.map((f) => `#/edit/${f.slice(0, -5)}`),
+    ...REGS_NOW.projects.projects.map((p) => `#/edit/data/projects/${p.id}`), '#/new/project', '#/new/person']);
   // every page of the registries' page tree is the site's own page: on screen, it is the Changes tab's page
   for (const p of C.pageList(REGS_NOW)) {
     await page.go(`#${p.route}`);
@@ -2912,7 +2924,10 @@ test('js/editor.js New project: a form -> one draft of two files -> Propose send
   page.action('make-draft').click();
   await settle();
   const d = C.createDraftStore(page.storage).get('new/project');
-  assert.deepEqual(Object.keys(d.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json']);
+  // three files since 2026-10-14: the index entry, the project's own facts file, its page
+  assert.deepEqual(Object.keys(d.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
+  assert.deepEqual(JSON.parse(d.files['data/projects.json']).projects.at(-1), { id: 'sonar-rig', owners: [] });
+  assert.equal(JSON.parse(d.files['data/projects/sonar-rig.json']).name, 'Sonar rig');
   assert.equal(d.route, '/projects/sonar-rig');
   assert.equal(rawEditor(page).value, '## What it is\n\nA rig.\n', 'the story opens in the editor');
   // the page on screen becomes the new page: the frame shows it from the draft
@@ -2924,9 +2939,9 @@ test('js/editor.js New project: a form -> one draft of two files -> Propose send
   await settle();
   fieldOf(page, 'summary').value = 'Add the sonar rig';
   await sendIt(page);
-  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
+  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
     'POST /git/refs', 'POST /pulls', 'PATCH /pulls/42']);
-  assert.deepEqual(writes[2].body.tree.map((e) => e.path), ['content/projects/sonar-rig.md', 'data/projects.json']);
+  assert.deepEqual(writes[3].body.tree.map((e) => e.path), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
   assert.ok(cardOpen(page, 42));
 });
 
@@ -2974,9 +2989,10 @@ test('js/editor.js New project can start from my open proposal: one more commit 
   await settle();
   assert.equal(page.action('send-proposal').textContent, 'Add to proposal #7');
   await sendIt(page);
-  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
+  // three files since 2026-10-14 (the index entry, the facts file, the page): three blobs
+  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
     `PATCH /git/refs/heads/${OWN}`]);
-  assert.equal(writes[2].body.base_tree, TREE_B);
+  assert.equal(writes[3].body.base_tree, TREE_B);
   assert.ok(cardOpen(page, 7), 'the tray shows proposal #7');
 });
 
@@ -4087,4 +4103,31 @@ test('owners: a rename out of a file it does not own, or a file list GitHub cut 
     files: [fileRow('content/projects/learning-to-swim.md')] };
   page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: cut } }, 1);
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not every file was listed');
+});
+
+test('Data tab (2026-10-14): each project\'s facts file is listed and opens as raw JSON; the index stays in the registries list', async () => {
+  const page = await editorOn();
+  await page.showData();
+  const link = page.linkTo('#/edit/data/projects/learning-to-swim');
+  assert.ok(link, 'the facts file of Learning to Swim is listed');
+  assert.match(link.textContent, /data\/projects\/learning-to-swim\.json/);
+  assert.ok(page.linkTo('#/edit/data/projects'), 'the index (ids and owners) is still a registry');
+  await page.follow(link);
+  const ta = rawEditor(page);
+  assert.ok(ta, 'it opens in the raw JSON editor');
+  assert.equal(JSON.parse(ta.value).file, 'content/projects/learning-to-swim.md');
+});
+
+test('New project (2026-10-14): a repository another project already holds in its facts file is refused before any draft', async () => {
+  const page = await editorOn();
+  await openTab(page, 'changes');
+  await page.follow(page.linkTo('#/new/project'));
+  const taken = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/projects/acoustics.json'), 'utf8')).repos.find((r) => !r.external).name;
+  for (const [k, v] of [['id', 'sonar-rig'], ['name', 'Sonar rig'], ['status', 'active'], ['tagline', 'A tank rig.'], ['repos', taken]]) {
+    fieldOf(page, k).value = v;
+  }
+  page.action('make-draft').click();
+  await settle();
+  assert.match(shownProblem(page).textContent, new RegExp(`${taken}.*already listed in project 'acoustics'`));
+  assert.equal(C.createDraftStore(page.storage).get('new/project'), null);
 });

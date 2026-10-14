@@ -1,0 +1,17 @@
+{
+ "name": "Learning to Swim: simulation run guide",
+ "status": "active",
+ "tagline": "Run one simulated HippoCampus heat-course flight on a computer or the vehicle's Raspberry Pi, and check that it worked.",
+ "file": "content/projects/learning-to-swim-run-guide.md",
+ "repos": [],
+ "hardware": [
+  "HippoCampus micro AUV",
+  "Raspberry Pi"
+ ],
+ "links": [
+  {
+   "href": "#/projects/learning-to-swim",
+   "label": "Learning to Swim replication"
+  }
+ ]
+}

@@ -1001,7 +1001,8 @@
     if (state.regs) return state.regs;
     const get = (p) => HC.fetchJSON(p).catch(() => null);
     const [setup, projects, tools] = await Promise.all([
-      get('data/setup.json'), get('data/projects.json'), get('data/tools.json')]);
+      get('data/setup.json'), typeof HC.fetchProjects === 'function' ? HC.fetchProjects().catch(() => null) : get('data/projects.json'),
+      get('data/tools.json')]);
     state.regs = { setup, projects, tools };
     return state.regs;
   }
@@ -1087,6 +1088,9 @@
      / Discard), the four registries as raw JSON, New project / New person. */
   function viewChanges(r, epoch) {
     const panel = changesPanel();
+    const projectFacts = (state.regs && state.regs.projects && Array.isArray(state.regs.projects.projects)
+      ? state.regs.projects.projects : []).filter((x) => x && typeof x.id === 'string' && C.PROJECT_ID_RE.test(x.id))
+      .map((x) => ({ id: x.id, name: typeof x.name === 'string' && x.name.trim() ? x.name.trim() : x.id }));
     fillBase(panel.slot, epoch);
     draftList = h('section', { class: 'hc-drafts', 'aria-label': 'Your drafts' });
     drawDraftList(true);
@@ -1095,6 +1099,10 @@
       draftList,
       h('h2', { text: 'Registries (raw JSON)' }),
       h('ul', { class: 'hc-links' }, ...C.RAW_REGISTRIES.map((f) => h('li', null, link(`#/edit/${f.slice(0, -5)}`, f)))),
+      // each project's own facts (2026-10-14): its owners edit and approve these; the list above stays admin-owned
+      projectFacts.length ? h('h2', { text: 'Project facts (each project\'s own file)' }) : null,
+      projectFacts.length ? h('ul', { class: 'hc-links' }, ...projectFacts.map((x) => h('li', null,
+        link(`#/edit/data/projects/${x.id}`, `${x.name} — ${C.projectFactsFile(x.id)}`)))) : null,
       // the image library (upload, rename, delete); a page's own images are replaced in the page itself
       h('h2', { text: 'Images' }),
       h('p', null, link('#/media', 'The image library'), ' — on a page, click an image to replace it, or drag it to move it.'),
@@ -1470,10 +1478,11 @@
   async function newProjectPage(epoch) {
     const d = drafts.get('new/project');
     if (d && C.isDirty(d)) {
-      const md = Object.keys(d.files).find((p) => p !== 'data/projects.json');
+      const md = Object.keys(d.files).find((p) => /\.md$/.test(p));
+      const facts = Object.keys(d.files).find((p) => C.PROJECT_FACTS_FILE_RE.test(p));
       const own = d.base.number ? await myProposals() : [];   // is my proposal still open?
-      if (!paint(epoch, [backToChanges(), h('p', { class: 'cms-muted', text: `This draft adds ${md} and one entry to `
-        + 'data/projects.json. To change the entry, discard it and fill the form again.' })]
+      if (!paint(epoch, [backToChanges(), h('p', { class: 'cms-muted', text: `This draft adds ${md}, its facts file ${facts} and `
+        + 'one entry to data/projects.json. To change the entry, discard it and fill the form again.' })]
         .concat(editorPage(d, md, 'page', true, epoch, own)))) return;
       editing = { key: d.key, hash: trayHash };
       return;
@@ -1499,8 +1508,9 @@
     paint(epoch, [
       backToChanges(),
       h('h1', { text: 'New project' }),
-      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json and one page of Markdown. '
-        + 'The draft stays in this browser tab until you propose it.' }),
+      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json (its id and owners), its facts file '
+        + 'data/projects/<id>.json and one page of Markdown. A new project needs a site admin\'s approval; after that its owners '
+        + 'look after it. The draft stays in this browser tab until you propose it.' }),
       h('div', { class: 'cms-form' },
         own.length ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
         labelled('Id', f.id, 'The page address, /projects/<id>: lowercase letters, digits and dashes. It cannot be changed later.'),
@@ -1511,6 +1521,22 @@
     ]);
   }
 
+  /* The projects (index + each facts file) at a commit: the draft's base, so a repository a project on my
+     proposal already holds is refused here, not only by the gate. null when the index does not parse. */
+  async function projectsAt(sha, indexText) {
+    let index;
+    try { index = JSON.parse(indexText); } catch (e) { return null; }
+    if (!index || !Array.isArray(index.projects)) return null;
+    const facts = await Promise.all(index.projects.map(async (e) => {
+      if (!e || typeof e.id !== 'string' || !C.PROJECT_ID_RE.test(e.id)) return null;
+      try {
+        const res = await apiResponse(C.contentsPath(C.projectFactsFile(e.id), sha), { accept: C.RAW_MEDIA, raw: true });
+        return res.ok ? JSON.parse(res.data) : null;
+      } catch (x) { return null; }
+    }));
+    return C.mergeProjects(index, facts);
+  }
+
   async function makeProjectDraft(f, own, problem, make, epoch) {
     const form = {};
     for (const k of Object.keys(f)) form[k] = f[k].value;
@@ -1518,13 +1544,15 @@
     const id = String(form.id).trim();
     make.disabled = true;
     try {
-      const files = ['data/projects.json'].concat(C.PROJECT_ID_RE.test(id) ? [`content/projects/${id}.md`] : []);
+      const files = ['data/projects.json'].concat(C.PROJECT_ID_RE.test(id) ? [C.projectFactsFile(id), `content/projects/${id}.md`] : []);
       const d = await loadDraft('new/project', { label: `New project: ${String(form.name).trim() || id}`,
         route: `/projects/${id}` }, files, hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
-      const out = C.newProjectDraft(form, d.originals['data/projects.json']);
+      const out = C.newProjectDraft(form, d.originals['data/projects.json'], await projectsAt(d.base.sha, d.originals['data/projects.json']));
       const md = `content/projects/${out.id}.md`;
       if (out.problem) { showProblem(problem, out.problem); return; }
-      if (d.originals[md] !== null) { showProblem(problem, `${md} already exists on the site — pick another id`); return; }
+      for (const f2 of [md, C.projectFactsFile(out.id)]) {
+        if (d.originals[f2] !== null) { showProblem(problem, `${f2} already exists on the site — pick another id`); return; }
+      }
       if (epoch !== routeEpoch) return;
       d.files = out.files;
       drafts.put(d);
@@ -3647,7 +3675,9 @@
   const unmailed = (s) => textOf(s).replace(EMAIL_SHAPED_RE, '[e-mail]');
 
   function dataFile(p) {
-    if (!mem.files.has(p)) mem.files.set(p, Promise.resolve().then(() => HC.fetchJSON(p)).catch(() => null));
+    // the project registry is read merged (the index + each project's facts file, 2026-10-14): names live in the facts
+    const read = p === 'data/projects.json' && typeof HC.fetchProjects === 'function' ? () => HC.fetchProjects() : () => HC.fetchJSON(p);
+    if (!mem.files.has(p)) mem.files.set(p, Promise.resolve().then(read).catch(() => null));
     return mem.files.get(p);
   }
 

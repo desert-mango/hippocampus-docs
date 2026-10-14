@@ -163,8 +163,10 @@ starting point goes into the same proposal; "What goes in" lists them all.
 
 **New project and New person.** At the bottom of the **Changes** tab, under **New**, click
 **New project** or **New person**, fill in the form, and click **Make the draft** (project) or
-**Add to the people draft** (person). Then propose it the same way. A new project is two files:
-its story and one entry in `data/projects.json`. A person is one card on the About page; their
+**Add to the people draft** (person). Then propose it the same way. A new project is three files:
+its story, its facts file `data/projects/<id>.json` and one entry (`id` and `owners`) in
+`data/projects.json`; a site admin approves a new project. After that, the project's owners
+approve changes to its two files (its story and its facts). A person is one card on the About page; their
 photo comes from **Photo from Media** (section 7). Both forms have the same "Start from:"
 choice.
 

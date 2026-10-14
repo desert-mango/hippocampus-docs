@@ -1,0 +1,37 @@
+{
+ "name": "Documentation & site",
+ "status": "active",
+ "tagline": "The public lab reference: setup guides, project maps, code search, and the tooling that keeps the site consistent.",
+ "file": "content/projects/docs-and-site.md",
+ "repos": [
+  {
+   "name": "docs",
+   "role": "Sphinx docs site (being replaced by this site)",
+   "url": "https://github.com/HippoCampusRobotics/docs",
+   "desc": "",
+   "lang": "Python",
+   "pushed": "2026-08-27",
+   "fork": false
+  },
+  {
+   "name": "hippocampusrobotics.github.io",
+   "role": "org website",
+   "url": "https://github.com/HippoCampusRobotics/hippocampusrobotics.github.io",
+   "desc": "",
+   "lang": "Ruby",
+   "pushed": "2024-02-22",
+   "fork": false
+  },
+  {
+   "name": ".github",
+   "role": "org profile readme",
+   "url": "https://github.com/HippoCampusRobotics/.github",
+   "desc": "",
+   "lang": "",
+   "pushed": "2025-07-24",
+   "fork": false
+  }
+ ],
+ "hardware": [],
+ "links": []
+}

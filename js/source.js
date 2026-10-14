@@ -186,6 +186,23 @@
     return err;
   }
 
+  /* The index merged with each project's facts (factsList[i] for entry i): an entry keeps the index's id and
+     owners first (a facts file cannot change them), then the facts. js/cms-core.js mergeProjects is the same. */
+  const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
+  function mergeProjects(index, factsList) {
+    if (!index || typeof index !== 'object' || !Array.isArray(index.projects)) return index;
+    const facts = Array.isArray(factsList) ? factsList : [];
+    return Object.assign({}, index, { projects: index.projects.map((e, i) => {
+      if (!e || typeof e !== 'object') return e;
+      const f = facts[i] && typeof facts[i] === 'object' && !Array.isArray(facts[i]) ? facts[i] : {};
+      const out = {};
+      if ('id' in e) out.id = e.id;
+      if ('owners' in e) out.owners = e.owners;
+      Object.keys(f).forEach((k) => { if (k !== 'id' && k !== 'owners') out[k] = f[k]; });
+      return Object.assign(out, e);
+    }) });
+  }
+
   function isBridgePath(path) {
     if (typeof path !== 'string' || !BRIDGE_PATH_RE.test(path)) return false;
     return path.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
@@ -427,8 +444,19 @@
       return nonce ? Promise.resolve(fakeResponse(405)) : Promise.resolve(fetchImpl(url, init));
     }
 
+    /* The project registry (2026-10-14): data/projects.json lists {id, owners} in order; each project's facts
+       are in data/projects/<id>.json. -> the merged document every page reads (mergeProjects). */
+    function fetchProjects() {
+      return fetchJSON('data/projects.json').then((index) => {
+        const rows = index && typeof index === 'object' && Array.isArray(index.projects) ? index.projects : [];
+        return Promise.all(rows.map((e) => (e && typeof e.id === 'string' && PROJECT_ID_RE.test(e.id)
+          ? fetchJSON(`data/projects/${e.id}.json`).catch(() => null) : Promise.resolve(null))))
+          .then((facts) => mergeProjects(index, facts));
+      });
+    }
+
     return Object.freeze({
-      preview: Boolean(nonce), fetchText, fetchJSON, callFunction,
+      preview: Boolean(nonce), fetchText, fetchJSON, fetchProjects, callFunction,
       blockPrefix: sentinelPrefix(nonce), post, onEditor,
     });
   }
@@ -436,7 +464,7 @@
   if (typeof window !== 'undefined') window.HC = create(window);
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-      create, previewFragment, parsePreviewFragment, isBridgePath,
+      create, previewFragment, parsePreviewFragment, isBridgePath, mergeProjects,
       BRIDGE_PATH_RE, BRIDGE_TIMEOUT_MS,
       sentinelPrefix, frameMessage, editorMessage, BLOCK_INSERT_KINDS, OVERLAY_MARKS, BLOCK_EDITORS, OPEN_KINDS, MAX_BLOCK_MD,
     };

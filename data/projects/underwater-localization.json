@@ -1,0 +1,11 @@
+{
+ "name": "Underwater localization & temperature exploration",
+ "status": "active",
+ "tagline": "Known-map localization, change mapping, and temperature-guided exploration tested in the measured HippoCampus pool simulation.",
+ "file": "content/projects/underwater-localization.md",
+ "repos": [],
+ "hardware": [
+  "HippoCampus micro AUV"
+ ],
+ "links": []
+}

@@ -600,3 +600,29 @@ test('hc-block-move is built from two checked indices only', () => {
     assert.equal(SRC.frameMessage('hc-block-move', bad), null, JSON.stringify(bad));
   }
 });
+
+/* Each project's facts in its own file (Kyle, 2026-10-14): HC.fetchProjects reads the index, then every
+   listed project's data/projects/<id>.json, and merges them into the shape every page knew (id, owners, then the
+   facts). A missing facts file leaves the bare entry; an id that is not a page address is not fetched. */
+test('HC.fetchProjects: the index merged with each project\'s facts file, in the index\'s order', async () => {
+  const files = {
+    '/data/projects.json': { intro: 'All of them.', projects: [{ id: 'b-proj', owners: ['x'] }, { id: 'a-proj', owners: [] },
+      { id: '../evil', owners: [] }, { id: 'gone', owners: [] }] },
+    '/data/projects/b-proj.json': { name: 'B', status: 'active', file: 'content/projects/b-proj.md', owners: ['sneaky'], id: 'zzz' },
+    '/data/projects/a-proj.json': { name: 'A', status: 'legacy', file: 'content/projects/a-proj.md' },
+  };
+  const asked = [];
+  const win = fakeWindow({ hash: '#/projects' });
+  const HC = SRC.create(win, { fetch: async (url) => { asked.push(url); const v = files[url.replace(/^\./, '').replace(/^(?!\/)/, '/')];
+    return v ? { ok: true, status: 200, text: async () => JSON.stringify(v) } : { ok: false, status: 404, text: async () => '' }; } });
+  const doc = await HC.fetchProjects();
+  assert.equal(doc.intro, 'All of them.');
+  assert.deepEqual(doc.projects.map((p) => p.id), ['b-proj', 'a-proj', '../evil', 'gone']);
+  assert.deepEqual(doc.projects[0], { id: 'b-proj', owners: ['x'], name: 'B', status: 'active', file: 'content/projects/b-proj.md' },
+    'the index\'s id and owners win; a facts file cannot widen ownership');
+  assert.deepEqual(Object.keys(doc.projects[1]), ['id', 'owners', 'name', 'status', 'file']);
+  assert.deepEqual(doc.projects[3], { id: 'gone', owners: [] }, 'no facts file: the bare entry');
+  assert.ok(!asked.some((u) => u.includes('evil')), 'an id that is not a page address is never fetched');
+  assert.deepEqual(SRC.mergeProjects({ projects: [{ id: 'a', owners: [] }] }, [{ name: 'A' }]).projects[0], { id: 'a', owners: [], name: 'A' });
+  assert.equal(SRC.mergeProjects(null, []), null);
+});
