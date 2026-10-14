@@ -591,3 +591,12 @@ test('the theme crosses into the frame: &theme=light in the fragment, theme in h
   assert.equal(SRC.editorMessage({ ...base, theme: '<b>' }).theme, null);
   assert.equal(SRC.editorMessage(base).theme, null, 'absent: the frame keeps what it has');
 });
+
+/* V2 (Kyle, 2026-10-14): an image block is dragged to another place in the page; the frame says only the two
+   block indices. */
+test('hc-block-move is built from two checked indices only', () => {
+  assert.deepEqual(SRC.frameMessage('hc-block-move', { index: 4, to: 9, md: '<img>', html: 'x' }), { type: 'hc-block-move', index: 4, to: 9 });
+  for (const bad of [{ index: 4, to: 4 }, { index: -1, to: 2 }, { index: 1, to: 1.5 }, { index: 1 }, { index: '1', to: 2 }, { index: 1, to: 100001 }]) {
+    assert.equal(SRC.frameMessage('hc-block-move', bad), null, JSON.stringify(bad));
+  }
+});

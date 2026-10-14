@@ -2133,6 +2133,36 @@
     return p.type === 'link' && listOf(p.tokens).length === 1 && p.tokens[0].type === 'image';
   }
 
+  /* One image block's Markdown -> {alt, title, tail} | null, for replacing its file (V2, Kyle 2026-10-14):
+     alt is the source text between ![ and ] (kept byte for byte), title the parsed title (any delimiter
+     CommonMark allows: "…", '…', (…)) or '', tail the trailing whitespace. A plain image only (not a
+     linked one); a reference-style image (![alt][ref], its definition elsewhere) counts, title ''. The
+     caller writes it back as an inline image: ![alt](new-address "title"). */
+  const IMAGE_ALT_RE = /^!\[((?:\\.|[^\]\\])*)\]/;
+  const IMAGE_REF_RE = /^!\[((?:\\.|[^\]\\])*)\]\[[^\]]*\]\s*$/;
+  function imageParts(md) {
+    if (typeof md !== 'string' || md.length > 4000) return null;
+    const alt = IMAGE_ALT_RE.exec(md);
+    if (!alt) return null;
+    const tail = /\s*$/.exec(md)[0];
+    if (IMAGE_REF_RE.test(md)) return { alt: alt[1], title: '', tail };
+    const lex = defaultLexer();
+    if (!lex) return null;
+    let toks;
+    try { toks = lex(md); } catch (e) { return null; }
+    const real = listOf(toks).filter((t) => t && t.type !== 'space');
+    if (real.length !== 1 || real[0].type !== 'paragraph' || !isImageOnly(real[0])) return null;
+    const img = listOf(real[0].tokens).find((t) => t && t.type === 'image');
+    if (!img) return null;                                    // a linked image: its click is the link's
+    // marked hands the title HTML-escaped: back to its characters (imageWith escapes for Markdown)
+    const title = typeof img.title === 'string' ? img.title.replace(/&(quot|#39|lt|gt|amp);/g,
+      (x, k) => ({ quot: '"', '#39': "'", lt: '<', gt: '>', amp: '&' })[k]) : '';
+    return { alt: alt[1], title, tail };
+  }
+  /* The image Markdown for parts with a new address. */
+  const imageWith = (parts, url) => `![${parts.alt}](${/[\s()<>]/.test(url) ? `<${url}>` : url}${parts.title
+    ? ` "${parts.title.replace(/["\\]/g, '\\$&')}"` : ''})${parts.tail}`;
+
   function kindOf(tok) {
     const t = tok.type;
     if (t === 'paragraph') return isImageOnly(tok) ? 'image' : 'paragraph';
@@ -2767,7 +2797,7 @@
     MEDIA_TYPES, SIZE_HINT_TEXT, REMOVE_FIRST_TEXT, IN_USE_TEXT, IN_DRAFT_TEXT, THUMB_TRANSFORM, MEDIA_SLUG_RE,
     thumbUrl, parseManifest, manifestAssets, findBySha, mediaChangeProblem, mediaFileProblem, mediaFailure,
     createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
-    BLOCK_KINDS, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
+    BLOCK_KINDS, imageParts, imageWith, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
     blockDiff, overlayOnMain, cachedFetcher, resolveRef, viewSettings, membersOnly,
     ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,
   });

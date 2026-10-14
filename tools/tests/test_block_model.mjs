@@ -495,3 +495,21 @@ test('SNIPPET_CATALOG: the picker catalog, each in the site dialect (sanitizer c
   }
   assert.ok(C.SNIPPET_CATALOG.image.media, 'the image snippet asks the Media tab for its address');
 });
+
+/* V2 (Kyle, 2026-10-14): an image block's parts, for replacing its file in the page. Every inline title form,
+   an angle-bracket address, a reference-style image; never a linked image or an image inside text. */
+test('imageParts / imageWith: every inline image form, a reference image; the alt kept byte for byte', () => {
+  const url = 'https://res.cloudinary.com/x/image/upload/v1/new.png';
+  const cases = [
+    ['![a](u)\n', `![a](${url})\n`],
+    ["![a](u 'cap')", `![a](${url} "cap")`],
+    ['![a](u (cap))\n\n', `![a](${url} "cap")\n\n`],
+    ['![a](<u x>)', `![a](${url})`],
+    ['![a][ref]', `![a](${url})`],
+    ['![a\\]b](u "t\\"q")', `![a\\]b](${url} "t\\"q")`],
+    ['![Describe the image]()\n', `![Describe the image](${url})\n`],
+  ];
+  for (const [md, want] of cases) assert.equal(C.imageWith(C.imageParts(md), url), want, md);
+  for (const md of ['[![a](u)](l)', 'text ![a](u)', '![a](u) and text', 'plain', '', 7]) assert.equal(C.imageParts(md), null, String(md));
+  assert.equal(C.imageWith({ alt: 'x', title: '', tail: '' }, 'a b.png'), '![x](<a b.png>)');
+});

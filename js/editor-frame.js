@@ -182,6 +182,19 @@
     return out;
   }
 
+  /* An image block: the wrapper holds one paragraph whose only content is one <img> (a linked image is not:
+     its click is the link's). V2 (Kyle, 2026-10-14): a click asks the parent to replace it, and it can be
+     dragged (or moved with Alt+arrow keys) to another place in the page. */
+  function isImageBlock(w, prefix) {
+    const els = Array.from(w.childNodes).filter((c) => c.nodeType === ELEMENT && sentinelIndex(c, prefix) === null
+      && classesOf(c).indexOf('hc-edit-root') < 0);
+    if (els.length !== 1 || String(els[0].tagName).toUpperCase() !== 'P') return false;
+    const inner = Array.from(els[0].childNodes);
+    const imgs = inner.filter((c) => c.nodeType === ELEMENT);
+    return imgs.length === 1 && String(imgs[0].tagName).toUpperCase() === 'IMG'
+      && inner.every((c) => c.nodeType === ELEMENT || (c.nodeType === 3 && !/\S/.test(c.data || '')));
+  }
+
   function indexOfBlock(w) {
     const n = Number(w.getAttribute('data-index'));
     return Number.isInteger(n) && n >= 0 ? n : null;
@@ -259,6 +272,80 @@
       HC.post('hc-block-select', { index });
     }
 
+    /* An image block moves: drag it (a line shows where it lands), or Alt+ArrowUp / Alt+ArrowDown while it has
+       keyboard focus. The frame only says {index, to}; the parent moves it in the draft and reloads. */
+    let dragFrom = null;
+    let dropLine = null;
+    const blocksIn = (body) => Array.from(body.childNodes).filter((c) => c.nodeType === ELEMENT && classesOf(c).indexOf('hc-block') >= 0);
+    function moveTo(i, to) { if (to !== i && to !== i + 1) HC.post('hc-block-move', { index: i, to }); }
+    function dropAt(body, e) {
+      let t = e && e.target;
+      while (t && t !== body && !(t.nodeType === ELEMENT && classesOf(t).indexOf('hc-block') >= 0)) t = t.parentNode;
+      if (!t || t === body) return null;
+      const k = indexOfBlock(t);
+      if (k === null) return null;
+      const r = typeof t.getBoundingClientRect === 'function' ? t.getBoundingClientRect() : null;
+      const after = Boolean(r && typeof e.clientY === 'number' && e.clientY > r.top + r.height / 2);
+      if (!after) return { to: k, y: r ? r.top : null };
+      const list = blocksIn(body);
+      const next = list[list.indexOf(t) + 1];
+      return { to: next ? indexOfBlock(next) : k + 1, y: r ? r.bottom : null };
+    }
+    function showDrop(y, body) {
+      if (!dropLine) {
+        dropLine = doc.createElement('div');
+        dropLine.className = 'hc-drop-line';
+        dropLine.setAttribute('aria-hidden', 'true');
+        if (doc.body) doc.body.appendChild(dropLine);
+      }
+      dropLine.hidden = y === null;
+      if (y === null) return;
+      dropLine.style.top = `${Math.round(y + (win.scrollY || 0)) - 1}px`;
+      const r = body && typeof body.getBoundingClientRect === 'function' ? body.getBoundingClientRect() : null;
+      if (r) { dropLine.style.left = `${Math.round(r.left + (win.scrollX || 0))}px`; dropLine.style.width = `${Math.round(r.width)}px`; }
+    }
+    function endDrag() { dragFrom = null; if (dropLine) dropLine.hidden = true; }
+    function wireImage(body, w, i) {
+      w.setAttribute('draggable', 'true');
+      w.setAttribute('data-hc-image', '1');
+      w.addEventListener('dragstart', (e) => {
+        if (openNow) { if (e && e.preventDefault) e.preventDefault(); return; }
+        dragFrom = i;
+        if (e && e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ''); } catch (x) { /* ok */ } }
+      });
+      w.addEventListener('dragend', endDrag);
+      w.addEventListener('keydown', (e) => {
+        if (!e || e.target !== w || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || openNow) return;
+        const list = blocksIn(body);
+        const k = list.indexOf(w);
+        if (e.preventDefault) e.preventDefault();
+        if (e.key === 'ArrowUp' && k > 0) moveTo(i, indexOfBlock(list[k - 1]));
+        else if (e.key === 'ArrowDown' && k >= 0 && k < list.length - 1) {
+          const after = list[k + 2];
+          moveTo(i, after ? indexOfBlock(after) : indexOfBlock(list[k + 1]) + 1);
+        }
+      });
+      if (body.getAttribute('data-hc-dnd') !== '1') {
+        body.setAttribute('data-hc-dnd', '1');
+        body.addEventListener('dragover', (e) => {
+          if (dragFrom === null) return;
+          const at = dropAt(body, e);
+          if (!at) return;
+          if (e.preventDefault) e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          showDrop(at.y, body);
+        });
+        body.addEventListener('drop', (e) => {
+          if (dragFrom === null) return;
+          if (e.preventDefault) e.preventDefault();
+          const at = dropAt(body, e);
+          const from = dragFrom;
+          endDrag();
+          if (at) moveTo(from, at.to);
+        });
+      }
+    }
+
     /* Click/Enter-to-select and the "+" rails, once per block. */
     function decorate(body, blocks) {
       blocks.forEach((w) => {
@@ -268,6 +355,7 @@
         // no pencil (Kyle, 2026-10-14): the block itself is the target — a click, or Enter / Space while
         // it has keyboard focus; css/editor.css draws the same left line for hover, focus and open
         w.setAttribute('tabindex', '0');
+        if (isImageBlock(w, prefix)) wireImage(body, w, i);
         w.addEventListener('keydown', (e) => {
           if (!e || e.target !== w || (e.key !== 'Enter' && e.key !== ' ')) return;
           if (openNow && openNow.index === i) return;

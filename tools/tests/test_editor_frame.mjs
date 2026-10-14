@@ -473,3 +473,41 @@ test('the block look is one left line (no pencil, no box ring), and scrollbars f
   assert.match(site, /color-scheme:\s*dark/, 'dark is declared, so form controls and scrollbars are dark');
   assert.match(site, /\[data-theme="light"\][^{]*\{[^}]*color-scheme:\s*light/, 'light is declared too');
 });
+
+/* V2 (Kyle, 2026-10-14): an image block is draggable to another place in the page, and Alt+arrow moves it
+   by keyboard; the frame says only {index, to}. Other blocks are not draggable. */
+test('an image block: draggable, dropped before or after a block, Alt+ArrowUp/Down; text blocks are not draggable', () => {
+  const doc = makeDoc();
+  const content = el(doc, 'main', { id: 'content', class: 'content' });
+  doc.body.appendChild(content);
+  const img = el(doc, 'img', { src: 'https://res.cloudinary.com/x/a.png', alt: 'a' });
+  const body = el(doc, 'div', { class: 'page-body' },
+    S(doc, 0), el(doc, 'h1', null, 'Title'),
+    S(doc, 2), el(doc, 'p', null, img),
+    S(doc, 4), el(doc, 'p', null, 'After the image.'),
+    S(doc, 6), el(doc, 'p', null, 'Last.'));
+  content.appendChild(body);
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  HC.send({ on: true });
+  const [w0, w2, w4, w6] = blocksOf(body);
+  assert.equal(w2.getAttribute('draggable'), 'true');
+  assert.ok(!w4.getAttribute('draggable'), 'a text block is not draggable');
+  const moves = () => HC.posts.filter((p) => p.type === 'hc-block-move');
+  w2.dispatch('keydown', w2, { key: 'ArrowDown', altKey: true });
+  w2.dispatch('keydown', w2, { key: 'ArrowUp', altKey: true });
+  w2.dispatch('keydown', w2, { key: 'ArrowDown' });                       // no Alt: nothing
+  w4.dispatch('keydown', w4, { key: 'ArrowDown', altKey: true });        // not an image: nothing
+  assert.deepEqual(moves(), [{ type: 'hc-block-move', index: 2, to: 6 }, { type: 'hc-block-move', index: 2, to: 0 }]);
+  // drag the image onto the last block (no layout under node: "before" it)
+  w2.dispatch('dragstart', w2, { dataTransfer: { setData() {} } });
+  body.dispatch('dragover', w6, { clientY: 1 });
+  body.dispatch('drop', w6, { clientY: 1 });
+  assert.deepEqual(moves().at(-1), { type: 'hc-block-move', index: 2, to: 6 });
+  // a drop on its own place says nothing; a drop with no drag says nothing
+  w2.dispatch('dragstart', w2, { dataTransfer: { setData() {} } });
+  body.dispatch('drop', w2, {});
+  body.dispatch('drop', w0, {});
+  assert.equal(moves().length, 3);
+  assert.ok(HC.posts.every((p) => Object.values(p).every((v) => typeof v !== 'string' || !/</.test(v))), 'no HTML in any message');
+});

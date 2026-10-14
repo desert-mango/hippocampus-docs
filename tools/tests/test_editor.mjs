@@ -181,6 +181,7 @@ function openSite(opts) {
   const told = [];        // the footer line (app.js's status callback)
   const sessions = [];    // app.js's onSession callback
   const listeners = {};
+  const docListeners = {};
   const created = [];
   const replaced = [];
   const storage = o.storage || memoryStorage();
@@ -195,6 +196,7 @@ function openSite(opts) {
       createElement: (tag) => { const e = new FakeElement(tag); created.push(e); return e; },
       createTextNode: (text) => ({ textContent: String(text), nodeType: 3 }),
       documentElement: new FakeElement('html'),
+      addEventListener: (type, fn) => { (docListeners[type] = docListeners[type] || []).push(fn); },
     },
     sessionStorage: storage,
     localStorage: o.localStorage || memoryStorage(),
@@ -228,6 +230,7 @@ function openSite(opts) {
     status: (text, kind) => told.push({ text, kind }), onSession: (on) => sessions.push(on) }, o.start));
   const page = {
     win, body, header, content, host, calls, listeners, location, created, replaced, storage, mql,
+    docListeners: (type) => docListeners[type] || [],
     started, opens, told, sessions,
     all: (pred) => findAll(body, pred),
     one: (pred) => findAll(body, pred)[0],
@@ -254,6 +257,16 @@ function openSite(opts) {
       await page.send({ type: 'hc-fetch', id, path: p });
       const hit = frame.posted.find((x) => x.m.type === 'hc-file' && x.m.id === id);
       return hit && hit.m;
+    },
+    // V2 (Kyle, 2026-10-14): a picked block is edited in the page; its Markdown is on the editor page's Data tab.
+    // pick = the frame says hc-block-select, then the person opens Proposals -> Data (when it is not open yet)
+    async pick(index) {
+      await page.send({ type: 'hc-block-select', index });
+      await page.showData();
+    },
+    async showData() {
+      if (page.tray().hidden) { page.handle().click(); await settle(); }
+      if (page.tab('changes').getAttribute('aria-selected') !== 'true') { page.tab('changes').click(); await settle(); }
     },
     editorMessages: () => page.frame().posted.filter((x) => x.m.type === 'hc-editor').map((x) => x.m),
     async type(el, text) { el.value = text; el.fire('input'); await settle(); },
@@ -349,7 +362,7 @@ test('hc-block-select: the tray shows that block\'s Markdown; the frame is told 
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   const ta = page.textarea();
   assert.ok(ta, 'the block editor is open');
   assert.equal(ta.value, blocksOf(PAGE_TEXT)[i].text);
@@ -361,7 +374,7 @@ test('an edit replaces the span, updates the draft, reloads with a NEW nonce and
   await page.asks(PAGE_FILE);
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   const netBefore = page.github().length;
   const first = page.nonce();
   const srcs = page.frame().srcs.length;
@@ -383,7 +396,7 @@ test('reload cost (D-D): a counting fetch across two edits reads each path once'
   const i = firstParagraph(PAGE_TEXT);
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.type(page.textarea(), 'One.\n\n');
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
@@ -401,7 +414,7 @@ test('typing an unclosed fence never touches the text outside the span', async (
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   const ta = page.textarea();
   for (const typed of ['```', '```bash\n', '```bash\necho', '```bash\necho one\n<div class="adm adm-note">\n']) {
     await page.type(ta, typed);
@@ -417,7 +430,7 @@ test('U2: a picked block goes to the frame as `open` {index, md, kind}: its Mark
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   const m = page.editorMessages().at(-1);
   assert.deepEqual({ ...m.open }, { index: i, md: blocksOf(PAGE_TEXT)[i].text, kind: 'paragraph', as: null });
 });
@@ -425,7 +438,7 @@ test('U2: a picked block goes to the frame as `open` {index, md, kind}: its Mark
 test('U2: the frame says it types in the page -> the tray drops the Markdown textarea and says so', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   assert.ok(page.textarea(), 'the textarea until the frame answers');
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   assert.equal(page.textarea(), undefined, 'no Markdown textarea while typing in the page');
@@ -438,7 +451,7 @@ test('U2: hc-block-md writes the block into the draft by its span: NO frame relo
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   const srcs = page.frame().srcs.length;
   const nonce = page.nonce();
@@ -459,7 +472,7 @@ test('U2: hc-block-md is dropped unless it names the open, in-page block in auth
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   const store = () => C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware');
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-md', index: i, md: 'Before the frame said it is typing.\n\n' });
   assert.equal(store(), null, 'not open in the page yet: dropped');
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
@@ -476,7 +489,7 @@ test('U2/U3: the frame cannot open the editor -> the tray textarea shows with th
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'markdown', reason: 'the in-page editor could not load' });
   assert.ok(page.textarea(), 'the Markdown textarea');
   assert.match(page.one((e) => e.attrs['data-markdown-reason'] !== undefined).textContent, /could not load/);
@@ -486,7 +499,7 @@ test('U3: "Edit this part as Markdown" closes the typed block, then opens it aga
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   const before = page.editorMessages().length;
   page.action('edit-as-markdown').click();
@@ -508,7 +521,7 @@ test('U3: typing in the tray textarea keeps the frame from opening the same bloc
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.type(page.textarea(), 'Typed in the tray.\n\n');
   await page.send({ type: 'hc-ready' });
   assert.equal(page.editorMessages().at(-1).open, null, 'the reloaded frame is not told to open it');
@@ -519,7 +532,7 @@ test('U3: a note box Remove (an empty hc-block-md) takes the block out of the dr
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'box', reason: '' });
   await page.send({ type: 'hc-block-md', index: i, md: '' });
   const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
@@ -530,7 +543,7 @@ test('U2: Escape in the frame (hc-block-state closed) deselects the block', asyn
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   await page.send({ type: 'hc-block-state', index: i, editor: 'closed', reason: '' });
   const m = page.editorMessages().at(-1);
@@ -557,7 +570,7 @@ test('U4a: the dock counts this page\'s changes; Send for review opens the propo
   const count = () => page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent;
   const send = () => page.action('dock-send');
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   assert.equal(count(), 'No changes yet');
   assert.equal(send().disabled, true, 'nothing to send yet');
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
@@ -575,7 +588,7 @@ test('U4a: the send box goes away with what it sends: Editor off, or nothing lef
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
   page.action('dock-send').click();
@@ -612,9 +625,11 @@ test('hc-block-insert puts the snippet at that boundary, as its own block, and s
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
+  assert.equal(page.tray().hidden, true, 'V2: the new block opens in the page, nothing else opens');
   const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   const want = C.insertAt(PAGE_TEXT, i, 'note');
   assert.equal(d, want.text);
+  await page.showData();
   const ta = page.textarea();
   assert.equal(ta.value, want.text.slice(want.span.start, want.span.end));
   assert.equal(ta.value.slice(ta.selectionStart, ta.selectionEnd), C.SNIPPET_CATALOG.note.placeholder);
@@ -632,7 +647,7 @@ test('a page the block model refuses (CRLF) offers only "Edit whole page as Mark
   const page = await editorOn({ files: { [PAGE_FILE]: crlf } });
   const served = await page.asks(PAGE_FILE);
   assert.equal(served.text, crlf, 'no sentinels on a page the split refuses');
-  await page.send({ type: 'hc-block-select', index: 0 });
+  await page.pick(0);
   const tray = page.one((e) => e.attrs.id === 'hc-tray');
   assert.match(tray.textContent, /Edit whole page as Markdown/);
   assert.match(tray.textContent, new RegExp(C.splitBlocks(crlf).reason.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -645,7 +660,7 @@ test('a page the block model refuses (CRLF) offers only "Edit whole page as Mark
 test('read-only role: a picked block is shown read-only, and "+" inserts nothing', async () => {
   const page = await editorOn({ variant: 'readonly' });
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   assert.equal(page.textarea().readOnly, true);
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
   assert.equal(C.createDraftStore(page.storage).list().length, 0);
@@ -686,7 +701,7 @@ test('a forged message — another window, or another nonce — is ignored', asy
 test('the frame hears hc-editor only after the CURRENT load\'s hc-ready; never before, never after a reload alone', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   assert.ok(page.textarea(), 'the tray still opens the block');
   assert.equal(page.editorMessages().length, 0, 'no hc-editor before this load said hc-ready');
   await page.send({ type: 'hc-ready' });
@@ -697,7 +712,7 @@ test('the frame hears hc-editor only after the CURRENT load\'s hc-ready; never b
   await page.type(page.textarea(), 'A changed paragraph.\n\n');
   assert.notEqual(page.nonce(), old, 'the frame reloaded');
   const before = page.frame().posted.filter((x) => x.m.type === 'hc-editor').length;
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   await page.send({ type: 'hc-ready', nonce: old });
   assert.equal(page.frame().posted.filter((x) => x.m.type === 'hc-editor').length, before,
     'nothing reaches the reloaded frame on the old load\'s ready or before its own');
@@ -743,46 +758,60 @@ test('Editor on survives a reload of the tab (sessionStorage hc-editor); Editor 
 const UBUNTU_ROUTE = '/setup/raspberry-pi/ubuntu-24-04-server';
 const UBUNTU_FILE = 'content/setup/raspberry-pi/ubuntu-24-04-server.md';
 const fixtureText = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
-const TAB_IDS = ['proposals', 'changes', 'media', 'view', 'guide'];
-const TAB_LABELS = ['Proposals', 'Changes', 'Media', 'View', 'Guide'];
+const TAB_IDS = ['proposals', 'changes', 'view', 'guide'];
+const TAB_LABELS = ['Proposals', 'Data', 'View', 'Guide'];
 const selectedTab = (page) => TAB_IDS.find((id) => page.tab(id).getAttribute('aria-selected') === 'true');
 
 async function openTab(page, id) {
-  if (page.tray().hidden) { page.handle().click(); await settle(); }   // the tabs live in the open tray
+  if (page.tray().hidden) { page.handle().click(); await settle(); }   // the tabs live on the editor page
+  if (id === 'media') {                                                // V2: no Media tab; the library is linked from Data
+    await page.showData();
+    await page.follow(page.linkTo('#/media'));
+    return;
+  }
   page.tab(id).click();
   await settle();
 }
 
-test('tray: five tabs in order; closed by default with the handle "Editor · 1 proposal"', async () => {
+test('editor page (V2): four tabs in order; closed by default; the bubble\'s "Proposals 1" opens it; no right tray, no edge handle', async () => {
   const page = await editorOn();
   const tray = page.tray();
-  assert.ok(tray, 'the tray is mounted');
+  assert.ok(tray, 'the editor page is mounted');
   const tabs = page.all((e) => e.attrs.role === 'tab');
   assert.deepEqual(tabs.map((t) => t.attrs['data-tab']), TAB_IDS);
   tabs.forEach((t, i) => assert.ok(t.textContent.indexOf(TAB_LABELS[i]) === 0, t.textContent));
   assert.equal(tray.hidden, true, 'closed until asked');
   assert.equal(page.body.classList.contains('hc-tray-open'), false);
-  const handle = page.handle();
-  assert.ok(handle && handle.hidden === false, 'the handle shows while the tray is closed');
-  assert.equal(handle.textContent, 'Editor · 1 proposal');
+  const btn = page.handle();
+  assert.ok(btn && btn.hidden === false, 'the Proposals button shows while Editor mode is on');
+  assert.ok(btn.classList.contains('hc-dock-pages'), 'in the bubble');
+  assert.equal(findAll(page.body, (e) => e.classList.contains('hc-dock')).some((d) => findAll(d, (x) => x === btn).length), true);
+  assert.equal(btn.textContent, 'Proposals1');
+  assert.equal(page.all((e) => e.classList.contains('hc-handle')).length, 0, 'no edge handle');
   assert.equal(page.tab('proposals').textContent, 'Proposals1', 'the Proposals tab carries the count');
 });
 
-test('tray: the handle opens it (Proposals first), × closes it; open/closed is kept for the tab', async () => {
+test('editor page (V2): the bubble button opens it (Proposals first); Back to the page and Escape close it; kept for the tab', async () => {
   const page = await editorOn();
   page.handle().click();
   await settle();
   assert.equal(page.tray().hidden, false);
   assert.ok(page.body.classList.contains('hc-tray-open'));
-  assert.equal(page.handle().hidden, true);
+  assert.equal(page.handle().getAttribute('aria-expanded'), 'true');
   assert.equal(selectedTab(page), 'proposals');
   assert.equal(JSON.parse(page.storage.getItem('hc-editor')).tray, true);
+  assert.equal(page.action('tray-close').textContent, 'Back to the page');
   page.action('tray-close').click();
   await settle();
   assert.equal(page.tray().hidden, true);
   assert.equal(page.body.classList.contains('hc-tray-open'), false);
-  assert.equal(page.handle().hidden, false);
+  assert.equal(page.handle().hidden, false, 'the button stays in the bubble');
   assert.equal(JSON.parse(page.storage.getItem('hc-editor')).tray, false);
+  page.handle().click();
+  await settle();
+  for (const fn of page.docListeners('keydown')) fn({ key: 'Escape', defaultPrevented: false });
+  await settle();
+  assert.equal(page.tray().hidden, true, 'Escape goes back to the page');
   // Editor off hides both
   page.switchBtn().click();
   await settle();
@@ -790,10 +819,13 @@ test('tray: the handle opens it (Proposals first), × closes it; open/closed is 
   assert.equal(page.tray().hidden, true);
 });
 
-test('tray: picking a block opens the tray on Changes', async () => {
+test('editor page (V2): picking a block opens nothing (it is typed in the page); its Markdown is on the Data tab', async () => {
   const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
   await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
-  assert.equal(page.tray().hidden, false);
+  assert.equal(page.tray().hidden, true, 'no panel slides in');
+  assert.equal(page.editorMessages().at(-1).open.index, firstParagraph(PAGE_TEXT), 'the frame is told to open it');
+  await page.showData();
   assert.equal(selectedTab(page), 'changes');
   assert.ok(page.textarea());
 });
@@ -843,8 +875,9 @@ test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-on
   assert.equal(served.text, C.withSentinels(head.text, page.nonce().slice(0, 16), head.overlay), 'the PR head\'s text, marked');
   const other = await page.asks('data/projects.json');
   assert.equal(other.text, readRepo('data/projects.json'), 'a file the proposal does not change comes from main');
-  assert.match(page.tray().textContent, /Showing proposal #1/);
-  await page.send({ type: 'hc-block-select', index: 0 });
+  assert.match(page.host.textContent, /Showing proposal #1/, 'the bar sits on the page it is about');
+  assert.equal(page.tray().hidden, true, 'the editor page steps aside for Show on page');
+  await page.pick(0);
   assert.equal(page.textarea(), undefined, 'no editing while a proposal is shown');
   assert.equal(C.createDraftStore(page.storage).list().length, 0);
   page.action('show-off').click();
@@ -853,14 +886,14 @@ test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-on
   const over = C.overlayOnMain(readRepo(UBUNTU_FILE), fixtureText('page-ubuntu-24-04-server.at-merge-base.md'),
     fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'));
   assert.equal(back.text, C.withSentinels(over.text, page.nonce().slice(0, 16), over.overlay), 'main, PR #1 drawn over it');
-  assert.doesNotMatch(page.tray().textContent, /Showing proposal #1/);
+  assert.doesNotMatch(page.host.textContent, /Showing proposal #1/);
 });
 
 test('Changes: the snippet bar (the catalog, image through Media) edits inside the span only', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   const kinds = page.all((e) => e.attrs['data-snippet'] !== undefined).map((e) => e.attrs['data-snippet']);
   assert.deepEqual(kinds, Object.keys(C.SNIPPET_CATALOG).filter((k) => !C.SNIPPET_CATALOG[k].media));
   assert.ok(page.one((e) => e.attrs['data-action'] === 'media-open' && /Image from Media/.test(e.textContent)));
@@ -875,7 +908,7 @@ test('Changes: the snippet bar (the catalog, image through Media) edits inside t
 test('Changes: the draft list with Propose… and Discard; Discard drops the draft and reloads the frame', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   assert.equal(page.all((e) => e.attrs['data-draft'] !== undefined).length, 0, 'no draft yet');
   await page.type(page.textarea(), 'Changed.\n\n');
   const row = page.one((e) => e.attrs['data-draft'] === 'setup/hippocampus-bringup/fcu-firmware');
@@ -1024,7 +1057,7 @@ test('js/editor.js editor: Read-only sees the page and its preview, view-only, w
   assert.equal(a.attrs.href, C.pencilUrl(PAGE_FILE), 'it carries the pencil link');
   assert.equal(a.attrs.target, '_blank');
   assert.equal(a.attrs.rel, 'noopener noreferrer');
-  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  await page.pick(firstParagraph(PAGE_TEXT));
   const ta = page.textarea();
   assert.equal(ta.readOnly, true);
   assert.equal(page.action('propose-draft'), undefined);
@@ -1057,17 +1090,17 @@ test('Start from while "Show on page" is on: the shown proposal goes, the draft 
   await page.follow(page.linkTo('#/review/7'));
   page.action('show-on-page').click();
   await settle();
-  assert.match(page.tray().textContent, /Showing proposal #7/);
+  assert.match(page.host.textContent, /Showing proposal #7/);
   await openTab(page, 'changes');
   const pick = basePick(page);
   pick.value = '7';
   pick.fire('change');
   await settle();
   assert.equal(page.action('show-off'), undefined, 'no "Back to your view": show mode is over');
-  assert.doesNotMatch(page.tray().textContent, /Showing proposal #7/, 'no show bar');
+  assert.doesNotMatch(page.host.textContent, /Showing proposal #7/, 'no show bar');
   assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(onBranch, page.nonce().slice(0, 16)),
     'the frame serves the draft on the picked base');
-  await page.send({ type: 'hc-block-select', index: firstParagraph(onBranch) });
+  await page.pick(firstParagraph(onBranch));
   assert.ok(page.textarea(), 'a block of the page can be edited');
   await page.type(page.textarea(), 'Changed.\n\n');
   const d = C.createDraftStore(page.storage).get(PAGE_ID);
@@ -1091,7 +1124,7 @@ test('Start from: an edit made while the picked base is still being read is neve
   pick.fire('change');
   await settle();
   // GitHub has not said where my proposal's branch is yet: the member edits meanwhile
-  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  await page.pick(firstParagraph(PAGE_TEXT));
   await page.type(page.textarea(), 'Changed during the wait.\n\n');
   open();
   await settle();
@@ -1169,10 +1202,10 @@ test('a link inside the frame to a page whose stored draft says #7 on another br
     'zero reads of that branch');
 });
 
-test('Media: the Media view in its tab', async () => {
+test('Media: the image library, linked from the Data tab', async () => {
   const page = await editorOn();
   await openTab(page, 'media');
-  assert.equal(selectedTab(page), 'media');
+  assert.equal(selectedTab(page), 'changes');
   assert.ok(page.one((e) => e.tagName === 'H1' && e.textContent === 'Media'));
   // the fake's /api/media list answers from data/cloudinary-manifest.json (the walk's tray-media shot)
   await settle();
@@ -1691,7 +1724,7 @@ test('overlay: Update from main re-reads the proposal and redraws the bar and th
   assert.ok(page.github().some((c) => c.url.endsWith(`/compare/${MAIN_SHA}...${up.newHead}`)), 'the new merge base was read');
   // an unrelated edit after the refresh reloads with zero network
   const k = ov.overlay.findIndex((e) => e.source === 'main' && blocksOf(main.text)[e.mainIndex].kind === 'paragraph');
-  await page.send({ type: 'hc-block-select', index: k });
+  await page.pick(k);
   const net = page.github().length;
   await page.type(page.textarea(), 'An unrelated edit.\n\n');
   await page.send({ type: 'hc-ready' });
@@ -1868,7 +1901,7 @@ test('overlay: clicking the block right after a PR-inserted block edits the righ
   const mi = ov.overlay[k].mainIndex;
   assert.notEqual(mi, k, 'composite and main indices differ here');
   const srcs = page.frame().srcs.length;
-  await page.send({ type: 'hc-block-select', index: k });
+  await page.pick(k);
   const ta = page.textarea();
   assert.ok(ta, 'the block editor is open');
   assert.equal(ta.value, blocksOf(main.text)[mi].text, 'main\'s block at mainIndex, not the composite\'s k-th');
@@ -1959,7 +1992,7 @@ test('two proposals on one page: the newest is overlaid; the bar lists the other
   assert.match(pageBar(page).textContent, /Showing proposal #1/);
   assert.ok(page.editorMessages().at(-1).overlay.length > 0, 'overlay on');
   const mainBlock = ov1.overlay.findIndex((e) => e.source === 'main' && e.text.trim());
-  await page.send({ type: 'hc-block-select', index: mainBlock });
+  await page.pick(mainBlock);
   assert.equal(page.textarea(), undefined, 'read-only: no editing');
   assert.equal(C.createDraftStore(page.storage).list().length, 0);
   page.action('show-off').click();
@@ -1988,7 +2021,7 @@ test('a proposal whose texts do not split is not drawn: the bar says to open it 
   const page = await ubuntuOn({ files: { [UBUNTU_FILE]: crlf } });
   assert.equal((await page.asks(UBUNTU_FILE)).text, crlf);
   assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
-  assert.match(pageBar(page).textContent, /this proposal can't be shown in place — open it in the tray/);
+  assert.match(pageBar(page).textContent, /this proposal can't be shown in place — open it under Proposals/);
   assert.ok(findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray').length);
 });
 
@@ -2753,7 +2786,7 @@ test('js/editor.js editor: a heading change reaches the preview frame through th
 
 test('js/editor.js editor: snippet buttons and the internal link picker insert into the draft', async () => {
   const page = await editorOn();
-  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  await page.pick(firstParagraph(PAGE_TEXT));
   const ta = page.textarea();
   ta.selectionStart = ta.selectionEnd = 0;
   page.one((e) => e.attrs['data-snippet'] === 'note').click();
@@ -2803,7 +2836,7 @@ test('js/editor.js editor: leaving a page with a draft that is not proposed asks
   const asked = [];
   page.win.confirm = (text) => { asked.push(text); return false; };
   // a page's block draft stays when the reader moves on (the draft store, keyed by page): nothing is lost
-  await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
+  await page.pick(firstParagraph(PAGE_TEXT));
   await page.type(page.textarea(), 'Changed.\n\n');
   await page.go(`#${OTHER_ROUTE}`);
   assert.deepEqual(asked, [], 'nothing to ask: the draft is kept');
@@ -3638,7 +3671,7 @@ const draftOfKey = (page, key) => C.createDraftStore(page.storage).get(key);
 async function mediaInBlock(opts) {
   const page = await editorOn(opts);
   const i = firstParagraph(PAGE_TEXT);
-  await page.send({ type: 'hc-block-select', index: i });
+  await page.pick(i);
   page.action('media-open').click();
   await settle();
   return { page, b: blocksOf(PAGE_TEXT)[i] };
@@ -3653,7 +3686,7 @@ test('js/editor.js #/media: the images with c_limit,w_240 thumbnails, "on the si
   };
   const w = mediaWorld({ pages });
   const page = await editorOn({ intercept: w.intercept });
-  assert.ok(page.tab('media'), 'the tray has a Media tab');
+  assert.equal(page.tab('media'), undefined, 'V2: no Media tab; the library is linked from Data');
   await openTab(page, 'media');
   const tiles = () => page.all((e) => e.attrs['data-asset'] !== undefined);
   assert.deepEqual(tiles().map((t) => t.attrs['data-asset']), [USED.public_id, FREE_ID]);
@@ -3867,4 +3900,132 @@ test('js/editor.js New person on my open proposal: an image already proposed on 
   assert.equal(d.base.number, 7);
   assert.equal(JSON.parse(d.files['data/people.json']).groups[1].people.at(-1).photo, proposed.url);
   assert.deepEqual(page.github().filter((c) => c.method !== 'GET'), []);
+});
+
+/* V2 (Kyle, 2026-10-14): images are edited IN the page. "+" Image, or a click on an image, asks for a file
+   (the browser's dialog); the file goes through the Media gateway (one manifest entry in the image-list draft)
+   and the block's address is replaced in my draft by its span. A drag (hc-block-move) moves an image block,
+   and only an image block, in my draft. */
+async function imageWorld() {
+  const w = mediaWorld();
+  const page = await editorOn({ intercept: w.intercept });
+  await page.send({ type: 'hc-ready' });
+  let asked = 0;
+  const input = () => page.one((e) => e.classList.contains('hc-image-input'));
+  return { w, page, input, asked: () => asked, watch() { input().click = () => { asked += 1; }; } };
+}
+
+test('V2 images: "+" Image asks for a file at once; the upload replaces the address (alt from the file name); nothing opens', async () => {
+  const { w, page, input, asked, watch } = await imageWorld();
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });
+  assert.ok(input(), 'the file input exists once asked');
+  watch();
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });   // a second image: asked again
+  assert.equal(asked(), 1, 'the browser\'s file dialog was opened from the click');
+  const before = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const k = blocksOf(before).findIndex((b) => b.kind === 'image');
+  assert.match(blocksOf(before)[k].text, /^!\[Describe the image\]\(\)/);
+  assert.equal(page.editorMessages().at(-1).open, null, 'an image is not opened for typing');
+  input().files = [fakeFile(PNG)];
+  input().fire('change');
+  await settle();
+  assert.deepEqual(w.media().map((c) => c.body.action), ['sign'], 'signed once, then uploaded to Cloudinary');
+  assert.equal(w.cloud().length, 1);
+  const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000001/hippocampus-docs/setup/hippo-mark.png`;
+  const after = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const j = blocksOf(after).findIndex((b) => b.kind === 'image' && b.text.includes(url));
+  assert.ok(j >= 0, 'the image block points at the new file');
+  assert.match(blocksOf(after)[j].text, /^!\[Hippo Mark\]\(/, 'the placeholder alt gave way to the file name');
+  assert.equal(after.length - before.length, url.length + 'Hippo Mark'.length - 'Describe the image'.length, 'nothing else changed');
+  assert.equal(JSON.parse(draftOfKey(page, C.MANIFEST_KEY).files[C.MANIFEST_FILE]).assets.at(-1).url, url, 'one manifest entry');
+  assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /Image replaced/);
+});
+
+test('V2 images: a click on an image asks for a file again; an unchanged file name keeps a real alt; a bad file is refused in words', async () => {
+  const { w, page, input, asked, watch } = await imageWorld();
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });
+  watch();
+  const k = blocksOf(draftOfKey(page, PAGE_ID).files[PAGE_FILE]).findIndex((b) => b.kind === 'image');
+  await page.send({ type: 'hc-block-select', index: k });
+  assert.equal(asked(), 1);
+  input().files = [fakeFile(PNG, { size: C.MEDIA_MAX_BYTES + 1 })];
+  input().fire('change');
+  await settle();
+  assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /Keep images under 5 MB/);
+  assert.equal(w.media().length, 0, 'no gateway call for a file that is too big');
+});
+
+test('V2 images: hc-block-move moves an image block in my draft and reloads; a text block or a forged message moves nothing', async () => {
+  const { page } = await imageWorld();
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });
+  const text = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const k = blocksOf(text).findIndex((b) => b.kind === 'image');
+  const srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-block-move', index: k, to: 0 });
+  assert.equal(draftOfKey(page, PAGE_ID).files[PAGE_FILE], C.moveBlock(text, k, 0));
+  assert.ok(page.frame().srcs.length > srcs, 'the frame reloads to show it');
+  const moved = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const p = blocksOf(moved).findIndex((b) => b.kind === 'paragraph');
+  await page.send({ type: 'hc-block-move', index: p, to: 0 });
+  assert.equal(draftOfKey(page, PAGE_ID).files[PAGE_FILE], moved, 'a paragraph is not moved by drag');
+  await page.send({ type: 'hc-block-move', index: 0, to: 5 }, { source: { postMessage() {} } });
+  assert.equal(draftOfKey(page, PAGE_ID).files[PAGE_FILE], moved, 'another window cannot move anything');
+});
+
+test('V2 images: an upload that finishes after the page changed replaces THE image that asked, or nothing (no stray manifest entry)', async () => {
+  const { page, input, watch } = await imageWorld();
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });
+  watch();
+  const text = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const k = blocksOf(text).findIndex((b) => b.kind === 'image');
+  // the image moves to the top while... (the move lands before the file is chosen; the index it asked with is stale)
+  await page.send({ type: 'hc-block-select', index: k });
+  await page.send({ type: 'hc-block-move', index: k, to: 0 });
+  input().files = [fakeFile(PNG)];
+  input().fire('change');
+  await settle();
+  const after = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000001/hippocampus-docs/setup/hippo-mark.png`;
+  assert.ok(blocksOf(after)[0].text.startsWith(`![Hippo Mark](${url})`), 'the moved image got the file');
+  assert.equal(blocksOf(after).filter((b) => b.text.includes(url)).length, 1, 'and only it');
+});
+
+test('V2 images: a reference-style image (![alt][ref]) is replaced too, as an inline image; the definition stays', async () => {
+  const text = `${PAGE_TEXT.trimEnd()}\n\n![wiring diagram][fig]\n\n[fig]: https://res.cloudinary.com/x/old.png\n`;
+  const w = mediaWorld();
+  const page = await editorOn({ intercept: w.intercept, files: { [PAGE_FILE]: text } });
+  await page.send({ type: 'hc-ready' });
+  const k = blocksOf(text).findIndex((b) => b.kind === 'image');
+  let asked = 0;
+  await page.send({ type: 'hc-block-select', index: 0 });             // a text block first
+  assert.equal(page.one((e) => e.classList.contains('hc-image-input')), undefined, 'nothing asked for a text block');
+  await page.send({ type: 'hc-block-select', index: k });
+  const input = page.one((e) => e.classList.contains('hc-image-input'));
+  assert.ok(input, 'the image asked for a file');
+  input.click = () => { asked += 1; };
+  assert.equal(page.editorMessages().at(-1).open, null, 'not opened for typing');
+  input.files = [fakeFile(PNG)];
+  input.fire('change');
+  await settle();
+  const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000001/hippocampus-docs/setup/hippo-mark.png`;
+  const after = draftOfKey(page, PAGE_ID).files[PAGE_FILE];
+  assert.ok(after.includes(`![wiring diagram](${url})\n\n[fig]: https://res.cloudinary.com/x/old.png\n`));
+  assert.equal(asked, 0);
+});
+
+test('V2: a message (or the image picker\'s button) unfolds a tucked bubble, without taking the focus', async () => {
+  const { page } = await imageWorld();
+  page.action('dock-collapse').click();
+  await settle();
+  assert.ok(page.body.classList.contains('hc-dock-collapsed'));
+  page.win.navigator = { userActivation: { isActive: false } };     // the click's activation is gone
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'image' });
+  assert.equal(page.body.classList.contains('hc-dock-collapsed'), false, 'the bubble unfolded');
+  assert.ok(page.action('image-pick'), 'with "Pick the new image" in it');
+  assert.equal(page.one((e) => e.classList.contains('hc-dock')).attrs.inert, undefined, 'and it is not inert');
 });

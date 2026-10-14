@@ -166,6 +166,15 @@
     notice.textContent = text || '';
     notice.hidden = !text;
     notice.classList.toggle('is-error', kind === 'error');
+    if (text) unfoldDock();
+  }
+  /* The status line lives in the bubble: a message (or the image picker's button) must be seen, so a tucked
+     bubble unfolds for it, without taking the focus. */
+  function unfoldDock() {
+    if (!dock || !document.body.classList.contains('hc-dock-collapsed')) return;
+    document.body.classList.remove('hc-dock-collapsed');
+    try { const st = localStore(); if (st) st.setItem(DOCK_KEY, 'open'); } catch (e) { /* this page only */ }
+    refreshDock();
   }
 
   /* Sign-in news: the footer line beside "Sign in to edit" (js/app.js),
@@ -398,7 +407,11 @@
       title: 'Hide (the tag on the right edge brings it back)' }, '×');
     x.addEventListener('click', () => collapseDock(true));
     const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount, dockSend);
-    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, sendWrap, x);
+    // the editor page (Proposals and Data) opens from here; it replaced the right tray and its edge handle
+    handle = h('button', { type: 'button', class: 'hc-dock-pages', 'data-action': 'tray-open', 'aria-expanded': 'false',
+      title: 'Proposals and data' }, 'Proposals');
+    handle.hidden = true;
+    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, handle, sendWrap, x);
     dockTag = h('button', { type: 'button', class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
       title: 'Show the editor controls' });
     dockTag.addEventListener('click', () => collapseDock(false));
@@ -938,9 +951,13 @@
           + 'a draft in this browser tab until you propose them.'),
         step('Click a block', ' and type right in the page: new text is underlined, removed text struck through. '
           + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
-        step('The whole page as Markdown', ' and the data files are in the ', link('#/pages', 'Changes tab'), '.'),
+        step('Images', ': click an image to replace it with a new file (it is uploaded for you), or drag it to another '
+          + 'place; with the image focused, Alt+Up and Alt+Down move it too.'),
+        step('The whole page as Markdown', ', the data files and the image library are on the ', link('#/pages', 'Data tab'),
+          '. "Proposals" in the bubble opens this page; "Back to the page" or Escape closes it.'),
         step('Press + between two blocks', ' to add a new block there.'),
-        step('Propose…', ' turns your drafts into a proposal: a pull request on GitHub, checked by the site\'s gate.'),
+        step('Send for review', ' (in the bubble) turns your changes into a proposal: a pull request on GitHub, checked by '
+          + 'the site\'s gate.'),
         step('Nothing is live', ' until someone with write access merges it, in the ', link('#/', 'Proposals tab'),
           '. "Show on page" shows a proposal on its page; a merge can be undone on GitHub.'),
         step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"): green is added or '
@@ -1045,6 +1062,9 @@
       draftList,
       h('h2', { text: 'Registries (raw JSON)' }),
       h('ul', { class: 'hc-links' }, ...C.RAW_REGISTRIES.map((f) => h('li', null, link(`#/edit/${f.slice(0, -5)}`, f)))),
+      // the image library (upload, rename, delete); a page's own images are replaced in the page itself
+      h('h2', { text: 'Images' }),
+      h('p', null, link('#/media', 'The image library'), ' — on a page, click an image to replace it, or drag it to move it.'),
       canEdit() ? h('h2', { text: 'New' }) : null,
       canEdit() ? h('p', { class: 'cms-new-links' }, link('#/new/project', 'New project'), ' · ',
         link('#/new/person', 'New person')) : null,
@@ -1605,7 +1625,7 @@
     if (open) {
       if (open.base.ref === base.ref) return { d: open };
       return { problem: `Your image-list draft builds on ${whereOf(open.base)}, and this page on ${whereOf(base)}. `
-        + 'Propose or discard one of them first (the Media tab can discard the image-list draft).' };
+        + 'Propose or discard one of them first (the image library on the Data tab can discard the image-list draft).' };
     }
     return { d: await loadDraft(C.MANIFEST_KEY, MANIFEST_META, [C.MANIFEST_FILE], { ref: base.ref, number: base.number }) };
   }
@@ -1624,6 +1644,9 @@
   }
 
   const mediaClient = () => C.createMediaClient({ fetch: netFetch, token: state.session.token });
+  // the one signed upload path (the Media panel and an image replaced in the page): sign, Cloudinary, manifest entry
+  const uploadImage = (file, subfolder, live, draftText) => C.runUpload({ media: mediaClient(), fetch: netFetch,
+    FormData: window.FormData, subtle: window.crypto.subtle }, { file, subfolder, live, draftText });
 
   /* A gateway answer for this session: dropped when the session changed
      meanwhile; a 401 ends the session. */
@@ -1723,8 +1746,7 @@
         if (md.problem) { tell(''); showProblem(problem, md.problem); return; }
         const live = await liveAssets();
         const gen = sessionGen.current();
-        const out = checked(gen, await C.runUpload({ media: mediaClient(), fetch: netFetch, FormData: window.FormData,
-          subtle: window.crypto.subtle }, { file: f, subfolder: folder.value, live, draftText: md.d.files[C.MANIFEST_FILE] }));
+        const out = checked(gen, await uploadImage(f, folder.value, live, md.d.files[C.MANIFEST_FILE]));
         if (out.kind === 'problem') { tell(''); showProblem(problem, out.message); return; }
         if (out.kind === 'duplicate') {
           choose(out.entry);
@@ -2005,7 +2027,7 @@
 
   const VIEW_HASH = '#/view';
   const TAB_OF_VIEW = Object.freeze({ home: 'proposals', review: 'proposals', 'review-pr': 'proposals',
-    'not-found': 'proposals', pages: 'changes', edit: 'changes', new: 'changes', media: 'media',
+    'not-found': 'proposals', pages: 'changes', edit: 'changes', new: 'changes', media: 'changes',
     help: 'guide', private: 'guide' });
   const tabOfHash = (hash) => (hash === VIEW_HASH ? 'view' : TAB_OF_VIEW[C.parseRoute(hash).name] || 'proposals');
 
@@ -2124,9 +2146,11 @@
      source is THIS frame's window and its nonce is the current load's. */
 
   const EDITOR_KEY = 'hc-editor';
-  const TABS = Object.freeze(['proposals', 'changes', 'media', 'view', 'guide']);
-  const TAB_LABEL = Object.freeze({ proposals: 'Proposals', changes: 'Changes', media: 'Media', view: 'View',
-    guide: 'Guide' });
+  // the editor page (Kyle, 2026-10-14: the right tray goes): Proposals and Data, plus View and Guide. Media is
+  // edited in the page (click an image to replace it, drag it to move it); its library view stays reachable at
+  // #/media from the Data tab's forms.
+  const TABS = Object.freeze(['proposals', 'changes', 'view', 'guide']);
+  const TAB_LABEL = Object.freeze({ proposals: 'Proposals', changes: 'Data', view: 'View', guide: 'Guide' });
   const TAB_HASH = Object.freeze({ proposals: '#/', changes: '#/pages', media: '#/media', view: VIEW_HASH,
     guide: '#/help' });
   const PHONE_QUERY = '(max-width: 767px)';
@@ -2239,6 +2263,7 @@
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`);
     } catch (e) { /* the parameter stays in the address; it is harmless */ }
     const pr = get('pr');
+    if (tab === 'media') return { tab: 'changes', media: true, pr: null, data: null, new: null };
     return { tab: TABS.indexOf(tab) >= 0 ? tab : 'proposals',
       pr: /^[1-9][0-9]{0,8}$/.test(String(pr)) ? Number(pr) : null, data: get('data'), new: get('new') };
   }
@@ -2274,12 +2299,13 @@
     frameTo(currentRoute(), false);
   }
 
-  /* The tray's open/closed state: the tray, or the handle, and the layout's room. */
+  /* The editor page's open/closed state (the old tray's; it is a full page over the frame now). */
   function applyTray() {
     if (!tray) return;
     const open = ed.on && ed.trayOpen;
     tray.hidden = !open;
-    handle.hidden = !(ed.on && !ed.trayOpen);
+    handle.hidden = !ed.on;                                    // the bubble's "Proposals" button
+    handle.setAttribute('aria-expanded', open ? 'true' : 'false');
     document.body.classList.toggle('hc-tray-open', open);
     saveEditorState();
   }
@@ -2307,20 +2333,24 @@
   function setCount(n) {
     ed.count = n;
     countEl.textContent = n > 0 ? String(n) : '';
-    handle.replaceChildren(document.createTextNode('Editor · '),
-      h('span', { class: 'n', text: `${n} proposal${n === 1 ? '' : 's'}` }));
+    handle.replaceChildren(document.createTextNode('Proposals'),
+      h('span', { class: 'n', 'aria-label': `${n} open`, text: n > 0 ? String(n) : '' }));
   }
 
   function loadCount() {
     const gen = sessionGen.current();
     openPulls().then((pulls) => {
       if (sessionGen.isCurrent(gen)) setCount(C.orderOpenPulls(pulls, null).length);
-    }).catch(() => { /* the handle keeps saying "Editor" */ });
+    }).catch(() => { /* the button keeps saying "Proposals" */ });
   }
 
-  /* The Changes tab's home, open (a block was picked or inserted). */
-  function showChanges(select) {
+  /* The Data tab's home (the old Changes home). A block picked or inserted is edited IN THE PAGE now, so
+     the editor page opens only when the block needs the Markdown textarea (open = true): the whole page as
+     Markdown, a page the block model refuses, or a block the frame could not open. Otherwise the view is
+     only redrawn if it is on screen. */
+  function showChanges(select, open) {
     ed.pendingSelect = select || null;
+    if (!open && !ed.trayOpen) return;
     ed.trayOpen = true;
     applyTray();
     trayGo(TAB_HASH.changes);
@@ -2343,6 +2373,8 @@
     }
     ed.show = { number: n, sha, changed };
     clearSelection();
+    ed.trayOpen = false;                         // the editor page steps aside: the proposal is shown ON the page
+    applyTray();
     drawShowBar();
     if (route2 && ROUTE_RE.test(route2) && route2 !== currentRoute()) {
       window.location.hash = `#${route2}`;       // onHashChange loads the frame there
@@ -2383,6 +2415,7 @@
     if (param.tab === 'proposals' && param.pr) hash = `#/review/${param.pr}`;
     else if (param.tab === 'changes' && C.RAW_REGISTRIES.indexOf(`data/${param.data}.json`) >= 0) hash = `#/edit/data/${param.data}`;
     else if (param.tab === 'changes' && (param.new === 'project' || param.new === 'person')) hash = `#/new/${param.new}`;
+    else if (param.tab === 'changes' && param.media) hash = '#/media';
     ed.tabHash[param.tab] = hash;
   }
 
@@ -2391,7 +2424,7 @@
       sandbox: 'allow-scripts allow-popups', referrerpolicy: 'no-referrer' });
     pageBar = h('div', { class: 'hc-pagebar', role: 'status', 'aria-label': 'Proposals on this page' });
     pageBar.hidden = true;
-    frameHost.replaceChildren(pageBar, frame);
+    frameHost.replaceChildren(showBar, pageBar, frame);      // "Showing proposal #N" sits on the page it is about
     ed.frame = frame;
     ed.host = C.createPreviewHost({
       getFrameWindow: () => frame.contentWindow,
@@ -2880,7 +2913,7 @@
         h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }), link(prLink(n), `PR #${n}`),
         h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }),
         h('span', { class: `hc-pagebar-check is-${state2}`, text: CHECK_WORD[state2] }),
-        pageBarButton('review-in-tray', n, 'Review in tray', () => openCard(n), true),
+        pageBarButton('review-in-tray', n, 'Review', () => openCard(n), true),
         pv.mode === 'show' ? back() : null));
       const note = ed.barNote;
       if (note && note.number === n && note.head === headShaOf(pv.pr)) {
@@ -2889,7 +2922,7 @@
       }
       if (pv.failed) {
         rows.push(h('p', { class: 'hc-pagebar-line is-warn',
-          text: `PR #${n}: this proposal can't be shown in place — open it in the tray.` }));
+          text: `PR #${n}: this proposal can't be shown in place — open it under Proposals.` }));
       }
       const conflicts = pv.ov ? pv.ov.conflicts.length : 0;
       if (conflicts) {
@@ -2948,6 +2981,7 @@
     const split = C.splitBlocks(md);
     const b = split.ok ? split.blocks.find((x) => x.kind !== 'space') : null;
     if (!b || OPEN_KINDS.indexOf(b.kind) < 0) return null;
+    if (imageParts(md)) return null;         // V2: a click on an image replaces it; nothing opens
     return { index: ed.selected, md, kind: b.kind, as: ed.asMarkdown === ed.selected ? 'markdown' : null };
   }
 
@@ -2987,7 +3021,7 @@
       if (editor === 'markdown') ed.inPageReason = reason || '';
       if (editor === 'closed') { ed.selected = null; ed.sel = null; postEditor(); }
     }
-    showChanges(null);
+    showChanges(null, editor === 'markdown');
   }
 
   /* A message from the frame. -> true when it was the frame's (acted on or
@@ -3005,6 +3039,7 @@
     else if (m.type === 'hc-block-select' && index !== null) pick(index).catch(shown);
     else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') pickInsert(index, m.kind).catch(shown);
     else if (m.type === 'hc-block-md' && index !== null) blockTyped(index, m.md);
+    else if (m.type === 'hc-block-move' && index !== null && Number.isInteger(m.to) && m.to >= 0 && m.to <= MAX_INDEX) moveImage(index, m.to).catch(shown);
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     return true;
   }
@@ -3146,6 +3181,110 @@
 
   /* The index of the block a position starts, in the split of `text`
      (display only: the edit itself is the span). */
+  // ---------------------------------------------- images in the page (V2) ---
+  /* Kyle, 2026-10-14: an image is edited in the page. A click on it (or "+" Image) asks for a new file: it is
+     uploaded through the Media gateway (C.runUpload, the image-list draft gains its entry, as Media did) and
+     the block's address is replaced in MY draft by its span; nothing else changes. An image can also be
+     dragged (or Alt+arrow) to another place: hc-block-move, an image block of my draft only. The file
+     dialog is the browser's own, opened inside the click's activation; when the browser says the click is
+     no longer active, the bubble offers a button to pick the file instead. */
+  const imageParts = (md) => C.imageParts(md);
+  let imageInput = null;
+  let imageWant = null;        // {key, file, index}: the image block a chosen file replaces
+  function imageInputEl() {
+    if (imageInput) return imageInput;
+    imageInput = h('input', { type: 'file', class: 'hc-image-input', accept: C.MEDIA_TYPES.join(','), 'aria-label': 'The new image',
+      tabindex: '-1' });
+    imageInput.hidden = true;
+    imageInput.addEventListener('change', () => { imageChosen().catch(shown); });
+    document.body.appendChild(imageInput);
+    return imageInput;
+  }
+  const subfolderOf = (file) => (/^content\/projects\//.test(file) ? 'projects' : /^content\/tools\//.test(file) ? 'tools' : 'setup');
+  function askImage(index) {
+    const page = ed.page;
+    const d = ed.draft;
+    if (!page || !d || d.key !== page.pageId || !canEdit() || showing() || (ed.pv && ed.pv.ov)) return;
+    const span0 = C.spanOf(d.files[page.file], index);
+    imageWant = { key: d.key, file: page.file, index, md: span0 ? d.files[page.file].slice(span0.start, span0.end) : null };
+    const input = imageInputEl();
+    input.value = '';
+    const ua = typeof navigator !== 'undefined' ? navigator.userActivation : null;
+    if (ua && ua.isActive === false) {
+      const pickBtn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'image-pick' }, 'Pick the new image');
+      pickBtn.addEventListener('click', () => { say(''); input.click(); });
+      notice.replaceChildren(document.createTextNode('Replace this image: '), pickBtn);
+      notice.hidden = false;
+      notice.classList.remove('is-error');
+      unfoldDock();
+      return;
+    }
+    input.click();
+  }
+  async function imageChosen() {
+    const f = imageInput && imageInput.files && imageInput.files[0];
+    const want = imageWant;
+    if (!f || !want) return;
+    imageWant = null;
+    const d = ed.draft;
+    if (!d || d.key !== want.key || typeof d.files[want.file] !== 'string') { say('The page changed meanwhile: click the image again.', 'error'); return; }
+    const bad = C.mediaFileProblem(f);
+    if (bad) { say(bad, 'error'); return; }
+    say('Uploading the new image…');
+    const md = await manifestDraftOn(d.base);
+    if (md.problem) { say(md.problem, 'error'); return; }
+    const live = await liveAssets();
+    const gen = sessionGen.current();
+    const out = checked(gen, await uploadImage(f, subfolderOf(want.file), live, md.d.files[C.MANIFEST_FILE]));
+    if (out.kind === 'problem') { say(out.message, 'error'); return; }
+    // the page may have changed while the file uploaded: find THE image that asked (its exact Markdown), at its
+    // index or, moved, wherever it is now (once); otherwise nothing is written, the image list included
+    if (!ed.draft || ed.draft !== d || typeof d.files[want.file] !== 'string') { say('The page changed meanwhile: click the image again.', 'error'); return; }
+    const text = d.files[want.file];
+    const split = C.splitBlocks(text);
+    const at = (k) => (split.ok && split.blocks[k] ? text.slice(split.blocks[k].start, split.blocks[k].end) : null);
+    let k = at(want.index) === want.md ? want.index : -1;
+    if (k < 0 && split.ok) {
+      const hits = split.blocks.map((b, j) => j).filter((j) => at(j) === want.md);
+      if (hits.length === 1) k = hits[0];
+    }
+    const span = k >= 0 ? C.spanOf(text, k) : null;
+    const m = span ? imageParts(text.slice(span.start, span.end)) : null;
+    if (!m) { say('That image changed while the file uploaded: nothing was changed. Click it again.', 'error'); return; }
+    if (out.kind !== 'duplicate') { md.d.files[C.MANIFEST_FILE] = out.text; drafts.put(md.d); }
+    // the "+" Image placeholder gives way to the file's name as the description (editable on the Data tab)
+    const alt = m.alt === C.SNIPPET_CATALOG.image.placeholder
+      ? String(f.name || 'image').replace(/\.[A-Za-z0-9]+$/, '').replace(/[[\]\\]/g, ' ').trim().slice(0, 120) || 'image' : m.alt;
+    const r = C.replaceSpan(text, span, C.imageWith(Object.assign({}, m, { alt }), out.entry.url));
+    d.files[want.file] = r.text;
+    drafts.put(d);
+    if (ed.sel && ed.sel.key === d.key && ed.selected === k) ed.sel.span = r.span;
+    drawDraftList(false);
+    refreshDock();
+    say(out.kind === 'duplicate' ? 'That image is already on the site: the page uses it now. Nothing was uploaded.'
+      : 'Image replaced. The new file goes into your proposal with this page.');
+    frameTo(ed.route, true);
+  }
+  async function moveImage(from, to) {
+    const page = ed.page;
+    if (!page || !canEdit() || showing() || (ed.pv && ed.pv.ov)) return;
+    const d = await pageDraft(page);
+    if (ed.page !== page || ed.show) return;
+    const text = d.files[page.file];
+    const split = C.splitBlocks(text);
+    const b = split.ok ? split.blocks[from] : null;
+    if (!b || b.kind !== 'image') return;                  // only an image block moves this way
+    const next = C.moveBlock(text, from, to);
+    if (next === null || next === text) return;
+    ed.draft = d;
+    d.files[page.file] = next;
+    drafts.put(d);
+    Object.assign(ed, { selected: null, sel: null, inPage: null });
+    drawDraftList(false);
+    refreshDock();
+    frameTo(ed.route, true);
+  }
+
   function blockIndexAt(text, pos) {
     const s = C.splitBlocks(text);
     if (!s.ok) return null;
@@ -3165,7 +3304,7 @@
     const split = C.splitBlocks(text);
     if (!split.ok) {
       Object.assign(ed, { wholeReason: split.reason, sel: null, selected: null });
-      showChanges(null);
+      showChanges(null, true);
       return;
     }
     const span = C.spanOf(text, index);
@@ -3173,9 +3312,10 @@
     if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, trayEdit: null, inPageReason: '' });
     Object.assign(ed, { wholeReason: null, selected: index,
       sel: { key: d.key, file: page.file, span, whole: false } });
-    showChanges(null);
+    showChanges(null, false);
     if (reload) frameTo(ed.route, true);
     else postEditor();
+    if (canEdit() && imageParts(text.slice(span.start, span.end))) askImage(index);
   }
 
   async function insertBlock(index, kind) {
@@ -3190,8 +3330,9 @@
     drafts.put(d);
     Object.assign(ed, { wholeReason: null, selected: blockIndexAt(out.text, out.span.start),
       sel: { key: d.key, file: page.file, span: out.span, whole: false } });
-    showChanges({ start: out.select.start - out.span.start, end: out.select.end - out.span.start });
+    showChanges({ start: out.select.start - out.span.start, end: out.select.end - out.span.start }, false);
     frameTo(ed.route, true);
+    if (kind === 'image' && ed.selected !== null) askImage(ed.selected);     // "+" Image: pick the file now
   }
 
   async function editWholePage() {
@@ -3202,7 +3343,7 @@
     ed.draft = d;
     Object.assign(ed, { selected: null,
       sel: { key: d.key, file: page.file, span: { start: 0, end: d.files[page.file].length }, whole: true } });
-    showChanges(null);
+    showChanges(null, true);
     if (ed.pv && ed.pv.ov) frameTo(ed.route, true);    // a proposal was drawn: show the page I edit
     else postEditor();
   }
@@ -3233,7 +3374,7 @@
   /* The Changes tab: the picked block (or the whole page) as Markdown. */
   function changesPanel() {
     const page = ed.page;
-    const out = [h('h2', { class: 'hc-tray-title', text: 'Changes' })];
+    const out = [h('h2', { class: 'hc-tray-title', text: 'This page' })];
     let slot = null;
     const box = (ta) => ({ node: h('section', { class: 'hc-changes', 'aria-label': 'Changes' }, ...out), ta, slot });
     if (!page) {
@@ -3277,7 +3418,7 @@
       inPageLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: draftStateText(ed.draft) });
       const md = ed.inPage.editor === 'mdbox';
       const asMd = md ? null : h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-as-markdown' }, 'Edit this part as Markdown');
-      if (asMd) asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; closeInFrame(); showChanges(null); });
+      if (asMd) asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; closeInFrame(); showChanges(null, ed.trayOpen); });
       out.push(h('p', { class: 'hc-block-label', text: md ? 'Editing as Markdown in the page' : 'Typing in the page' }),
         h('p', { class: 'cms-muted', 'data-in-page': ed.inPage.editor, text: md
           ? 'This part is edited as Markdown right in the page, with a live preview. Done shows the result.'
@@ -3356,23 +3497,29 @@
       return b;
     });
     const close = h('button', { type: 'button', class: 'hc-tray-close', 'data-action': 'tray-close',
-      title: 'Hide the tray', 'aria-label': 'Hide the tray' }, '×');
+      title: 'Back to the page (Escape)' }, 'Back to the page');
     close.addEventListener('click', closeTray);
     showBar = h('div', { class: 'hc-showing', role: 'status' });
     showBar.hidden = true;
     main = h('div', { class: 'hc-tray-view' });
     trayBody = h('div', { class: 'hc-tray-body', role: 'tabpanel' }, main);
     trayBody.addEventListener('click', onTrayClick);
-    tray = h('aside', { id: 'hc-tray', class: 'hc-tray', 'aria-label': 'Editor' },
-      h('div', { class: 'hc-tray-tabs', role: 'tablist', 'aria-label': 'Editor' }, ...tabButtons, close),
-      showBar, notice, trayBody);
+    tray = h('section', { id: 'hc-tray', class: 'hc-tray', 'aria-label': 'Editor: proposals and data' },
+      h('div', { class: 'hc-tray-head' }, close,
+        h('div', { class: 'hc-tray-tabs', role: 'tablist', 'aria-label': 'Editor' }, ...tabButtons)),
+      trayBody);
+    // the editor's one status line lives in the bubble, which is on screen over the page and the editor page alike
+    dock.appendChild(notice);
+    // Escape leaves the editor page, wherever the focus is (the bubble's button included); a field or menu that
+    // uses Escape itself (the account menu, a Markdown box) keeps it
+    if (typeof document.addEventListener === 'function') document.addEventListener('keydown', (e) => {
+      if (!e || e.key !== 'Escape' || e.defaultPrevented || !ed.on || !ed.trayOpen || (menu && !menu.hidden)) return;
+      closeTray();
+      if (handle && typeof handle.focus === 'function') handle.focus();
+    });
     tray.hidden = true;
-    handle = h('button', { type: 'button', class: 'hc-handle', 'data-action': 'tray-open', title: 'Open the Editor tray' },
-      'Editor');
-    handle.hidden = true;
-    handle.addEventListener('click', openTray);
+    handle.addEventListener('click', () => { if (ed.trayOpen) closeTray(); else openTray(); });
     document.body.appendChild(tray);
-    document.body.appendChild(handle);
     // the theme toggle: the open page frame follows at once
     if (typeof window.MutationObserver === 'function') {
       new window.MutationObserver(() => { if (ed.on) postEditor(); })

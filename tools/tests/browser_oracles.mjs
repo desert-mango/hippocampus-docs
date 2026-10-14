@@ -569,11 +569,13 @@ async function editorWalk(page, scratch, query = '') {
   let id = 0;
   const pend = new Map();
   const contexts = new Map();
+  const events = [];             // every protocol event (method + params), for tests that wait on one
   const sendTo = (sessionId, method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r);
     ws.send(JSON.stringify(Object.assign({ id: n, method, params }, sessionId ? { sessionId } : {}))); });
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     const sid = m.sessionId || null;
+    if (m.method) events.push({ method: m.method, params: m.params, sid });
     if (m.method === 'Runtime.executionContextCreated') contexts.set(`${sid}:${m.params.context.id}`, { sid, id: m.params.context.id, ctx: m.params.context });
     if (m.method === 'Runtime.executionContextDestroyed') contexts.delete(`${sid}:${m.params.executionContextId}`);
     if (m.method === 'Target.attachedToTarget') {
@@ -619,7 +621,7 @@ async function editorWalk(page, scratch, query = '') {
     const r = await send('Page.captureScreenshot', { format: 'png' });
     if (r.result && r.result.data) { mkdirSync(dir, { recursive: true }); writeFileSync(path.join(dir, `${name}.png`), Buffer.from(r.result.data, 'base64')); }
   };
-  return { send, ev, F, site, until, sleep, draft, clickBlock, close, shot };
+  return { send, sendTo, ev, F, site, until, sleep, draft, clickBlock, close, shot, events };
 }
 
 test('U3 walk: the block editors in the page, in a real Chrome: note box type, Markdown box, code language, format bar', { timeout: 120000 }, async () => {
@@ -812,6 +814,62 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
     await until(() => ev("document.documentElement.getAttribute('data-theme') === null", F), 'the frame turns dark with the site');
     await shot('v1-dark-after-toggle');
     console.log('V1 walk: light frame, one left line, "HippoCampus Editor", bubble under TUHH in two rows, code + link');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* V2 (Kyle, 2026-10-14) in a real Chrome: no right tray and no edge handle; the bubble's "Proposals" opens the
+   editor page and Escape closes it; a REAL click on an image (trusted input, through the sandboxed frame)
+   opens the browser's file dialog in the parent (the click's activation reaches it); Alt+ArrowDown on a
+   focused image moves it in the draft. */
+test('V2 walk: the editor page from the bubble, an image click opens the file dialog, Alt+Down moves the image', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-v2-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch);
+    const { send, ev, F, site, until, sleep, draft, shot, events } = W;
+    const KEY = 'setup/lab-gantry/usage';
+    const FILE = 'content/setup/lab-gantry/usage.md';
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    assert.equal(await S("document.querySelectorAll('.hc-handle').length"), 0, 'no edge handle');
+    assert.equal(await S("document.querySelector('#hc-tray').hidden"), true, 'no panel at the start');
+    // the editor page
+    await S("document.querySelector('.hc-dock-pages').click()");
+    await until(() => S("!document.querySelector('#hc-tray').hidden"), 'the editor page opens');
+    const cover = await S("(() => { const t = document.querySelector('#hc-tray').getBoundingClientRect(); return { left: t.left, right: innerWidth - t.right }; })()");
+    assert.ok(cover.left <= 1 && cover.right <= 1, `a full page, not a side panel (${JSON.stringify(cover)})`);
+    await shot('v2-editor-page');
+    await S("document.querySelector('#hc-tray .hc-tab[data-tab=changes]').click()");
+    await sleep(400);
+    await shot('v2-editor-page-data');
+    await S("document.querySelector('#hc-tray').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    await until(() => S("document.querySelector('#hc-tray').hidden"), 'Escape goes back to the page');
+    // a trusted click on the first image block opens the file dialog
+    await send('Page.setInterceptFileChooserDialog', { enabled: true });
+    await ev("document.querySelector('.hc-block[data-hc-image]').scrollIntoView({ block: 'center' })", F);
+    await sleep(300);
+    const inF = await ev("(() => { const r = document.querySelector('.hc-block[data-hc-image] img').getBoundingClientRect(); return { x: r.left + Math.min(40, r.width / 2), y: r.top + Math.min(20, r.height / 2) }; })()", F);
+    const frameAt = await S("(() => { const r = document.querySelector('.hc-frame').getBoundingClientRect(); return { x: r.left, y: r.top }; })()");
+    const siteAt = await ev("(() => { const r = document.querySelector('iframe').getBoundingClientRect(); return { x: r.left, y: r.top }; })()");
+    const x = siteAt.x + frameAt.x + inF.x;
+    const y = siteAt.y + frameAt.y + inF.y;
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    await until(() => events.some((e) => e.method === 'Page.fileChooserOpened'), 'the browser\'s file dialog opened from the click in the frame');
+    assert.equal(await ev("document.querySelector('.hc-block[data-hc-image]').classList.contains('hc-open')", F), false, 'the image did not open for typing');
+    // Alt+ArrowDown on the focused image moves it below the next block, in the draft
+    // where Alt+Down must land it: before the block after next (the frame's own wrappers), as HCCore.moveBlock
+    const move = await ev("(() => { const ws = [...document.querySelectorAll('.page-body > .hc-block')]; const w = document.querySelector('.hc-block[data-hc-image]'); const k = ws.indexOf(w); const n = (x) => Number(x.getAttribute('data-index')); return { from: n(w), to: ws[k + 2] ? n(ws[k + 2]) : n(ws[k + 1]) + 1 }; })()", F);
+    const want = await ev(`fetch('/${FILE}').then((r) => r.text()).then((t) => ${site}.HCCore.moveBlock(t, ${move.from}, ${move.to}))`);
+    assert.ok(want && want.indexOf('![gantry gui screenshot]') > 0);
+    // (the file dialog took the window's focus: the key goes to the focused block directly)
+    await ev("(() => { const w = document.querySelector('.hc-block[data-hc-image]'); w.focus(); w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true, cancelable: true })); })()", F);
+    await until(async () => (await draft(KEY, FILE)) === want, 'the image moved below the next block, in the draft, byte for byte');
+    await sleep(600);
+    await shot('v2-image-moved');
+    console.log('V2 walk: full editor page from the bubble, Escape back; trusted image click -> file dialog; Alt+Down moves the image');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });

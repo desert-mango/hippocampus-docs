@@ -112,6 +112,11 @@
         hc-block-insert  {index, kind}       "+" at the boundary before
                                              block `index`; kind is one of
                                              BLOCK_INSERT_KINDS
+        hc-block-move    {index, to}         an image block was dragged (or moved
+                                             with Alt+arrow) to the boundary
+                                             before block `to` (V2, 2026-10-14);
+                                             the parent moves it in MY draft
+                                             only, and only an image block
         hc-block-state   {index, editor,     the open block is typed in the
                           reason}            page ('visual' | 'code' |
                                              'box'), is edited in the
@@ -246,6 +251,9 @@
     if (type === 'hc-block-insert') {
       return (isIndex(d.index) && BLOCK_INSERT_KINDS.indexOf(d.kind) >= 0)
         ? { type, index: d.index, kind: d.kind } : null;
+    }
+    if (type === 'hc-block-move') {
+      return (isIndex(d.index) && isIndex(d.to) && d.to !== d.index) ? { type, index: d.index, to: d.to } : null;
     }
     if (type === 'hc-block-state') {
       if (!isIndex(d.index) || BLOCK_EDITORS.indexOf(d.editor) < 0) return null;

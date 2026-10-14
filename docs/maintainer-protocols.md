@@ -22,9 +22,12 @@ A few words used on this page:
 - **The gate:** the site's rule checker (`tools/check.py`). It runs on every proposal and
   gives a green ✓ or a red ✗.
 - **Editor mode:** the site editor. It works on the site's own pages, so you change a page
-  while you look at it. You turn it on and off with the **Editor** switch in the header.
-- **The tray:** the Editor's panel on the right side of the screen (at the bottom on a phone).
-  It has five tabs: **Proposals**, **Changes**, **Media**, **View** and **Guide**.
+  while you look at it. You turn it on and off with the **Editor** switch in the bubble at the top
+  right of the page.
+- **The editor page:** opens from **Proposals** in the bubble and covers the page until you press
+  **Back to the page** (or Escape). It has four tabs: **Proposals**, **Data**, **View** and
+  **Guide**. (Until 14 October 2026 this was a panel on the right called the tray; the steps below
+  that say "tray" mean this page, and "Changes" means **Data**.)
 - **Block:** one piece of a page, such as a heading, a paragraph, a list, a picture or a note
   box. In Editor mode you click a block to change it.
 - **Draft:** a change you made that is not proposed yet. It stays in your browser tab only.
@@ -341,14 +344,20 @@ Someone without a role can still sign in. They get the Read-only badge: they can
 proposals, but they cannot propose or review. Adding them with a role fixes that; they reload the
 page to see their new badge.
 
-## 7. Pictures: the Media tab
+## 7. Pictures
 
 The site's pictures are stored on Cloudinary (an image host). Editor mode uploads a picture
 there and adds it to the site's image list (`data/cloudinary-manifest.json`). That change waits
 in a draft called "Site image list" and goes into the same proposal as the page that uses the
 picture.
 
-**Put a picture on a page (the usual way):**
+**Replace or move a picture (the usual way, since 14 October 2026):** in Editor mode, click the
+picture on the page. Your computer's file dialog opens: pick the new file. The editor uploads it
+and the page shows the new picture. To move a picture, drag it to another place on the page
+(or click it once and press Alt+Up or Alt+Down). To add one, press **+** between two blocks and
+pick **Image**: the file dialog opens the same way.
+
+**Put a picture in with the Markdown box:**
 
 1. Pick the block on the page where the picture should go (section 1b). In the **Changes** tab,
    put the cursor where the picture should go and click **Image from Media**.
@@ -362,15 +371,15 @@ picture.
 **A person's photo:** in **New person**, click **Photo from Media**, upload or pick the photo, and
 click **Use as photo**.
 
-**The Media tab itself:** open the tray's **Media** tab (the direct address is
-`https://hippocampus-docs.vercel.app/#/?editor=media`). It lists every picture with "on the
+**The image library:** open the editor page's **Data** tab and click **The image library** (the
+direct address is `https://hippocampus-docs.vercel.app/#/?editor=media`). It lists every picture with "on the
 site", "in your image-list draft" or "not used by the site". You can upload there too, but each
 new picture must be used on a page in the same proposal: the site's rules refuse an image
 nothing uses. So go to the page, pick a block, press **Image from Media** and pick the picture.
 **Discard the image-list draft** throws away the image-list change (the pictures stay on
 Cloudinary, unused, and you can delete them there).
 
-**What the Media tab refuses, in its own words:**
+**What the image library refuses, in its own words:**
 
 - A file over 5 MB: "<name> is <n> MB. Keep images under 5 MB: make it smaller and choose it
   again."
