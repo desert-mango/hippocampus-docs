@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 2 October 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent.
 /* HCEditorFrame — the FRAME side of the Editor mode (plan D-D, D-E, D-N).
@@ -378,17 +378,61 @@
        walk cannot click inside this sandboxed frame, and the picker is the
        frame's own (no message opens it). So on localhost / 127.0.0.1 only,
        and only when a top window that is NOT the parent sits above the site
-       (the walk page; in the real Editor top is the parent), a message
-       {type: 'hc-walk-picker', index} from that top window clicks the "+"
-       rail before block `index` — the real click path — scrolls it into view
-       and answers the top window {type: 'hc-walk-picker-open', index, open,
-       kinds}. The parent is told nothing; anywhere else no listener exists. */
+       (the walk page; in the real Editor top is the parent), ONE message
+       listener answers that top window:
+         - {type: 'hc-walk-picker', index} clicks the "+" rail before block
+           `index` — the real click path — scrolls it into view and answers
+           {type: 'hc-walk-picker-open', index, open, kinds};
+         - {type: 'hc-walk-scroll'} answers {type: 'hc-walk-scroll-samples',
+           samples, log, loadedAt, nonce16, now}: this document's scrollY
+           since it loaded, as 16 ms samples [msSinceLoad, scrollY] (sample 0
+           taken here, at create) and as an ordered event log {seq, why,
+           scrollY, scrollHeight, innerHeight} written on create, on every
+           change inside #content and on every scroll event (timers do not
+           fire under headless Chrome's virtual time while fetches are
+           pending; the log still keeps the order). Both stop growing at
+           WALK_CAP entries; `now` is scrollY at the moment of the answer.
+           It measures the page jumping while a block is edited.
+       The parent is told nothing; anywhere else no listener, timer or
+       observer exists. */
     const host = String((win.location && win.location.hostname) || '');
     if ((host === 'localhost' || host === '127.0.0.1') && win.top && win.parent && win.top !== win.parent) {
+      const WALK_CAP = 2000;
+      const scrollYNow = () => Number(win.scrollY) || 0;
+      const scroller = () => doc.scrollingElement || doc.documentElement || doc.body || {};
+      const loadedAt = Date.now();
+      const samples = [[0, scrollYNow()]];
+      const log = [];
+      const note = (why) => {
+        if (log.length >= WALK_CAP) return;
+        log.push({ seq: log.length, why, scrollY: scrollYNow(), scrollHeight: Number(scroller().scrollHeight) || 0,
+          innerHeight: Number(win.innerHeight) || 0 });
+      };
+      note('create');
+      if (typeof win.setInterval === 'function') {
+        let timer = null;
+        timer = win.setInterval(() => {
+          if (timer === null) return;
+          samples.push([Date.now() - loadedAt, scrollYNow()]);
+          if (samples.length >= WALK_CAP) {
+            if (typeof win.clearInterval === 'function') win.clearInterval(timer);
+            timer = null;
+          }
+        }, 16);
+      }
+      if (content && typeof win.MutationObserver === 'function') {
+        new win.MutationObserver(() => note('mutation')).observe(content, { childList: true, subtree: true });
+      }
+      win.addEventListener('scroll', () => note('scroll'));
       win.addEventListener('message', (e) => {
         const d = e && e.data;
-        if (!e || e.source !== win.top || !d || typeof d !== 'object' || d.type !== 'hc-walk-picker'
-          || !Number.isInteger(d.index)) return;
+        if (!e || e.source !== win.top || !d || typeof d !== 'object') return;
+        if (d.type === 'hc-walk-scroll') {
+          e.source.postMessage({ type: 'hc-walk-scroll-samples', samples: samples.map((x) => x.slice()),
+            log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow() }, e.origin);
+          return;
+        }
+        if (d.type !== 'hc-walk-picker' || !Number.isInteger(d.index)) return;
         const root = doc.getElementById('content') || doc.body;
         let r = null;
         for (const body of pageBodies(root, prefix)) {

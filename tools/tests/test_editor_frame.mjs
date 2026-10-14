@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 2 October 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site.
 /* Unit tests for js/editor-frame.js over a small fake DOM (node has none).
@@ -316,11 +316,90 @@ test('editor-frame: on localhost under the walk, the top window\'s hc-walk-picke
   assert.equal(HC.posts.filter((p) => p.type !== 'hc-ready').length, 0, 'the parent is told nothing');
 });
 
+/* The scroll half of the walk hook: a fake window with a scrollY, an
+   interval recorder and a MutationObserver recorder, so the test drives
+   time, scrolling and page changes by hand. */
+function scrollRig(win) {
+  const timers = [];
+  const cleared = [];
+  const observers = [];
+  win.scrollY = 0;
+  win.innerHeight = 900;
+  win.setInterval = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
+  win.clearInterval = (id) => { cleared.push(id); };
+  win.MutationObserver = class { constructor(cb) { this.cb = cb; observers.push(this); } observe(t, o) { this.target = t; this.opts = o; } };
+  return { timers, cleared, observers };
+}
+
+test('editor-frame: under the walk, hc-walk-scroll answers this document\'s scroll samples and event log', () => {
+  const { doc, content } = setupPage();
+  doc.scrollingElement = { scrollHeight: 3000 };
+  const { win, answers } = walkWin('127.0.0.1', true);
+  const rig = scrollRig(win);
+  win.scrollY = 7;                                                 // whatever it is at create is sample 0's value
+  const HC = fakeHC();
+  EF.create(win, doc, HC);
+  assert.equal(rig.timers.length, 1, 'one sampling timer');
+  assert.equal(rig.timers[0].ms, 16);
+  assert.equal(rig.observers.length, 2, 'the marks observer plus the walk\'s own');
+  assert.equal(rig.observers[1].target, content);
+  assert.equal((win.listeners.message || []).length, 1, 'still one message listener');
+  assert.equal((win.listeners.scroll || []).length, 1);
+  win.scrollY = 0;
+  rig.observers[1].cb([]);                                         // the page body changes
+  rig.timers[0].fn();
+  win.scrollY = 640;
+  win.listeners.scroll.forEach((fn) => fn({}));                    // then the window scrolls
+  rig.timers[0].fn();
+  const say = (source, data) => win.listeners.message.forEach((fn) => fn({ source, origin: 'http://127.0.0.1:8130', data }));
+  say(win.parent, { type: 'hc-walk-scroll' });                     // the parent is the Editor, not the walk
+  say(win.top, { type: 'hc-walk-scrolls' });
+  say(win.top, 'hc-walk-scroll');
+  assert.deepEqual(answers, [], 'only the walk\'s own message is answered');
+  say(win.top, { type: 'hc-walk-scroll' });
+  assert.equal(answers.length, 1);
+  const [m, origin] = answers[0];
+  assert.equal(origin, 'http://127.0.0.1:8130');
+  assert.equal(m.type, 'hc-walk-scroll-samples');
+  assert.equal(m.nonce16, PREFIX, 'the answer names this load');
+  assert.equal(typeof m.loadedAt, 'number');
+  assert.equal(m.now, 640);
+  assert.deepEqual(m.samples[0], [0, 7], 'sample 0 is taken at create');
+  assert.deepEqual(m.samples.map((x) => x[1]), [7, 0, 640], 'later samples follow scrollY');
+  assert.ok(m.samples.every(([t]) => typeof t === 'number' && t >= 0));
+  assert.deepEqual(m.log, [
+    { seq: 0, why: 'create', scrollY: 7, scrollHeight: 3000, innerHeight: 900 },
+    { seq: 1, why: 'mutation', scrollY: 0, scrollHeight: 3000, innerHeight: 900 },
+    { seq: 2, why: 'scroll', scrollY: 640, scrollHeight: 3000, innerHeight: 900 }], 'create → change → scroll, in order');
+  m.samples.push('x');                                             // the answer is a copy
+  say(win.top, { type: 'hc-walk-scroll' });
+  assert.equal(answers[1][0].samples.length, 3);
+  assert.equal(HC.posts.filter((p) => p.type !== 'hc-ready').length, 0, 'the parent is told nothing');
+});
+
+test('editor-frame: the walk\'s scroll samples and log stop growing at the cap', () => {
+  const { doc } = setupPage();
+  const { win, answers } = walkWin('localhost', true);
+  const rig = scrollRig(win);
+  EF.create(win, doc, fakeHC());
+  for (let i = 0; i < 2500; i += 1) { win.scrollY = i; rig.timers[0].fn(); win.listeners.scroll.forEach((fn) => fn({})); }
+  assert.deepEqual(rig.cleared, [1], 'the timer is stopped once, at the cap');
+  win.listeners.message.forEach((fn) => fn({ source: win.top, origin: 'http://localhost:8130', data: { type: 'hc-walk-scroll' } }));
+  const m = answers[0][0];
+  assert.equal(m.samples.length, 2000);
+  assert.equal(m.log.length, 2000);
+  assert.equal(m.now, 2499, 'now still tells the truth past the cap');
+});
+
 test('editor-frame: the walk hook is absent off localhost and in the real Editor (top is the parent)', () => {
   for (const [host, framed] of [['hippocampus-docs.vercel.app', true], ['localhost', false], ['127.0.0.1', false]]) {
     const { doc } = setupPage();
     const { win } = walkWin(host, framed);
+    const rig = scrollRig(win);
     EF.create(win, doc, fakeHC());
     assert.equal(win.listeners.message, undefined, `${host} framed=${framed}: no message listener`);
+    assert.equal(win.listeners.scroll, undefined, `${host} framed=${framed}: no scroll listener`);
+    assert.equal(rig.timers.length, 0, `${host} framed=${framed}: no timer`);
+    assert.equal(rig.observers.length, 1, `${host} framed=${framed}: only the marks observer`);
   }
 });

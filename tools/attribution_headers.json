@@ -815,7 +815,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
       },
@@ -830,7 +830,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site."
       },

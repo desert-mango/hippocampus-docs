@@ -721,10 +721,16 @@ class TestRealTree(unittest.TestCase):
         self.assertEqual(check.check_contributors(self.contributors, self.projects), [])
 
     def test_the_real_enumeration_is_the_expected_size(self):
-        # 71 setup pages + 17 projects + 3 tools + about
+        # every setup page + every project + every tool + about, counted from the
+        # registries (never a constant), and equal to the Markdown files on disk
+        expected = (sum(len(sec["pages"]) for sec in self.setup["sections"])
+                    + len(self.projects["projects"]) + len(self.tools["tools"]) + 1)
+        on_disk = len(list((check.ROOT / "content").rglob("*.md")))
+        self.assertGreater(expected, 1)
+        self.assertEqual(expected, on_disk)
         rows = check.enumerate_page_nodes(self.setup, self.projects, self.tools)
-        self.assertEqual(len(rows), 92)
-        self.assertEqual(len({r for r, _ in rows}), 92)
+        self.assertEqual(len(rows), expected)
+        self.assertEqual(len({r for r, _ in rows}), expected)
 
 
 if __name__ == "__main__":

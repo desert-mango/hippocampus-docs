@@ -18,6 +18,14 @@
     select           on + the frame says hc-block-select (a paragraph block)
     edit             select + typing in the tray's block editor; the frame
                      reloads with a NEW nonce, the block still selected
+    scroll           on + select the page's LAST paragraph (low on the page),
+                     then measure the page jumping while typing: ask the frame
+                     (hc-walk-scroll, the TEST-ONLY hook below) until its
+                     scrollY is >= 100 px and steady over 3 answers (before),
+                     type one character into the tray, wait for any reload
+                     and ~1 s, ask again (after). The site window's own
+                     scrollY is recorded too (same origin, read directly).
+                     Writes data-walk-scroll-before / -after / -site (JSON)
     insert           on + the "+" rail before the first paragraph with its
                      picker OPEN (the kinds, before one is chosen; mockup
                      a-3): the frame's own rail button is clicked through
@@ -69,6 +77,9 @@
   page posts {type: 'hc-walk-picker', index} into the page frame, the frame
   clicks its real "+" button and answers {type: 'hc-walk-picker-open',
   index, open, kinds}; insert is ready only when open with all the kinds.
+  The scroll step uses the same hook's {type: 'hc-walk-scroll'}: the frame
+  answers {type: 'hc-walk-scroll-samples', samples, log, loadedAt, nonce16,
+  now} — its document's scrollY since it loaded.
 
   When the state is reached, THIS page's body gets
   data-walk-step="<step>:ready" (smoke.mjs asserts it in --dump-dom, then
@@ -97,7 +108,7 @@
     return;
   }
   const STEPS = ['on', 'select', 'edit', 'insert', 'inserted', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
-    'overlay-inline', 'overlay-side', 'two-prs', 'members'];
+    'overlay-inline', 'overlay-side', 'two-prs', 'members', 'scroll'];
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
@@ -221,10 +232,12 @@
   let SD = null;               // the site's document
   const readies = [];          // nonces of the page frames that said hc-ready
   const pickerReplies = [];    // the frame's answers to hc-walk-picker (the insert step)
+  const scrollReplies = [];    // the frame's answers to hc-walk-scroll (the scroll step)
   window.addEventListener('message', (e) => {
     const f = SD ? pageFrame() : null;
     const m = e.data;
     if (f && e.source === f.contentWindow && m && typeof m === 'object' && m.type === 'hc-walk-picker-open') pickerReplies.push(m);
+    if (f && e.source === f.contentWindow && m && typeof m === 'object' && m.type === 'hc-walk-scroll-samples') scrollReplies.push(m);
   });
   const seen = {};             // message type -> count (the failure line)
   const $ = (sel) => SD.querySelector(sel);
@@ -259,6 +272,34 @@
     const blocks = split && split.ok ? split.blocks : [];
     const i = blocks.findIndex((b) => b.kind === 'paragraph');
     return i >= 0 ? i : 1;
+  }
+
+  // the page's LAST paragraph block (low on the page: the scroll step)
+  async function lastParagraphIndex() {
+    const m = /^\/setup\/(.+)$/.exec(page);
+    const text = m ? await readText(`../../content/setup/${m[1]}.md`) : null;
+    const split = text ? window.HCCore.splitBlocks(text) : null;
+    const blocks = split && split.ok ? split.blocks : [];
+    for (let i = blocks.length - 1; i >= 0; i -= 1) if (blocks[i].kind === 'paragraph') return i;
+    throw new Error(`the walk page ${page} has no paragraph block`);
+  }
+
+  // ask the page frame for its scroll record; the next answer after asking
+  async function askScroll(what) {
+    const seenBefore = scrollReplies.length;
+    return until(() => {
+      const f = pageFrame();
+      if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-scroll' }, '*');
+      return scrollReplies.length > seenBefore ? scrollReplies[scrollReplies.length - 1] : null;
+    }, `the frame's hc-walk-scroll answer (${what})`);
+  }
+
+  // what the page body carries: the counts, first/last/max, the first 40 samples, the log (capped)
+  function scrollSummary(r) {
+    const ys = r.samples.map((x) => x[1]);
+    return { nonce16: r.nonce16, loadedAt: r.loadedAt, now: r.now, count: ys.length,
+      first: ys.length ? ys[0] : null, last: ys.length ? ys[ys.length - 1] : null, max: ys.length ? Math.max(...ys) : null,
+      samples: r.samples.slice(0, 40), logCount: r.log.length, log: r.log.slice(0, 300) };
   }
 
   async function editorOn() {
@@ -365,6 +406,47 @@
       await openTray('proposals');
       await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
       await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+    },
+    scroll: async () => {
+      await editorOn();
+      const siteSamples = [];
+      const siteLog = [];
+      const t0 = Date.now();
+      const siteTimer = setInterval(() => { if (siteSamples.length < 2000) siteSamples.push([Date.now() - t0, SW.scrollY]); }, 16);
+      const onSiteScroll = () => { if (siteLog.length < 2000) siteLog.push([Date.now() - t0, SW.scrollY]); };
+      SW.addEventListener('scroll', onSiteScroll);
+      try {
+        frameSays('hc-block-select', { index: await lastParagraphIndex() });
+        const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
+        // before: the frame has scrolled the selected block into view and holds still (3 answers in a row, +-2 px)
+        const end = Date.now() + LIMIT_MS;
+        const run = [];
+        let before = null;
+        while (!before) {
+          if (Date.now() > end) throw new Error(`the frame never held still at >= 100 px (last ${JSON.stringify(run)})`);
+          const r = await askScroll('before typing');
+          if (r.now >= 100 && run.length && Math.abs(r.now - run[run.length - 1].now) <= 2) run.push(r);
+          else run.splice(0, run.length, r);
+          if (run.length >= 3 && run[0].now >= 100) before = r;
+          else await sleep(100);
+        }
+        const nonceBefore = nonceOf(pageFrame());
+        ta.value += 'x';
+        ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
+        // a reload (the old editor) shows as a NEW nonce's hc-ready; no reload is fine too (the fix)
+        try { await frameReady(nonceBefore); } catch (e) { /* no reload within the limit */ }
+        await sleep(1000);
+        const after = await askScroll('after typing');
+        body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(before)));
+        body.setAttribute('data-walk-scroll-after', JSON.stringify(scrollSummary(after)));
+        const ys = siteSamples.map((x) => x[1]);
+        body.setAttribute('data-walk-scroll-site', JSON.stringify({ count: ys.length, first: ys.length ? ys[0] : null,
+          last: ys.length ? ys[ys.length - 1] : null, max: ys.length ? Math.max(...ys) : null,
+          samples: siteSamples.slice(0, 40), events: siteLog.slice(0, 300) }));
+      } finally {
+        SW.removeEventListener('scroll', onSiteScroll);
+        clearInterval(siteTimer);
+      }
     },
     'overlay-inline': async () => {
       await editorOn();

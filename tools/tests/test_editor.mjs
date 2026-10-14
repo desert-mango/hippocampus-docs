@@ -1949,8 +1949,12 @@ test('page tree: exactly the registries\' pages — every setup page, project, t
   const toolIds = REGS.tools.tools.map((t) => `tool/${t.id}`);
   const list = C.pageList(REGS);
   assert.deepEqual(list.map((p) => p.pageId), [...setupIds, ...projectIds, ...toolIds, 'about']);
-  // today's counts, as the report states them
-  assert.deepEqual([setupIds.length, projectIds.length, toolIds.length], [71, 17, 3]);
+  // the counts come from the content tree, never a constant: one Markdown file per registry page
+  const mdUnder = (dir) => fs.readdirSync(path.join(ROOT, dir), { recursive: true })
+    .filter((f) => String(f).endsWith('.md')).length;
+  assert.deepEqual([setupIds.length, projectIds.length, toolIds.length],
+    [mdUnder('content/setup'), mdUnder('content/projects'), mdUnder('content/tools')]);
+  for (const n of [setupIds.length, projectIds.length, toolIds.length]) assert.ok(n > 0);
   for (const p of list) {
     assert.equal(p.file, C.editPath(p.pageId, REGS), p.pageId);
     assert.equal(C.pageIdForFile(p.file, REGS), p.pageId, `${p.file} maps back`);
@@ -2013,7 +2017,8 @@ test('locked ids: a draft that drops or renames an existing id is refused with t
   assert.equal(C.ID_RULE_TEXT, 'renaming or removing an existing id needs Desert Mango — open an issue');
   const before = readRepo('data/projects.json');
   const ids = C.lockedIds('data/projects.json', JSON.parse(before));
-  assert.equal(ids.length, 17);
+  assert.ok(ids.length > 0);
+  assert.equal(ids.length, JSON.parse(before).projects.length);
   assert.equal(C.registryDraftProblem('data/projects.json', before, before), null);
   const renamed = before.replace('"id": "uvms"', '"id": "uvms-2"');
   assert.notEqual(renamed, before);
