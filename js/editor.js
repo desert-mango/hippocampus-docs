@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 2 October 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte
@@ -2037,6 +2037,8 @@
   const EDITOR_PARAMS = Object.freeze(['editor', 'pr', 'data', 'new']);
   const ROUTE_RE = /^\/(?!\/)[^\x00-\x1f\x7f]{0,500}$/;
   const MAX_INDEX = 100000;
+  const MAX_BLOCK_MD = 200000;          // js/source.js MAX_BLOCK_MD: the longest block the frame may send back
+  const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
   const FRAME_DELAY_MS = 600;
   const ed = {
     on: false,
@@ -2058,6 +2060,9 @@
     draft: null,          // the draft of ed.page (in the draft store once it changed)
     sel: null,            // {key, file, span, whole}: the text the tray's textarea edits
     selected: null,       // the block index the frame shows selected
+    inPage: null,         // {index, editor}: the frame said that block is typed in the page (U2), else null
+    asMarkdown: null,     // the block index the person chose to edit as Markdown in the tray instead
+    inPageReason: '',     // why the frame said the selected block must be edited as Markdown
     wholeReason: null,    // why block editing is off for this page, or null
     mainSha: null,        // Promise of main's head sha, once per refresh
     cache: null,          // HCCore.cachedFetcher over this session's token
@@ -2069,6 +2074,7 @@
     checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
   };
   let frameTimer = null;
+  let inPageLine = null;    // the draft-state line under "Typing in the page" (blockTyped updates it)
 
   function readEditorState() {
     const s = store();
@@ -2326,6 +2332,9 @@
   function clearSelection() {
     ed.sel = null;
     ed.selected = null;
+    ed.inPage = null;
+    ed.asMarkdown = null;
+    ed.inPageReason = '';
     ed.wholeReason = null;
     ed.draft = null;
   }
@@ -2402,6 +2411,7 @@
     ed.pv = pv;
     drawPageBar();
     ed.prefix = null;
+    ed.inPage = null;     // the new document reopens the block itself and says so
     ed.ready = false;     // a new document: it hears nothing until its own hc-ready
     const nonce = ed.host.load(route, frameFetcher);
     // frameFetcher reads it at call time: the frame asks only after it loaded
@@ -2814,7 +2824,53 @@
     const nonce = ed.host && ed.host.nonce();
     if (!w || !nonce || !ed.ready) return;
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [] }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage() }, '*');
+  }
+
+  /* The block the frame may open for typing in the page (U2): the selected block of MY draft, its
+     Markdown taken from the draft's span (the frame renders it itself). Never while a proposal is
+     shown, never for a read-only role, never for the whole-page Markdown, and not when the person
+     chose the Markdown box for it. */
+  function openBlockMessage() {
+    const sel = ed.sel;
+    const d = ed.draft;
+    if (!sel || sel.whole || ed.selected === null || !d || d.key !== sel.key || !canEdit() || showing()) return null;
+    if (ed.asMarkdown === ed.selected) return null;
+    if (ed.pv && ed.pv.ov) return null;                    // a proposal is drawn over the page
+    const md = d.files[sel.file].slice(sel.span.start, sel.span.end);
+    if (md.length > MAX_BLOCK_MD) return null;
+    const split = C.splitBlocks(md);
+    const b = split.ok ? split.blocks.find((x) => x.kind !== 'space') : null;
+    if (!b || OPEN_KINDS.indexOf(b.kind) < 0) return null;
+    return { index: ed.selected, md, kind: b.kind };
+  }
+
+  /* hc-block-md: the open block's new Markdown, written into the draft by its SPAN (the text outside
+     it stays byte-identical) and kept; the frame is NOT reloaded (the jump is gone). Accepted only
+     for the one block the parent marked open, typed in the page, in author mode. */
+  function blockTyped(index, md) {
+    const sel = ed.sel;
+    const d = ed.draft;
+    if (!ed.inPage || ed.inPage.index !== index || ed.selected !== index || !sel || sel.whole || !d || d.key !== sel.key
+      || !canEdit() || showing() || typeof md !== 'string' || md.length > MAX_BLOCK_MD) return;
+    const out = C.replaceSpan(d.files[sel.file], sel.span, md);
+    d.files[sel.file] = out.text;
+    sel.span = out.span;
+    if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
+    if (inPageLine) inPageLine.textContent = draftStateText(d);
+    drawDraftList(false);
+  }
+
+  /* hc-block-state: the frame typed in the page, or needs the Markdown box, or closed the block. */
+  function blockState(index, editor, reason) {
+    if (index !== ed.selected) return;
+    if (editor === 'visual' || editor === 'code' || editor === 'box') ed.inPage = { index, editor };
+    else {
+      ed.inPage = null;
+      if (editor === 'markdown') ed.inPageReason = reason || '';
+      if (editor === 'closed') { ed.selected = null; ed.sel = null; postEditor(); }
+    }
+    showChanges(null);
   }
 
   /* A message from the frame. -> true when it was the frame's (acted on or
@@ -2831,6 +2887,8 @@
     else if (m.type === 'hc-route' && typeof m.route === 'string' && ROUTE_RE.test(m.route)) frameRouted(m.route);
     else if (m.type === 'hc-block-select' && index !== null) pick(index).catch(shown);
     else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') pickInsert(index, m.kind).catch(shown);
+    else if (m.type === 'hc-block-md' && index !== null) blockTyped(index, m.md);
+    else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     return true;
   }
   const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };
@@ -2994,6 +3052,7 @@
     }
     const span = C.spanOf(text, index);
     if (!span) return;
+    if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, inPageReason: '' });
     Object.assign(ed, { wholeReason: null, selected: index,
       sel: { key: d.key, file: page.file, span, whole: false } });
     showChanges(null);
@@ -3039,6 +3098,8 @@
     const d = ed.draft;
     const sel = ed.sel;
     if (!d || !sel || !canEdit() || d.key !== sel.key) return;
+    // typing in the Markdown box: this block stays a Markdown edit (the frame must not open it for typing)
+    if (!sel.whole && ed.selected !== null) ed.asMarkdown = ed.selected;
     const out = C.replaceSpan(d.files[sel.file], sel.span, ta.value);
     d.files[sel.file] = out.text;
     sel.span = out.span;
@@ -3093,6 +3154,20 @@
       }
       out.push(h('div', { class: 'cms-action-row' }, whole));
       return box(null);
+    }
+    if (!sel.whole && ed.inPage && ed.inPage.index === ed.selected) {
+      inPageLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: draftStateText(ed.draft) });
+      const asMd = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-as-markdown' }, 'Edit this part as Markdown');
+      asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; postEditor(); showChanges(null); });
+      out.push(h('p', { class: 'hc-block-label', text: 'Typing in the page' }),
+        h('p', { class: 'cms-muted', 'data-in-page': ed.inPage.editor, text: 'Type right in the page: your changes are marked there as suggestions '
+          + '(new text underlined, removed text struck through). Escape stops typing.' }),
+        inPageLine, h('div', { class: 'cms-action-row' }, asMd, whole));
+      return box(null);
+    }
+    if (!sel.whole && ed.inPageReason && ed.asMarkdown !== ed.selected) {
+      out.push(h('p', { class: 'cms-muted', role: 'status', 'data-markdown-reason': true,
+        text: `This part is edited as Markdown: ${ed.inPageReason}.` }));
     }
     const ta = h('textarea', { class: 'cms-editor-text hc-block-text', 'data-block-editor': true, rows: 12,
       spellcheck: 'true', 'aria-label': sel.whole ? `Text of ${sel.file}` : 'This block, as Markdown' });

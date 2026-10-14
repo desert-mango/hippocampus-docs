@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the content-source seam and the CMS preview bridge client in js/source.js.
 /* Unit tests for js/source.js — HC.fetchText / HC.fetchJSON / HC.callFunction.
@@ -503,14 +503,14 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }] });
+    overlay: [{ index: 1, mark: 'add' }], open: null });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [] });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], open: null });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
 });
 
@@ -537,4 +537,27 @@ test('vercel.json: every route may be framed by the site itself only (the editor
   assert.equal(csp.value, "frame-ancestors 'self'", 'the policy is exactly frame-ancestors \'self\'');
   const xfo = all.headers.find((h) => h.key.toLowerCase() === 'x-frame-options');
   assert.ok(xfo && xfo.value === 'SAMEORIGIN', 'older browsers get X-Frame-Options: SAMEORIGIN');
+});
+
+test('typing in the page (U2): hc-editor `open` is cleaned field by field; the frame gets Markdown, never HTML', () => {
+  const base = { type: 'hc-editor', on: true };
+  const ok = SRC.editorMessage({ ...base, open: { index: 4, md: 'A paragraph.\n\n', kind: 'paragraph', html: '<b>x</b>' } });
+  assert.deepEqual(ok.open, { index: 4, md: 'A paragraph.\n\n', kind: 'paragraph' }, 'only index, md and kind cross');
+  for (const bad of [{ index: -1, md: 'x', kind: 'paragraph' }, { index: 1, md: 7, kind: 'paragraph' },
+    { index: 1, md: 'x', kind: 'script' }, { index: 1, md: 'x'.repeat(SRC.MAX_BLOCK_MD + 1), kind: 'paragraph' }, 'x', null]) {
+    assert.equal(SRC.editorMessage({ ...base, open: bad }).open, null, JSON.stringify(bad && bad.kind));
+  }
+});
+
+test('typing in the page (U2): hc-block-md and hc-block-state are built from checked fields only', () => {
+  assert.deepEqual(SRC.frameMessage('hc-block-md', { index: 3, md: 'New text.\n\n', extra: 1 }), { type: 'hc-block-md', index: 3, md: 'New text.\n\n' });
+  assert.equal(SRC.frameMessage('hc-block-md', { index: 3, md: { html: '<b>' } }), null, 'Markdown is a string');
+  assert.equal(SRC.frameMessage('hc-block-md', { index: 3, md: 'x'.repeat(SRC.MAX_BLOCK_MD + 1) }), null, 'over the cap');
+  assert.equal(SRC.frameMessage('hc-block-md', { index: 'a', md: 'x' }), null);
+  for (const editor of SRC.BLOCK_EDITORS) {
+    assert.deepEqual(SRC.frameMessage('hc-block-state', { index: 1, editor, reason: 'why' }), { type: 'hc-block-state', index: 1, editor, reason: 'why' });
+  }
+  assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'html' }), null);
+  assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'visual', reason: 'r'.repeat(900) }).reason.length, 300);
+  assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'visual', reason: 5 }).reason, '');
 });

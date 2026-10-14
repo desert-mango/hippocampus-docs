@@ -1053,6 +1053,11 @@ a proposal runs in an opaque origin, with no access to the parent's `sessionStor
 or the API. The bridge (`js/source.js`) answers only the current nonce, only the frame's own
 window, only `content/`, `data/` and `search/` paths at the shown commit (R1-F13); the frame's
 block messages are checked the same way.
+Since the editor redesign (U2, 2026-10-14) **draft text can be written by the frame; the parent shows
+what changed before any write**: a block is typed in the page, the frame sends its Markdown back
+(`hc-block-md`, a string, never HTML), and the parent accepts it only for the one block it marked
+open, in author mode, with a length cap; the text outside that block's span stays byte-identical,
+and nothing reaches GitHub until the person reads the changes and sends them.
 
 (3) **The gate.** `check.py` 6d rejects scripts, handlers and `javascript:` URLs in content
 before merge. `index.html` is judged like the old shell pages: no inline `<script>`, no `on*=`
@@ -1060,7 +1065,9 @@ attribute, scripts and styles only from the site's own files (the one remote
 `<link rel="icon">` on `res.cloudinary.com` is allowed the way an `<img>` is). `index.html`
 also sends `<meta name="referrer" content="no-referrer">`.
 
-(4) **CSP — a stated follow-up, not shipped.** A Content Security Policy header
+(4) **CSP — a stated follow-up, partly shipped.** Since 2026-10-14 every route sends
+`Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` (`vercel.json`;
+`tools/dev_site.mjs` sends the same locally). The rest of the policy below is still to come. A Content Security Policy header
 (`script-src 'self'`, no inline scripts, no third-party scripts, `object-src 'none'`) is U4b,
 after the handoff, once the three-browser pass with the bridge is done. In revision 4 it applies
 to `/` (the whole site), not only to `/cms/`. Until it ships, layers 0–3 carry the risk.

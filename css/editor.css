@@ -16,6 +16,9 @@
   --hc-add: #3fb950; --hc-del: #f85149; --hc-tray-w: 340px;
 }
 [data-theme="light"] { --hc-add: #1a7f37; --hc-del: #cf222e; }
+/* the site's own accent as text: in light mode darkened 15% so small text reaches 5.2:1 (plain --accent is 3.9:1) */
+:root { --hc-accent-ink: var(--accent); }
+[data-theme="light"] { --hc-accent-ink: color-mix(in srgb, var(--accent) 85%, #000); }
 
 /* ---------- 1. the frame side ---------- */
 
@@ -39,6 +42,25 @@ body.hc-edit-on .page-body > .hc-block.hc-selected { box-shadow: 0 0 0 2px var(-
 body.hc-edit-on .page-body > .hc-block:hover > .hc-pencil,
 .hc-block.hc-selected > .hc-pencil,
 .hc-pencil:focus-visible { opacity: 1; }
+
+/* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout;
+   a thin accent bar in the margin says where the caret is; a note box or code box gets an accent ring
+   instead (the box has its own left bar). Suggestions (js/editor-type.js): new text in the accent colour,
+   underlined; removed text struck through in the accent colour; a format change dotted. */
+body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; box-shadow: none !important; }
+body.hc-edit-on .page-body > .hc-block.hc-open::before { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
+  width: 2px; border-radius: 2px; background: var(--accent); }
+body.hc-edit-on .page-body > .hc-block.hc-open:has(> .hc-edit-root > .adm, > .hc-edit-root > pre)::before { display: none; }
+.hc-block.hc-open > .hc-pencil { display: none; }
+.hc-edit-root [contenteditable] { outline: none; caret-color: var(--accent); cursor: text; }
+.hc-edit-root > .adm:has([contenteditable]), .hc-edit-root > pre:has([contenteditable]) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; }
+.hc-sug-ins { color: var(--hc-accent-ink); background: none; text-decoration: underline; text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.hc-sug-del { color: var(--hc-accent-ink); background: none; text-decoration: line-through; text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px; }
+.hc-sug-del + .hc-sug-ins { margin-left: .25em; }
+.hc-sug-fmt { text-decoration: underline dotted var(--accent); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 .hc-plus { position: relative; height: 0; margin: 0; }
 .hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: transparent; }

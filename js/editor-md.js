@@ -191,9 +191,9 @@
         continue;
       }
       if (c.nodeType !== 1) continue;
-      refuseEnhanced(c);
       const name = tag(c);
-      const sug = attr(c, 'data-hc-sug');
+      const sug = attr(c, 'data-hc-sug');                           // the typing engine's own marks (hc-sug class)
+      if (!sug) refuseEnhanced(c);
       if (sug === 'del') continue;                                  // a suggested deletion: gone
       if (sug === 'ins') { out += inline(c, st, ctx); continue; }   // a suggested insertion: its text
       if (sug === 'fmt') {

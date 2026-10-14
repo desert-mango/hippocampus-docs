@@ -372,3 +372,179 @@ test('oracle (e): the converter decides the same editors in Chrome as under node
     rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+/* Editor redesign U2, end to end in a real Chrome over DevTools: the REAL site in Editor mode
+   (tools/tests/editor_walk.html?step=on, the fake GitHub), a click on a paragraph INSIDE the
+   sandboxed page frame, real typing (Input.insertText) and real Backspace key presses. Asserts:
+   the block opens for typing in the page; typing is a suggestion (inserted text marked, deleted
+   text struck, deleting your own inserted text removes it); the parent's draft holds exactly the
+   new Markdown for that block's span; the page frame is NEVER reloaded (same src, same nonce) and
+   the frame's scroll position does not move (the old "page jumped" bug). */
+test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by span, no reload, no jump', { timeout: 120000 }, async () => {
+  const chrome = findChrome();
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u2-walk-'));
+  let server = null;
+  let child = null;
+  try {
+    server = await startServer(ROOT, []);
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    child = spawn(chrome, ['--headless=new', '--disable-gpu', ...HERMETIC, '--window-size=1280,900',
+      `--user-data-dir=${mkdtempSync(path.join(scratch, 'profile-'))}`, '--remote-debugging-port=0', 'about:blank'],
+    { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', (d) => { err += d; });
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let port = null;
+    for (let i = 0; i < 150 && !port; i++) { const m = /ws:\/\/127\.0\.0\.1:(\d+)\//.exec(err); if (m) port = m[1]; else await sleep(100); }
+    assert.ok(port, 'Chrome DevTools came up');
+    const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
+    const ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r) => { ws.onopen = r; });
+    let id = 0;
+    const pend = new Map();
+    const contexts = new Map();
+    // the sandboxed page frame runs out of process: DevTools attaches to it as its own target (flatten)
+    const sendTo = (sessionId, method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r);
+      ws.send(JSON.stringify(Object.assign({ id: n, method, params }, sessionId ? { sessionId } : {}))); });
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      const sid = m.sessionId || null;
+      if (m.method === 'Runtime.executionContextCreated') contexts.set(`${sid}:${m.params.context.id}`, { sid, id: m.params.context.id, ctx: m.params.context });
+      if (m.method === 'Runtime.executionContextDestroyed') contexts.delete(`${sid}:${m.params.executionContextId}`);
+      if (m.method === 'Runtime.executionContextsCleared') for (const k of [...contexts.keys()]) if (k.startsWith(`${sid}:`)) contexts.delete(k);
+      if (m.method === 'Target.attachedToTarget') {
+        const s2 = m.params.sessionId;
+        sendTo(s2, 'Runtime.enable');
+        sendTo(s2, 'Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+        sendTo(s2, 'Runtime.runIfWaitingForDebugger');
+      }
+      if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
+    };
+    const send = (method, params = {}) => sendTo(null, method, params);
+    const ev = async (expression, where) => {
+      const params = Object.assign({ expression, returnByValue: true, awaitPromise: true }, where ? { contextId: where.id } : {});
+      const r = await sendTo(where ? where.sid : null, 'Runtime.evaluate', params);
+      if (r.result && r.result.exceptionDetails) throw new Error(`${expression.slice(0, 80)}: ${JSON.stringify(r.result.exceptionDetails.exception && r.result.exceptionDetails.exception.description)}`);
+      return r.result && r.result.result ? r.result.result.value : undefined;
+    };
+    const until = async (fn, what, ms = 20000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${what}`); await sleep(100); } };
+    await send('Page.enable');
+    await send('Runtime.enable');
+    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+    await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=on&page=/setup/lab-gantry/usage` });
+    await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === 'on:ready' || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), 'the walk at "on"');
+    // the editor's page frame: the one execution context whose HC is a preview
+    const frameCtx = async () => {
+      for (const c of contexts.values()) {
+        if (!c.ctx.auxData || !c.ctx.auxData.isDefault) continue;
+        try { if (await ev("typeof HC !== 'undefined' && HC.preview === true && !!document.querySelector('.hc-block')", c)) return c; } catch (e) { /* gone */ }
+      }
+      return null;
+    };
+    const F = await until(frameCtx, 'the page frame grouped');
+    const site = "document.querySelector('iframe').contentWindow";
+    const srcBefore = await ev(`${site}.document.querySelector('#hc-frame-host iframe').getAttribute('src')`);
+    const scrollBefore = await ev('scrollY', F);
+    // click the paragraph with the TODO, at its own position
+    const pt = await ev(`(() => { const p = [...document.querySelectorAll('.hc-block p')].find((x) => x.textContent.includes('TODO: this needs to be fixed.'));
+      const r = p.getBoundingClientRect(); const x = r.right - 4, y = r.bottom - 6;
+      p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y })); return [x, y]; })()`, F);
+    assert.ok(Array.isArray(pt));
+    const open = await until(() => ev('HCEditorFrame.runtime.open()', F), 'the block opens for typing in the page');
+    assert.equal(open.editor, 'visual');
+    assert.equal(await ev("!!document.querySelector('.hc-block.hc-open .hc-edit-root p[contenteditable]')", F), true);
+    // the caret at the end of the paragraph, then real typing
+    await ev(`(() => { const p = document.querySelector('.hc-block.hc-open .hc-edit-root p'); p.focus(); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await send('Input.insertText', { text: ' Check the cable firstt' });
+    const bs = async (n) => { for (let i = 0; i < n; i++) { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, commands: ['deleteBackward'] }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 }); } };
+    await bs(1);                                                  // own inserted text: removed outright
+    await send('Input.insertText', { text: '.' });
+    await sleep(100);
+    const ins = await ev("[...document.querySelectorAll('.hc-open ins[data-hc-sug=ins]')].map((n) => n.textContent)", F);
+    assert.deepEqual(ins, [' Check the cable first.'], 'one inserted suggestion, the typo removed outright');
+    // now delete original text before the insertion: the caret moves before it, Backspace strikes
+    await ev(`(() => { const p = document.querySelector('.hc-block.hc-open .hc-edit-root p'); const ins = p.querySelector('ins'); const r = document.createRange(); r.setStartBefore(ins); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await bs(6);
+    await sleep(700);
+    const del = await ev("[...document.querySelectorAll('.hc-open del[data-hc-sug=del]')].map((n) => n.textContent)", F);
+    assert.deepEqual(del, ['fixed.'], 'original text struck, not removed');
+    assert.match(await ev("document.querySelector('.hc-open .hc-edit-root').textContent", F), /needs to be fixed\. Check the cable first\./, 'struck text stays on the page');
+    // the parent's draft: exactly the block's new Markdown in its span
+    const draft = await until(() => ev(`(() => { const raw = ${site}.sessionStorage.getItem('hc-draft:setup/lab-gantry/usage') || ''; return raw; })()`), 'the draft saved', 5000).catch(() => '');
+    const store = draft || await ev(`JSON.stringify(Object.keys(${site}.sessionStorage))`);
+    const text = await ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.sessionStorage).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : null; })()`);
+    assert.ok(text, `a draft exists (${String(store).slice(0, 200)})`);
+    assert.ok(/all 3 motors should work\. TODO: this needs to be +Check the cable first\.\n/.test(text), 'deleted text gone, inserted text kept, in the Markdown');
+    const orig = readFileSync(path.join(ROOT, 'content/setup/lab-gantry/usage.md'), 'utf8');
+    const at = orig.indexOf('If you encounter any error messages');
+    assert.equal(text.slice(0, at), orig.slice(0, at), 'everything before the block byte-identical');
+    const tail = orig.slice(orig.indexOf('Example for timeout errror'));
+    assert.ok(text.endsWith(tail), 'everything after the block byte-identical');
+    // an IME composition (dead key / CJK) becomes a suggestion too
+    await ev(`(() => { const p = document.querySelector('.hc-block.hc-open .hc-edit-root p'); const ins = p.querySelector('ins'); const r = document.createRange(); r.setStart(ins.firstChild, ins.firstChild.length); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await ev(`(() => { const p = document.querySelector('.hc-block.hc-open .hc-edit-root p'); const t = document.createTextNode(''); p.appendChild(t); const r = document.createRange(); r.setStart(t, 0); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await send('Input.imeSetComposition', { text: 'ü', selectionStart: 1, selectionEnd: 1 });
+    await send('Input.insertText', { text: 'ü' });
+    await sleep(150);
+    const imeMarked = await ev("[...document.querySelectorAll('.hc-open ins[data-hc-sug=ins]')].some((n) => n.textContent.endsWith('ü'))", F);
+    assert.equal(imeMarked, true, 'a composed character is marked as inserted');
+    // Shift+Enter inserts a line break as a suggestion; Backspace right after takes it out again
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 8, commands: ['insertLineBreak'] });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 8 });
+    await sleep(100);
+    assert.equal(await ev("document.querySelectorAll('.hc-open ins[data-hc-sug=ins] br').length", F), 1, 'Shift+Enter: one inserted line break');
+    await bs(1);
+    await sleep(100);
+    assert.equal(await ev("document.querySelectorAll('.hc-open .hc-edit-root br').length", F), 0, 'Backspace removes the inserted break, nothing else');
+    assert.equal(await ev("[...document.querySelectorAll('.hc-open ins[data-hc-sug=ins]')].some((n) => n.textContent.endsWith('first.ü'))", F), true, 'the text before it is intact');
+    // a selection across a line break: typing over it takes the break too (inserted: gone)
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 8, commands: ['insertLineBreak'] });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, modifiers: 8 });
+    await send('Input.insertText', { text: 'xy' });
+    await ev(`(() => { const ins = document.querySelector('.hc-open ins[data-hc-sug=ins]'); const br = ins.querySelector('br'); const t = br.nextSibling; const r = document.createRange(); r.setStart(br.previousSibling, br.previousSibling.length); r.setEnd(t, t.length); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await bs(1);                                                  // Backspace over the selection
+    await sleep(100);
+    assert.equal(await ev("document.querySelectorAll('.hc-open .hc-edit-root br').length", F), 0, 'a selected line break is deleted with the selection');
+    // Backspace after an emoji takes the whole character, never half of it
+    await send('Input.insertText', { text: '🥳' });
+    await bs(1);
+    await sleep(80);
+    assert.ok(await ev("![...document.querySelectorAll('.hc-open ins')].some((n) => /[\\ud800-\\udfff]/.test(n.textContent))", F), 'no lone surrogate left');
+    // a word delete (Option+Backspace) takes the whole word: mine goes outright
+    await send('Input.insertText', { text: ' Wordy' });
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, modifiers: 1, commands: ['deleteWordBackward'] });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, modifiers: 1 });
+    await sleep(100);
+    assert.equal(await ev("[...document.querySelectorAll('.hc-open ins[data-hc-sug=ins]')].map((n) => n.textContent).join('|')", F), ' Check the cable first.ü ', 'Option+Backspace removed the whole typed word');
+    await bs(1);
+    // strike the first letters of a paragraph, then type: the text goes where the caret is, not at the end
+    const other = await ev(`(() => { const p = [...document.querySelectorAll('.hc-block p')].find((x) => x.textContent.startsWith('Example for timeout')); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 3, clientY: r.top + 5 })); return true; })()`, F);
+    assert.ok(other);
+    await until(() => ev("(HCEditorFrame.runtime.open() || {}).index !== undefined && document.querySelector('.hc-block.hc-open p') && document.querySelector('.hc-block.hc-open p').textContent.startsWith('Example')", F), 'the second paragraph opens');
+    await ev(`(() => { const p = document.querySelector('.hc-block.hc-open .hc-edit-root p'); const t = p.firstChild; const r = document.createRange(); r.setStart(t, 2); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    await bs(2);
+    await send('Input.insertText', { text: 'An e' });
+    await sleep(100);
+    assert.match(await ev("document.querySelector('.hc-block.hc-open .hc-edit-root p').textContent", F), /^ExAn eample for timeout/, 'typed at the caret after striking the first letters');
+    await ev(`(() => { const p = [...document.querySelectorAll('.hc-block p')].find((x) => x.textContent.includes('Check the cable first.')); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.right - 4, clientY: r.bottom - 6 })); })()`, F);
+    await until(() => ev(`(HCEditorFrame.runtime.open() || {}).index === ${open.index}`, F), 'back to the first paragraph');
+    await ev(`(() => { const ins = [...document.querySelectorAll('.hc-open ins[data-hc-sug=ins]')].pop(); ins.closest('[contenteditable]').focus(); const t = ins.lastChild; const r = document.createRange(); r.setStart(t, t.length); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); })()`, F);
+    // type, then pick another block at once: the last keystrokes are not lost
+    await send('Input.insertText', { text: ' Quick' });
+    await ev(`(() => { const p = [...document.querySelectorAll('.hc-block p')].find((x) => x.textContent.includes('ample for timeout errror')); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 5, clientY: r.top + 5 })); })()`, F);
+    await sleep(600);
+    const quick = await ev(`(() => { const d = ${site}.HCCore.createDraftStore(${site}.sessionStorage).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : ''; })()`);
+    assert.ok(/first\.ü +Quick\n/.test(quick), `typed text reaches the draft even with an immediate switch to another block: ${JSON.stringify((/TODO[^\n]*/.exec(quick) || [''])[0])}`);
+    // no reload, no jump
+    assert.equal(await ev(`${site}.document.querySelector('#hc-frame-host iframe').getAttribute('src')`), srcBefore, 'the page frame was never reloaded');
+    const F2 = await frameCtx();
+    assert.ok(F2 && F2.sid === F.sid && F2.id === F.id, 'the same document');
+    assert.ok(Math.abs((await ev('scrollY', F)) - scrollBefore) <= 2, 'the page did not scroll');
+    console.log('U2 walk: typed in the page; suggestions marked; draft by span; no reload, no jump');
+    ws.close();
+  } finally {
+    if (child) { try { child.kill('SIGKILL'); } catch { /* gone */ } }
+    if (server) { server.closeAllConnections?.(); server.close(); }
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

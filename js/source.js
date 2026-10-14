@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Fetch site content same-origin, or through the CMS preview bridge inside a preview frame.
 /* HC — the content-source seam. js/app.js, js/search.js and js/graph.js read
@@ -112,17 +112,35 @@
         hc-block-insert  {index, kind}       "+" at the boundary before
                                              block `index`; kind is one of
                                              BLOCK_INSERT_KINDS
+        hc-block-state   {index, editor,     the open block is typed in the
+                          reason}            page ('visual' | 'code' |
+                                             'box'), must be edited as
+                                             Markdown ('markdown'), or was
+                                             closed ('closed'); reason is
+                                             plain text, at most 300 characters
+        hc-block-md      {index, md}         the open block's Markdown after
+                                             typing (the editor redesign, U2):
+                                             a string of at most
+                                             MAX_BLOCK_MD characters, never HTML.
+                                             The parent accepts it ONLY for the
+                                             one block it marked open, in
+                                             author mode, and shows the changed
+                                             text itself before any write.
       index is a whole number 0..100000. HC.post builds the message itself
       (frameMessage below): an unknown type or a bad field posts nothing.
       The parent acts on one only when event.source is ITS frame's window
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, selected, overlay}, '*')
+          {type: 'hc-editor', nonce, on, settings, selected, overlay, open}, '*')
         on        true: draw the block marks (false: draw none)
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
+        open      {index, md, kind} | null: the block to type in, its Markdown
+                  (a string of at most MAX_BLOCK_MD characters) and its
+                  HCCore.splitBlocks kind (OPEN_KINDS); the frame renders the
+                  Markdown itself, so no HTML crosses
       The frame accepts it only when event.source === window.parent,
       event.origin === its own location.origin and the nonce is its own
       (as in 5), and cleans it field by field (editorMessage below); a
@@ -147,6 +165,9 @@
   const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
   const MAX_OVERLAY = 5000;
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
+  const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'markdown', 'closed']);
+  const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
+  const MAX_BLOCK_MD = 200000;
 
   function httpError(path, status, detail) {
     const err = new Error(`${path}: HTTP ${status}` + (detail ? ` (${detail})` : ''));
@@ -215,6 +236,14 @@
       return (isIndex(d.index) && BLOCK_INSERT_KINDS.indexOf(d.kind) >= 0)
         ? { type, index: d.index, kind: d.kind } : null;
     }
+    if (type === 'hc-block-state') {
+      if (!isIndex(d.index) || BLOCK_EDITORS.indexOf(d.editor) < 0) return null;
+      return { type, index: d.index, editor: d.editor, reason: typeof d.reason === 'string' ? d.reason.slice(0, 300) : '' };
+    }
+    if (type === 'hc-block-md') {
+      return (isIndex(d.index) && typeof d.md === 'string' && d.md.length <= MAX_BLOCK_MD)
+        ? { type, index: d.index, md: d.md } : null;
+    }
     return null;
   }
 
@@ -243,6 +272,9 @@
       },
       selected: isIndex(m.selected) ? m.selected : null,
       overlay,
+      open: (m.open && typeof m.open === 'object' && isIndex(m.open.index) && typeof m.open.md === 'string'
+        && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
+        ? { index: m.open.index, md: m.open.md, kind: m.open.kind } : null,
     };
   }
 
@@ -381,7 +413,7 @@
     module.exports = {
       create, previewFragment, parsePreviewFragment, isBridgePath,
       BRIDGE_PATH_RE, BRIDGE_TIMEOUT_MS,
-      sentinelPrefix, frameMessage, editorMessage, BLOCK_INSERT_KINDS, OVERLAY_MARKS,
+      sentinelPrefix, frameMessage, editorMessage, BLOCK_INSERT_KINDS, OVERLAY_MARKS, BLOCK_EDITORS, OPEN_KINDS, MAX_BLOCK_MD,
     };
   }
 }());

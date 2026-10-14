@@ -188,7 +188,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Fetch site content same-origin, or through the CMS preview bridge inside a preview frame."
       },
@@ -740,7 +740,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the content-source seam and the CMS preview bridge client in js/source.js."
       },
@@ -845,7 +845,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
       },
@@ -875,7 +875,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub."
       },
@@ -970,6 +970,21 @@
         "purpose": "A small HTML parser and DOM for node tests of browser code that walks a DOM (sanitizer, editor serializer)."
       },
       "reason": "First-party site code or test written for the editor redesign (unit U1, the converter); the baseline is the file as introduced."
+    },
+    "js/editor-type.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c0604fb4117e740677a422b7633692203cf3b9cac7b5f2cf0d03a5f599643c81",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "14 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Make typing in an open block a Google Docs-style suggestion: inserted text marked, deleted text struck, kept."
+      },
+      "reason": "First-party site code written for the editor redesign (unit U2, typing in the page); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

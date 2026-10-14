@@ -172,10 +172,11 @@ test('D1 suggestion marks: inserted text is kept, deleted text dropped, a format
   const add = (n) => { p.appendChild(n); return n; };
   const el = (name, attrs, text) => { const e = new ShimElement(name, HTML_NS); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text !== undefined) e.appendChild(new ShimText(text)); return e; };
   add(new ShimText('If you encounter errors, keep '));
-  add(el('b', { 'data-hc-sug': 'fmt', 'data-hc-fmt': 'strong' }, 'going'));
+  // exactly as js/editor-type.js draws them: data-hc-sug, data-hc-id and the hc-sug classes
+  add(el('b', { 'data-hc-sug': 'fmt', 'data-hc-fmt': 'strong', 'data-hc-id': 's2', class: 'hc-sug hc-sug-fmt' }, 'going'));
   add(new ShimText('. '));
-  add(el('del', { 'data-hc-sug': 'del' }, 'TODO: this needs to be fixed.'));
-  add(el('ins', { 'data-hc-sug': 'ins' }, 'Check the x-axis cable first.'));
+  add(el('del', { 'data-hc-sug': 'del', 'data-hc-id': 's1', class: 'hc-sug hc-sug-del' }, 'TODO: this needs to be fixed.'));
+  add(el('ins', { 'data-hc-sug': 'ins', 'data-hc-id': 's1', class: 'hc-sug hc-sug-ins' }, 'Check the x-axis cable first.'));
   assert.equal(M.serialize(root, md, 'paragraph'), 'If you encounter errors, keep **going**. Check the x-axis cable first.\n\n');
   // a content <del> (~~text~~) is NOT a suggestion: it stays a strike-through
   assert.equal(M.serialize(M.renderBlock('Old ~~gone~~ text.\n\n'), 'Old ~~gone~~ text.\n\n', 'paragraph'), 'Old ~~gone~~ text.\n\n');

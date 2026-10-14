@@ -403,3 +403,42 @@ test('editor-frame: the walk hook is absent off localhost and in the real Editor
     assert.equal(rig.observers.length, 1, `${host} framed=${framed}: only the marks observer`);
   }
 });
+
+// ------------------------------------------- typing in the page (editor redesign U2) --
+test('editor-frame (U2): a selected block already on screen is never scrolled; one out of view still is', () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  const win = Object.assign(fakeWin(), { innerHeight: 900 });
+  EF.create(win, doc, HC);
+  HC.send({ on: true, selected: null });
+  const [, w2, w3] = blocksOf(body);
+  w2.getBoundingClientRect = () => ({ top: 300, bottom: 360 });          // on screen: the reader clicked it there
+  w3.getBoundingClientRect = () => ({ top: 2400, bottom: 2460 });        // far below
+  HC.send({ on: true, selected: 2 });
+  assert.equal(w2.scrolled, 0, 'no jump for a block in view');
+  HC.send({ on: true, selected: 3 });
+  assert.equal(w3.scrolled, 1, 'a block out of view is brought into view');
+});
+
+test('editor-frame (U2): the typing scripts load only when the parent opens a block, once, never while off', () => {
+  const { doc } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  const scripts = () => kids(doc.head).filter((c) => c.tagName === 'SCRIPT').map((c) => c.src);
+  HC.send({ on: false, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
+  assert.deepEqual(scripts(), [], 'Editor off: nothing loads');
+  HC.send({ on: true, selected: 2 });
+  assert.deepEqual(scripts(), [], 'a selection alone loads nothing');
+  HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
+  HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
+  assert.deepEqual(scripts(), ['js/editor-md.js', 'js/editor-type.js'], 'the converter and the typing engine, once');
+});
+
+test('editor-frame (U2): Escape while the typing scripts are still loading cancels the open and tells the parent', () => {
+  const { doc } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
+  for (const fn of doc.listeners.keydown || []) fn({ key: 'Escape' });
+  assert.deepEqual(HC.posts.filter((p) => p.type === 'hc-block-state').map((p) => [p.index, p.editor]), [[2, 'closed']]);
+});

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 2 October 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub.
 /* js/editor.js runs in the site's own page once a session exists (plan D-C,
@@ -409,6 +409,94 @@ test('typing an unclosed fence never touches the text outside the span', async (
     assert.equal(d.slice(0, b.start), PAGE_TEXT.slice(0, b.start), 'before the span: byte-identical');
     assert.equal(d.slice(b.start + typed.length), PAGE_TEXT.slice(b.end), 'after the span: byte-identical');
   }
+});
+
+// ------------------------------------------- typing in the page (editor redesign U2) ---
+
+test('U2: a picked block goes to the frame as `open` {index, md, kind}: its Markdown from my draft, never HTML', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  const m = page.editorMessages().at(-1);
+  assert.deepEqual({ ...m.open }, { index: i, md: blocksOf(PAGE_TEXT)[i].text, kind: 'paragraph' });
+});
+
+test('U2: the frame says it types in the page -> the tray drops the Markdown textarea and says so', async () => {
+  const page = await editorOn();
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  assert.ok(page.textarea(), 'the textarea until the frame answers');
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  assert.equal(page.textarea(), undefined, 'no Markdown textarea while typing in the page');
+  assert.ok(page.one((e) => e.attrs['data-in-page'] === 'visual'), 'the "typing in the page" note');
+});
+
+test('U2: hc-block-md writes the block into the draft by its span: NO frame reload, same nonce, zero network', async () => {
+  const page = await editorOn();
+  await page.asks(PAGE_FILE);
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  const b = blocksOf(PAGE_TEXT)[i];
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  const srcs = page.frame().srcs.length;
+  const nonce = page.nonce();
+  const net = page.github().length;
+  for (const typed of ['A changed paragraph.\n\n', 'A changed paragraph, typed on.\n\n']) {
+    await page.send({ type: 'hc-block-md', index: i, md: typed });
+    const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+    assert.equal(d, PAGE_TEXT.slice(0, b.start) + typed + PAGE_TEXT.slice(b.end), 'the span replaced, nothing else');
+  }
+  await new Promise((r) => setTimeout(r, 700));
+  assert.equal(page.frame().srcs.length, srcs, 'the frame was never reloaded (the page cannot jump)');
+  assert.equal(page.nonce(), nonce);
+  assert.equal(page.github().length, net, 'no network call');
+  assert.equal(page.editorMessages().at(-1).open.index, i, 'the block stays the open one');
+});
+
+test('U2: hc-block-md is dropped unless it names the open, in-page block in author mode', async () => {
+  const page = await editorOn();
+  const i = firstParagraph(PAGE_TEXT);
+  const store = () => C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware');
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-md', index: i, md: 'Before the frame said it is typing.\n\n' });
+  assert.equal(store(), null, 'not open in the page yet: dropped');
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  await page.send({ type: 'hc-block-md', index: i + 1, md: 'Another block.\n\n' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'Forged.\n\n' }, { source: {} });
+  await page.send({ type: 'hc-block-md', index: i, md: 'Another load.\n\n', nonce: 'another-nonce-123456' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'x'.repeat(200001) });
+  assert.equal(store(), null, 'another block, another window, another load, over the cap: all dropped');
+  await page.send({ type: 'hc-block-md', index: i, md: 'Accepted.\n\n' });
+  assert.match(store().files[PAGE_FILE], /Accepted\./);
+});
+
+test('U2: the frame needs the Markdown box -> the textarea shows with the reason; "Edit this part as Markdown" closes the in-page block', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'markdown', reason: 'a reference-style link' });
+  assert.ok(page.textarea(), 'the Markdown textarea');
+  assert.match(page.one((e) => e.attrs['data-markdown-reason'] !== undefined).textContent, /reference-style link/);
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  page.action('edit-as-markdown').click();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(page.editorMessages().at(-1).open, null, 'the frame is told to stop typing');
+  assert.ok(page.textarea(), 'and the textarea is back');
+});
+
+test('U2: Escape in the frame (hc-block-state closed) deselects the block', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'closed', reason: '' });
+  const m = page.editorMessages().at(-1);
+  assert.equal(m.selected, null);
+  assert.equal(m.open, null);
 });
 
 test('hc-block-insert puts the snippet at that boundary, as its own block, and selects it', async () => {

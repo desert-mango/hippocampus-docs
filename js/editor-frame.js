@@ -40,8 +40,21 @@
            replaced block (mark del) and its new version (mark change, the
            block right after it) into one two-column <div class="hc-side">;
            with "inline" they stay stacked, old above new.
-       No text is ever typed into the frame: editing happens in the parent's
-       tray. No message carries HTML.
+         * opens ONE block for typing in the page (editor redesign U2): the
+           message's `open` {index, md, kind} names the block and its Markdown.
+           The frame loads js/editor-md.js and js/editor-type.js (once, on
+           demand: never for a guest, never outside a preview), swaps that
+           block's DOM for a CLEAN render of the Markdown (no cross-reference
+           links, anchors or copy buttons) when HCEditorMd's gate passes, and
+           makes it editable. Every keystroke is a suggestion (HCEditorType:
+           inserted text marked, deleted text struck, kept). After every
+           edit it posts hc-block-md {index, md}: the block's
+           Markdown, never HTML. It reports hc-block-state {index, editor,
+           reason}: 'visual' | 'code' | 'box' when typing in the page,
+           'markdown' when the block must be edited as Markdown (the parent's
+           box), 'closed' after Escape. The page is never reloaded while a
+           block is typed in, and a block already in view is never scrolled.
+       No message carries HTML.
    The page renders after this file runs (js/app.js is later in the page),
    so a MutationObserver on #content re-applies the marks whenever the page
    body appears or changes; grouping is idempotent.
@@ -65,6 +78,9 @@
     conflict: 'hc-prop-conflict' });
   const SETTING_CLASS = Object.freeze({ outlines: 'hc-outlines', compact: 'hc-compact' });
   const CSS_HREF = 'css/editor.css';
+  const TYPING_SCRIPTS = Object.freeze(['js/editor-md.js', 'js/editor-type.js']);
+  const MAX_BLOCK_MD = 200000;  // js/source.js MAX_BLOCK_MD: a longer hc-block-md is refused by the bridge
+  const OPEN_EDITORS = Object.freeze(['visual', 'code', 'box']);
   const ELEMENT = 1;
 
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -177,6 +193,10 @@
     let state = null;
     let cssAdded = false;
     let openPicker = null;
+    let openNow = null;        // {index, w, root, md, kind, editor, handles, sent}
+    let scriptsP = null;
+    let wanted = null;         // the block an open is waiting for (the scripts still loading); Escape cancels it
+    let lastClick = null;      // where the last click into a block landed: the caret goes there on open
 
     function button(cls, label, text) {
       const b = doc.createElement('button');
@@ -235,6 +255,7 @@
 
     function select(index) {
       closePicker();
+      if (openNow && openNow.index !== index) flush(openNow);   // the last keystrokes (a finished composition too) first
       HC.post('hc-block-select', { index });
     }
 
@@ -251,10 +272,12 @@
         });
         w.appendChild(pencil);
         w.addEventListener('click', (e) => {
+          if (openNow && openNow.index === i) return;          // typing here already: the click moves the caret
           for (let t = e && e.target; t && t !== w; t = t.parentNode) {
             const tag = String(t.tagName || '').toUpperCase();
             if (['A', 'BUTTON', 'SUMMARY', 'INPUT', 'SELECT', 'TEXTAREA', 'LABEL'].indexOf(tag) >= 0) return;
           }
+          lastClick = e && typeof e.clientX === 'number' ? { x: e.clientX, y: e.clientY } : null;
           select(i);
         });
         const prev = w.previousSibling;
@@ -282,6 +305,7 @@
       if (!side) return;
       const byIndex = new Map(blocks.map((w) => [indexOfBlock(w), w]));
       for (const [d, c] of sidePairs(s.overlay)) {
+        if (openNow && (openNow.index === d || openNow.index === c)) continue;   // the block being typed in stays put
         const old = byIndex.get(d);
         const neu = byIndex.get(c);
         if (!old || !neu || old.parentNode !== body || neu.parentNode !== body) continue;
@@ -346,9 +370,177 @@
         arrangeSides(body, blocks, s);
         if (chosen && scrolledTo !== chosen && typeof chosen.scrollIntoView === 'function') {
           scrolledTo = chosen;
-          try { chosen.scrollIntoView({ block: 'center' }); } catch (e) { /* a courtesy */ }
+          if (!inView(chosen)) {
+            try { chosen.scrollIntoView({ block: 'center' }); } catch (e) { /* a courtesy */ }
+          }
         }
       }
+      syncOpen(s);
+    }
+
+    /* A block (partly) on screen is never scrolled: the reader clicked it where it is. */
+    function inView(el) {
+      if (typeof el.getBoundingClientRect !== 'function') return false;
+      const r = el.getBoundingClientRect();
+      const h = Number(win.innerHeight) || 0;
+      return h > 0 && r.bottom > 0 && r.top < h;
+    }
+
+    // ------------------------------------------------- typing in the page (U2) ---
+
+    function loadScripts() {
+      if (scriptsP) return scriptsP;
+      scriptsP = new Promise((resolve) => {
+        if (win.HCEditorMd && win.HCEditorType) { resolve(true); return; }
+        let left = TYPING_SCRIPTS.length;
+        let ok = true;
+        for (const src of TYPING_SCRIPTS) {
+          const el = doc.createElement('script');
+          el.src = src;
+          el.addEventListener('load', () => { left -= 1; if (!left) resolve(ok && Boolean(win.HCEditorMd && win.HCEditorType)); });
+          el.addEventListener('error', () => { ok = false; left -= 1; if (!left) resolve(false); });
+          (doc.head || doc.body).appendChild(el);
+        }
+      });
+      return scriptsP;
+    }
+
+    function wrapperFor(index) {
+      const root = doc.getElementById('content') || doc.body;
+      for (const body of pageBodies(root, prefix)) {
+        const w = blocksIn(body).find((x) => indexOfBlock(x) === index);
+        if (w) return w;
+      }
+      return null;
+    }
+    const isPencil = (n) => n.nodeType === ELEMENT && classesOf(n).indexOf('hc-pencil') >= 0;
+
+    function syncOpen(s) {
+      const want = s && s.on ? s.open : null;
+      if (!want) { if (openNow) closeBlock(false); return; }
+      if (openNow && openNow.index === want.index) return;   // the frame's DOM is the truth while typing
+      openBlock(want);
+    }
+
+    function report(index, editor, reason) {
+      HC.post('hc-block-state', { index, editor, reason: reason ? String(reason).slice(0, 300) : '' });
+    }
+
+    async function openBlock(o) {
+      closeBlock(false);
+      const pending = o;
+      wanted = o.index;
+      const ok = await loadScripts();
+      if (wanted !== pending.index) return;                       // Escape while loading, or another pick
+      wanted = null;
+      if (!state || !state.open || state.open.index !== pending.index || (openNow && openNow.index === pending.index)) return;
+      if (state.open.md !== pending.md || state.open.kind !== pending.kind) return;   // the draft moved on meanwhile
+      if (!ok) { report(o.index, 'markdown', 'the in-page editor could not load'); return; }
+      const M = win.HCEditorMd;
+      const w = wrapperFor(o.index);
+      if (!w) return;
+      const editor = M.editorFor({ kind: o.kind, text: o.md });
+      if (OPEN_EDITORS.indexOf(editor) < 0) {
+        report(o.index, 'markdown', editor === 'image' ? 'images are chosen from Media' : (M.gate(o.md, o.kind).reason || 'this part is edited as Markdown'));
+        return;
+      }
+      let root = null;
+      for (const c of Array.from(w.childNodes)) if (c.nodeType === ELEMENT && classesOf(c).indexOf('hc-edit-root') >= 0) root = c;
+      if (!root || root.getAttribute('data-hc-md-sent') !== o.md) {
+        // a clean render of THIS Markdown replaces the page's enhanced one (the wrapper keeps its sentinel and pencil)
+        const fresh = doc.createElement('div');
+        fresh.className = 'hc-edit-root';
+        const body = M.renderBlock(o.md);
+        while (body.firstChild) fresh.appendChild(body.firstChild);      // appending adopts the node into this page
+        for (const c of Array.from(w.childNodes)) {
+          if (sentinelIndex(c, prefix) !== null || isPencil(c)) continue;
+          w.removeChild(c);
+        }
+        const pencil = Array.from(w.childNodes).find(isPencil) || null;
+        w.insertBefore(fresh, pencil);
+        root = fresh;
+      }
+      const plain = editor === 'code';
+      const targets = editor === 'code' ? Array.from(root.querySelectorAll('pre > code')).slice(0, 1)
+        : editor === 'box' ? Array.from(root.querySelectorAll('.adm > *')).filter((n) => classesOf(n).indexOf('adm-title') < 0)
+          : Array.from(root.children);
+      if (!targets.length) { report(o.index, 'markdown', 'nothing in this part can be typed into'); return; }
+      const now = { index: o.index, w, root, md: o.md, kind: o.kind === 'wrapper' ? 'wrapper' : o.kind, editor, handles: [], sent: o.md };
+      openNow = now;
+      root.setAttribute('data-hc-md-sent', o.md);
+      for (const t of targets) {
+        t.setAttribute('contenteditable', plain ? 'plaintext-only' : 'true');
+        t.setAttribute('spellcheck', plain ? 'false' : 'true');
+        now.handles.push(win.HCEditorType.attach(t, { plain, onChange: () => schedule(now) }));
+        if (plain) {
+          const onInput = () => schedule(now);
+          t.addEventListener('input', onInput);
+          now.handles.push({ detach() { t.removeEventListener('input', onInput); } });
+        }
+      }
+      w.classList.add('hc-open');
+      placeCaret(targets);
+      report(o.index, editor, '');
+    }
+
+    function placeCaret(targets) {
+      const first = targets[0];
+      let placed = false;
+      if (lastClick && typeof doc.caretRangeFromPoint === 'function') {
+        const r = doc.caretRangeFromPoint(lastClick.x, lastClick.y);
+        if (r && targets.some((t) => t.contains(r.startContainer))) {
+          const host = targets.find((t) => t.contains(r.startContainer));
+          host.focus({ preventScroll: true });
+          const sel = doc.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          placed = true;
+        }
+      }
+      if (!placed && first && typeof first.focus === 'function') {
+        first.focus({ preventScroll: true });
+        const r = doc.createRange(); r.selectNodeContents(first); r.collapse(false);
+        const sel = doc.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      }
+      lastClick = null;
+    }
+
+    /* Every edit reaches the parent at once: postMessage keeps the order, so the last keystroke always
+       arrives before a later pick, "Edit as Markdown" or the Editor switch. Nothing waits on a timer. */
+    function schedule(now) {
+      if (openNow !== now) return;
+      flush(now);
+    }
+
+    /* The block's Markdown, from the edited DOM, to the parent (only when it changed). */
+    function flush(now) {
+      let md;
+      try {
+        md = win.HCEditorMd.serialize(now.root, now.md, now.kind);
+      } catch (e) {
+        report(now.index, 'markdown', (e && e.message) || 'this part can no longer be typed into');
+        if (openNow === now) closeBlock(false);
+        return;
+      }
+      if (md === now.sent) return;
+      if (md.length > MAX_BLOCK_MD) {           // the bridge would refuse it: say so, the Markdown box takes over
+        report(now.index, 'markdown', 'this part is now longer than 200,000 characters: edit it as Markdown');
+        if (openNow === now) closeBlock(false);
+        return;
+      }
+      now.sent = md;
+      now.root.setAttribute('data-hc-md-sent', md);
+      HC.post('hc-block-md', { index: now.index, md });
+    }
+
+    /* Typing stops; the DOM (and its suggestion marks) stays on the page as it is. */
+    function closeBlock(tellParent) {
+      const now = openNow;
+      if (!now) return;
+      flush(now);                                 // anything not yet sent (a composition that just ended)
+      openNow = null;
+      for (const hd of now.handles) hd.detach();
+      for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
+      now.w.classList.remove('hc-open');
+      if (tellParent) report(now.index, 'closed', '');
     }
 
     HC.onEditor((s) => {
@@ -372,7 +564,14 @@
       if (h.indexOf('#preview=') === 0) return;      // js/source.js turns that into a reload
       HC.post('hc-route', { route: h.replace(/^#/, '') || '/' });
     });
-    if (doc.addEventListener) doc.addEventListener('click', () => closePicker());
+    if (doc.addEventListener) {
+      doc.addEventListener('click', () => closePicker());
+      doc.addEventListener('keydown', (e) => {
+        if (!e || e.key !== 'Escape') return;
+        if (openNow) closeBlock(true);
+        else if (wanted !== null) { const i = wanted; wanted = null; report(i, 'closed', ''); }
+      });
+    }
 
     /* TEST-ONLY, for the localhost walk (tools/tests/editor_walk.html): the
        walk cannot click inside this sandboxed frame, and the picker is the
@@ -453,7 +652,7 @@
     }
 
     HC.post('hc-ready');
-    return Object.freeze({ apply, state: () => state });
+    return Object.freeze({ apply, state: () => state, open: () => (openNow ? { index: openNow.index, editor: openNow.editor } : null) });
   }
 
   const api = { INSERT_KINDS, MARK_CLASS, sentinelIndex, isChrome, findSentinels, pageBodies, groupBlocks, sidePairs,
