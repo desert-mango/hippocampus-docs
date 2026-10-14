@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Route and render the documentation site's pages from JSON registries and Markdown.
 /* HippoCampus Robotics docs — hash router + renderers.
@@ -696,7 +696,7 @@
     ['script', { src: 'js/cms-core.js' }],
     ['script', { src: 'js/editor.js' }],
   ];
-  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false };
+  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, guestDock: null, sessionKnown: false };
 
   function storedSession() {
     if (HC.preview) return false;
@@ -732,7 +732,9 @@
 
   function onEditorSession(signedIn) {
     editor.signedIn = Boolean(signedIn);
+    if (!signedIn) editor.session = false;   // signed out, or the stored session ended: a guest again
     setEditLink(editRoute);
+    syncGuestDock();
   }
 
   /* One element into <head>, resolved when it loaded. A file that loaded
@@ -782,20 +784,82 @@
   function initEditorEntry() {
     const link = $('#edit-page');
     if (!link || HC.preview) return;
-    link.addEventListener('click', (e) => {
-      if (editor.signedIn) return;             // "Edit this page": a plain link
-      e.preventDefault();
-      // first, before anything else: the browser allows this window only
-      // inside the click itself
-      const popup = window.open('about:blank', POPUP_NAME, POPUP_FEATURES);
-      if (!popup) {
-        footerStatus('The sign-in window was blocked. Allow pop-ups for this site and try again.', 'error');
-        return;
-      }
-      editor.prompt = false;
-      footerStatus('');
-      loadEditor({ popup });
-    });
+    link.addEventListener('click', signInClick);
+    guestDock();
+  }
+
+  /* The guest's "Sign in" bubble (editor redesign U4a, Kyle's D1 change 3): the Editor's dock sits at the
+     bottom right once signed in; before that, the same place holds "Sign in". Its click is the footer
+     link's click (signInClick: the sign-in window opens inside the click). Its x tucks it into a tag on
+     the right edge, remembered in this browser (localStorage hc-editor-dock, the dock's own key). */
+  function guestDock() {
+    if (editor.guestDock || HC.preview || !document.body) return;
+    const signIn = document.createElement('button');
+    signIn.type = 'button';
+    signIn.className = 'hc-guest-signin';
+    signIn.textContent = 'Sign in';
+    signIn.title = 'Lab members sign in with GitHub to edit this page';
+    signIn.addEventListener('click', signInClick);
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'hc-guest-x';
+    x.setAttribute('aria-label', 'Hide');
+    x.textContent = '×';
+    const box = document.createElement('div');
+    box.className = 'hc-guest-dock';
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', 'Sign in to edit');
+    box.appendChild(signIn);
+    box.appendChild(x);
+    const tag = document.createElement('button');
+    tag.type = 'button';
+    tag.className = 'hc-guest-tag';
+    tag.setAttribute('aria-label', 'Show "Sign in"');
+    tag.textContent = '✎';
+    const tuck = (on) => {
+      document.body.classList.toggle('hc-guest-collapsed', on);
+      try { window.localStorage.setItem('hc-editor-dock', on ? 'collapsed' : 'open'); } catch (e) { /* this page only */ }
+      syncGuestDock();
+      (on ? tag : signIn).focus();
+    };
+    x.addEventListener('click', () => tuck(true));
+    tag.addEventListener('click', () => tuck(false));
+    let collapsed = false;
+    try { collapsed = window.localStorage.getItem('hc-editor-dock') === 'collapsed'; } catch (e) { collapsed = false; }
+    if (collapsed) document.body.classList.add('hc-guest-collapsed');
+    box.hidden = true;                         // until boot() has read whether a session is stored
+    tag.hidden = true;
+    document.body.appendChild(box);
+    document.body.appendChild(tag);
+    editor.guestDock = { box, tag };
+  }
+  function syncGuestDock() {
+    if (!editor.guestDock || !editor.sessionKnown) return;
+    const show = !HC.preview && !editor.signedIn && !editor.session;      // a stored session: the Editor's own dock comes
+    if (show) {                                // the setting is shared with the Editor's dock: read it afresh
+      let stored = false;
+      try { stored = window.localStorage.getItem('hc-editor-dock') === 'collapsed'; } catch (e) { stored = false; }
+      document.body.classList.toggle('hc-guest-collapsed', stored);
+    }
+    const tucked = document.body.classList.contains('hc-guest-collapsed');
+    editor.guestDock.box.hidden = !show;
+    editor.guestDock.tag.hidden = !show || !tucked;          // the tag exists only while the bubble is tucked away
+    if (tucked) editor.guestDock.box.setAttribute('inert', ''); else editor.guestDock.box.removeAttribute('inert');
+  }
+
+  function signInClick(e) {
+    if (editor.signedIn) return;               // "Edit this page": a plain link
+    e.preventDefault();
+    // first, before anything else: the browser allows this window only
+    // inside the click itself
+    const popup = window.open('about:blank', POPUP_NAME, POPUP_FEATURES);
+    if (!popup) {
+      footerStatus('The sign-in window was blocked. Allow pop-ups for this site and try again.', 'error');
+      return;
+    }
+    editor.prompt = false;
+    footerStatus('');
+    loadEditor({ popup });
   }
 
   window.HCApp = Object.freeze({
@@ -907,9 +971,12 @@
       return;
     }
     editor.session = storedSession();       // the one storage read (guarded)
+    editor.sessionKnown = true;
+    syncGuestDock();
     window.addEventListener('hashchange', route);
     route();
-    if (editor.session) loadEditor();
+    // a stored session the editor turns down (expired, malformed): a guest after all, so "Sign in" shows
+    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncGuestDock(); } });
   }
 
   boot();

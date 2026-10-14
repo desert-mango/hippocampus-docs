@@ -674,3 +674,54 @@ test('U3 walk: the block editors in the page, in a real Chrome: note box type, M
     rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+test('U4a walk: the dock at the bottom right in a real Chrome (switch, avatar, count, Send), and the guest "Sign in" bubble', { timeout: 120000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u4a-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch);
+    const { send, ev, F, site, until, sleep, clickBlock, shot } = W;
+    const S = (x) => ev(`${site}.document.${x}`);
+    assert.equal(await S("querySelector('.header-actions .hc-switch')"), null, 'no switch in the header');
+    const box = await ev(`(() => { const d = ${site}.document.querySelector('.hc-dock'); if (!d || d.hidden) return null; const r = d.getBoundingClientRect(); return { right: ${site}.innerWidth - r.right, bottom: ${site}.innerHeight - r.bottom, sw: !!d.querySelector('.hc-switch'), av: !!d.querySelector('.hc-avatar') }; })()`);
+    assert.ok(box && box.sw && box.av, 'the dock holds the switch and the avatar');
+    assert.ok(box.right >= 0 && box.right < 40 && box.bottom >= 0 && box.bottom < 40, `bottom right (${box.right}, ${box.bottom})`);
+    assert.ok(await clickBlock('As a physical check'));
+    await until(() => ev("(HCEditorFrame.runtime.open() || {}).editor === 'visual'", F), 'the block opens');
+    await ev("(() => { const p = document.querySelector('.hc-block.hc-open p'); p.focus(); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); })()", F);
+    await send('Input.insertText', { text: ' Then home it.' });
+    await sleep(300);
+    assert.equal(await S("querySelector('.hc-dock-count').textContent"), '1 change');
+    await shot('u4a-dock');
+    await ev(`${site}.document.querySelector('.hc-dock-send').click()`);
+    await until(() => S("querySelector('.hc-sendbox .hc-propose-slot') && document.querySelector('iframe').contentWindow.document.querySelector('.hc-sendbox .hc-propose-slot').childElementCount > 0"), 'the send box with the propose form');
+    await shot('u4a-send');
+    // a 320-px phone: every dock control stays on screen
+    await ev(`(() => { const f = document.querySelector('iframe'); f.style.width = '320px'; })()`);
+    await until(() => ev(`${site}.innerWidth === 320`), 'the site at 320 px');
+    await sleep(800);                                             // the media query and the dock's reflow
+    const fits = await ev(`(() => { const w = ${site}; const d = w.document.querySelector('.hc-dock'); const r = d.getBoundingClientRect();
+      const all = [...d.querySelectorAll('button')].filter((b) => !b.hidden && b.getClientRects().length).map((b) => b.getBoundingClientRect());
+      return { dock: [r.left, r.right], vw: w.innerWidth, out: all.filter((b) => b.left < 0 || b.right > w.innerWidth).length }; })()`);
+    assert.equal(fits.out, 0, `every dock button inside a 320-px screen (${JSON.stringify(fits)})`);
+    await shot('u4a-phone');
+    W.close(); W = null;
+    // a guest: the bubble holds "Sign in" in the same place
+    W = await (async () => {
+      const chrome = findChrome();
+      const server = await startServer(ROOT, []);
+      const child = spawn(chrome, ['--headless=new', '--disable-gpu', ...HERMETIC, '--window-size=1280,900', `--user-data-dir=${mkdtempSync(path.join(scratch, 'g-'))}`,
+        '--virtual-time-budget=8000', '--dump-dom', `http://127.0.0.1:${server.address().port}/index.html#/setup/lab-gantry/usage`], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; });
+      for (let i = 0; i < 150 && !/<\/html>\s*$/i.test(out); i++) await new Promise((r) => setTimeout(r, 100));
+      child.kill('SIGKILL'); server.closeAllConnections?.(); server.close();
+      return { out, close() {} };
+    })();
+    assert.match(W.out, /<div class="hc-guest-dock" role="region" aria-label="Sign in to edit"><button type="button" class="hc-guest-signin"[^>]*>Sign in<\/button>/, 'the guest bubble with "Sign in"');
+    console.log('U4a walk: dock bottom right with switch + avatar + count + Send; guest bubble "Sign in"');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

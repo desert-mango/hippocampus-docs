@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click.
 /* Plan D-C: guests load zero editor code and make zero GitHub requests.
@@ -337,7 +337,7 @@ function openApp(opts) {
       assert.ok(n, `${name} was injected`);
       if (how !== 'error' && name === 'js/editor.js') {
         win.HCEditor = Object.freeze({
-          start: (opts2) => { app.starts.push(opts2); return true; },
+          start: (opts2) => { app.starts.push(opts2); return o.startAnswer === undefined ? true : o.startAnswer; },
         });
       }
       n.fire(how || 'load');
@@ -642,4 +642,37 @@ test('an outside link opens in a new tab whatever its scheme\'s case (never insi
   const inside = by('#/about');
   assert.ok(inside);
   assert.ok(inside.target !== '_blank', 'a site link stays in the page');
+});
+
+// ------------------------------------- the guest's "Sign in" bubble (editor redesign U4a, D1 change 3) --
+test('U4a: a guest sees "Sign in" at the bottom right; its click is the footer\'s sign-in (window opened inside the click)', async () => {
+  const app = await boot({ hash: '#/' });
+  const dock = app.doc.created.find((n) => n.className === 'hc-guest-dock');
+  assert.ok(dock, 'the bubble');
+  assert.equal(dock.hidden, false);
+  const btn = app.doc.created.find((n) => n.className === 'hc-guest-signin');
+  assert.equal(btn.textContent, 'Sign in');
+  assert.equal(app.doc.created.find((n) => n.className === 'hc-guest-tag').hidden, true, 'no hidden tag in the tab order');
+  const e = btn.fire('click');
+  assert.equal(e.defaultPrevented, true);
+  assert.equal(app.opens.length, 1, 'the sign-in window opens');
+  assert.equal(app.opens[0].url, 'about:blank');
+  assert.equal(app.scriptsOrLinks().length, 0, 'still nothing loaded before the click handled it');
+});
+
+test('U4a: a session boot never shows the guest bubble (the Editor\'s own dock comes)', async () => {
+  const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
+  const app = await boot({ hash: '#/', storage });
+  const dock = app.doc.created.find((n) => n.className === 'hc-guest-dock');
+  assert.ok(!dock || dock.hidden, 'no guest bubble when signed in');
+});
+
+test('U4a: a stored session the editor turns down (expired) leaves a guest, and the "Sign in" bubble shows', async () => {
+  const storage = memoryStorage({ [C.SESSION_KEY]: 'not a session' });
+  const app = await boot({ hash: '#/', storage, startAnswer: false });
+  const dock = () => app.doc.created.find((n) => n.className === 'hc-guest-dock');
+  assert.equal(dock().hidden, true, 'a stored session: the bubble waits');
+  await app.loadAll();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(dock().hidden, false, 'the editor turned the session down: "Sign in" shows');
 });

@@ -72,7 +72,13 @@
   let notice = null;       // the tray's notice line
   let tray = null;         // aside#hc-tray
   let trayBody = null;     // the tray's scrolling body
-  let controls = null;     // the header's Editor controls
+  let controls = null;     // the Editor controls (switch, avatar, role), in the dock
+  let dock = null;         // the bottom-right dock (editor redesign U4a, Kyle's D1 change 3)
+  let dockTag = null;      // the small tag on the right edge that brings a collapsed dock back
+  let dockCount = null;    // "N changes" in the dock
+  let dockSend = null;     // "Send for review" in the dock
+  let sendBox = null;      // the box above the dock that Send opens (the propose form)
+  let sendKey = null;      // the draft that box was opened for
   let switchBtn = null;
   let who = null;
   let frameHost = null;    // #hc-frame-host (index.html)
@@ -376,7 +382,87 @@
      avatar (its menu holds Sign out), the first name, the role. The switch
      works once GitHub has confirmed access. js/app.js hears every change
      between signed in and signed out (its footer link follows). */
+  /* The dock (editor redesign U4a, Kyle's D1 change 3): the Editor switch and the avatar leave the
+     header and sit in a bubble at the bottom right with the page's change count and "Send for
+     review"; its x tucks it into a small tag on the right edge (remembered in this browser). */
+  const DOCK_KEY = 'hc-editor-dock';
+  function mountDock() {
+    dockCount = h('span', { class: 'hc-dock-count', 'data-dock-count': true });
+    dockSend = h('button', { type: 'button', class: 'cms-btn cms-btn-primary hc-dock-send', 'data-action': 'dock-send' }, 'Send for review');
+    dockSend.addEventListener('click', () => { openSendBox().catch(shown); });
+    const x = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'dock-collapse', 'aria-label': 'Hide the editor controls',
+      title: 'Hide (the tag on the right edge brings it back)' }, '×');
+    x.addEventListener('click', () => collapseDock(true));
+    const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount, dockSend);
+    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, sendWrap, x);
+    dockTag = h('button', { type: 'button', class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
+      title: 'Show the editor controls' });
+    dockTag.addEventListener('click', () => collapseDock(false));
+    document.body.appendChild(dock);
+    document.body.appendChild(dockTag);
+    let collapsed = false;
+    try { const s = localStore(); collapsed = Boolean(s && s.getItem(DOCK_KEY) === 'collapsed'); } catch (e) { collapsed = false; }
+    document.body.classList.toggle('hc-dock-collapsed', collapsed);
+  }
+  function collapseDock(on) {
+    document.body.classList.toggle('hc-dock-collapsed', on);
+    try { const s = localStore(); if (s) s.setItem(DOCK_KEY, on ? 'collapsed' : 'open'); } catch (e) { /* this page only */ }
+    if (on) closeSendBox();
+    refreshDock();
+    const next = on ? dockTag : switchBtn;
+    if (next && typeof next.focus === 'function') next.focus();
+  }
+  /* "N changes" on this page: the blocks my draft changed, added or removed against what it started from. */
+  function pageChanges() {
+    const d = ed.draft;
+    const page = ed.page;
+    if (!d || !page || !d.files || typeof d.files[page.file] !== 'string' || !d.originals) return 0;
+    const diff = C.blockDiff(d.originals[page.file], d.files[page.file]);
+    if (!diff) return d.files[page.file] !== d.originals[page.file] ? 1 : 0;   // a page the block model refuses (CRLF): changed or not
+    return diff.filter((e) => e.status !== 'same').length;
+  }
+  function closeSendBox() { if (sendBox) { sendBox.remove(); sendBox = null; sendKey = null; } }
+  function refreshDock() {
+    if (!dock) return;
+    const signedIn = Boolean(state.session);
+    dock.hidden = !signedIn;
+    const tucked = document.body.classList.contains('hc-dock-collapsed');
+    dockTag.hidden = !signedIn || !tucked;                // only while tucked away
+    if (tucked) { dock.setAttribute('inert', ''); closeMenu(); } else dock.removeAttribute('inert');   // nothing hidden is in the tab order
+    const n = ed.on && canEdit() ? pageChanges() : 0;
+    const editing = ed.on && canEdit() && Boolean(ed.page);
+    dockCount.textContent = !editing ? '' : (n === 0 ? 'No changes yet' : `${n} ${n === 1 ? 'change' : 'changes'}`);
+    dockSend.hidden = !editing;
+    dockSend.disabled = n === 0;
+    // Editor off, signed out, nothing left to send, or another page's draft on screen: the box goes
+    if (!signedIn || !editing || n === 0 || (sendBox && (!ed.draft || ed.draft.key !== sendKey))) closeSendBox();
+    if (signedIn) {
+      const login = String(state.session.login);
+      const kids = [avatarFace(login, login)];
+      if (n) kids.push(h('span', { class: 'hc-dock-badge', text: String(n) }));
+      dockTag.replaceChildren(...kids);
+    }
+  }
+  /* Send for review: the page's draft goes through the same propose form the tray uses, in a box
+     above the dock. */
+  async function openSendBox() {
+    if (sendBox) { closeSendBox(); return; }
+    const d = ed.draft;
+    if (!d || !canEdit() || !pageChanges()) return;
+    const slot = h('div', { class: 'hc-propose-slot' });
+    const close = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'send-close', 'aria-label': 'Close' }, '×');
+    close.addEventListener('click', closeSendBox);
+    sendBox = h('div', { class: 'hc-sendbox', role: 'dialog', 'aria-label': 'Send for review' },
+      h('div', { class: 'hc-sendbox-head' }, h('strong', { text: 'Send for review' }), close), slot);
+    sendKey = d.key;
+    document.body.appendChild(sendBox);
+    const own = await myProposals();
+    if (!sendBox || sendKey !== d.key || !ed.draft || ed.draft.key !== d.key) return;   // closed or moved on meanwhile
+    openPropose(d, routeEpoch, slot, own);
+  }
+
   function renderChrome() {
+    refreshDock();
     if (!controls) return;
     const signedIn = Boolean(state.session);
     controls.hidden = !signedIn;
@@ -980,6 +1066,7 @@
   /* My changed drafts; redrawn only when the set of them changed (a
      keystroke does not rebuild an open Propose panel). */
   function drawDraftList(force) {
+    refreshDock();
     if (!draftList) return;
     const list = canEdit() ? drafts.dirty() : [];
     const keys = list.map((d) => d.key).join('\n');
@@ -2422,6 +2509,7 @@
       markPage();
       refreshChanges();
     }
+    refreshDock();
   }
 
   /* What the frame reads: the drafts on the same commit from memory (this
@@ -2861,6 +2949,7 @@
     if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
     if (inPageLine) inPageLine.textContent = draftStateText(d);
     drawDraftList(false);
+    refreshDock();
   }
 
   /* "Edit this part as Markdown": the frame closes the typed block (open: null), then opens it again
@@ -2930,6 +3019,7 @@
       refreshChanges();
       viewAfterRoute(page);
     }
+    refreshDock();                          // the dock counts the page now on screen
     if (currentRoute() === route) {
       if (reload) frameTo(route, true);
       return;
@@ -3239,8 +3329,7 @@
     avatarBtn.addEventListener('keydown', escape);
     menu.addEventListener('keydown', escape);
     controls = h('span', { class: 'hc-editor-controls' }, switchBtn, who);
-    const actions = document.querySelector('.header-actions');
-    if (actions) actions.prepend(controls);
+    mountDock();
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
     countEl = h('span', { class: 'n' });

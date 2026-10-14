@@ -774,3 +774,29 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 @media (max-width: 900px) {
   .hc-cols { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- the guest's "Sign in" bubble (js/app.js; editor redesign U4a, Kyle's D1 change 3) ----
+   The place the Editor's dock takes once signed in (css/editor.css). Its x tucks it into a tag on the
+   right edge. */
+.hc-guest-dock {
+  position: fixed; right: 20px; bottom: 20px; z-index: 80; display: flex; align-items: center; gap: 4px;
+  padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); transition: transform 0.22s ease, opacity 0.22s ease;
+}
+[data-theme="light"] .hc-guest-dock, [data-theme="light"] .hc-guest-tag { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06); }
+.hc-guest-dock[hidden], .hc-guest-tag[hidden] { display: none; }
+.hc-guest-signin {
+  min-height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--heading); color: var(--bg);
+  font: 600 0.84rem var(--sans); cursor: pointer;
+}
+.hc-guest-signin:focus-visible, .hc-guest-x:focus-visible, .hc-guest-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hc-guest-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.hc-guest-x:hover { background: var(--surface-2); color: var(--heading); }
+.hc-guest-tag {
+  position: fixed; right: 0; bottom: 26px; z-index: 80; width: 40px; height: 40px; border: 1px solid var(--edge); border-right: 0;
+  border-radius: 10px 0 0 10px; background: var(--surface); color: var(--heading); cursor: pointer; transform: translateX(110%);
+  transition: transform 0.22s ease; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+body.hc-guest-collapsed .hc-guest-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+body.hc-guest-collapsed .hc-guest-tag { transform: none; }
+@media (prefers-reduced-motion: reduce) { .hc-guest-dock, .hc-guest-tag { transition: none; } }

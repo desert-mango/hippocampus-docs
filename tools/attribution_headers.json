@@ -76,7 +76,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Route and render the documentation site's pages from JSON registries and Markdown."
       },
@@ -890,7 +890,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click."
       },

@@ -205,6 +205,36 @@ body.hc-compact .page-body pre { font-size: .8em; }
 .hc-menu-item { display: block; width: 100%; text-align: left; font: inherit; font-size: .84rem; color: var(--body);
   background: none; border: 0; border-radius: 6px; padding: .35rem .45rem; cursor: pointer; }
 .hc-menu-item:hover, .hc-menu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
+
+/* the dock (editor redesign U4a, Kyle's D1 change 3): the switch, the avatar and Send for review in a
+   bubble at the bottom right; x tucks it into a tag on the right edge. Site tokens, light and dark.
+   Phones (max-width 767px, the media block near the end of this file): it spans the bottom and wraps,
+   count + Send on their own row; tools/tests/browser_oracles.mjs checks every button fits at 320 px. */
+.hc-dock { position: fixed; right: 20px; bottom: 20px; z-index: 80; display: flex; align-items: center; gap: .7rem;
+  padding: .45rem .45rem .45rem .6rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--heading); font-size: .84rem; transition: transform .22s ease, opacity .22s ease; }
+[data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag, [data-theme="light"] .hc-sendbox { box-shadow: 0 12px 30px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .06); }
+.hc-dock[hidden], .hc-dock-tag[hidden] { display: none; }
+.hc-dock .hc-switch { color: var(--heading); font-weight: 600; }
+.hc-dock .hc-menu { top: auto; bottom: calc(100% + .6rem); }
+.hc-dock-send-wrap { display: inline-flex; align-items: center; gap: .6rem; padding-left: .7rem; border-left: 1px solid var(--edge); }
+.hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
+.hc-dock-count { color: var(--body-soft); white-space: nowrap; }
+.hc-dock-send[hidden] { display: none; }
+.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
+.hc-dock-tag { position: fixed; right: 0; bottom: 26px; z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid var(--edge); border-right: 0; border-radius: 10px 0 0 10px; background: var(--surface); cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); transform: translateX(110%); transition: transform .22s ease; }
+.hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 24px; height: 24px; border-radius: 50%; }
+.hc-dock-badge { position: absolute; top: -6px; left: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--hc-accent-ink); color: #fff; font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+body.hc-dock-collapsed .hc-dock-tag { transform: none; }
+.hc-sendbox { position: fixed; right: 20px; bottom: 84px; z-index: 85; width: 26rem; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto;
+  padding: .9rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+.hc-sendbox-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; color: var(--heading); }
+@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag { transition: none; } }
 /* The footer's sign-in line (js/app.js) once this file is in. */
 .edit-status.is-error { color: var(--danger); }
 
@@ -503,6 +533,12 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--accent); outline-offset
   .hc-handle { top: auto; bottom: 0; right: 50%; transform: translateX(50%); writing-mode: horizontal-tb;
     border-radius: 8px 8px 0 0; border: 1px solid var(--edge); border-bottom: 0; padding: .45rem .9rem; }
   .hc-switch-label, .hc-who .hc-login, .hc-who .hc-role { display: none; }
+  .hc-dock { left: 8px; right: 8px; bottom: 8px; flex-wrap: wrap; row-gap: .45rem; }
+  .hc-dock-x { margin-left: auto; }
+  /* a phone: the count and Send take their own row, so nothing runs off a 320-px screen */
+  .hc-dock-send-wrap { order: 3; flex-basis: 100%; justify-content: space-between; border-left: 0; padding-left: 0;
+    padding-top: .45rem; border-top: 1px solid var(--edge); }
+  .hc-sendbox { right: 8px; left: 8px; width: auto; bottom: 118px; max-height: calc(100vh - 140px); }
   /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
   body.hc-editor-on .sidebar { display: none; }
 }

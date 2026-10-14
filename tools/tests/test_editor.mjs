@@ -233,7 +233,7 @@ function openSite(opts) {
     one: (pred) => findAll(body, pred)[0],
     frames: () => findAll(host, (e) => e.tagName === 'IFRAME'),
     frame: () => findAll(host, (e) => e.tagName === 'IFRAME').at(-1),
-    switchBtn: () => findAll(header, (e) => e.attrs['data-editor-switch'] !== undefined)[0],
+    switchBtn: () => findAll(body, (e) => e.attrs['data-editor-switch'] !== undefined)[0],
     textarea: () => findAll(body, (e) => e.tagName === 'TEXTAREA' && e.attrs['data-block-editor'] !== undefined)[0],
     nonce: () => /#preview=([A-Za-z0-9_-]+)/.exec(page.frame().srcs.at(-1))[1],
     async go(hash) {
@@ -536,6 +536,76 @@ test('U2: Escape in the frame (hc-block-state closed) deselects the block', asyn
   const m = page.editorMessages().at(-1);
   assert.equal(m.selected, null);
   assert.equal(m.open, null);
+});
+
+// ------------------------------------------------ the dock (editor redesign U4a, D1 change 3) ---
+
+test('U4a: the Editor switch and the avatar sit in the bottom-right dock, never in the header', async () => {
+  const page = openSite({ hash: `#${PAGE_ROUTE}` });
+  await new Promise((r) => setImmediate(r));
+  const dock = page.one((e) => e.classList.contains('hc-dock'));
+  assert.ok(dock, 'the dock');
+  assert.ok(findAll(dock, (e) => e.attrs['data-editor-switch'] !== undefined)[0], 'the switch is in it');
+  assert.ok(findAll(dock, (e) => e.attrs['data-action'] === 'avatar')[0], 'and the avatar');
+  assert.equal(findAll(page.header, (e) => e.classList.contains('hc-editor-controls')).length, 0, 'nothing in the header');
+  assert.equal(page.one((e) => e.classList.contains('hc-dock-tag')).hidden, true, 'the tag is not in the tab order while the dock shows');
+});
+
+test('U4a: the dock counts this page\'s changes; Send for review opens the propose form above the dock', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const count = () => page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent;
+  const send = () => page.action('dock-send');
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  assert.equal(count(), 'No changes yet');
+  assert.equal(send().disabled, true, 'nothing to send yet');
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
+  assert.equal(count(), '1 change');
+  assert.equal(send().disabled, false);
+  send().click();
+  await new Promise((r) => setTimeout(r, 30));
+  const box = page.one((e) => e.classList.contains('hc-sendbox'));
+  assert.ok(box, 'the send box');
+  assert.ok(findAll(box, (e) => e.classList.contains('hc-propose-slot'))[0].childNodes.length > 0, 'with the propose form in it');
+});
+
+test('U4a: the send box goes away with what it sends: Editor off, or nothing left to send', async () => {
+  const page = await editorOn();
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
+  page.action('dock-send').click();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.ok(page.one((e) => e.classList.contains('hc-sendbox')), 'open');
+  await page.send({ type: 'hc-block-md', index: i, md: blocksOf(PAGE_TEXT)[i].text });
+  assert.equal(page.one((e) => e.classList.contains('hc-sendbox')), undefined, 'typed back to the original: nothing to send, the box closes');
+  await page.send({ type: 'hc-block-md', index: i, md: 'Changed again.\n\n' });
+  page.action('dock-send').click();
+  await new Promise((r) => setTimeout(r, 30));
+  page.switchBtn().click();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(page.one((e) => e.classList.contains('hc-sendbox')), undefined, 'Editor off: gone');
+});
+
+test('U4a: x tucks the dock into a tag on the right edge, remembered in this browser; the tag brings it back', async () => {
+  const local = memoryStorage();
+  const page = openSite({ hash: `#${PAGE_ROUTE}`, localStorage: local });
+  await new Promise((r) => setImmediate(r));
+  page.action('dock-collapse').click();
+  assert.ok(page.body.classList.contains('hc-dock-collapsed'));
+  assert.equal(page.one((e) => e.classList.contains('hc-dock-tag')).hidden, false, 'the tag shows while tucked away');
+  assert.equal(page.one((e) => e.classList.contains('hc-dock')).getAttribute('inert'), '', 'the tucked dock is inert (out of the tab order)');
+  assert.equal(local.getItem('hc-editor-dock'), 'collapsed');
+  const again = openSite({ hash: `#${PAGE_ROUTE}`, localStorage: local });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(again.body.classList.contains('hc-dock-collapsed'), 'still tucked away after a reload');
+  again.action('dock-expand').click();
+  assert.equal(again.body.classList.contains('hc-dock-collapsed'), false);
+  assert.equal(local.getItem('hc-editor-dock'), 'open');
 });
 
 test('hc-block-insert puts the snippet at that boundary, as its own block, and selects it', async () => {
@@ -1210,7 +1280,8 @@ function authServer(log) {
   };
 }
 
-const controlsOf = (page) => page.header.childNodes.find((c) => c.classList.contains('hc-editor-controls'));
+// U4a: the controls live in the dock (bottom right), no longer in the header
+const controlsOf = (page) => findAll(page.body, (c) => c.classList.contains('hc-editor-controls'))[0];
 const stateOf = (popup) => new URL(popup.location.href).searchParams.get('state');
 
 test('sign-in click path: start({popup}) with no session adopts that window, mounts nothing visible, opens none', async () => {
