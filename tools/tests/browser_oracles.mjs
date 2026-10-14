@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Run the R3 block-sentinel oracles (b) and (c) in a real headless Chrome over every content page.
 /* R3 oracles (b) and (c) (plan D-E), the repo's first scripted Chrome test.
@@ -16,6 +16,8 @@
          {on: true}, js/editor-frame.js wraps the body's children between
          sentinels into one .hc-block[data-index] per sentinel, in order,
          losing and reordering nothing (oracle_parent.html has the rule).
+     (e) the converter (js/editor-md.js, editor redesign U1): Chrome and node's DOM shim choose the
+         same editor for every block, and real contenteditable typing round-trips (oracle_md.html).
 
    How: this file starts its OWN static server (node http, 127.0.0.1, an
    ephemeral port, the worktree root served as-is), finds Chrome (CHROME,
@@ -303,6 +305,67 @@ test('R3 oracles (b) and (c): every content page, with sentinels, renders the sa
     console.log(`browser oracles: ${real.length} PASS over ${files.length} content pages (${sentinels} sentinels checked `
       + 'and grouped), '
       + `negative FAIL as it must; ${secs} s`);
+  } finally {
+    for (const child of live) { try { child.kill('SIGKILL'); } catch { /* gone */ } }
+    if (server) { server.closeAllConnections?.(); server.close(); }
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* Oracle (e), editor redesign U1: js/editor-md.js decides the SAME editor for every block in a real
+   Chrome DOM as it does under node's DOM shim (tools/tests/test_editor_md.mjs runs the floors there),
+   and real contenteditable typing (execCommand) serializes to Markdown that renders back to the
+   typed text: no-break spaces, Shift+Enter line breaks, Markdown-special characters. */
+test('oracle (e): the converter decides the same editors in Chrome as under node, and real typing round-trips', { timeout: 300000 }, async () => {
+  const { ShimDOMParser } = await import('./fixtures/dom_shim.mjs');
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const saved = globalThis.DOMParser;
+  globalThis.DOMParser = ShimDOMParser;
+  const M = req(path.join(ROOT, 'js', 'editor-md.js'));
+  const C = req(path.join(ROOT, 'js', 'cms-core.js'));
+  const LETTER = { visual: 'v', code: 'c', box: 'b', image: 'i', markdown: 'm' };
+  const files = contentFiles();
+  const nodeLetters = new Map(files.map((f) => [f, C.splitBlocks(readFileSync(path.join(ROOT, f), 'utf8')).blocks
+    .filter((b) => b.kind !== 'space').map((b) => LETTER[M.editorFor(b)] || '?').join('')]));
+  globalThis.DOMParser = saved;
+  const chrome = findChrome();
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-oracle-md-'));
+  const live = new Set();
+  let server = null;
+  try {
+    server = await startServer(ROOT, []);
+    const base = `http://127.0.0.1:${server.address().port}/tools/tests/oracle_md.html`;
+    const batches = [];
+    for (let i = 0; i < files.length; i += BATCH) batches.push(files.slice(i, i + BATCH));
+    const runs = await inPool(batches, PARALLEL, async (batch, i) => {
+      const url = `${base}?pages=${encodeURIComponent(batch.join(','))}${i === 0 ? '&typing=1' : ''}`;
+      const args = ['--headless=new', '--disable-gpu', ...HERMETIC,
+        `--user-data-dir=${mkdtempSync(path.join(scratch, `profile-${i}-`))}`,
+        `--virtual-time-budget=${BUDGET_MS}`, '--dump-dom', url];
+      const r = await runChrome(chrome, args, CHROME_LIMIT_MS, scratch, (o) => /<\/html>\s*$/i.test(o), live);
+      return { batch, r, verdicts: verdictsOf(r.stdout) };
+    });
+    const lines = [];
+    for (const { batch, r, verdicts } of runs) {
+      assert.ok(verdicts, `a Chrome batch did not finish (chrome ${r.how}): ${batch[0]} … ${r.stderr.slice(-300)}`);
+      lines.push(...verdicts);
+    }
+    const typing = lines.filter((l) => / typing:/.test(` ${l.split(' ')[1]}`) || /^(PASS|FAIL) typing:/.test(l));
+    assert.equal(typing.length, 5, 'five typing cases ran');
+    assert.deepEqual(typing.filter((l) => !l.startsWith('PASS')), [], 'real contenteditable typing round-trips');
+    const pages = lines.filter((l) => !/^(PASS|FAIL) typing:/.test(l));
+    assert.equal(pages.length, files.length, `one verdict per content page:\n${pages.filter((l) => !/^PASS content/.test(l)).slice(0, 12).join('\n')}`);
+    const differ = [];
+    for (const l of pages) {
+      const [verdict, file, field] = l.split(' ');
+      assert.equal(verdict, 'PASS', l);
+      const got = (field || '').replace(/^editors=/, '');
+      if (got !== nodeLetters.get(file)) differ.push(`${file}: chrome ${got} node ${nodeLetters.get(file)}`);
+    }
+    assert.deepEqual(differ, [], 'Chrome and the node shim choose the same editor for every block');
+    const all = [...nodeLetters.values()].join('');
+    console.log(`oracle (e): ${pages.length} pages, ${all.length} blocks, same editors in Chrome and node; typing 5/5`);
   } finally {
     for (const child of live) { try { child.kill('SIGKILL'); } catch { /* gone */ } }
     if (server) { server.closeAllConnections?.(); server.close(); }

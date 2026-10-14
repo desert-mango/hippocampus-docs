@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oracle (e): the Editor mode converter in a real browser DOM</title>
+<!-- Oracle (e) (editor redesign U1; run by tools/tests/browser_oracles.mjs).
+     ?pages=a.md,b.md : for every block of every page, HCEditorMd.editorFor() in THIS browser's DOM.
+       One line per page: "PASS <file> editors=<one letter per non-space block>"
+       (v visual, c code, b box, i image, m Markdown box). The node test computes the same letters
+       with the DOM shim and asserts both agree, so the shim cannot hide a browser difference.
+     ?typing=1 : real contenteditable typing (execCommand insertText / insertLineBreak) into clean
+       renders; the serialized Markdown must render back to the typed text.
+       One line per case: "PASS typing:<name>" or "FAIL typing:<name> <why>".
+     Writes the lines into the verdicts block, then the done marker, for --dump-dom. -->
+<script src="../../js/marked.min.js"></script>
+<script src="../../js/sanitize.js"></script>
+<script src="../../js/cms-core.js"></script>
+<script src="../../js/editor-md.js"></script>
+</head>
+<body>
+<pre id="verdicts"></pre>
+<div id="stage"></div>
+<script>
+(async function () {
+  'use strict';
+  const out = [];
+  const Q = new URLSearchParams(location.search);
+  const LETTER = { visual: 'v', code: 'c', box: 'b', image: 'i', markdown: 'm' };
+  const pages = (Q.get('pages') || '').split(',').filter(Boolean);
+  for (const p of pages) {
+    if (!/^content\/[a-z0-9/_-]+\.md$/.test(p)) { out.push(`FAIL ${p} refused`); continue; }
+    try {
+      const text = await (await fetch(`../../${p}`, { cache: 'no-store' })).text();
+      const split = HCCore.splitBlocks(text);
+      if (!split.ok) { out.push(`FAIL ${p} split: ${split.reason}`); continue; }
+      const letters = split.blocks.filter((b) => b.kind !== 'space').map((b) => LETTER[HCEditorMd.editorFor(b)] || '?').join('');
+      out.push(`PASS ${p} editors=${letters}`);
+    } catch (e) { out.push(`FAIL ${p} ${e.message}`); }
+  }
+  if (Q.get('typing') === '1') {
+    const stage = document.getElementById('stage');
+    const caretAtEnd = (el) => { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    const norm = (s) => s.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+    const CASES = [
+      ['double-space', 'A plain paragraph.\n\n', 'paragraph', (t) => { document.execCommand('insertText', false, ' Two  spaces  here.'); }],
+      ['line-break', 'A plain paragraph.\n\n', 'paragraph', (t) => { document.execCommand('insertLineBreak'); document.execCommand('insertText', false, 'next line'); }],
+      ['specials', 'A plain paragraph.\n\n', 'paragraph', (t) => { document.execCommand('insertText', false, ' * _ ` [x](y) <div class="adm"> # > | \\ 1. done'); }],
+      ['list-item', '- one\n- two\n\n', 'list', (t) => { document.execCommand('insertText', false, ' and *more*'); }],
+      ['heading', '## A heading\n\n', 'heading', (t) => { document.execCommand('insertText', false, ' # with a hash'); }],
+    ];
+    for (const [name, md, kind, typeIt] of CASES) {
+      try {
+        stage.innerHTML = '';
+        const body = HCEditorMd.renderBlock(md);
+        while (body.firstChild) stage.append(body.firstChild);
+        const target = stage.querySelector('p, li, h2');
+        target.setAttribute('contenteditable', 'true');
+        target.focus(); caretAtEnd(target);
+        typeIt(target);
+        target.removeAttribute('contenteditable');
+        const typed = norm(stage.textContent);
+        const md2 = HCEditorMd.serialize(stage, md, kind);
+        const back = HCEditorMd.renderBlock(md2);
+        const got = norm(back.textContent);
+        const brs = stage.querySelectorAll('br').length, brs2 = back.querySelectorAll('br').length;
+        if (got !== typed) out.push(`FAIL typing:${name} text ${JSON.stringify(got)} != ${JSON.stringify(typed)} via ${JSON.stringify(md2)}`);
+        else if (brs !== brs2) out.push(`FAIL typing:${name} line breaks ${brs2} != ${brs}`);
+        else out.push(`PASS typing:${name}`);
+      } catch (e) { out.push(`FAIL typing:${name} ${e.name}: ${e.message}`); }
+    }
+  }
+  document.getElementById('verdicts').textContent = out.join('\n');
+  const done = document.createElement('p'); done.id = 'done'; document.body.append(done);
+}());
+</script>
+</body>
+</html>

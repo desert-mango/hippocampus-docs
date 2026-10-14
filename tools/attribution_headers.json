@@ -427,7 +427,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Run the R3 block-sentinel oracles (b) and (c) in a real headless Chrome over every content page."
       },
@@ -755,7 +755,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "14 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the allowlist HTML sanitizer that every rendered Markdown page passes through."
       },
@@ -925,6 +925,51 @@
         "purpose": "Prove the /cms/ parity table: every retired /cms/ route and action names a green Editor-mode test."
       },
       "reason": "First-party site code or test written for the editor-mode build (unit U8); the baseline is the file as introduced."
+    },
+    "js/editor-md.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "de8880c6809bed8375b7be72164d06d505a4fc06b97eb31f6429c6d6963ba7aa",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "14 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Turn one Markdown block into the DOM a person types into, and that DOM back into Markdown, byte-exact."
+      },
+      "reason": "First-party site code or test written for the editor redesign (unit U1, the converter); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_md.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "9f1a782d57e97e97b9e8f505c5bd03480fcb0811f7121b3901009238eb27f665",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "14 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the Editor mode converter: every content block round-trips byte for byte or opens as the Markdown box."
+      },
+      "reason": "First-party site code or test written for the editor redesign (unit U1, the converter); the baseline is the file as introduced."
+    },
+    "tools/tests/fixtures/dom_shim.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "8d90107699cf17a172db183e563bafa70e39947d80c1d621ff4367b1dbcd408f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "14 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "A small HTML parser and DOM for node tests of browser code that walks a DOM (sanitizer, editor serializer)."
+      },
+      "reason": "First-party site code or test written for the editor redesign (unit U1, the converter); the baseline is the file as introduced."
     }
   },
   "schema_version": 1
