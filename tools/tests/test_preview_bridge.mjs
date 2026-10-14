@@ -526,3 +526,15 @@ test('editor mode: the sentinel prefix is the first 16 characters of this load\'
   assert.deepEqual([...SRC.BLOCK_INSERT_KINDS].sort(), Object.keys(C.SNIPPET_CATALOG).sort());
   assert.deepEqual([...SRC.OVERLAY_MARKS], ['add', 'del', 'change', 'conflict']);
 });
+
+test('vercel.json: every route may be framed by the site itself only (the editor preview frame is same-site)', async () => {
+  const fs = await import('node:fs');
+  const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+  const all = (vercel.headers || []).find((h) => h.source === '/(.*)');
+  assert.ok(all, 'a header block covers every route');
+  const csp = all.headers.find((h) => h.key.toLowerCase() === 'content-security-policy');
+  assert.ok(csp, 'every route sends a Content-Security-Policy header');
+  assert.equal(csp.value, "frame-ancestors 'self'", 'the policy is exactly frame-ancestors \'self\'');
+  const xfo = all.headers.find((h) => h.key.toLowerCase() === 'x-frame-options');
+  assert.ok(xfo && xfo.value === 'SAMEORIGIN', 'older browsers get X-Frame-Options: SAMEORIGIN');
+});

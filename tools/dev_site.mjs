@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 14 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Serve static pages and every api/ function locally, with deterministic librarian mocks.
 /* dev_site — the ONE local server that serves this site exactly the way Vercel
@@ -438,6 +438,18 @@ function resolveStatic(urlPath) {
   return full;
 }
 
+/* vercel.json's every-route headers (the "/(.*)" block: robots, frame policy) go on every static
+   reply too, so a local run is framed, cached and indexed the way the deploy is. Read once at start. */
+const DEPLOY_HEADERS = (() => {
+  try {
+    const v = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+    const all = (v.headers || []).find((h) => h.source === '/(.*)');
+    return Object.fromEntries(((all && all.headers) || []).map((h) => [h.key, h.value]));
+  } catch (e) {
+    return {};
+  }
+})();
+
 function serveStatic(req, res, urlPath) {
   const file = resolveStatic(urlPath);
   if (!file) {
@@ -447,6 +459,7 @@ function serveStatic(req, res, urlPath) {
   }
   const body = fs.readFileSync(file);
   res.writeHead(200, {
+    ...DEPLOY_HEADERS,
     'content-type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
     'content-length': body.length,
     'cache-control': 'no-store',

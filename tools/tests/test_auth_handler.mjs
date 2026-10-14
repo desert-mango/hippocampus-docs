@@ -528,6 +528,21 @@ function post(port, route, body, origin) {
   });
 }
 
+test('dev_site sends vercel.json\'s every-route headers on static files, so local runs match the deploy', async () => {
+  const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+  const want = vercel.headers.find((h) => h.source === '/(.*)').headers;
+  const site = await startDevSite(['--dotenv', path.join(os.tmpdir(), 'no-such-env-file-hc')]);
+  try {
+    for (const route of ['/', '/index.html', '/css/site.css']) {
+      const r = await fetch(`http://localhost:${site.port}${route}`);
+      assert.equal(r.status, 200, route);
+      for (const { key, value } of want) assert.equal(r.headers.get(key), value, `${route} ${key}`);
+    }
+  } finally {
+    site.child.kill();
+  }
+});
+
 test('dev_site routes every api/*.js: auth and librarian both answer, unknown is 404', async () => {
   const site = await startDevSite(['--dotenv', path.join(os.tmpdir(), 'no-such-env-file-hc')]);
   try {
