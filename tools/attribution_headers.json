@@ -209,6 +209,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/build_codeowners.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "06e0ba03911eee726e5909c8d42627de861c59b09cccbda1fdaa6294a8f73721",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "14 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Write .github/CODEOWNERS from the project owners in data/projects.json: who may approve which files."
+      },
+      "reason": "First-party site tool written for the editor redesign (access-level approval, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
+    },
     "tools/build_contributors.py": {
       "classification": "included",
       "evidence": {

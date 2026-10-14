@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import check  # noqa: E402
 import projects_registry  # noqa: E402
+import build_codeowners  # noqa: E402
 
 
 def spec_errors(doc):
@@ -162,6 +163,46 @@ class SplitRegistryTest(unittest.TestCase):
         self.assertEqual(check.check_project_files({"projects": ["x", {"id": 3}]}, {"data/projects/a.json": "str"})[:1],
                          ["data/projects/a.json: not in data/projects.json's list — add {\"id\": \"a\", \"owners\": []} there "
                           "(a new project needs an admin) or remove the file"])
+
+
+class CodeownersTest(unittest.TestCase):
+    """.github/CODEOWNERS is generated from the owners (Kyle, 2026-10-14) and checked in step."""
+
+    def test_the_committed_file_is_the_generator_output(self):
+        self.assertEqual((ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8"), build_codeowners.expected(ROOT))
+
+    def test_owners_get_their_project_files_and_admins_keep_the_rest(self):
+        text = build_codeowners.render({"projects": [
+            {"id": "learning-to-swim", "owners": ["kyle-nelson-berkeley"]},
+            {"id": "acoustics", "owners": []},
+            {"id": "x", "owners": ["desert-mango-robotics"]}]})
+        lines = [l.split() for l in text.splitlines() if l and not l.startswith("#")]
+        rule = {l[0]: l[1:] for l in lines}
+        admins = ["@desert-mango-robotics", "@NBauschmann"]
+        self.assertEqual(lines[0], ["*"] + admins)
+        self.assertEqual(rule["/content/projects/learning-to-swim.md"], admins + ["@kyle-nelson-berkeley"])
+        self.assertEqual(rule["/data/projects/learning-to-swim.json"], admins + ["@kyle-nelson-berkeley"])
+        self.assertNotIn("/content/projects/acoustics.md", rule, "no owners: the admins' * line")
+        self.assertNotIn("/content/projects/x.md", rule, "an admin as owner adds nothing")
+        # the admin-only paths come LAST (later lines win), CODEOWNERS and the index among them
+        tail = [l[0] for l in lines[-len(build_codeowners.ADMIN_ONLY):]]
+        self.assertEqual(tuple(tail), build_codeowners.ADMIN_ONLY)
+        for path in ("/.github/", "/data/projects.json", "/js/", "/tools/"):
+            self.assertEqual(rule[path], admins, path)
+        self.assertNotIn("@kyle-nelson-berkeley", " ".join(" ".join(rule[p]) for p in build_codeowners.ADMIN_ONLY))
+
+    def test_check_py_fails_when_the_file_drifts(self):
+        import shutil
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = Path(tmp) / "repo"
+            shutil.copytree(ROOT, dst, ignore=shutil.ignore_patterns(".git", "graphify-out", "node_modules"))
+            p = dst / ".github" / "CODEOWNERS"
+            p.write_text(p.read_text(encoding="utf-8") + "/content/setup/ @kyle-nelson-berkeley\n", encoding="utf-8")
+            run = subprocess.run([sys.executable, str(dst / "tools" / "check.py")], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 1, run.stdout[-600:])
+            self.assertIn(".github/CODEOWNERS: not in step with the project owners", run.stdout)
 
 
 if __name__ == "__main__":

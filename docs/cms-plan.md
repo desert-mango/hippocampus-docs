@@ -32,6 +32,15 @@ for the three places reality diverged from the original plan.*
 > Three things changed after the original 2026-09-03 plan, and the body below is annotated to
 > match — the appendix changelog is preserved verbatim as the historical record:
 >
+> 0. **Reversed 2026-10-14 (Kyle):** access-level protection is now WANTED: a member with Write must
+>    not approve on github.com what the site editor would not let them approve (Setup, Agent tools,
+>    About, Lab: admins; a project's pages: that project's `owners`). Shipped: `.github/CODEOWNERS`
+>    generated from `data/projects.json` owners (`tools/build_codeowners.py`, kept in step by the
+>    gate) and the editor's Approve rule. Not on yet: the ruleset on `main` (PR + 1 code-owner approval
+>    + the `check` status, admin bypass). GitHub refuses the GitHub Actions app as a bypass actor on
+>    this repository (HTTP 422), and `derive.yml` pushes to `main` with `GITHUB_TOKEN`, so turning the
+>    ruleset on needs a new derive credential (a deploy key in a `derive` environment): Kyle's call.
+>    Item 1 below is the historical record.
 > 1. **Branch protection was DECLINED (2026-09-06), permanently.** The §6 G3 rule and the §5
 >    "belt-and-braces" framing are **not a to-do and are never to be re-proposed** — a blocked
 >    merge state must never land on a lab member. `main` carries no branch protection; the

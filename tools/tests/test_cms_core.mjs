@@ -1497,3 +1497,16 @@ test('split projects: bare index -> pages; a facts file -> its project page; hea
   assert.deepEqual(C.mergeProjects(index, [{ name: 'L', owners: ['x'], id: 'y' }, null]).projects,
     [{ id: 'learning-to-swim', owners: ['k'], name: 'L' }, { id: 'scalar-field', owners: [] }]);
 });
+
+/* G (2026-10-14): main's ruleset refuses a merge until a code owner approved and the check passed. The editor
+   says which, in plain words, never GitHub's raw rule text alone. */
+test('a merge the ruleset refuses says why in plain words: a code owner\'s approval, or the check', () => {
+  const res = (message) => ({ ok: false, status: 405, data: { message } });
+  assert.equal(C.actionOutcome('merge', res('Repository rule violations found\n\nWaiting on code owner review from desert-mango-robotics.')).message,
+    'Not merged yet: it is waiting for a code owner\'s approval (a site admin, or an owner of this project).');
+  assert.equal(C.actionOutcome('merge', res('Repository rule violations found\n\nAt least 1 approving review is required by reviewers with write access.')).message,
+    'Not merged yet: it is waiting for a code owner\'s approval (a site admin, or an owner of this project).');
+  assert.equal(C.actionOutcome('merge', res('Repository rule violations found\n\nRequired status check "check" is expected.')).message,
+    'Not merged yet: the site check must pass first.');
+  assert.match(C.actionOutcome('merge', res('Pull Request is not mergeable')).message, /^GitHub cannot merge this proposal: Pull Request is not mergeable/);
+});

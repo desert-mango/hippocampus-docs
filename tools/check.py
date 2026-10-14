@@ -88,6 +88,7 @@ from github_layer_rules import (  # noqa: E402  (one copy, shared with the build
     UNSAFE_TAG_RE, UNSAFE_TAGS, scan_markup, unsafe_scheme)
 import github_layer_rules  # noqa: E402
 import projects_registry  # noqa: E402  (the project index + each project's facts file)
+import build_codeowners  # noqa: E402  (.github/CODEOWNERS from the project owners)
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKED_SHA256 = "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
@@ -130,6 +131,7 @@ CONTRIB_MAX_ROWS = 12
 #   tools/check_urls.py, tools/derive.py (paths only: it passes registry paths
 #   to git diff and dereferences no key), tools/github_names.py (people.json
 #   and github-links.json only, both excluded below), tools/projects_registry.py
+#   tools/build_codeowners.py (projects[].id and .owners, guarded),
 #   and js/source.js (2026-10-14: both read data/projects.json's projects[].id
 #   to fetch each project's facts file, data/projects/<id>.json, and merge it;
 #   the facts files' own spec is PROJECT_FACTS_SPEC), tools/rst_convert.py
@@ -1643,6 +1645,16 @@ def main():
     # ---- 4. projects coverage ----
     for msg in check_project_owners(projects):
         err(msg)
+    # .github/CODEOWNERS is generated from the owners (2026-10-14): GitHub's ruleset enforces it, so it may
+    # never drift from data/projects.json
+    try:
+        want_owners = build_codeowners.render(registries["data/projects.json"])
+        have_owners = (ROOT / build_codeowners.OUT).read_text(encoding="utf-8")
+        if have_owners != want_owners:
+            err(f"{build_codeowners.OUT}: not in step with the project owners in data/projects.json — "
+                f"run python3 tools/build_codeowners.py and commit the result")
+    except FileNotFoundError:
+        err(f"{build_codeowners.OUT}: missing — run python3 tools/build_codeowners.py")
     org_names = {r["name"] for r in org}
     seen = {}
     for pr in projects["projects"]:

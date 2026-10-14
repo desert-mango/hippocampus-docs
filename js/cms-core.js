@@ -1019,6 +1019,13 @@
       return out(false, `${action === 'approve' ? SELF_APPROVE_TEXT : SELF_REQUEST_TEXT}.`);
     }
     if (action === 'merge' && status === 409) return out(false, `Not merged: it ${STALE_TEXT}.`);
+    // main's ruleset (2026-10-14): a code owner's approval and the check come first; say which is missing
+    if (action === 'merge' && status === 405 && /code owner|approving review|review is required|review required/i.test(words)) {
+      return out(false, 'Not merged yet: it is waiting for a code owner\'s approval (a site admin, or an owner of this project).');
+    }
+    if (action === 'merge' && status === 405 && /status check|required check/i.test(words)) {
+      return out(false, 'Not merged yet: the site check must pass first.');
+    }
     if (action === 'merge' && status === 405) return out(false, `GitHub cannot merge this proposal${said}`);
     if (action === 'update' && status === 422) {
       if (/expected[_ ]head[_ ]sha|head sha/i.test(words)) return out(false, `Not updated: it ${STALE_TEXT}.`);
