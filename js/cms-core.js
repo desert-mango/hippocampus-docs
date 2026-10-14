@@ -1460,17 +1460,58 @@
 
   const isDirty = (d) => Object.keys(d.files).some((p) => d.files[p] !== d.originals[p]);
 
-  function createDraftStore(storage) {
-    const map = new Map();
-    try {
-      const raw = storage ? storage.getItem(DRAFTS_KEY) : null;
-      const list = raw ? JSON.parse(raw) : [];
-      for (const d of Array.isArray(list) ? list : []) if (validDraft(d)) map.set(d.key, d);
-    } catch (e) { /* unreadable: start empty */ }
-    function persist() {
+  /* The draft store. Without a name: the one list under DRAFTS_KEY (a tab's sessionStorage before U4b). With a
+     name (draftsKey(login): one store per login in localStorage, U4b): ONE storage entry per page,
+     `<name>/<page key>`, so two tabs saving different pages never write the same entry; each draft keeps its
+     base sha. sync(keep) reads the other tabs' writes (this tab's own objects kept for `keep`, unless another
+     tab removed them); clear() drops every entry of the store (sign-out). */
+  function createDraftStore(storage, name) {
+    const scoped = typeof name === 'string' && name.length > 0;
+    const KEY = scoped ? name : DRAFTS_KEY;
+    const entryKey = (k) => `${KEY}/${encodeURIComponent(k)}`;
+    function entries() {
+      const out = [];
+      for (let i = 0; storage && i < storage.length; i += 1) {
+        const k = storage.key(i);
+        if (typeof k === 'string' && k.indexOf(`${KEY}/`) === 0) out.push(k);
+      }
+      return out;
+    }
+    function read() {
+      const out = new Map();
+      try {
+        if (!storage) return out;
+        if (!scoped) {
+          const raw = storage.getItem(KEY);
+          const list = raw ? JSON.parse(raw) : [];
+          for (const d of Array.isArray(list) ? list : []) if (validDraft(d)) out.set(d.key, d);
+          return out;
+        }
+        for (const k of entries()) {
+          try {
+            const d = JSON.parse(storage.getItem(k));
+            if (validDraft(d) && entryKey(d.key) === k) out.set(d.key, d);
+          } catch (e) { /* one broken entry is skipped */ }
+        }
+      } catch (e) { /* unreadable: start empty */ }
+      return out;
+    }
+    let map = read();
+    function write(d) {
       try {
         if (!storage) return false;
-        storage.setItem(DRAFTS_KEY, JSON.stringify([...map.values()]));
+        if (scoped) storage.setItem(entryKey(d.key), JSON.stringify(d));
+        else storage.setItem(KEY, JSON.stringify([...map.values()]));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    function drop(key) {
+      try {
+        if (!storage) return false;
+        if (scoped) storage.removeItem(entryKey(key));
+        else storage.setItem(KEY, JSON.stringify([...map.values()]));
         return true;
       } catch (e) {
         return false;
@@ -1481,13 +1522,32 @@
       put(d) {
         if (!validDraft(d)) throw new Error('not a draft');
         map.set(d.key, d);
-        return persist();
+        return write(d);
       },
-      remove(key) { map.delete(key); return persist(); },
+      remove(key) { map.delete(key); return drop(key); },
       list: () => [...map.values()],
       dirty: () => [...map.values()].filter(isDirty),
+      sync(keep) {
+        const now = read();
+        for (const k of Array.isArray(keep) ? keep : []) if (now.has(k) && map.has(k)) now.set(k, map.get(k));
+        map = now;
+        return [...map.values()];
+      },
+      clear() {
+        map = new Map();
+        try {
+          if (!storage) return;
+          if (scoped) entries().forEach((k) => storage.removeItem(k));
+          else storage.removeItem(KEY);
+        } catch (e) { /* nothing to clear */ }
+      },
+      key: KEY,
+      entryKey,
     });
   }
+  const GH_LOGIN_KEY_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  /* One draft store per login (U4b): never another person's drafts on a shared browser. */
+  const draftsKey = (login) => (typeof login === 'string' && GH_LOGIN_KEY_RE.test(login) ? `${DRAFTS_KEY}:${login.toLowerCase()}` : null);
 
   /* ---- new project, new person: a form -> the registry text of a draft. */
   const PROJECT_STATUSES = Object.freeze(['active', 'maintained', 'legacy', 'archive']);
@@ -2868,7 +2928,7 @@
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
     vercelCommentUrl, ownsAll, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
-    ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, SNIPPETS, SNIPPET_CATALOG,
+    ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, draftsKey, SNIPPETS, SNIPPET_CATALOG,
     editKind, pageTree, pageList, pageIdForFile, routeForPage,
     jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
     insertSnippet, linkMarkdown, createDraftStore, isDirty,

@@ -472,7 +472,7 @@ test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by sp
     // the parent's draft: exactly the block's new Markdown in its span
     const draft = await until(() => ev(`(() => { const raw = ${site}.sessionStorage.getItem('hc-draft:setup/lab-gantry/usage') || ''; return raw; })()`), 'the draft saved', 5000).catch(() => '');
     const store = draft || await ev(`JSON.stringify(Object.keys(${site}.sessionStorage))`);
-    const text = await ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.sessionStorage).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : null; })()`);
+    const text = await ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.localStorage, (Object.keys(${site}.localStorage).find((k) => k.startsWith(C.DRAFTS_KEY + ':')) || '').split('/')[0]).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : null; })()`);
     assert.ok(text, `a draft exists (${String(store).slice(0, 200)})`);
     assert.ok(/all 3 motors should work\. TODO: this needs to be +Check the cable first\.\n/.test(text), 'deleted text gone, inserted text kept, in the Markdown');
     const orig = readFileSync(path.join(ROOT, 'content/setup/lab-gantry/usage.md'), 'utf8');
@@ -533,7 +533,7 @@ test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by sp
     await send('Input.insertText', { text: ' Quick' });
     await ev(`(() => { const p = [...document.querySelectorAll('.hc-block p')].find((x) => x.textContent.includes('ample for timeout errror')); const r = p.getBoundingClientRect(); p.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 5, clientY: r.top + 5 })); })()`, F);
     await sleep(600);
-    const quick = await ev(`(() => { const d = ${site}.HCCore.createDraftStore(${site}.sessionStorage).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : ''; })()`);
+    const quick = await ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.localStorage, (Object.keys(${site}.localStorage).find((k) => k.startsWith(C.DRAFTS_KEY + ':')) || '').split('/')[0]).get('setup/lab-gantry/usage'); return d ? d.files['content/setup/lab-gantry/usage.md'] : ''; })()`);
     assert.ok(/first\.ü +Quick\n/.test(quick), `typed text reaches the draft even with an immediate switch to another block: ${JSON.stringify((/TODO[^\n]*/.exec(quick) || [''])[0])}`);
     // no reload, no jump
     assert.equal(await ev(`${site}.document.querySelector('#hc-frame-host iframe').getAttribute('src')`), srcBefore, 'the page frame was never reloaded');
@@ -607,7 +607,7 @@ async function editorWalk(page, scratch, query = '') {
   };
   const F = await until(frameCtx, 'the page frame grouped');
   const site = "document.querySelector('iframe').contentWindow";
-  const draft = (key, file) => ev(`(() => { const d = ${site}.HCCore.createDraftStore(${site}.sessionStorage).get('${key}'); return d ? d.files['${file}'] : null; })()`);
+  const draft = (key, file) => ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.localStorage, (Object.keys(${site}.localStorage).find((k) => k.startsWith(C.DRAFTS_KEY + ':')) || '').split('/')[0]).get('${key}'); return d ? d.files['${file}'] : null; })()`);
   // click the block whose text matches `needle` (a JS regexp source), at a point inside it
   const clickBlock = (needle, sel = 'p, li, td, pre, h2, h3') => ev(`(() => { const re = new RegExp(${JSON.stringify(needle)});
     const el = [...document.querySelectorAll('.hc-block :is(${sel})')].find((x) => re.test(x.textContent) && x.getClientRects().length);

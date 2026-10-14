@@ -304,6 +304,11 @@
   }
 
   function onSignOutClick() {
+    // U4b: drafts are kept in this browser per login; signing out deletes them (a shared computer keeps nothing)
+    const n = drafts.dirty().length;
+    if (n && typeof window.confirm === 'function'
+      && !window.confirm(`Signing out deletes ${n} change${n === 1 ? '' : 's'} you have not sent for review yet, kept in this browser. Sign out anyway?`)) return;
+    drafts.clear();
     signIn.cancel();
     endSession(null);
     tell('Signed out.');
@@ -958,7 +963,7 @@
       h('h2', { text: 'How editing works here' }),
       h('ol', { class: 'hc-guide' },
         step('Editor on', ' (the switch in the bubble at the top right) shows this page in a frame you can edit. Your changes stay '
-          + 'a draft in this browser tab until you propose them.'),
+          + 'a draft in this browser (even when you close the tab) until you send them for review; signing out deletes them.'),
         step('Click a block', ' and type right in the page: new text is underlined, removed text struck through. '
           + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
         step('Images', ': click an image to replace it with a new file (it is uploaded for you), or drag it to another '
@@ -1033,12 +1038,42 @@
      editor: the file's text at the head of main (or of my own open
      proposal), snippet buttons, and the live preview — the sandboxed site
      served the draft through the bridge, reloaded with a fresh nonce a moment
-     after each change. A draft lives in memory and in this tab's
-     sessionStorage, keyed by page (HCCore.createDraftStore); leaving a page
-     whose draft is not proposed asks first. Read-only people get the same
+     after each change. A draft lives in memory and in this browser's
+     localStorage (U4b: it survives a closed tab), one store per login
+     (HCCore.draftsKey), keyed by page, with its base sha; leaving a page whose
+     draft is not proposed asks first; Sign out deletes the login's drafts
+     (asked first when some are not proposed). Read-only people get the same
      page, view-only, with the github.com pencil link. */
 
-  const drafts = C.createDraftStore(store());
+  let draftBound = { key: null, store: C.createDraftStore(null) };
+  let legacyOwner = null;       // the login whose session this tab restored at load (start): owner of older tab drafts
+  /* The signed-in login's store, bound (again) whenever the login changes. A tab's older sessionStorage
+     drafts (before U4b) move into it once. */
+  function draftStore() {
+    const login = state.session && typeof state.session.login === 'string' ? state.session.login : null;
+    const key = login ? C.draftsKey(login) : null;
+    if (draftBound.key !== key) {
+      const st = key ? C.createDraftStore(localStore(), key) : C.createDraftStore(null);
+      // a tab's older sessionStorage drafts (before U4b) carry no login: they move in only for the person whose
+      // session this tab restored at load (theirs, then); after a different sign-in they are dropped, never
+      // handed to the next person. The old copy goes only once every draft was written.
+      if (key) {
+        const old = C.createDraftStore(store());
+        if (old.list().length) {
+          const own = legacyOwner && legacyOwner.toLowerCase() === login.toLowerCase();
+          const moved = own ? old.list().every((d) => Boolean(st.get(d.key)) || st.put(d)) : true;
+          if (moved) { try { const ss = store(); if (ss) ss.removeItem(C.DRAFTS_KEY); } catch (e) { /* kept where it was */ } }
+        }
+      }
+      draftBound = { key, store: st };
+    }
+    return draftBound.store;
+  }
+  const drafts = Object.freeze({
+    get: (k) => draftStore().get(k), put: (d) => draftStore().put(d), remove: (k) => draftStore().remove(k),
+    list: () => draftStore().list(), dirty: () => draftStore().dirty(), sync: (keep) => draftStore().sync(keep),
+    clear: () => draftStore().clear(),
+  });
   let editing = null;            // {key, hash}: the edit page on screen, for the leave question
   let previewTimer = null;
   const PREVIEW_DELAY_MS = 600;
@@ -1246,7 +1281,7 @@
       problem.hidden = !bad;
       const dirty = C.isDirty(d);
       stateLine.textContent = !editable ? 'View only.'
-        : (dirty ? 'Changed — kept as a draft in this tab, not proposed yet.' : 'No changes yet.');
+        : (dirty ? 'Changed — kept as a draft in this browser, not proposed yet.' : 'No changes yet.');
       if (proposeBtn) proposeBtn.disabled = Boolean(bad) || !dirty;
     }
 
@@ -1510,7 +1545,7 @@
       h('h1', { text: 'New project' }),
       h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json (its id and owners), its facts file '
         + 'data/projects/<id>.json and one page of Markdown. A new project needs a site admin\'s approval; after that its owners '
-        + 'look after it. The draft stays in this browser tab until you propose it.' }),
+        + 'look after it. The draft stays in this browser until you propose it.' }),
       h('div', { class: 'cms-form' },
         own.length ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
         labelled('Id', f.id, 'The page address, /projects/<id>: lowercase letters, digits and dashes. It cannot be changed later.'),
@@ -3409,7 +3444,7 @@
     else postEditor();
   }
 
-  const draftStateText = (d) => (C.isDirty(d) ? 'Changed — kept as a draft in this tab, not proposed yet.'
+  const draftStateText = (d) => (C.isDirty(d) ? 'Changed — kept as a draft in this browser, not proposed yet.'
     : 'No changes yet.');
 
   /* One keystroke in the tray's textarea: the span is replaced (never the
@@ -3581,6 +3616,26 @@
     tray.hidden = true;
     handle.addEventListener('click', () => { if (ed.trayOpen) closeTray(); else openTray(); });
     document.body.appendChild(tray);
+    // U4b: another tab wrote this login's drafts (one storage entry per page): read them again. When it changed
+    // THIS page, say so; when it REMOVED this page's draft (proposed, discarded, or signed out there), this tab
+    // drops it too and shows the page as it is, so a deleted draft is never written back.
+    window.addEventListener('storage', (e) => {
+      const base = draftBound.key;
+      if (!e || !base || (e.key !== null && (typeof e.key !== 'string' || e.key.indexOf(`${base}/`) !== 0))) return;
+      const open = ed.draft && ed.draft.key ? ed.draft.key : null;
+      const mineText = open ? JSON.stringify(ed.draft.files) : null;
+      const theirs = open ? C.createDraftStore(localStore(), base).get(open) : null;
+      drafts.sync(open && theirs ? [open] : []);
+      if (open && !theirs && (e.key === null || e.key === draftStore().entryKey(open))) {
+        Object.assign(ed, { draft: null, sel: null, selected: null, inPage: null });
+        say('This page\'s unsent changes were removed in another tab (sent for review, discarded, or signed out there).', 'error');
+        if (ed.on) frameTo(ed.route, true);
+      } else if (open && theirs && JSON.stringify(theirs.files) !== mineText) {
+        say('This page is also being changed in another tab. Each tab keeps its own changes; the tab that saves last wins.', 'error');
+      }
+      drawDraftList(false);
+      refreshDock();
+    });
     // the theme toggle: the open page frame follows at once
     if (typeof window.MutationObserver === 'function') {
       new window.MutationObserver(() => { if (ed.on) postEditor(); })
@@ -4214,6 +4269,8 @@
       && typeof o.session.login === 'string' ? o.session : null;
     const stored = C.readSession(store(), Date.now());
     if (!given && !stored && !popup) return false;
+    const restored = given || stored;
+    legacyOwner = restored && typeof restored.login === 'string' ? restored.login : null;
     started = true;
     if (typeof o.fetch === 'function') fetchImpl = o.fetch;
     if (given) state.memoryOnly = given;

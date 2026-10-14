@@ -136,6 +136,8 @@ function memoryStorage() {
     getItem: (k) => (m.has(k) ? m.get(k) : null),
     setItem: (k, v) => m.set(k, String(v)),
     removeItem: (k) => m.delete(k),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() { return m.size; },
     raw: m,
   };
 }
@@ -182,10 +184,13 @@ function openSite(opts) {
   const sessions = [];    // app.js's onSession callback
   const listeners = {};
   const docListeners = {};
+  const confirms = [];    // window.confirm's questions
   const hcReads = [];     // the site files read through HC.fetchJSON
   const created = [];
   const replaced = [];
   const storage = o.storage || memoryStorage();
+  // one browser: pages that share a sessionStorage (a reload of the tab) share its localStorage too
+  const local = o.localStorage || localFor(storage);
   const location = { origin: ORIGIN, pathname: '/', search: '', hash: o.hash || '#/' };
   const mql = { matches: Boolean(o.phone), media: '', handlers: [],
     addEventListener(type, fn) { if (type === 'change') mql.handlers.push(fn); } };
@@ -200,14 +205,14 @@ function openSite(opts) {
       addEventListener: (type, fn) => { (docListeners[type] = docListeners[type] || []).push(fn); },
     },
     sessionStorage: storage,
-    localStorage: o.localStorage || memoryStorage(),
+    localStorage: local,
     location,
     history: { replaceState: (s, t, url) => { replaced.push(url); location.hash = String(url).replace(/^[^#]*/, ''); } },
     crypto: { getRandomValues: (arr) => { for (let i = 0; i < arr.length; i += 1) arr[i] = Math.floor(Math.random() * 256); return arr; },
       subtle: webcrypto.subtle },
     FormData: FakeFormData,
     open: (...a) => { opens.push(a); return null; },
-    confirm: () => true,
+    confirm: (text) => { confirms.push(String(text)); return o.confirm === undefined ? true : o.confirm; },
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     HC: Object.freeze({ preview: false,
       fetchJSON: async (p) => { hcReads.push(p); return (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p) ? o.hc[p] : JSON.parse(readRepo(p))); },
@@ -234,8 +239,10 @@ function openSite(opts) {
   const started = win.HCEditor.start(Object.assign({ session,
     status: (text, kind) => told.push({ text, kind }), onSession: (on) => sessions.push(on) }, o.start));
   const page = {
-    win, body, header, content, host, calls, listeners, location, created, replaced, storage, mql,
+    win, body, header, content, host, calls, listeners, location, created, replaced, storage, mql, local,
+    login: session && typeof session.login === 'string' ? session.login : null,
     docListeners: (type) => docListeners[type] || [],
+    confirms,
     hcReads,
     started, opens, told, sessions,
     all: (pred) => findAll(body, pred),
@@ -291,6 +298,14 @@ function openSite(opts) {
   };
   return page;
 }
+
+const LOCALS = new WeakMap();
+function localFor(storage) {
+  if (!LOCALS.has(storage)) LOCALS.set(storage, memoryStorage());
+  return LOCALS.get(storage);
+}
+/* U4b: the signed-in login's drafts, as the editor keeps them (localStorage, one store per login). */
+const draftsOf = (page) => C.createDraftStore(page.local, C.draftsKey(page.login));
 
 async function editorOn(opts) {
   const page = openSite(Object.assign({ hash: `#${PAGE_ROUTE}` }, opts));
@@ -386,7 +401,7 @@ test('an edit replaces the span, updates the draft, reloads with a NEW nonce and
   const srcs = page.frame().srcs.length;
   await page.type(page.textarea(), 'A changed paragraph.\n\n');
   const want = PAGE_TEXT.slice(0, b.start) + 'A changed paragraph.\n\n' + PAGE_TEXT.slice(b.end);
-  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware');
+  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware');
   assert.equal(d.files[PAGE_FILE], want, 'the draft holds the text with the span replaced');
   assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded once');
   assert.notEqual(page.nonce(), first, 'with a fresh nonce');
@@ -424,7 +439,7 @@ test('typing an unclosed fence never touches the text outside the span', async (
   const ta = page.textarea();
   for (const typed of ['```', '```bash\n', '```bash\necho', '```bash\necho one\n<div class="adm adm-note">\n']) {
     await page.type(ta, typed);
-    const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+    const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
     assert.equal(d.slice(0, b.start), PAGE_TEXT.slice(0, b.start), 'before the span: byte-identical');
     assert.equal(d.slice(b.start + typed.length), PAGE_TEXT.slice(b.end), 'after the span: byte-identical');
   }
@@ -464,7 +479,7 @@ test('U2: hc-block-md writes the block into the draft by its span: NO frame relo
   const net = page.github().length;
   for (const typed of ['A changed paragraph.\n\n', 'A changed paragraph, typed on.\n\n']) {
     await page.send({ type: 'hc-block-md', index: i, md: typed });
-    const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+    const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
     assert.equal(d, PAGE_TEXT.slice(0, b.start) + typed + PAGE_TEXT.slice(b.end), 'the span replaced, nothing else');
   }
   await new Promise((r) => setTimeout(r, 700));
@@ -477,7 +492,7 @@ test('U2: hc-block-md writes the block into the draft by its span: NO frame relo
 test('U2: hc-block-md is dropped unless it names the open, in-page block in author mode', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
-  const store = () => C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware');
+  const store = () => draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware');
   await page.pick(i);
   await page.send({ type: 'hc-block-md', index: i, md: 'Before the frame said it is typing.\n\n' });
   assert.equal(store(), null, 'not open in the page yet: dropped');
@@ -519,7 +534,7 @@ test('U3: "Edit this part as Markdown" closes the typed block, then opens it aga
   assert.ok(page.one((e) => e.attrs['data-in-page'] === 'mdbox'), '"Editing as Markdown in the page"');
   assert.equal(page.textarea(), undefined, 'no second editor in the tray');
   await page.send({ type: 'hc-block-md', index: i, md: '| a | b |\n|---|---|\n| 1 | 2 |\n\n' });
-  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   assert.match(d, /\| a \| b \|/, 'the box\'s Markdown, exactly as typed, in the span');
 });
 
@@ -541,7 +556,7 @@ test('U3: a note box Remove (an empty hc-block-md) takes the block out of the dr
   await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'box', reason: '' });
   await page.send({ type: 'hc-block-md', index: i, md: '' });
-  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   assert.equal(d, PAGE_TEXT.slice(0, b.start) + PAGE_TEXT.slice(b.end));
 });
 
@@ -632,7 +647,7 @@ test('hc-block-insert puts the snippet at that boundary, as its own block, and s
   const i = firstParagraph(PAGE_TEXT);
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
   assert.equal(page.tray().hidden, true, 'V2: the new block opens in the page, nothing else opens');
-  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   const want = C.insertAt(PAGE_TEXT, i, 'note');
   assert.equal(d, want.text);
   await page.showData();
@@ -645,7 +660,7 @@ test('hc-block-insert puts the snippet at that boundary, as its own block, and s
   // an unknown kind or an index past the end changes nothing
   await page.send({ type: 'hc-block-insert', index: i, kind: 'script' });
   await page.send({ type: 'hc-block-insert', index: 99999, kind: 'note' });
-  assert.equal(C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE], want.text);
+  assert.equal(draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE], want.text);
 });
 
 test('a page the block model refuses (CRLF) offers only "Edit whole page as Markdown", with the reason', async () => {
@@ -669,7 +684,7 @@ test('read-only role: a picked block is shown read-only, and "+" inserts nothing
   await page.pick(i);
   assert.equal(page.textarea().readOnly, true);
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
-  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  assert.equal(draftsOf(page).list().length, 0);
 });
 
 // ------------------------------------------------------- routes, forgery ---
@@ -699,7 +714,7 @@ test('a forged message — another window, or another nonce — is ignored', asy
   await page.send({ type: 'hc-block-select', index: i, nonce: 'f'.repeat(32) });
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' }, { source: { postMessage() {} } });
   assert.equal(page.textarea(), undefined);
-  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  assert.equal(draftsOf(page).list().length, 0);
   await page.send({ type: 'hc-ready', nonce: 'f'.repeat(32) });
   assert.equal(page.editorMessages().length, 0);
 });
@@ -888,7 +903,7 @@ test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-on
   assert.equal(page.tray().hidden, true, 'the editor page steps aside for Show on page');
   await page.pick(0);
   assert.equal(page.textarea(), undefined, 'no editing while a proposal is shown');
-  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  assert.equal(draftsOf(page).list().length, 0);
   page.action('show-off').click();
   await settle();
   const back = await page.asks(UBUNTU_FILE);
@@ -910,7 +925,7 @@ test('Changes: the snippet bar (the catalog, image through Media) edits inside t
   await settle();
   const want = C.insertSnippet(b.text, 0, 0, 'note');
   assert.equal(page.textarea().value, want.text);
-  const d = C.createDraftStore(page.storage).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
+  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   assert.equal(d, PAGE_TEXT.slice(0, b.start) + want.text + PAGE_TEXT.slice(b.end));
 });
 
@@ -931,7 +946,7 @@ test('Changes: the draft list with Propose… and Discard; Discard drops the dra
   findAll(page.one((e) => e.attrs['data-draft'] === 'setup/hippocampus-bringup/fcu-firmware'),
     (e) => e.attrs['data-action'] === 'discard-draft')[0].click();
   await settle();
-  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  assert.equal(draftsOf(page).list().length, 0);
   assert.equal(page.textarea(), undefined, 'the selection went with the draft');
   assert.equal(page.frame().srcs.length, srcs + 1);
   const served = await page.asks(PAGE_FILE);
@@ -1009,7 +1024,7 @@ test('js/editor.js Propose: starting from my own proposal adds one commit and mo
   await settle();
   assert.equal(page.textarea().value, onBranch, 'the text at my proposal\'s head');
   await page.type(page.textarea(), `${onBranch}Even more.\n`);
-  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  const d = draftsOf(page).get(PAGE_ID);
   assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 }, 'the draft keeps its base');
   findAll(page.one((e) => e.attrs['data-draft'] === PAGE_ID), (e) => e.attrs['data-action'] === 'propose-draft')[0].click();
   await settle();
@@ -1022,7 +1037,7 @@ test('js/editor.js Propose: starting from my own proposal adds one commit and mo
   assert.equal(writes[1].body.base_tree, TREE_B);
   assert.equal(writes[2].body.parents[0], HEAD_B, 'one commit on my proposal\'s head');
   assert.match(page.tray().textContent, /Added to your proposal #7/);
-  assert.equal(C.createDraftStore(page.storage).get(PAGE_ID), null, 'the draft went into the proposal');
+  assert.equal(draftsOf(page).get(PAGE_ID), null, 'the draft went into the proposal');
 });
 
 test('Start from my proposal: a link inside the frame to another page reloads it there at main; back again, the draft is on my proposal', async () => {
@@ -1112,7 +1127,7 @@ test('Start from while "Show on page" is on: the shown proposal goes, the draft 
   await page.pick(firstParagraph(onBranch));
   assert.ok(page.textarea(), 'a block of the page can be edited');
   await page.type(page.textarea(), 'Changed.\n\n');
-  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  const d = draftsOf(page).get(PAGE_ID);
   assert.ok(d && C.isDirty(d), 'the edit is kept');
   assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
 });
@@ -1138,7 +1153,7 @@ test('Start from: an edit made while the picked base is still being read is neve
   open();
   await settle();
   assert.deepEqual(asked, [C.DISCARD_TEXT], 'asked before the edit could go');
-  const d = C.createDraftStore(page.storage).get(PAGE_ID);
+  const d = draftsOf(page).get(PAGE_ID);
   assert.ok(d && C.isDirty(d), 'the edit is kept');
   assert.equal(d.base.number, null, 'still on the live site');
   assert.match(d.files[PAGE_FILE], /Changed during the wait\./);
@@ -1924,7 +1939,7 @@ test('overlay: clicking the block right after a PR-inserted block edits the righ
   // an edit changes main's block only
   await page.type(page.textarea(), 'Edited from the overlay.\n');
   const b = blocksOf(main.text)[mi];
-  const d = C.createDraftStore(page.storage).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
+  const d = draftsOf(page).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
   assert.equal(d, main.text.slice(0, b.start) + 'Edited from the overlay.\n' + main.text.slice(b.end));
   // with a draft, the page bar says the proposal also touches this page, with "Show on page"
   await settle();
@@ -1943,7 +1958,7 @@ test('overlay: "+" after a PR-inserted block inserts after the nearest preceding
   // the rail BEFORE composite block k+1 (right after the PR-inserted block k)
   await page.send({ type: 'hc-block-insert', index: k + 1, kind: 'note' });
   const want = C.insertAt(main.text, ov.overlay[j].mainIndex + 1, 'note');
-  const d = C.createDraftStore(page.storage).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
+  const d = draftsOf(page).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
   assert.equal(d, want.text);
 });
 
@@ -1958,7 +1973,7 @@ test('overlay: clicking a PR-only block opens that proposal\'s card and starts n
     assert.equal(selectedTab(page), 'proposals');
     assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'), 'PR #1\'s card, open');
     assert.equal(page.textarea(), undefined, 'no block editor');
-    assert.equal(C.createDraftStore(page.storage).list().length, 0, 'no draft');
+    assert.equal(draftsOf(page).list().length, 0, 'no draft');
     assert.equal(page.frame().srcs.length, srcs, 'the frame stays on the overlay');
   }
 });
@@ -2003,7 +2018,7 @@ test('two proposals on one page: the newest is overlaid; the bar lists the other
   const mainBlock = ov1.overlay.findIndex((e) => e.source === 'main' && e.text.trim());
   await page.pick(mainBlock);
   assert.equal(page.textarea(), undefined, 'read-only: no editing');
-  assert.equal(C.createDraftStore(page.storage).list().length, 0);
+  assert.equal(draftsOf(page).list().length, 0);
   page.action('show-off').click();
   await settle();
   assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov2.text, page.nonce().slice(0, 16), ov2.overlay),
@@ -2330,12 +2345,38 @@ function memoryStorage() {
     getItem: (k) => (m.has(k) ? m.get(k) : null),
     setItem: (k, v) => m.set(k, String(v)),
     removeItem: (k) => m.delete(k),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() { return m.size; },
     raw: m,
   };
 }
 
 const draftOf = (key, file, original, text, base) => ({ key, label: key, route: '/about',
   files: { [file]: text }, originals: { [file]: original }, base: base || { ref: 'main', sha: MAIN_SHA, number: null } });
+
+/* U4b (plan-final §7 Drafts): drafts live in localStorage (they survive a closed tab), one store per login
+   (two people on one browser never see each other's), each draft holding its base sha; two tabs writing the
+   same store merge by page instead of overwriting each other's whole list. */
+test('U4b drafts: per-login store in localStorage; two tabs keep each other\'s pages; clear() empties only that login', () => {
+  const local = memoryStorage();
+  assert.equal(C.draftsKey('Kyle-Nelson-Berkeley'), 'hc-cms-drafts:kyle-nelson-berkeley');
+  assert.equal(C.draftsKey('not a login'), null, 'no store for a malformed login');
+  const tab1 = C.createDraftStore(local, C.draftsKey('bob'));
+  const tab2 = C.createDraftStore(local, C.draftsKey('bob'));        // a second tab, opened before tab1 wrote
+  tab1.put(draftOf('about', 'content/about.md', 'Old\n', 'New\n'));
+  tab2.put(draftOf('tool/runpod-mcp', 'content/tools/runpod-mcp.md', 'a\n', 'b\n'));
+  // (one storage entry per page: two tabs that never read each other's writes still keep both pages)
+  assert.ok(local.getItem(`${C.draftsKey('bob')}/about`), 'one entry per page');
+  const both = C.createDraftStore(local, C.draftsKey('bob')).list().map((d) => d.key).sort();
+  assert.deepEqual(both, ['about', 'tool/runpod-mcp'], 'the second tab kept the first tab\'s page');
+  assert.equal(C.createDraftStore(local, C.draftsKey('alice')).list().length, 0, 'another login sees none');
+  assert.equal(tab1.sync().map((d) => d.key).sort().join(','), 'about,tool/runpod-mcp', 'sync() reads the other tab\'s writes');
+  assert.equal(tab1.get('about').base.sha, MAIN_SHA, 'the base sha is kept with the draft');
+  C.createDraftStore(local, C.draftsKey('alice')).put(draftOf('about', 'content/about.md', 'x', 'y'));
+  tab1.clear();
+  assert.equal(C.createDraftStore(local, C.draftsKey('bob')).list().length, 0, 'clear() empties bob\'s store');
+  assert.equal(C.createDraftStore(local, C.draftsKey('alice')).list().length, 1, 'and only bob\'s');
+});
 
 test('drafts: kept in memory and in sessionStorage, keyed by page; broken storage never throws', () => {
   const s = memoryStorage();
@@ -2794,7 +2835,7 @@ test('js/editor.js editor: a heading change reaches the preview frame through th
   assert.equal((await page.asks('data/projects.json')).text, readRepo('data/projects.json'),
     'everything else comes from main\'s head');
   // the draft is in sessionStorage, keyed by the page
-  const kept = C.createDraftStore(page.storage).get(PAGE_ID);
+  const kept = draftsOf(page).get(PAGE_ID);
   assert.equal(kept.files[PAGE_FILE], edited);
   assert.equal(kept.base.sha, MAIN_SHA);
   assert.deepEqual(page.calls.filter((c) => c.method !== 'GET'), [], 'editing writes nothing to GitHub');
@@ -2819,7 +2860,7 @@ test('js/editor.js editor: snippet buttons and the internal link picker insert i
   assert.match(page.textarea().value, /^\[[^\]]+\]\(#\/setup\/bluerov\/dvl\)/);
   const media = page.action('media-open');
   assert.ok(media && !media.disabled, 'Image from Media is live (its rows are the "Image from Media" ones below)');
-  const d = C.createDraftStore(page.storage).get(PAGE_ID).files[PAGE_FILE];
+  const d = draftsOf(page).get(PAGE_ID).files[PAGE_FILE];
   assert.ok(d.includes('adm-note') && d.includes('(#/setup/bluerov/dvl)'));
 });
 
@@ -2859,7 +2900,7 @@ test('js/editor.js editor: leaving a page with a draft that is not proposed asks
   await page.type(page.textarea(), 'Changed.\n\n');
   await page.go(`#${OTHER_ROUTE}`);
   assert.deepEqual(asked, [], 'nothing to ask: the draft is kept');
-  assert.ok(C.isDirty(C.createDraftStore(page.storage).get(PAGE_ID)), 'the draft stays');
+  assert.ok(C.isDirty(draftsOf(page).get(PAGE_ID)), 'the draft stays');
   // the raw-JSON editor asks before its draft leaves the screen
   await openTab(page, 'changes');
   await page.follow(page.linkTo('#/edit/data/site'));
@@ -2900,7 +2941,7 @@ test('js/editor.js Propose from a setup page: exactly blobs -> tree -> commit ->
   assert.match(writes[3].body.ref, /^refs\/heads\/cms\/bob\/fix-the-heading-[0-9]{6}$/);
   assert.match(writes[5].body.body, /https:\/\/docs\.example\.org\/cms\/#\/review\/42/);
   assert.ok(cardOpen(page, 42), 'the tray shows proposal #42 (the old #/review/42)');
-  assert.equal(C.createDraftStore(page.storage).get(PAGE_ID), null, 'the draft went into the proposal');
+  assert.equal(draftsOf(page).get(PAGE_ID), null, 'the draft went into the proposal');
   assert.deepEqual(asked, [], 'no leave question after proposing');
 });
 
@@ -2923,7 +2964,7 @@ test('js/editor.js New project: a form -> one draft of two files -> Propose send
   field('story').value = '## What it is\n\nA rig.\n';
   page.action('make-draft').click();
   await settle();
-  const d = C.createDraftStore(page.storage).get('new/project');
+  const d = draftsOf(page).get('new/project');
   // three files since 2026-10-14: the index entry, the project's own facts file, its page
   assert.deepEqual(Object.keys(d.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
   assert.deepEqual(JSON.parse(d.files['data/projects.json']).projects.at(-1), { id: 'sonar-rig', owners: [] });
@@ -2960,7 +3001,7 @@ test('js/editor.js New person: the form adds one person to the people draft and 
   field('title').value = 'Student';
   page.action('add-person').click();
   await settle();
-  const d = C.createDraftStore(page.storage).get('data/people');
+  const d = draftsOf(page).get('data/people');
   assert.deepEqual(JSON.parse(d.files['data/people.json']).groups[1].people.at(-1),
     { name: 'Ada Example', title: 'Student', photo: null, link: null });
   assert.equal(rawEditor(page).value, d.files['data/people.json'], 'the people draft opens (the old #/edit/data/people)');
@@ -2983,7 +3024,7 @@ test('js/editor.js New project can start from my open proposal: one more commit 
   field('tagline').value = 'A tank rig.';
   page.action('make-draft').click();
   await settle();
-  const d = C.createDraftStore(page.storage).get('new/project');
+  const d = draftsOf(page).get('new/project');
   assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
   page.action('propose').click();
   await settle();
@@ -3014,7 +3055,7 @@ test('js/editor.js New person can start from my open proposal: the person joins 
   field('name').value = 'Ada Example';
   page.action('add-person').click();
   await settle();
-  const d = C.createDraftStore(page.storage).get('data/people');
+  const d = draftsOf(page).get('data/people');
   assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
   const people = JSON.parse(d.files['data/people.json']).groups;
   assert.equal(people[0].people.at(-1).name, 'Already Proposed', 'built on the proposal\'s people, not main\'s');
@@ -3049,7 +3090,7 @@ test('js/editor.js New person: with a people draft already open, the person join
   field('name').value = 'Second Person';
   page.action('add-person').click();
   await settle();
-  const d = C.createDraftStore(page.storage).get('data/people');
+  const d = draftsOf(page).get('data/people');
   assert.equal(d.base.number, 7);
   assert.deepEqual(JSON.parse(d.files['data/people.json']).groups[1].people.slice(-2).map((p) => p.name),
     ['First Person', 'Second Person']);
@@ -3067,7 +3108,7 @@ test('js/editor.js Propose: a 401 after the PR opened keeps it proposed (drafts 
   await proposeFrom(page, PAGE_ID, 'Add a line');
   await sendIt(page);
   assert.deepEqual(writeSeq(rec.writes).slice(-2), ['POST /pulls', 'PATCH /pulls/42'], 'the PR opened');
-  assert.equal(C.createDraftStore(page.storage).get(PAGE_ID), null, 'never proposed twice');
+  assert.equal(draftsOf(page).get(PAGE_ID), null, 'never proposed twice');
   assert.equal(controlsOf(page).hidden, true, 'the session ended');
   assert.equal(page.sessions.at(-1), false, 'app.js hears it');
   assert.equal(page.body.classList.contains('hc-editor-on'), false);
@@ -3689,7 +3730,7 @@ const uploadFile = async (page, file, folder) => {
   page.action('media-upload').click();
   await settle();
 };
-const draftOfKey = (page, key) => C.createDraftStore(page.storage).get(key);
+const draftOfKey = (page, key) => draftsOf(page).get(key);
 /* Editor on, the first paragraph picked, its "Image from Media" open. */
 async function mediaInBlock(opts) {
   const page = await editorOn(opts);
@@ -4129,5 +4170,107 @@ test('New project (2026-10-14): a repository another project already holds in it
   page.action('make-draft').click();
   await settle();
   assert.match(shownProblem(page).textContent, new RegExp(`${taken}.*already listed in project 'acoustics'`));
-  assert.equal(C.createDraftStore(page.storage).get('new/project'), null);
+  assert.equal(draftsOf(page).get('new/project'), null);
+});
+
+
+/* U4b (plan-final §7 Drafts): a draft survives a closed tab (localStorage), belongs to its login, is deleted at
+   Sign out (asked first), and a second tab changing the same page is said out loud. */
+async function typedDraft(page) {
+  const i = firstParagraph(PAGE_TEXT);
+  await page.pick(i);
+  const ta = page.textarea();
+  await page.type(ta, `${ta.value} One more line.`);
+  return i;
+}
+
+test('U4b: a draft survives a closed tab, and only for its own login', async () => {
+  const a = await editorOn();
+  await typedDraft(a);
+  assert.ok(draftsOf(a).get(PAGE_ID), 'kept in localStorage');
+  assert.equal(a.storage.getItem(C.DRAFTS_KEY), null, 'not in the tab\'s sessionStorage');
+  // the tab is closed; a new one opens (a fresh sessionStorage, the same browser's localStorage)
+  const b = await editorOn({ localStorage: a.local });
+  assert.match(b.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /1 change/, 'the draft is back');
+  // another person on the same browser sees none of it
+  const c = await editorOn({ localStorage: a.local, session: C.makeSession(TOKEN, null, 'alice', Date.now()) });
+  assert.equal(draftsOf(c).list().length, 0);
+  assert.equal(c.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
+});
+
+test('U4b: Sign out asks, then deletes the login\'s drafts; saying no keeps both the session and the drafts', async () => {
+  let page = await editorOn({ confirm: false });
+  await typedDraft(page);
+  page.action('sign-out').click();
+  await settle();
+  assert.match(page.confirms.at(-1), /deletes 1 change you have not sent for review/);
+  assert.ok(draftsOf(page).get(PAGE_ID), 'kept: the person said no');
+  assert.ok(page.switchBtn() && !page.switchBtn().hidden, 'still signed in');
+  page = await editorOn({ localStorage: page.local });
+  page.action('sign-out').click();
+  await settle();
+  assert.equal(C.createDraftStore(page.local, C.draftsKey('bob')).list().length, 0, 'deleted at sign-out');
+});
+
+test('U4b: an older tab\'s sessionStorage drafts move into the login\'s store once', async () => {
+  const storage = memoryStorage();
+  C.createDraftStore(storage).put({ key: PAGE_ID, label: 'FCU firmware', route: PAGE_ROUTE,
+    files: { [PAGE_FILE]: `${PAGE_TEXT}\nMoved.\n` }, originals: { [PAGE_FILE]: PAGE_TEXT },
+    base: { ref: 'main', sha: MAIN_SHA, number: null } });
+  const page = await editorOn({ storage });
+  assert.equal(draftsOf(page).get(PAGE_ID).files[PAGE_FILE], `${PAGE_TEXT}\nMoved.\n`);
+  assert.equal(storage.getItem(C.DRAFTS_KEY), null, 'gone from the session');
+});
+
+test('U4b: another tab changing the same page is said in the bubble; another page is merged quietly', async () => {
+  const page = await editorOn();
+  await typedDraft(page);
+  const notice = () => page.one((e) => e.classList.contains('hc-notice'));
+  const other = C.createDraftStore(page.local, C.draftsKey('bob'));
+  other.put({ key: 'about', label: 'About', route: '/about', files: { 'content/about.md': 'New\n' },
+    originals: { 'content/about.md': 'Old\n' }, base: { ref: 'main', sha: MAIN_SHA, number: null } });
+  for (const fn of page.listeners.storage || []) fn({ key: `${C.draftsKey('bob')}/x` });
+  await settle();
+  assert.ok(notice().hidden || !/another tab/.test(notice().textContent), 'another page: quiet');
+  assert.ok(draftsOf(page).get('about'), 'and kept');
+  const theirs = other.get(PAGE_ID);
+  theirs.files[PAGE_FILE] += 'Typed in the other tab.\n';
+  other.put(theirs);
+  for (const fn of page.listeners.storage || []) fn({ key: `${C.draftsKey('bob')}/x` });
+  await settle();
+  assert.match(notice().textContent, /also being changed in another tab/);
+});
+
+test('U4b: a sign-out in another tab deletes this tab\'s copy too: the draft is not written back', async () => {
+  const page = await editorOn();
+  await typedDraft(page);
+  assert.ok(draftsOf(page).get(PAGE_ID));
+  C.createDraftStore(page.local, C.draftsKey('bob')).clear();                 // the other tab signed out
+  for (const fn of page.listeners.storage || []) fn({ key: `${C.draftsKey('bob')}/${encodeURIComponent(PAGE_ID)}`, newValue: null });
+  await settle();
+  assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /removed in another tab/);
+  assert.equal(draftsOf(page).list().length, 0, 'nothing written back');
+  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
+});
+
+test('U4b: older tab drafts are never handed to another person, and are kept when localStorage refuses them', async () => {
+  const legacy = () => {
+    const storage = memoryStorage();
+    C.createDraftStore(storage).put({ key: PAGE_ID, label: 'FCU firmware', route: PAGE_ROUTE,
+      files: { [PAGE_FILE]: `${PAGE_TEXT}\nOld tab.\n` }, originals: { [PAGE_FILE]: PAGE_TEXT },
+      base: { ref: 'main', sha: MAIN_SHA, number: null } });
+    return storage;
+  };
+  // localStorage that refuses every write (private mode, quota): the old copy stays where it was
+  const full = Object.assign(memoryStorage(), { setItem() { throw new Error('quota'); } });
+  let storage = legacy();
+  await editorOn({ storage, localStorage: full });
+  assert.ok(storage.getItem(C.DRAFTS_KEY), 'kept in the session: nothing was written');
+  // the restored session's own drafts move (the case the earlier test covers); a session that is not the
+  // tab's restored one gets none: simulated with the store bound for a login the tab did not restore
+  storage = legacy();
+  const page = await editorOn({ storage });
+  const local = page.local;
+  assert.ok(C.createDraftStore(local, C.draftsKey('bob')).get(PAGE_ID), 'bob restored this tab: his');
+  assert.equal(C.createDraftStore(local, C.draftsKey('alice')).list().length, 0, 'never alice\'s');
 });

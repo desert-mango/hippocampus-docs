@@ -30,7 +30,8 @@ A few words used on this page:
   that say "tray" mean this page, and "Changes" means **Data**.)
 - **Block:** one piece of a page, such as a heading, a paragraph, a list, a picture or a note
   box. In Editor mode you click a block to change it.
-- **Draft:** a change you made that is not proposed yet. It stays in your browser tab only.
+- **Draft:** a change you made that is not proposed yet. It stays in this browser, even when you close
+  the tab, until you send it for review or sign out (signing out deletes it, after asking).
 
 ## Quick answers
 
@@ -125,8 +126,8 @@ Editor mode on with the **Changes** tab open. The tray starts closed: the tab
    block's text under "This block, as Markdown". (Markdown is the plain-text way the site's
    pages are written: `#` makes a heading, `**word**` makes bold.)
 2. Change the text. The page shows your change a moment later, with the same block still
-   picked. The line under the box says "Changed — kept as a draft in this tab, not proposed
-   yet." Your draft lives only in this browser tab until you propose it.
+   picked. The line under the box says "Changed — kept as a draft in this browser, not proposed
+   yet." Your draft stays in this browser (even when you close the tab) until you propose it.
 3. The buttons above the box add a **Note box**, a **Warning**, **Tabs**, an **Attention** box,
    a **Video (a link)** or a **Repository card** at the cursor. **Insert link** adds a link to
    another page of the site (pick it under "Page to link to"). **Image from Media** adds a
