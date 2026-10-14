@@ -15,7 +15,9 @@
                         through; the caret skips over text that is already struck. Deleting your own
                         inserted text removes it outright.
      select + type   -> the selection is struck and the new text follows it: ONE suggestion (Replace).
-     Bold / Italic   -> <b data-hc-sug="fmt" data-hc-fmt="strong|em">: a format suggestion.
+     Bold / Italic / inline code / Link
+                     -> <b|i|code|a data-hc-sug="fmt" data-hc-fmt="strong|em|code|link"> (a link also
+                        data-hc-href): a format suggestion.
      Shift+Enter     -> a line break, inserted as a suggestion.
    Every mark carries data-hc-id (s1, s2, ...): the pieces of one suggestion share it.
    js/editor-md.js serialize() writes the result as Markdown: inserted kept, deleted dropped, format
@@ -239,15 +241,20 @@
     } else tidy(root);
   }
 
-  function format(root, what) {
+  /* what: 'strong' | 'em' | 'code' | 'link' (href: an address js/editor-md.js linkHref accepted; a link
+     mark is an <a> WITHOUT href, so it never navigates while typing). */
+  const FORMAT_TAG = Object.freeze({ strong: 'b', em: 'i', code: 'code', link: 'a' });
+  function format(root, what, href) {
     const doc = root.ownerDocument;
     const s = doc.getSelection();
-    if (!s.rangeCount || s.isCollapsed) return;
+    if (!s.rangeCount || s.isCollapsed || !Object.prototype.hasOwnProperty.call(FORMAT_TAG, what)) return;
+    if (what === 'link' && (typeof href !== 'string' || !href)) return;
     const r = s.getRangeAt(0);
     if (!root.contains(r.commonAncestorContainer)) return;
-    const el = doc.createElement(what === 'em' ? 'i' : 'b');
+    const el = doc.createElement(FORMAT_TAG[what]);
     el.setAttribute(SUG, 'fmt');
-    el.setAttribute('data-hc-fmt', what === 'em' ? 'em' : 'strong');
+    el.setAttribute('data-hc-fmt', what);
+    if (what === 'link') el.setAttribute('data-hc-href', href);
     el.setAttribute(ID, newId());
     el.className = 'hc-sug hc-sug-fmt';
     try { r.surroundContents(el); } catch (e) { el.appendChild(r.extractContents()); r.insertNode(el); }

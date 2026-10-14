@@ -503,14 +503,14 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }], open: null });
+    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], open: null });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
 });
 
@@ -562,4 +562,32 @@ test('typing in the page (U2): hc-block-md and hc-block-state are built from che
   assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'html' }), null);
   assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'visual', reason: 'r'.repeat(900) }).reason.length, 300);
   assert.equal(SRC.frameMessage('hc-block-state', { index: 1, editor: 'visual', reason: 5 }).reason, '');
+});
+
+/* Kyle's live feedback retro (2026-10-14): the page frame is sandboxed without same-origin, so it cannot
+   read the site's stored theme and drew dark content under a light site. The parent says the theme in
+   the fragment (&theme=light, the one value; dark is the site's default) and again in hc-editor when it
+   changes; the frame sets data-theme on its <html> and nothing else. */
+test('the theme crosses into the frame: &theme=light in the fragment, theme in hc-editor, nothing else', () => {
+  assert.equal(SRC.previewFragment(NONCE, '/about', 'light'), `#preview=${NONCE}&route=%2Fabout&theme=light`);
+  assert.equal(SRC.previewFragment(NONCE, '/about', 'dark'), `#preview=${NONCE}&route=%2Fabout`, 'dark is the default');
+  assert.equal(SRC.previewFragment(NONCE, '/', 'light'), `#preview=${NONCE}&theme=light`);
+  assert.deepEqual(SRC.parsePreviewFragment(`#preview=${NONCE}&route=%2Fabout&theme=light`), { nonce: NONCE, route: '/about', theme: 'light' });
+  assert.deepEqual(SRC.parsePreviewFragment(`#preview=${NONCE}&theme=x%22onload`), { nonce: NONCE, route: '/' }, 'any other value is no theme');
+  const docEl = { dataset: {} };
+  const win = fakeWindow({ hash: `#preview=${NONCE}&route=%2Fabout&theme=light` });
+  win.document = { documentElement: docEl };
+  SRC.create(win);
+  assert.equal(docEl.dataset.theme, 'light', 'set before the site draws');
+  assert.equal(win.location.hash, '#/about');
+  const top = fakeWindow({ hash: '#/about', framed: false });
+  const topEl = { dataset: {} };
+  top.document = { documentElement: topEl };
+  SRC.create(top);
+  assert.equal(topEl.dataset.theme, undefined, 'never outside a preview');
+  const base = { type: 'hc-editor', on: true };
+  assert.equal(SRC.editorMessage({ ...base, theme: 'light' }).theme, 'light');
+  assert.equal(SRC.editorMessage({ ...base, theme: 'dark' }).theme, 'dark');
+  assert.equal(SRC.editorMessage({ ...base, theme: '<b>' }).theme, null);
+  assert.equal(SRC.editorMessage(base).theme, null, 'absent: the frame keeps what it has');
 });

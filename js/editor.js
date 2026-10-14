@@ -115,6 +115,10 @@
   const sessionGen = C.createGeneration();
   const STALE = 'stale answer';
 
+  /* The site's theme now: the sandboxed page frame cannot read it, so it is told (the frame fragment, and
+     hc-editor when the toggle changes it). */
+  const siteTheme = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+
   function store() {
     try { return window.sessionStorage; } catch (e) { return null; }
   }
@@ -444,7 +448,7 @@
     }
   }
   /* Send for review: the page's draft goes through the same propose form the tray uses, in a box
-     above the dock. */
+     below the dock. */
   async function openSendBox() {
     if (sendBox) { closeSendBox(); return; }
     const d = ed.draft;
@@ -456,6 +460,9 @@
       h('div', { class: 'hc-sendbox-head' }, h('strong', { text: 'Send for review' }), close), slot);
     sendKey = d.key;
     document.body.appendChild(sendBox);
+    // below the bubble, whatever its height (two rows; wrapped on a narrow screen)
+    const below = typeof dock.getBoundingClientRect === 'function' ? dock.getBoundingClientRect() : null;
+    if (below && below.bottom > 0) sendBox.style.top = `${Math.round(below.bottom + 8)}px`;
     const own = await myProposals();
     if (!sendBox || sendKey !== d.key || !ed.draft || ed.draft.key !== d.key) return;   // closed or moved on meanwhile
     openPropose(d, routeEpoch, slot, own);
@@ -927,10 +934,11 @@
     paint(epoch, [
       h('h2', { text: 'How editing works here' }),
       h('ol', { class: 'hc-guide' },
-        step('Editor on', ' (the switch in the header) shows this page in a frame you can edit. Your changes stay '
+        step('Editor on', ' (the switch in the bubble at the top right) shows this page in a frame you can edit. Your changes stay '
           + 'a draft in this browser tab until you propose them.'),
-        step('Click a block', ' (or its pencil) to change its Markdown in the ', link('#/pages', 'Changes tab'),
-          '. The snippet buttons and "Image from Media" add a note, a warning, tabs, an image…'),
+        step('Click a block', ' and type right in the page: new text is underlined, removed text struck through. '
+          + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
+        step('The whole page as Markdown', ' and the data files are in the ', link('#/pages', 'Changes tab'), '.'),
         step('Press + between two blocks', ' to add a new block there.'),
         step('Propose…', ' turns your drafts into a proposal: a pull request on GitHub, checked by the site\'s gate.'),
         step('Nothing is live', ' until someone with write access merges it, in the ', link('#/', 'Proposals tab'),
@@ -1964,7 +1972,7 @@
         toggle('suggestions', 'Show others\u2019 suggestions', 'Open proposals drawn on the page'),
         row('Diff style', 'How a changed block is shown', seg),
         toggle('compact', 'Compact mode', 'Tighter text and code'),
-        toggle('outlines', 'Outline editable blocks', 'Show the frame on hover')),
+        toggle('outlines', 'Mark blocks on hover', 'A faint line beside the block under the pointer')),
       h('p', { class: 'hc-foot', text: 'These settings are yours only. They live in this browser (localStorage) '
         + 'and never touch the repository or what visitors see.' }),
     ];
@@ -2088,6 +2096,7 @@
       getFrameWindow: () => frame.contentWindow,
       setFrameSrc: (url) => { frame.src = url; },
       getRandomValues: randomValues,
+      getTheme: siteTheme,
       base: 'index.html',
     });
     const entry = { host, frame };
@@ -2242,6 +2251,12 @@
     ed.on = on;
     if (!on) ed.show = null;
     document.body.classList.toggle('hc-editor-on', on);
+    // the title: "HippoCampus Editor" while Editor mode is on (css/site.css slides the word); the reader hears the visible word
+    const [robotics, editorWord] = [document.querySelector('.brand-robotics'), document.querySelector('.brand-editor')];
+    if (robotics && editorWord) {
+      if (on) { robotics.setAttribute('aria-hidden', 'true'); editorWord.removeAttribute('aria-hidden'); }
+      else { editorWord.setAttribute('aria-hidden', 'true'); robotics.removeAttribute('aria-hidden'); }
+    }
     if (frameHost) frameHost.hidden = !on;
     applyTray();
     drawShowBar();
@@ -2382,6 +2397,7 @@
       getFrameWindow: () => frame.contentWindow,
       setFrameSrc: (url) => { frame.src = url; },
       getRandomValues: randomValues,
+      getTheme: siteTheme,
       base: 'index.html',
     });
   }
@@ -2913,7 +2929,7 @@
     const w = ed.frame && ed.frame.contentWindow;
     const nonce = ed.host && ed.host.nonce();
     if (!w || !nonce || !ed.ready) return;
-    w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(),
+    w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
       selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage() }, '*');
   }
 
@@ -3251,7 +3267,7 @@
     const sel = ed.sel && ed.draft && ed.sel.key === ed.draft.key ? ed.sel : null;
     if (!sel) {
       if (!ed.wholeReason) {
-        out.push(h('p', { class: 'cms-muted', text: 'Click a block on the page (the pencil) to edit it, '
+        out.push(h('p', { class: 'cms-muted', text: 'Click a block on the page to edit it, '
           + 'or "+" between two blocks to add one.' }));
       }
       out.push(h('div', { class: 'cms-action-row' }, whole));
@@ -3357,6 +3373,11 @@
     handle.addEventListener('click', openTray);
     document.body.appendChild(tray);
     document.body.appendChild(handle);
+    // the theme toggle: the open page frame follows at once
+    if (typeof window.MutationObserver === 'function') {
+      new window.MutationObserver(() => { if (ed.on) postEditor(); })
+        .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
     // phones: the tray is a bottom sheet (css/editor.css); the class says so to scripts and tests
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia(PHONE_QUERY) : null;
     if (mq) {

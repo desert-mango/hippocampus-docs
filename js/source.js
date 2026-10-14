@@ -134,9 +134,12 @@
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, selected, overlay, open}, '*')
+          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open}, '*')
         on        true: draw the block marks (false: draw none)
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
+        theme     'light' | 'dark' | absent: the site's theme now (the frame sets
+                  data-theme on its <html>; the first load gets it in the
+                  fragment as &theme=light)
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
         open      {index, md, kind, as} | null: the block to type in, its Markdown
@@ -188,12 +191,15 @@
       ? route : '/';
   }
 
-  function previewFragment(nonce, route) {
+  /* theme: 'light' adds &theme=light (the sandboxed frame cannot read the site's stored theme; dark is the
+     site's default, so it adds nothing). */
+  function previewFragment(nonce, route, theme) {
     if (typeof nonce !== 'string' || !NONCE_RE.test(nonce)) {
       throw new Error('previewFragment: the nonce must be 16-128 characters of [A-Za-z0-9_-]');
     }
     const r = safeRoute(route === undefined ? '/' : route);
-    return PREVIEW_PREFIX + nonce + (r === '/' ? '' : '&route=' + encodeURIComponent(r));
+    return PREVIEW_PREFIX + nonce + (r === '/' ? '' : '&route=' + encodeURIComponent(r))
+      + (theme === 'light' ? '&theme=light' : '');
   }
 
   // null when the fragment is not a preview fragment at all; otherwise
@@ -204,10 +210,12 @@
     let params;
     try { params = new URLSearchParams(hash.slice(1)); } catch (e) { return { nonce: null, route: '/' }; }
     const nonce = params.get('preview');
-    return {
+    const out = {
       nonce: (nonce && NONCE_RE.test(nonce)) ? nonce : null,
       route: safeRoute(params.get('route')),
     };
+    if (params.get('theme') === 'light') out.theme = 'light';
+    return out;
   }
 
   function rewriteFragment(win, hash) {
@@ -275,6 +283,7 @@
       },
       selected: isIndex(m.selected) ? m.selected : null,
       overlay,
+      theme: m.theme === 'light' || m.theme === 'dark' ? m.theme : null,
       open: (m.open && typeof m.open === 'object' && isIndex(m.open.index) && typeof m.open.md === 'string'
         && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
         ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
@@ -297,6 +306,11 @@
     const nonce = (parsed && parsed.nonce && framed && /^https?:\/\/[^/]+$/.test(origin))
       ? parsed.nonce : null;
     if (parsed) rewriteFragment(win, '#' + parsed.route);
+    // the parent's theme, before the site draws (js/app.js only ever sets light from storage, which a
+    // sandboxed frame cannot read)
+    if (nonce && parsed.theme === 'light' && win.document && win.document.documentElement) {
+      win.document.documentElement.dataset.theme = 'light';
+    }
 
     // (3) a later preview fragment is a new load, never a route and never a nonce.
     win.addEventListener('hashchange', (event) => {

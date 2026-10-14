@@ -551,7 +551,7 @@ test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by sp
 
 /* The DevTools harness of the walks above, as one helper: the real site in Editor mode at `page`
    (editor_walk.html?step=on), with the sandboxed page frame's context found (it runs out of process). */
-async function editorWalk(page, scratch) {
+async function editorWalk(page, scratch, query = '') {
   const chrome = findChrome();
   const server = await startServer(ROOT, []);
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -594,7 +594,7 @@ async function editorWalk(page, scratch) {
   await send('Page.enable');
   await send('Runtime.enable');
   await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
-  await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=on&page=${page}` });
+  await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=on&page=${page}${query}` });
   await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === 'on:ready' || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), 'the walk at "on"');
   const frameCtx = async () => {
     for (const c of contexts.values()) {
@@ -675,7 +675,7 @@ test('U3 walk: the block editors in the page, in a real Chrome: note box type, M
   }
 });
 
-test('U4a walk: the dock at the bottom right in a real Chrome (switch, avatar, count, Send), and the guest "Sign in" bubble', { timeout: 120000 }, async () => {
+test('U4a walk: the dock (top right since V1) in a real Chrome (switch, avatar, count, Send), and the guest "Sign in" bubble', { timeout: 120000 }, async () => {
   const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u4a-walk-'));
   let W = null;
   try {
@@ -683,9 +683,10 @@ test('U4a walk: the dock at the bottom right in a real Chrome (switch, avatar, c
     const { send, ev, F, site, until, sleep, clickBlock, shot } = W;
     const S = (x) => ev(`${site}.document.${x}`);
     assert.equal(await S("querySelector('.header-actions .hc-switch')"), null, 'no switch in the header');
-    const box = await ev(`(() => { const d = ${site}.document.querySelector('.hc-dock'); if (!d || d.hidden) return null; const r = d.getBoundingClientRect(); return { right: ${site}.innerWidth - r.right, bottom: ${site}.innerHeight - r.bottom, sw: !!d.querySelector('.hc-switch'), av: !!d.querySelector('.hc-avatar') }; })()`);
+    const box = await ev(`(() => { const d = ${site}.document.querySelector('.hc-dock'); if (!d || d.hidden) return null; const r = d.getBoundingClientRect(); const h = ${site}.document.querySelector('.site-header').getBoundingClientRect(); return { right: ${site}.innerWidth - r.right, below: r.top - h.bottom, sw: !!d.querySelector('.hc-switch'), av: !!d.querySelector('.hc-avatar') }; })()`);
     assert.ok(box && box.sw && box.av, 'the dock holds the switch and the avatar');
-    assert.ok(box.right >= 0 && box.right < 40 && box.bottom >= 0 && box.bottom < 40, `bottom right (${box.right}, ${box.bottom})`);
+    // Kyle's live feedback (2026-10-14): top right, just under the header (it was bottom right in U4a)
+    assert.ok(box.right >= 0 && box.right < 40 && box.below >= 0 && box.below < 30, `top right, under the header (${box.right}, ${box.below})`);
     assert.ok(await clickBlock('As a physical check'));
     await until(() => ev("(HCEditorFrame.runtime.open() || {}).editor === 'visual'", F), 'the block opens');
     await ev("(() => { const p = document.querySelector('.hc-block.hc-open p'); p.focus(); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); })()", F);
@@ -720,6 +721,97 @@ test('U4a walk: the dock at the bottom right in a real Chrome (switch, avatar, c
     })();
     assert.match(W.out, /<div class="hc-guest-dock" role="region" aria-label="Sign in to edit"><button type="button" class="hc-guest-signin"[^>]*>Sign in<\/button>/, 'the guest bubble with "Sign in"');
     console.log('U4a walk: dock bottom right with switch + avatar + count + Send; guest bubble "Sign in"');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* Kyle's live feedback (2026-10-14), the look (unit V1), in a real Chrome, LIGHT theme: the frame follows the
+   site's theme (live too); no pencil; one left line (faint on hover, solid open); the title says "HippoCampus
+   Editor" with "Editor" in the accent; the bubble sits top right under the TUHH mark in two rows; the format
+   bar has Bold, Italic, inline code and Link, and Link refuses a script address. */
+test('V1 walk: theme in the frame, the left line, the title, the bubble top right, Link and code', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-v1-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&theme=light');
+    const { send, ev, F, site, until, sleep, draft, clickBlock, shot } = W;
+    const KEY = 'setup/lab-gantry/usage';
+    const FILE = 'content/setup/lab-gantry/usage.md';
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    // 1. the theme crosses into the sandboxed frame
+    assert.equal(await S("document.documentElement.getAttribute('data-theme')"), 'light');
+    assert.equal(await ev("document.documentElement.getAttribute('data-theme')", F), 'light', 'the frame is light too');
+    assert.equal(await ev('getComputedStyle(document.body).backgroundColor', F), 'rgb(250, 250, 250)', 'light page under a light site');
+    // 2. no pencil; the left line: transparent at rest, solid accent on the open block
+    assert.equal(await ev("document.querySelectorAll('.hc-pencil').length", F), 0, 'no pencil');
+    const lineOf = (sel) => ev(`getComputedStyle(document.querySelector(${JSON.stringify(sel)}), '::after').backgroundColor`, F);
+    assert.equal(await lineOf('.hc-block'), 'rgba(0, 0, 0, 0)', 'no line at rest');
+    assert.equal(await ev("getComputedStyle(document.querySelector('.hc-block')).boxShadow", F), 'none', 'no ring');
+    // (measured before a block opens: until V2 the right tray opens with it and the bubble steps left of it)
+    // 3. the title: "HippoCampus Editor", "Editor" in the accent, "Robotics" gone
+    await sleep(400);                                            // the slide
+    const title = await S(`(() => { const ed = document.querySelector('.brand-editor'), ro = document.querySelector('.brand-robotics');
+      return ed && ro ? { ed: getComputedStyle(ed).opacity, edColor: getComputedStyle(ed).color, ro: getComputedStyle(ro).opacity, roHidden: ro.getAttribute('aria-hidden'), edHidden: ed.getAttribute('aria-hidden') } : null; })()`);
+    assert.ok(title, 'the brand has both words');
+    assert.equal(title.ed, '1'); assert.equal(title.ro, '0');
+    assert.equal(title.edColor, 'rgb(2, 132, 199)', '"Editor" in the site blue');
+    assert.equal(title.roHidden, 'true'); assert.equal(title.edHidden, null);
+    // 4. the bubble: top right, under the header (not in it), its right edge at the TUHH mark's, two rows
+    const pos = await S(`(() => { const d = document.querySelector('.hc-dock'), hd = document.querySelector('.site-header'), t = document.querySelector('.tuhh-link');
+      const r = d.getBoundingClientRect(), h = hd.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      const row1 = d.querySelector('.hc-switch').getBoundingClientRect(), row2 = d.querySelector('.hc-dock-count').getBoundingClientRect();
+      return { top: r.top, headerBottom: h.bottom, right: r.right, tuhhRight: tr.right, row1: row1.top, row2: row2.top, bottomGap: innerHeight - r.bottom }; })()`);
+    assert.ok(pos.top >= pos.headerBottom && pos.top - pos.headerBottom <= 24, `just under the header (${JSON.stringify(pos)})`);
+    assert.ok(Math.abs(pos.right - pos.tuhhRight) <= 12, `right edge under the TUHH mark (${pos.right} vs ${pos.tuhhRight})`);
+    assert.ok(pos.row2 > pos.row1 + 10, 'two rows: switch above the count');
+    assert.ok(await clickBlock('As a physical check'));
+    await until(() => ev("(HCEditorFrame.runtime.open() || {}).editor === 'visual'", F), 'the block opens');
+    await sleep(400);                                            // the line's colour transition
+    const accent = await ev("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()", F);
+    assert.equal(accent, '#0284c7');
+    assert.equal(await lineOf('.hc-block.hc-open'), 'rgb(2, 132, 199)', 'the open block has the solid accent line');
+    assert.equal(await ev("getComputedStyle(document.querySelector('.hc-block.hc-open')).boxShadow", F), 'none', 'and no ring');
+    await shot('v1-light-open');
+    // 5. the format bar: Bold, Italic, inline code, Link
+    const selectWord = (word) => ev(`(() => { const p = document.querySelector('.hc-block.hc-open p'); const w = document.createTreeWalker(p, 4); let t; while ((t = w.nextNode())) { const i = t.data.indexOf(${JSON.stringify(word)}); if (i >= 0) { const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + ${word.length}); getSelection().removeAllRanges(); getSelection().addRange(r); return true; } } return false; })()`, F);
+    assert.ok(await selectWord('physical'));
+    await until(() => ev("!!document.querySelector('.hc-formatbar') && !document.querySelector('.hc-formatbar').hidden", F), 'the format bar');
+    const kinds = await ev("[...document.querySelectorAll('.hc-formatbar .hc-fb')].map((b) => b.getAttribute('aria-label'))", F);
+    assert.deepEqual(kinds, ['Bold', 'Italic', 'Inline code', 'Link']);
+    await shot('v1-format-bar');
+    await ev("document.querySelector('.hc-formatbar .hc-fb-code').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await sleep(250);
+    assert.match(await draft(KEY, FILE), /As a `physical` check/, 'inline code in the draft');
+    assert.ok(await selectWord('check'));
+    await until(() => ev("!document.querySelector('.hc-formatbar').hidden", F), 'the bar again');
+    await ev("document.querySelector('.hc-formatbar .hc-fb-link').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await until(() => ev("!!document.querySelector('.hc-formatbar .hc-fb-url') && document.activeElement === document.querySelector('.hc-formatbar .hc-fb-url')", F), 'the address field, focused');
+    await send('Input.insertText', { text: 'javascript:alert(1)' });
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await sleep(150);
+    assert.match(await ev("(document.querySelector('.hc-formatbar .hc-fb-err') || {}).textContent || ''", F), /https:\/\//, 'a script address is refused, in words');
+    await shot('v1-link-refused');
+    await ev("(() => { const i = document.querySelector('.hc-formatbar .hc-fb-url'); i.value = ''; })()", F);
+    await send('Input.insertText', { text: '#/setup/lab-gantry/wiring' });
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await sleep(300);
+    assert.match(await draft(KEY, FILE), /`physical` \[check\]\(#\/setup\/lab-gantry\/wiring\)/, 'the link in the draft');
+    // keyboard: Cmd/Ctrl+K opens the address field for the selection; Escape gives the selection back
+    assert.ok(await selectWord('movable'));
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 4 });
+    await until(() => ev("document.activeElement === document.querySelector('.hc-formatbar .hc-fb-url')", F), 'Cmd+K opens the address field');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await until(() => ev("document.querySelector('.hc-formatbar').hidden && getSelection().toString() === 'movable'", F), 'Escape closes it and keeps the selection');
+    await sleep(300);                                            // the selectionchange the restore fires
+    assert.equal(await ev("document.querySelector('.hc-formatbar').hidden", F), true, 'and the bar stays closed');
+    assert.ok(await ev("!!HCEditorFrame.runtime.open()", F), 'and the block stays open');
+    // 6. the theme toggle: the frame follows at once
+    await S("document.getElementById('theme-toggle').click()");
+    await until(() => ev("document.documentElement.getAttribute('data-theme') === null", F), 'the frame turns dark with the site');
+    await shot('v1-dark-after-toggle');
+    console.log('V1 walk: light frame, one left line, "HippoCampus Editor", bubble under TUHH in two rows, code + link');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });

@@ -27,9 +27,9 @@
            <div class="hc-block" data-index="i">, sentinel first. The run
            stops early at chrome app.js/lab.js add after the Markdown
            (nav.page-nav, any hc-* element), which stays outside;
-         * adds the select affordance (a pencil button per block; a click
-           anywhere in a block that is not a link or a control selects it
-           too) -> hc-block-select {index}, and a "+" rail before every
+         * adds the select affordance (a click anywhere in a block that is
+           not a link or a control, or Enter/Space on the focused block —
+           each block is tabindex 0) -> hc-block-select {index}, and a "+" rail before every
            block and after the last -> a picker of the snippet kinds ->
            hc-block-insert {index, kind};
          * applies the classes the message names: hc-selected on the
@@ -259,18 +259,22 @@
       HC.post('hc-block-select', { index });
     }
 
-    /* Pencil, click-to-select and the "+" rails, once per block. */
+    /* Click/Enter-to-select and the "+" rails, once per block. */
     function decorate(body, blocks) {
       blocks.forEach((w) => {
         const i = indexOfBlock(w);
         if (i === null || w.getAttribute('data-hc-wired') === '1') return;
         w.setAttribute('data-hc-wired', '1');
-        const pencil = button('hc-pencil', 'Edit this block', '✎');
-        pencil.addEventListener('click', (e) => {
-          if (e && e.stopPropagation) e.stopPropagation();
+        // no pencil (Kyle, 2026-10-14): the block itself is the target — a click, or Enter / Space while
+        // it has keyboard focus; css/editor.css draws the same left line for hover, focus and open
+        w.setAttribute('tabindex', '0');
+        w.addEventListener('keydown', (e) => {
+          if (!e || e.target !== w || (e.key !== 'Enter' && e.key !== ' ')) return;
+          if (openNow && openNow.index === i) return;
+          if (typeof e.preventDefault === 'function') e.preventDefault();
+          lastClick = null;
           select(i);
         });
-        w.appendChild(pencil);
         w.addEventListener('click', (e) => {
           if (openNow && openNow.index === i) return;          // typing here already: the click moves the caret
           for (let t = e && e.target; t && t !== w; t = t.parentNode) {
@@ -413,7 +417,6 @@
       }
       return null;
     }
-    const isPencil = (n) => n.nodeType === ELEMENT && classesOf(n).indexOf('hc-pencil') >= 0;
 
     function syncOpen(s) {
       const want = s && s.on ? s.open : null;
@@ -447,17 +450,16 @@
       let root = null;
       for (const c of Array.from(w.childNodes)) if (c.nodeType === ELEMENT && classesOf(c).indexOf('hc-edit-root') >= 0) root = c;
       if (!root || root.getAttribute('data-hc-md-sent') !== o.md) {
-        // a clean render of THIS Markdown replaces the page's enhanced one (the wrapper keeps its sentinel and pencil)
+        // a clean render of THIS Markdown replaces the page's enhanced one (the wrapper keeps its sentinel)
         const fresh = doc.createElement('div');
         fresh.className = 'hc-edit-root';
         const body = M.renderBlock(o.md);
         while (body.firstChild) fresh.appendChild(body.firstChild);      // appending adopts the node into this page
         for (const c of Array.from(w.childNodes)) {
-          if (sentinelIndex(c, prefix) !== null || isPencil(c)) continue;
+          if (sentinelIndex(c, prefix) !== null) continue;
           w.removeChild(c);
         }
-        const pencil = Array.from(w.childNodes).find(isPencil) || null;
-        w.insertBefore(fresh, pencil);
+        w.appendChild(fresh);
         root = fresh;
       }
       const plain = editor === 'code';
@@ -511,7 +513,7 @@
        keystroke posts the box's text (Markdown, exactly as typed); Done shows the result rendered. */
     function openMarkdownBox(o, w) {
       const M = win.HCEditorMd;
-      const kept = Array.from(w.childNodes).filter((c) => sentinelIndex(c, prefix) === null && !isPencil(c));
+      const kept = Array.from(w.childNodes).filter((c) => sentinelIndex(c, prefix) === null);
       kept.forEach((c) => { if (c.nodeType === ELEMENT) c.style.display = 'none'; });
       const label = o.kind === 'table' ? 'Table' : (/class="tabs"/.test(o.md) ? 'Tabs'
         : (o.kind === 'html' || o.kind === 'wrapper' ? 'HTML' : 'Markdown'));
@@ -519,8 +521,7 @@
       const box = win.HCEditorBlocks.markdownBox(doc, { md: o.md, label, render: (md) => M.renderBlock(md),
         onInput: () => schedule(now), onDone: () => { if (openNow === now) closeBlock(true); } });
       now.box = box;
-      const pencil = Array.from(w.childNodes).find(isPencil) || null;
-      w.insertBefore(box.el, pencil);
+      w.appendChild(box.el);
       now.handles.push({ detach() {
         box.el.remove();
         if (now.sent === now.md) { kept.forEach((c) => { if (c.nodeType === ELEMENT) c.style.display = ''; }); return; }
@@ -531,7 +532,7 @@
         const body = M.renderBlock(now.sent);
         while (body.firstChild) fresh.appendChild(body.firstChild);
         fresh.setAttribute('data-hc-md-sent', now.sent);
-        w.insertBefore(fresh, pencil);
+        w.appendChild(fresh);
       } });
       openNow = now;
       w.classList.add('hc-open', 'hc-open-md');
@@ -552,20 +553,32 @@
       now.w.classList.add('hc-removed');
     }
 
-    /* The formatting bar over a selection inside the open block (U3): Bold, Italic, as suggestions. */
+    /* The formatting bar over a selection inside the open block (U3): Bold, Italic, inline code, Link, as suggestions. */
     let fbar = null;
     function formatBar() {
       if (fbar || !win.HCEditorBlocks || !doc.body) return fbar;
-      fbar = win.HCEditorBlocks.formatBar(doc, { onFormat: (what) => {
-        const now = openNow;
-        const sel = doc.getSelection();
-        if (!now || !now.targets || !sel || !sel.rangeCount) return;
-        const host = now.targets.find((t) => t.contains(sel.anchorNode));
-        if (!host) return;
-        win.HCEditorType.format(host, what);
-        schedule(now);
-        fbar.hide();
-      } });
+      fbar = win.HCEditorBlocks.formatBar(doc, {
+        // a link address: js/editor-md.js's rule (https://, http://, #/, /, a page path), the one the serializer re-checks
+        check: (v) => (win.HCEditorMd && typeof win.HCEditorMd.linkHref === 'function' ? win.HCEditorMd.linkHref(v) : null),
+        onFormat: (what, href, range) => {
+          const now = openNow;
+          const sel = doc.getSelection();
+          if (!now || !now.targets || !sel) return;
+          if (range) {                                   // Link: the selection saved before the address field took the focus
+            const owner = now.targets.find((t) => t.contains(range.commonAncestorContainer));
+            if (!owner) return;
+            owner.focus({ preventScroll: true });
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+          if (!sel.rangeCount) return;
+          const host = now.targets.find((t) => t.contains(sel.anchorNode));
+          if (!host) return;
+          win.HCEditorType.format(host, what, href);
+          schedule(now);
+          fbar.hide();
+        },
+      });
       doc.body.appendChild(fbar.el);
       return fbar;
     }
@@ -574,7 +587,7 @@
         const now = openNow;
         const sel = doc.getSelection ? doc.getSelection() : null;
         const fb = now && now.targets ? formatBar() : fbar;
-        if (!fb) return;
+        if (!fb || (fb.busy && fb.busy())) return;     // the Link address field has the focus
         if (!now || !now.targets || !sel || sel.isCollapsed || !sel.rangeCount || !now.targets.some((t) => t.contains(sel.anchorNode))) { fb.hide(); return; }
         const r = sel.getRangeAt(0).getBoundingClientRect();
         if (r && (r.width || r.height)) fb.showAt(r); else fb.hide();
@@ -638,12 +651,16 @@
       openNow = null;
       for (const hd of now.handles) hd.detach();
       if (now.root) for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
-      if (fbar) fbar.hide();
+      if (fbar) fbar.close();
       now.w.classList.remove('hc-open', 'hc-open-md');
       if (tellParent) report(now.index, 'closed', '');
     }
 
     HC.onEditor((s) => {
+      // the site's theme (the sandboxed frame cannot read it): the one attribute js/app.js's toggle sets
+      const root = doc.documentElement;
+      if (root && s.theme === 'light') root.setAttribute('data-theme', 'light');
+      else if (root && s.theme === 'dark') root.removeAttribute('data-theme');
       if (!state || state.selected !== s.selected) scrolledTo = null;
       state = s;
       apply();
@@ -666,6 +683,23 @@
     });
     if (doc.addEventListener) {
       doc.addEventListener('click', () => closePicker());
+      // the format bar from the keyboard (Kyle's 2026-10-14 bar): Cmd/Ctrl+K a link, Cmd/Ctrl+E inline code
+      doc.addEventListener('keydown', (e) => {
+        if (!e || !(e.metaKey || e.ctrlKey) || e.altKey || !openNow || !openNow.targets) return;
+        const k = String(e.key || '').toLowerCase();
+        if (k !== 'k' && k !== 'e') return;
+        const sel = doc.getSelection ? doc.getSelection() : null;
+        if (!sel || sel.isCollapsed || !sel.rangeCount || !openNow.targets.some((t) => t.contains(sel.anchorNode))) return;
+        const fb = formatBar();
+        if (!fb) return;
+        e.preventDefault();
+        if (k === 'e') {
+          const host = openNow.targets.find((t) => t.contains(sel.anchorNode));
+          win.HCEditorType.format(host, 'code');
+          schedule(openNow);
+          fb.hide();
+        } else fb.openLink(sel.getRangeAt(0).getBoundingClientRect());
+      });
       doc.addEventListener('keydown', (e) => {
         if (!e || e.key !== 'Escape') return;
         if (openNow) closeBlock(true);

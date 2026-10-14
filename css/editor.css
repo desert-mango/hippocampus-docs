@@ -4,7 +4,7 @@
    Built on css/site.css's tokens; nothing in site.css changes.
 
    Sections:
-     1. the frame side: hc-framed, block marks, pencil, "+" rails, picker,
+     1. the frame side: hc-framed, the block line, "+" rails, picker,
         proposal marks, view settings;
      2. the parent side: header switch and avatar, frame host, tray, handle,
         and the tray's contents (carried over from the retired css/cms.css) — added with
@@ -31,30 +31,33 @@ body.hc-framed .skip-link { display: none !important; }
 body.hc-framed .layout { display: block; width: auto; max-width: none; padding: 0; }
 body.hc-framed .content { padding: 1.4rem 1.6rem 3rem; max-width: 52rem; margin: 0 auto; }
 
-body.hc-edit-on .page-body > .hc-block { position: relative; border-radius: 8px; transition: box-shadow .15s; cursor: pointer; }
-body.hc-edit-on.hc-outlines .page-body > .hc-block:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
-body.hc-edit-on .page-body > .hc-block.hc-selected { box-shadow: 0 0 0 2px var(--accent) !important; }
+/* One look for a block in Editor mode (Kyle, 2026-10-14): a line in the left margin — faint on hover and on
+   the solid line on keyboard focus and when the block is selected or open. No pencil, no ring, no box: the same ::after in
+   every state, only its colour changes, so nothing jumps. A note box, a code box and the Markdown box get the
+   same line. */
+:root { --hc-line-faint: color-mix(in srgb, var(--accent) 38%, transparent); }
+body.hc-edit-on .page-body > .hc-block,
+body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; cursor: pointer; outline: none; }
+body.hc-edit-on .page-body > .hc-block::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block::after { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
+  width: 2px; border-radius: 2px; background: transparent; transition: background-color .15s ease-out; pointer-events: none; }
+body.hc-edit-on.hc-outlines .page-body > .hc-block:hover::after,
+body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover::after { background: var(--hc-line-faint); }
+/* keyboard focus: the solid line (a faint one would not reach 3:1 as a focus indicator) */
+body.hc-edit-on .page-body > .hc-block:focus-visible::after,
+body.hc-edit-on .page-body > .hc-block.hc-selected::after,
+body.hc-edit-on .page-body > .hc-block.hc-open::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block:focus-visible::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-selected::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-open::after { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  body.hc-edit-on .page-body > .hc-block::after, body.hc-edit-on .page-body > .hc-side > .hc-block::after { transition: none; } }
 
-.hc-pencil { position: absolute; top: -.6rem; right: -.4rem; opacity: 0; transition: opacity .15s; z-index: 3;
-  width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1px solid var(--edge); background: var(--surface);
-  color: var(--accent); cursor: pointer; font: inherit; font-size: .8rem; line-height: 1; }
-body.hc-edit-on .page-body > .hc-block:hover > .hc-pencil,
-.hc-block.hc-selected > .hc-pencil,
-.hc-pencil:focus-visible { opacity: 1; }
-
-/* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout;
-   a thin accent bar in the margin says where the caret is; a note box or code box gets an accent ring
-   instead (the box has its own left bar). Suggestions (js/editor-type.js): new text in the accent colour,
+/* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout; the
+   left line says where the caret is. Suggestions (js/editor-type.js): new text in the accent colour,
    underlined; removed text struck through in the accent colour; a format change dotted. */
-body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; box-shadow: none !important; }
-body.hc-edit-on .page-body > .hc-block.hc-open::before { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
-  width: 2px; border-radius: 2px; background: var(--accent); }
-body.hc-edit-on .page-body > .hc-block.hc-open:has(> .hc-edit-root > .adm, > .hc-edit-root > pre)::before { display: none; }
-.hc-block.hc-open > .hc-pencil { display: none; }
+body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-edit-root [contenteditable] { outline: none; caret-color: var(--accent); cursor: text; }
-.hc-edit-root > .adm:has([contenteditable]), .hc-edit-root > pre:has([contenteditable]) {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; }
 .hc-sug-ins { color: var(--hc-accent-ink); background: none; text-decoration: underline; text-decoration-color: var(--accent);
   text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 .hc-sug-del { color: var(--hc-accent-ink); background: none; text-decoration: line-through; text-decoration-color: var(--accent);
@@ -82,15 +85,34 @@ body.hc-edit-on .page-body > .hc-block.hc-open:has(> .hc-edit-root > .adm, > .hc
 .hc-boxmenu .hc-pm-item:hover { background: var(--surface-2); }
 .hc-boxmenu .is-current { background: var(--accent-soft); }
 .hc-block.hc-removed { opacity: .55; text-decoration: line-through; text-decoration-color: var(--accent); }
-.hc-formatbar { position: absolute; z-index: 60; display: flex; gap: 2px; padding: 4px; border-radius: 10px; background: var(--surface);
+.hc-formatbar { position: absolute; z-index: 60; padding: 4px; border-radius: 10px; background: var(--surface);
   border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-.hc-formatbar[hidden] { display: none; }
-.hc-fb { width: 32px; height: 32px; border: 0; border-radius: 7px; background: none; color: var(--heading); cursor: pointer; font: 700 14px var(--sans); }
+[data-theme="light"] .hc-formatbar { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
+.hc-formatbar[hidden], .hc-fb-row[hidden], .hc-fb-linkrow[hidden], .hc-fb-err[hidden] { display: none; }
+.hc-fb-row { display: flex; gap: 2px; }
+.hc-fb { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 7px; background: none;
+  color: var(--heading); cursor: pointer; font: 700 14px var(--sans); transition: background-color .12s ease-out, color .12s ease-out; }
 .hc-fb-em { font-style: italic; font-weight: 600; font-family: Georgia, serif; }
+.hc-fb-code { font: 600 12.5px var(--mono); letter-spacing: -.04em; }
 .hc-fb:hover { background: var(--surface-2); color: var(--hc-accent-ink); }
+.hc-fb:active { background: var(--accent-soft); }
+.hc-fb:focus-visible, .hc-fb-add:focus-visible, .hc-fb-cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hc-fb-linkrow { width: 19rem; max-width: calc(100vw - 32px); }
+.hc-fb-inputs { display: flex; align-items: center; gap: 4px; }
+.hc-fb-url { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--edge); border-radius: 7px; background: var(--bg);
+  color: var(--heading); font: 13px var(--mono); }
+.hc-fb-url:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; border-color: var(--accent); }
+.hc-fb-add { height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--accent); color: #06121a; font: 600 13px var(--sans); cursor: pointer; }
+[data-theme="light"] .hc-fb-add { background: var(--hc-accent-ink); color: #fff; }
+.hc-fb-add:hover { filter: brightness(1.08); }
+.hc-fb-cancel { width: 32px; height: 32px; border: 0; border-radius: 7px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.05rem; }
+.hc-fb-cancel:hover { background: var(--surface-2); color: var(--heading); }
+.hc-fb-err { margin: 6px 4px 2px; color: var(--hc-del); font: 12.5px/1.4 var(--sans); }
+/* an inline code or link suggestion keeps its own look under the dotted format mark */
+code.hc-sug-fmt { font-family: var(--mono); }
+a.hc-sug-fmt { color: var(--hc-accent-ink); }
 /* the in-place Markdown box (Kyle's D1 change 6b) */
-.hc-mdbox { margin: 1.1rem 0; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); overflow: hidden; cursor: default;
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; }
+.hc-mdbox { margin: 1.1rem 0; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); overflow: hidden; cursor: default; }
 .hc-md-head { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 14px; min-height: 46px; border-bottom: 1px solid var(--edge-soft);
   font: 13.5px var(--sans); flex-wrap: wrap; }
 .hc-md-title { color: var(--heading); font-weight: 600; }
@@ -111,7 +133,6 @@ body.hc-edit-on .page-body > .hc-block.hc-open:has(> .hc-edit-root > .adm, > .hc
 .hc-md-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--body-soft); margin: 2px 0 4px; }
 .hc-md-prev { font-size: .95em; }
 .hc-md-foot { padding: 8px 14px; border-top: 1px solid var(--edge-soft); color: var(--body-soft); font: 12.5px var(--sans); }
-body.hc-edit-on .page-body > .hc-block.hc-open-md::before { display: none; }
 
 .hc-plus { position: relative; height: 0; margin: 0; }
 .hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: transparent; }
@@ -148,11 +169,7 @@ body.hc-hide-suggestions .hc-block.hc-prop-del { display: none; }
    (js/editor-frame.js pairs them into .hc-side; inline keeps them stacked, old above new). */
 body.hc-edit-on .page-body > .hc-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: .9rem; align-items: start; margin: .2rem 0; }
-body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; min-width: 0; margin-left: 0; cursor: pointer;
-  border-radius: 0 6px 6px 0; }
-body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
-body.hc-edit-on .page-body > .hc-side > .hc-block:hover > .hc-pencil { opacity: 1; }
+body.hc-edit-on .page-body > .hc-side > .hc-block { min-width: 0; margin-left: 0; border-radius: 0 6px 6px 0; }
 .hc-side > .hc-block.hc-prop-del::before, .hc-side > .hc-block.hc-prop-change::before { display: block;
   margin-bottom: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .hc-side > .hc-block.hc-prop-del::before { content: "Now"; color: var(--hc-del); }
@@ -171,6 +188,11 @@ body.hc-compact .page-body pre { font-size: .8em; }
   body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
   .hc-block.hc-prop-add, .hc-block.hc-prop-change, .hc-block.hc-prop-del { margin-left: -.6rem; padding-left: .55rem; }
 }
+
+/* Scrollbars in the editor's own scrolling boxes: the site's tokens (css/site.css --scroll-thumb), both themes. */
+.hc-md-src, .hc-md-prevwrap, .hc-sendbox, .hc-tray-body { scrollbar-color: var(--scroll-thumb) transparent; scrollbar-width: thin; }
+.hc-md-src::-webkit-scrollbar-thumb, .hc-md-prevwrap::-webkit-scrollbar-thumb, .hc-sendbox::-webkit-scrollbar-thumb,
+.hc-tray-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; }
 
 /* ---------- 2. the parent side (js/editor.js) ---------- */
 
@@ -206,35 +228,52 @@ body.hc-compact .page-body pre { font-size: .8em; }
   background: none; border: 0; border-radius: 6px; padding: .35rem .45rem; cursor: pointer; }
 .hc-menu-item:hover, .hc-menu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
 
-/* the dock (editor redesign U4a, Kyle's D1 change 3): the switch, the avatar and Send for review in a
-   bubble at the bottom right; x tucks it into a tag on the right edge. Site tokens, light and dark.
-   Phones (max-width 767px, the media block near the end of this file): it spans the bottom and wraps,
-   count + Send on their own row; tools/tests/browser_oracles.mjs checks every button fits at 320 px. */
-.hc-dock { position: fixed; right: 20px; bottom: 20px; z-index: 80; display: flex; align-items: center; gap: .7rem;
-  padding: .45rem .45rem .45rem .6rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--heading); font-size: .84rem; transition: transform .22s ease, opacity .22s ease; }
-[data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag, [data-theme="light"] .hc-sendbox { box-shadow: 0 12px 30px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .06); }
+/* the dock (Kyle's live feedback, 2026-10-14, items 6-7): a bubble at the TOP RIGHT, just under the header and
+   lined up with the TUHH mark above it (the header's right padding), never inside the header. Two rows:
+   the Editor switch, avatar and role (with the x), then the change count and Send for review. The x tucks it
+   into a tag on the right edge at the same height. Site tokens, light and dark. */
+.hc-dock { position: fixed; top: calc(var(--header-h) + 10px); right: 1.25rem; z-index: 80; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: .5rem; min-width: 17.5rem; max-width: calc(100vw - 16px);
+  padding: .45rem .45rem .5rem .65rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .42), 0 2px 6px rgba(0, 0, 0, .22); color: var(--heading); font-size: .84rem;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), opacity .18s ease-out; }
+[data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag, [data-theme="light"] .hc-sendbox { box-shadow: 0 12px 30px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
 .hc-dock[hidden], .hc-dock-tag[hidden] { display: none; }
+.hc-dock > .hc-editor-controls { grid-column: 1; min-width: 0; }
+.hc-dock > .hc-dock-x { grid-column: 2; grid-row: 1; justify-self: end; }
 .hc-dock .hc-switch { color: var(--heading); font-weight: 600; }
-.hc-dock .hc-menu { top: auto; bottom: calc(100% + .6rem); }
-.hc-dock-send-wrap { display: inline-flex; align-items: center; gap: .6rem; padding-left: .7rem; border-left: 1px solid var(--edge); }
+.hc-dock-send-wrap { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  margin-top: .45rem; padding-top: .5rem; border-top: 1px solid var(--edge-soft); }
 .hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
-.hc-dock-count { color: var(--body-soft); white-space: nowrap; }
+.hc-dock-count { color: var(--body-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hc-dock-send[hidden] { display: none; }
-.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1;
+  transition: background-color .12s ease-out, color .12s ease-out; }
 .hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
-.hc-dock-tag { position: fixed; right: 0; bottom: 26px; z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
+.hc-dock-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hc-dock-tag { position: fixed; right: 0; top: calc(var(--header-h) + 14px); z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
   border: 1px solid var(--edge); border-right: 0; border-radius: 10px 0 0 10px; background: var(--surface); cursor: pointer;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); transform: translateX(110%); transition: transform .22s ease; }
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .42); transform: translateX(110%); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.hc-dock-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 24px; height: 24px; border-radius: 50%; }
 .hc-dock-badge { position: absolute; top: -6px; left: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   background: var(--hc-accent-ink); color: #fff; font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
 body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
 body.hc-dock-collapsed .hc-dock-tag { transform: none; }
-.hc-sendbox { position: fixed; right: 20px; bottom: 84px; z-index: 85; width: 26rem; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto;
+/* Send for review opens below the bubble (js/editor.js sets its top from the bubble's bottom) */
+.hc-sendbox { position: fixed; right: 1.25rem; top: calc(var(--header-h) + 128px); z-index: 85; width: 26rem; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - var(--header-h) - 150px); overflow: auto;
   padding: .9rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
 .hc-sendbox-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; color: var(--heading); }
-@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag, .hc-dock-x { transition: none; } }
+/* the propose form inside the send box: the box is the card, so the form drops its own panel chrome, and its
+   heading (which says new proposal or "Add to your proposal #N") becomes a quiet line under "Send for review" */
+.hc-sendbox .cms-propose.cms-panel { border: 0; padding: 0; margin: 0; background: none; box-shadow: none; }
+.hc-sendbox .cms-propose > h2 { margin: 0 0 .7rem; font-size: .86rem; font-weight: 500; color: var(--body-soft); letter-spacing: 0; }
+/* the right tray (until V2 removes it): the bubble moves left of it, so neither covers the other */
+@media (min-width: 768px) {
+  body.hc-editor-on.hc-tray-open .hc-dock, body.hc-editor-on.hc-tray-open .hc-sendbox { right: calc(var(--hc-tray-w) + 1.25rem); }
+}
 /* The footer's sign-in line (js/app.js) once this file is in. */
 .edit-status.is-error { color: var(--danger); }
 
@@ -371,6 +410,8 @@ body.hc-editor-on.hc-tray-open .layout { padding-right: var(--hc-tray-w); }
 .cms-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cms-btn-primary { background: var(--accent); color: #06121a; border-color: transparent; font-weight: 600; }
 .cms-btn-primary:hover { filter: brightness(1.08); }
+/* disabled reads as disabled in both themes (a pale accent read as a broken colour in light mode) */
+.cms-btn:disabled, .cms-btn-primary:disabled { background: var(--surface-2); color: var(--muted); border-color: var(--edge); cursor: default; filter: none; }
 .cms-btn[disabled] { opacity: .55; cursor: progress; }
 a.cms-btn { display: inline-block; text-decoration: none; }
 .cms-role { font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .5rem;
@@ -533,12 +574,9 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--accent); outline-offset
   .hc-handle { top: auto; bottom: 0; right: 50%; transform: translateX(50%); writing-mode: horizontal-tb;
     border-radius: 8px 8px 0 0; border: 1px solid var(--edge); border-bottom: 0; padding: .45rem .9rem; }
   .hc-switch-label, .hc-who .hc-login, .hc-who .hc-role { display: none; }
-  .hc-dock { left: 8px; right: 8px; bottom: 8px; flex-wrap: wrap; row-gap: .45rem; }
-  .hc-dock-x { margin-left: auto; }
-  /* a phone: the count and Send take their own row, so nothing runs off a 320-px screen */
-  .hc-dock-send-wrap { order: 3; flex-basis: 100%; justify-content: space-between; border-left: 0; padding-left: 0;
-    padding-top: .45rem; border-top: 1px solid var(--edge); }
-  .hc-sendbox { right: 8px; left: 8px; width: auto; bottom: 118px; max-height: calc(100vh - 140px); }
+  .hc-dock { right: 8px; top: calc(var(--header-h) + 8px); min-width: 0; width: min(20rem, calc(100vw - 16px)); }
+  .hc-dock-tag { top: calc(var(--header-h) + 12px); }
+  .hc-sendbox { right: 8px; left: 8px; width: auto; max-height: calc(100vh - var(--header-h) - 140px); }
   /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
   body.hc-editor-on .sidebar { display: none; }
 }

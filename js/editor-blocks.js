@@ -19,7 +19,7 @@
      codeBar(doc, pre, {languages, current, onChange}) -> el
          The code box's language picker (the fence's info string).
      formatBar(doc, {onFormat}) -> {el, showAt(rect), hide()}
-         The formatting bar over a selection: Bold, Italic (suggestions, js/editor-type.js). */
+         The formatting bar over a selection: Bold, Italic, inline code, Link (suggestions, js/editor-type.js). */
 (function () {
   'use strict';
 
@@ -152,26 +152,129 @@
     return bar;
   }
 
+  /* The formatting bar over a selection: Bold, Italic, inline code, Link (Kyle, 2026-10-14). Link turns the
+     bar into an address field (the sandboxed frame has no prompt()): Enter or Add applies it to the selection
+     saved when Link was pressed, Escape or x goes back; o.check(address) -> the address or null (refused,
+     said in words under the field). o.onFormat(what, href, range). Keyboard: every button works from the
+     keyboard (Enter/Space), and the frame maps Cmd/Ctrl+K to openLink and Cmd/Ctrl+E to inline code.
+     busy() is true while the field is open,
+     so the frame does not hide the bar when the focus leaves the text for the field. */
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function linkIcon(doc) {
+    const svg = doc.createElementNS(SVG_NS, 'svg');
+    for (const [k, v] of [['viewBox', '0 0 16 16'], ['width', '16'], ['height', '16'], ['aria-hidden', 'true'], ['fill', 'none'],
+      ['stroke', 'currentColor'], ['stroke-width', '1.6'], ['stroke-linecap', 'round']]) svg.setAttribute(k, v);
+    for (const d of ['M6.6 9.4l2.8-2.8', 'M7.3 4.6l1.1-1.1a2.6 2.6 0 0 1 3.7 3.7L11 8.3', 'M8.7 11.4l-1.1 1.1a2.6 2.6 0 0 1-3.7-3.7L5 7.7']) {
+      const path = doc.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    }
+    return svg;
+  }
   function formatBar(doc, o) {
     const bar = make(doc, 'div', 'hc-formatbar');
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', 'Format');
     bar.hidden = true;
-    for (const [what, text, lab] of [['strong', 'B', 'Bold'], ['em', 'I', 'Italic']]) {
-      const b = button(doc, `hc-fb hc-fb-${what}`, text, lab);
-      b.addEventListener('mousedown', (e) => { e.preventDefault(); o.onFormat(what); });
-      bar.appendChild(b);
-    }
+    const row = make(doc, 'div', 'hc-fb-row');
+    const field = make(doc, 'div', 'hc-fb-linkrow');
+    field.hidden = true;
+    let saved = null;
     const win = doc.defaultView;
+    for (const [what, text, lab] of [['strong', 'B', 'Bold'], ['em', 'I', 'Italic'], ['code', '<>', 'Inline code'], ['link', '', 'Link']]) {
+      const b = button(doc, `hc-fb hc-fb-${what}`, text, lab);
+      if (what === 'link') b.appendChild(linkIcon(doc));
+      const act = () => { if (what === 'link') openLink(); else o.onFormat(what); };
+      // mousedown keeps the text selection; a keyboard press on a focused button arrives as a click with detail 0
+      b.addEventListener('mousedown', (e) => { e.preventDefault(); act(); });
+      b.addEventListener('click', (e) => { if (e.detail === 0) act(); });
+      row.appendChild(b);
+    }
+    const url = make(doc, 'input', 'hc-fb-url');
+    url.type = 'url';                              // the address keyboard on phones; there is no form, so nothing is blocked
+    url.setAttribute('inputmode', 'url');
+    url.setAttribute('autocomplete', 'off');
+    url.setAttribute('aria-label', 'Link address');
+    url.placeholder = 'https://… or #/setup/…';
+    url.spellcheck = false;
+    const add = button(doc, 'hc-fb-add', 'Add', 'Add the link');
+    const cancel = button(doc, 'hc-fb-cancel', '×', 'Cancel');
+    const err = make(doc, 'p', 'hc-fb-err');
+    err.setAttribute('role', 'alert');
+    err.hidden = true;
+    const inputs = make(doc, 'div', 'hc-fb-inputs');
+    inputs.append(url, add, cancel);
+    field.append(inputs, err);
+    bar.append(row, field);
+    function openLink() {
+      const sel = doc.getSelection();
+      saved = sel && sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0).cloneRange() : null;
+      if (saved) openField();
+      return Boolean(saved);
+    }
+    function openField() {
+      row.hidden = true;
+      field.hidden = false;
+      err.hidden = true;
+      url.value = '';
+      url.focus();
+    }
+    // a selection given back by Escape/x must not bring the bar straight back: it stays closed until the
+    // person selects something else
+    let dismissed = null;
+    const sameRange = (a, b) => Boolean(a && b) && a.startContainer === b.startContainer && a.startOffset === b.startOffset
+      && a.endContainer === b.endContainer && a.endOffset === b.endOffset;
+    function closeField(restore) {
+      field.hidden = true;
+      row.hidden = false;
+      const r = saved;
+      saved = null;
+      bar.hidden = true;
+      dismissed = restore && r ? r : null;
+      if (restore && r) { const sel = doc.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+    }
+    function apply() {
+      const href = typeof o.check === 'function' ? o.check(url.value) : null;
+      if (href === null) {
+        err.textContent = 'Use an address that starts with https://, http://, #/ or /, or a page path.';
+        err.hidden = false;
+        url.focus();
+        return;
+      }
+      const r = saved;
+      closeField(false);
+      if (r) o.onFormat('link', href, r);
+    }
+    add.addEventListener('mousedown', (e) => { e.preventDefault(); apply(); });
+    add.addEventListener('click', (e) => { if (e.detail === 0) apply(); });
+    cancel.addEventListener('mousedown', (e) => { e.preventDefault(); closeField(true); });
+    cancel.addEventListener('click', (e) => { if (e.detail === 0) closeField(true); });
+    url.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); apply(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeField(true); }
+    });
+    function place(r) {
+      const w = bar.offsetWidth || 80;
+      bar.style.left = `${Math.max(8, Math.min((win.innerWidth || 800) - w - 8, r.left + r.width / 2 - w / 2)) + (win.scrollX || 0)}px`;
+      bar.style.top = `${r.top + (win.scrollY || 0) - (bar.offsetHeight || 36) - 8}px`;
+    }
     return {
       el: bar,
       showAt(r) {
+        if (saved) return;                       // the address field is open: it stays where it is
+        if (dismissed) {
+          const sel = doc.getSelection();
+          if (sel && sel.rangeCount && sameRange(sel.getRangeAt(0), dismissed)) return;
+          dismissed = null;
+        }
         bar.hidden = false;
-        const w = bar.offsetWidth || 80;
-        bar.style.left = `${Math.max(8, Math.min((win.innerWidth || 800) - w - 8, r.left + r.width / 2 - w / 2)) + (win.scrollX || 0)}px`;
-        bar.style.top = `${r.top + (win.scrollY || 0) - (bar.offsetHeight || 36) - 8}px`;
+        place(r);
       },
-      hide() { bar.hidden = true; },
+      hide() { if (saved) return; bar.hidden = true; },
+      busy() { return Boolean(saved); },
+      // Cmd/Ctrl+K in the open block: the address field for the selection, the bar over it (r: its rectangle)
+      openLink(r) { bar.hidden = false; if (r) place(r); if (!openLink()) bar.hidden = true; },
+      close() { if (saved) closeField(false); dismissed = null; bar.hidden = true; },
     };
   }
 

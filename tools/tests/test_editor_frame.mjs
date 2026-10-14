@@ -73,10 +73,10 @@ class El extends Node {
   }
   removeChild(c) { this._detach(c); c.parentNode = null; return c; }
   addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
-  dispatch(t, target) {
+  dispatch(t, target, extra) {
     // bubbles from target up to this element's document root
     for (let n = target || this; n; n = n.parentNode) {
-      for (const fn of (n.listeners && n.listeners[t]) || []) fn({ type: t, target: target || this, stopPropagation() { this.stopped = true; } });
+      for (const fn of (n.listeners && n.listeners[t]) || []) fn({ type: t, target: target || this, ...(extra || {}), stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; } });
     }
   }
   click() { this.dispatch('click', this); }
@@ -248,13 +248,16 @@ test('editor-frame: hc-framed, settings, hc-selected and the overlay classes fol
   assert.match(css, /body\.hc-framed \.skip-link \{ display: none !important; \}/);
 });
 
-test('editor-frame: pencil and click select a block; a link does not; "+" offers the snippet kinds', () => {
+test('editor-frame: Enter on a focused block and a click select it (no pencil); a link does not; "+" offers the snippet kinds', () => {
   const { doc, body } = setupPage();
   const HC = fakeHC();
   EF.create(fakeWin(), doc, HC);
   HC.send({ on: true });
   const [, w2, w3] = blocksOf(body);
-  kids(w3).find((c) => c.classList.contains('hc-pencil')).click();
+  assert.equal(blocksOf(body).some((w) => kids(w).some((c) => c.classList.contains('hc-pencil'))), false, 'no pencil button (Kyle, 2026-10-14)');
+  assert.equal(w3.getAttribute('tabindex'), '0', 'a block is reachable by keyboard instead');
+  w3.dispatch('keydown', w3, { key: 'Tab' });                 // not a pick
+  w3.dispatch('keydown', w3, { key: 'Enter' });
   kids(w2)[1].click();                                     // a paragraph
   kids(kids(w2)[1]).find((c) => c.tagName === 'A').click(); // a link inside it: navigation, not a pick
   assert.deepEqual(HC.posts.slice(1), [{ type: 'hc-block-select', index: 3 }, { type: 'hc-block-select', index: 2 }]);
@@ -441,4 +444,32 @@ test('editor-frame (U2): Escape while the typing scripts are still loading cance
   HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });
   for (const fn of doc.listeners.keydown || []) fn({ key: 'Escape' });
   assert.deepEqual(HC.posts.filter((p) => p.type === 'hc-block-state').map((p) => [p.index, p.editor]), [[2, 'closed']]);
+});
+
+/* Kyle's live feedback (2026-10-14), items 1, 2 and 4: ONE look for a block in Editor mode — a faint accent
+   line in the left margin on hover and focus, the same line solid when open or selected; no pencil, no box,
+   no ring, so nothing jumps between two styles. And themed scrollbars on the site and in the frame. */
+test('the block look is one left line (no pencil, no box ring), and scrollbars follow the theme', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
+  const site = fs.readFileSync(path.join(ROOT, 'css', 'site.css'), 'utf8');
+  assert.equal(/hc-pencil/.test(css), false, 'no pencil styles left');
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((r) => r.split('{'));
+  const blockRules = rules.filter(([sel]) => sel && /\.hc-block\b/.test(sel) && !/hc-prop-|hc-removed/.test(sel));
+  for (const [sel, body] of blockRules) {
+    assert.equal(/box-shadow|outline\s*:(?!\s*none)/.test(body || ''), false, `no ring on a block: ${sel.trim()}`);
+  }
+  const line = (re) => blockRules.find(([sel]) => re.test(sel) && /::after/.test(sel));
+  assert.ok(line(/:hover/), 'hover draws the left line');
+  assert.ok(line(/:focus-visible/), 'keyboard focus draws the same line');
+  assert.ok(line(/hc-open|hc-selected/), 'open/selected draws the same line');
+  for (const st of ['focus-visible', 'hc-selected', 'hc-open']) {
+    assert.ok(blockRules.some(([sel]) => sel.includes('.hc-side > .hc-block') && sel.includes(st) && /::after/.test(sel)), `side by side too: ${st}`);
+  }
+  assert.match(css, /--hc-line-faint/, 'the faint line has one token');
+  for (const [name, text] of [['site.css', site], ['editor.css', css]]) {
+    assert.match(text, /scrollbar-color/, `${name}: themed scrollbars (Firefox, Chrome 121+)`);
+    assert.match(text, /::-webkit-scrollbar-thumb/, `${name}: themed scrollbars (Safari)`);
+  }
+  assert.match(site, /color-scheme:\s*dark/, 'dark is declared, so form controls and scrollbars are dark');
+  assert.match(site, /\[data-theme="light"\][^{]*\{[^}]*color-scheme:\s*light/, 'light is declared too');
 });

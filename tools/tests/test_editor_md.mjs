@@ -185,6 +185,32 @@ test('D1 suggestion marks: inserted text is kept, deleted text dropped, a format
   assert.match(M.serialize(forged, 'A ~~secret~~ word.\n\n', 'paragraph'), /secret/);
 });
 
+/* Kyle's live feedback (2026-10-14) item 5: the format bar adds Link and inline code. js/editor-type.js draws
+   them as format suggestions like Bold/Italic; the serializer writes the Markdown; the address is checked
+   on the way in (the bar) and again here, so a forged mark cannot carry a script address. */
+test('format suggestions for inline code and a link are written as Markdown; a bad address is refused', () => {
+  const md = 'Run the launch file, then read the guide.\n\n';
+  const el = (name, attrs, ...kids) => { const e = new ShimElement(name, HTML_NS); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); for (const k of kids) e.appendChild(typeof k === 'string' ? new ShimText(k) : k); return e; };
+  const build = (...parts) => { const root = M.renderBlock(md); const p = root.childNodes.find((c) => c.nodeType === 1); p.childNodes = []; for (const x of parts) p.appendChild(typeof x === 'string' ? new ShimText(x) : x); return root; };
+  const code = (...k) => el('code', { 'data-hc-sug': 'fmt', 'data-hc-fmt': 'code', 'data-hc-id': 's1', class: 'hc-sug hc-sug-fmt' }, ...k);
+  const link = (href, ...k) => el('a', { 'data-hc-sug': 'fmt', 'data-hc-fmt': 'link', 'data-hc-href': href, 'data-hc-id': 's2', class: 'hc-sug hc-sug-fmt' }, ...k);
+  assert.equal(M.serialize(build('Run ', code('the launch file'), ', then read the guide.'), md, 'paragraph'), 'Run `the launch file`, then read the guide.\n\n');
+  // a struck part inside the code mark is gone; a backtick inside gets the longer fence
+  assert.equal(M.serialize(build('Run ', code('a', el('del', { 'data-hc-sug': 'del', 'data-hc-id': 's3', class: 'hc-sug hc-sug-del' }, 'xx'), '`b'), '.'), md, 'paragraph'), 'Run ``a`b``.\n\n');
+  assert.equal(M.serialize(build('Read ', link('https://docs.ros.org/en/humble/', 'the guide'), '.'), md, 'paragraph'), 'Read [the guide](https://docs.ros.org/en/humble/).\n\n');
+  assert.equal(M.serialize(build('Read ', link('#/setup/lab-gantry/usage', 'Usage'), '.'), md, 'paragraph'), 'Read [Usage](#/setup/lab-gantry/usage).\n\n');
+  assert.equal(M.serialize(build('Read ', link('docs/a b.md', 'it'), '.'), md, 'paragraph'), 'Read [it](<docs/a b.md>).\n\n');
+  for (const bad of ['javascript:alert(1)', ' JavaScript:alert(1)', 'data:text/html,x', 'vbscript:x', 'mailto:a@b.c', '', 'foo:bar/baz',
+    '//attacker.example', '#section', '?q=1', '\\\\host\\x', '/\\host']) {
+    assert.equal(M.linkHref(bad), null, `refused: ${JSON.stringify(bad)}`);
+    assert.throws(() => M.serialize(build('Read ', link(bad, 'it'), '.'), md, 'paragraph'), (e) => e.name === 'Unsupported', `serializer refuses ${JSON.stringify(bad)}`);
+  }
+  for (const [good, want] of [[' https://example.org/x ', 'https://example.org/x'], ['http://a.b', 'http://a.b'], ['#/about', '#/about'],
+    ['/assets/x.pdf', '/assets/x.pdf'], ['wiring.md', 'wiring.md'], ['docs/x.md#part', 'docs/x.md#part']]) {
+    assert.equal(M.linkHref(good), want, `allowed: ${good}`);
+  }
+});
+
 test('the serializer refuses a DOM that the page enhanced after the Markdown (so the gate never passes on it)', () => {
   const md = '## Run the setup\n\nSee the [Wiring](#/setup/lab-gantry/wiring) page.\n\n';
   const clean = M.renderBlock(md);

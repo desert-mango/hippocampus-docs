@@ -577,12 +577,12 @@
       ? route : '/';
   }
 
-  function previewFragment(nonce, route) {
+  function previewFragment(nonce, route, theme) {
     if (typeof nonce !== 'string' || !NONCE_RE.test(nonce)) {
       throw new Error('previewFragment: the nonce must be 16-128 characters of [A-Za-z0-9_-]');
     }
     const r = safeRoute(route === undefined ? '/' : route);
-    return `#preview=${nonce}${r === '/' ? '' : `&route=${encodeURIComponent(r)}`}`;
+    return `#preview=${nonce}${r === '/' ? '' : `&route=${encodeURIComponent(r)}`}${theme === 'light' ? '&theme=light' : ''}`;
   }
 
   const refused = () => ({ ok: false, status: 403, text: '' });
@@ -652,6 +652,7 @@
        setFrameSrc(url)   sets iframe.src
        getRandomValues    crypto.getRandomValues (bound)
        base               the site page relative to the CMS page ('../index.html')
+       getTheme()         optional: 'light' | 'dark', the site's theme now (the frame cannot read it)
      load(route, fetcher) starts a new load with a fresh nonce and returns it.
      handleMessage(event) returns null for a message it ignores, else a
      Promise of the answer it posted (null when the answer was dropped
@@ -664,7 +665,7 @@
     function load(route, fetcher) {
       const nonce = randomHex(16, d.getRandomValues);
       current = { nonce, fetcher };
-      d.setFrameSrc(base + previewFragment(nonce, route));
+      d.setFrameSrc(base + previewFragment(nonce, route, typeof d.getTheme === 'function' ? d.getTheme() : null));
       return nonce;
     }
 

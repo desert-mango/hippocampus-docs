@@ -540,7 +540,7 @@ test('U2: Escape in the frame (hc-block-state closed) deselects the block', asyn
 
 // ------------------------------------------------ the dock (editor redesign U4a, D1 change 3) ---
 
-test('U4a: the Editor switch and the avatar sit in the bottom-right dock, never in the header', async () => {
+test('U4a: the Editor switch and the avatar sit in the dock (top right since V1), never in the header', async () => {
   const page = openSite({ hash: `#${PAGE_ROUTE}` });
   await new Promise((r) => setImmediate(r));
   const dock = page.one((e) => e.classList.contains('hc-dock'));
@@ -551,7 +551,7 @@ test('U4a: the Editor switch and the avatar sit in the bottom-right dock, never 
   assert.equal(page.one((e) => e.classList.contains('hc-dock-tag')).hidden, true, 'the tag is not in the tab order while the dock shows');
 });
 
-test('U4a: the dock counts this page\'s changes; Send for review opens the propose form above the dock', async () => {
+test('U4a: the dock counts this page\'s changes; Send for review opens the propose form below the dock', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const count = () => page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent;

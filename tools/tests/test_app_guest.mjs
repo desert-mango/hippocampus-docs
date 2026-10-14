@@ -645,7 +645,7 @@ test('an outside link opens in a new tab whatever its scheme\'s case (never insi
 });
 
 // ------------------------------------- the guest's "Sign in" bubble (editor redesign U4a, D1 change 3) --
-test('U4a: a guest sees "Sign in" at the bottom right; its click is the footer\'s sign-in (window opened inside the click)', async () => {
+test('U4a: a guest sees "Sign in" in the bubble (top right since V1); its click is the footer\'s sign-in (window opened inside the click)', async () => {
   const app = await boot({ hash: '#/' });
   const dock = app.doc.created.find((n) => n.className === 'hc-guest-dock');
   assert.ok(dock, 'the bubble');

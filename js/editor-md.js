@@ -31,7 +31,7 @@
    Editor mode's suggestion marks (the Google Docs "Suggesting" look) live only in the typing DOM,
    never in content: they carry data-hc-sug="ins|del|fmt", an attribute js/sanitize.js drops from
    every content file, so content cannot forge one. serialize() keeps inserted text, drops deleted
-   text and writes a format mark as the format (fmt + data-hc-fmt="strong|em").
+   text and writes a format mark as the format (fmt + data-hc-fmt="strong|em|code|link"; a link carries data-hc-href, checked by linkHref).
 
    Runs unchanged in the browser (window.marked, window.HCSanitize, the real DOMParser) and under
    node (require: marked.min.js, sanitize.js; the test installs tools/tests/fixtures/dom_shim.mjs as
@@ -196,6 +196,18 @@
       if (!sug) refuseEnhanced(c);
       if (sug === 'del') continue;                                  // a suggested deletion: gone
       if (sug === 'ins') { out += inline(c, st, ctx); continue; }   // a suggested insertion: its text
+      if (sug === 'fmt' && attr(c, 'data-hc-fmt') === 'code') {      // inline code: its kept text, verbatim
+        const t = keptText(c).replace(/\u00a0/g, ' ');
+        if (t) { out += codeSpan(t); ctx.lineStart = false; }
+        continue;
+      }
+      if (sug === 'fmt' && attr(c, 'data-hc-fmt') === 'link') {      // a link: the address the bar checked, checked again
+        const href = linkHref(attr(c, 'data-hc-href'));
+        if (href === null) no('a link address that is not https://, http://, #/, / or a page-relative path');
+        const label = inline(c, st, ctx);
+        out += label.trim() ? `[${label}](${/[\s()<>]/.test(href) ? `<${href}>` : href})` : label;
+        continue;
+      }
       if (sug === 'fmt') {
         const f = attr(c, 'data-hc-fmt') === 'em' ? st.em : st.strong;
         const body = inline(c, st, ctx);
@@ -215,6 +227,30 @@
       else no(`inline <${name}> (written as HTML in the Markdown)`);
     }
     return out;
+  }
+
+  /* The text a reader will see in n: a suggested deletion inside it is gone. */
+  function keptText(n) {
+    let out = '';
+    for (const c of kids(n)) {
+      if (c.nodeType === 3) out += c.data;
+      else if (c.nodeType === 1 && attr(c, 'data-hc-sug') !== 'del') out += keptText(c);
+    }
+    return out;
+  }
+
+  /* A link address typed in the format bar -> the trimmed address, or null. Allowed: https://, http://,
+     a site route (#/...), a site path (/...), or a page-relative path with no scheme (no ':' before the
+     first '/', '?' or '#'). Everything else (javascript:, data:, vbscript:, mailto:, ...) is refused. */
+  function linkHref(v) {
+    if (typeof v !== 'string') return null;
+    const t = v.trim();
+    if (!t || t.length > 2000 || /[\u0000-\u001f\u007f]/.test(t)) return null;
+    if (/^https?:\/\/[^\s/]/i.test(t)) return t;
+    if (/^#\//.test(t) || /^\/(?![/\\])/.test(t)) return t;   // '/\host' is //host to a browser
+    if (/^[/#?\\]/.test(t)) return null;          // //host (another site, no scheme), a bare #x or ?x, a backslash
+    const head = t.split(/[/?#]/)[0];
+    return head.includes(':') ? null : t;
   }
 
   const titlePart = (t) => (t ? ` "${t.replace(/"/g, '\\"')}"` : '');
@@ -484,7 +520,7 @@
     return gate(b.text, b.kind).ok ? 'visual' : 'markdown';
   }
 
-  const API = { renderBlock, serialize, gate, editorFor, styleOf, escapeText, Unsupported };
+  const API = { renderBlock, serialize, gate, editorFor, styleOf, escapeText, linkHref, Unsupported };
   if (isNode) module.exports = API;
   if (typeof window !== 'undefined') window.HCEditorMd = API;
 }());

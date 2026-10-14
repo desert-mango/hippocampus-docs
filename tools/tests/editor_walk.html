@@ -218,6 +218,9 @@
     extra,
   });
 
+  // theme=light|dark (screenshots of both themes): the site reads hc-theme from this origin's storage
+  const theme = params.get('theme');
+  if (theme === 'light' || theme === 'dark') { try { localStorage.setItem('hc-theme', theme); } catch (e) { /* ok */ } }
   const site = document.createElement('iframe');
   site.title = 'The site';
   site.src = `../../index.html#${page}`;
