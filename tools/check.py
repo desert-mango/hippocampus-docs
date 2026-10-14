@@ -244,10 +244,17 @@ READER_REQUIRED_KEYS = {
     "data/projects.json": {
         "keys": ("projects", "intro"),
         "each": {"projects": {
-                     "keys": ("id", "name", "tagline", "status", "file", "repos"),
+                     "keys": ("id", "name", "tagline", "status", "file", "repos", "owners"),
                      "types": {"id": str, "file": str},
-                     # optional; app.js renders (p.hardware || []).map(…)
-                     "lists": ("hardware",),
+                     # optional; app.js renders (p.hardware || []).map(…).
+                     # 'owners' (Kyle, 2026-10-14): the GitHub logins who may approve
+                     # this project's edits. js/cms-core.js ownsAll() iterates it and
+                     # compares each member with a login, and tools/build_codeowners.py
+                     # writes each member into .github/CODEOWNERS: a string in the
+                     # list's place would iterate as characters, and a non-string
+                     # member would silently never match (str_lists).
+                     "lists": ("hardware", "owners"),
+                     "str_lists": ("owners",),
                      "each": {"repos": {"keys": ("name", "url")},
                               # 'links' is optional; when present the About-style
                               # "See also" list dereferences both fields.
@@ -956,6 +963,30 @@ def node_ids(wiki):
             if isinstance(n, dict) and isinstance(n.get("id"), str)}
 
 
+GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$")
+
+
+def check_project_owners(projects):
+    """Each project's 'owners' (Kyle, 2026-10-14): GitHub logins, each a
+    well-formed login, none twice (GitHub logins are case-insensitive). The
+    list may be empty (admins only). -> list of error strings. Shape (a list
+    of strings) is READER_REQUIRED_KEYS's; this never raises on a wrong shape."""
+    out = []
+    for pr in projects.get("projects", []) if isinstance(projects, dict) else []:
+        if not isinstance(pr, dict) or not isinstance(pr.get("owners"), list):
+            continue
+        seen = set()
+        for login in pr["owners"]:
+            if not isinstance(login, str):
+                continue
+            if not GITHUB_LOGIN_RE.match(login):
+                out.append(f"projects.json: {pr.get('id')} owner '{login[:60]}' is not a GitHub login")
+            elif login.lower() in seen:
+                out.append(f"projects.json: {pr.get('id')} lists owner '{login}' twice")
+            seen.add(login.lower())
+    return out
+
+
 def enumerate_page_nodes(setup, projects, tools):
     """Every content page the registries define, as (node id, kind) pairs.
 
@@ -1535,6 +1566,8 @@ def main():
             err(f"docs/setup-parity.md counts stale ({m.group(1)} vs {len(old_set)} old pages) — re-run tools/rst_convert.py")
 
     # ---- 4. projects coverage ----
+    for msg in check_project_owners(projects):
+        err(msg)
     org_names = {r["name"] for r in org}
     seen = {}
     for pr in projects["projects"]:

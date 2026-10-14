@@ -888,18 +888,45 @@
     return c ? c.html_url : null;
   }
 
-  /* Which buttons a role gets (D8). Read-only: none. Write ("Editor"):
-     review, update and close, but the Merge button is hidden. Maintain and
-     Admin: all. A merged PR offers only Undo on GitHub (Revert needs write,
-     [S89]); a closed one nothing. */
-  function reviewActionsFor(role, pull) {
+  /* Who may approve (Kyle, 2026-10-14). A project's owners are the GitHub logins in its `owners` list in
+     MAIN's data/projects.json (the caller passes main's registry, never a proposal's). ownsAll is true when
+     every changed file is a file of a project the login owns: its page content/projects/<id>.md, or (with
+     the per-project facts files) data/projects/<id>.json. Anything else (setup, tools, About, Lab, a shared
+     registry, the image list) is never a project owner's. */
+  const PROJECT_FILE_RE = /^(?:content\/projects\/([a-z0-9][a-z0-9-]{0,80})\.md|data\/projects\/([a-z0-9][a-z0-9-]{0,80})\.json)$/;
+  function ownsAll(o) {
+    const c = o || {};
+    const login = typeof c.login === 'string' ? c.login.toLowerCase() : '';
+    const files = Array.isArray(c.files) ? c.files : null;
+    const list = c.projects && Array.isArray(c.projects.projects) ? c.projects.projects : [];
+    if (!login || !files || !files.length) return false;
+    return files.every((f) => {
+      const m = typeof f === 'string' ? PROJECT_FILE_RE.exec(f) : null;
+      const id = m ? (m[1] || m[2]) : null;
+      const p = id ? list.find((x) => x && x.id === id) : null;
+      return Boolean(p) && Array.isArray(p.owners) && p.owners.some((w) => typeof w === 'string' && w.toLowerCase() === login);
+    });
+  }
+
+  /* Which buttons a role gets (D8, owners 2026-10-14). Read-only: none. Write ("Editor"): request changes,
+     update and close; Approve and Merge only when ctx shows the proposal is wholly inside projects the
+     member owns (ownsAll), and never Approve on their own proposal. Maintain and Admin: all. A merged PR
+     offers only Undo on GitHub (Revert needs write, [S89]); a closed one nothing. ctx: {login, files
+     (changed file names, or null while unread), projects (main's data/projects.json)}. */
+  function reviewActionsFor(role, pull, ctx) {
     const r = role || {};
     const p = pull || {};
     if (r.canPush !== true) return [];
     if (p.merged === true || typeof p.merged_at === 'string') return ['undo'];
     if (p.state !== 'open') return [];
-    const out = ['approve', 'request-changes', 'update', 'close'];
-    if (r.key === 'maintain' || r.key === 'admin') out.splice(2, 0, 'merge');
+    if (r.key === 'maintain' || r.key === 'admin') return ['approve', 'request-changes', 'merge', 'update', 'close'];
+    const c = ctx || {};
+    const owns = ownsAll(c);
+    const author = p.user && typeof p.user.login === 'string' ? p.user.login.toLowerCase() : '';
+    const own = !author || author === String(c.login || '').toLowerCase();
+    const out = ['request-changes', 'update', 'close'];
+    if (owns) out.splice(1, 0, 'merge');
+    if (owns && !own) out.unshift('approve');
     return out;
   }
 
@@ -1468,7 +1495,8 @@
       return fail(`the repository '${taken}' is already listed in ${owner.get(taken)} — each repository belongs to exactly one project`);
     }
     const file = `content/projects/${id}.md`;
-    reg.doc.projects.push({ id, name, status, tagline, file,
+    // owners: [] (Kyle, 2026-10-14): a new project starts admin-owned; an admin names its owners
+    reg.doc.projects.push({ id, owners: [], name, status, tagline, file,
       repos: names.map((n) => ({ name: n, url: `${ORG_WEB}/${n}` })) });
     const story = String(typeof f.story === 'string' ? f.story : '').replace(/\s+$/, '');
     return { problem: null, id, files: { 'data/projects.json': formatLike(projectsText, reg.doc), [file]: `${story}\n` } };
@@ -2784,7 +2812,7 @@
     isMachineryPath, isDerivedPath, pullBadges, loadPullFiles, ageText,
     PREVIEW_CONTENT_ONLY_TEXT, PREVIEW_UNLISTED_TEXT, previewScope,
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
-    vercelCommentUrl, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
+    vercelCommentUrl, ownsAll, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
     ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, SNIPPETS, SNIPPET_CATALOG,
     editKind, pageTree, pageList, pageIdForFile, routeForPage,

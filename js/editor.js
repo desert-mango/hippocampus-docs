@@ -718,12 +718,21 @@
   const ACTION_LABEL = { approve: 'Approve', 'request-changes': 'Request changes', merge: 'Merge',
     update: 'Update from main', close: 'Close' };
 
-  function actionsBlock(p, n, sha, epoch, status) {
-    const keys = C.reviewActionsFor(state.role, p);
+  function actionsBlock(p, n, sha, epoch, status, files, owners) {
+    const login = (state.session && state.session.login) || '';
+    // who may approve (Kyle, 2026-10-14): owners come from MAIN's data/projects.json (state.regs), never the proposal's
+    // every path the proposal touches: a rename's old path too; a list GitHub cut short counts as unknown
+    const complete = Array.isArray(files) && !(Number.isInteger(p.changed_files) && files.length < p.changed_files);
+    const paths = complete ? files.flatMap((f) => [f && f.filename, f && f.previous_filename].filter((x) => typeof x === 'string')) : null;
+    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, projects: owners || null });
     if (!keys.length) {
       return h('p', { class: 'cms-muted', text: 'You can read this proposal. Reviewing it needs write access to this site\'s repository.' });
     }
-    const login = (state.session && state.session.login) || '';
+    const approveNote = state.role && state.role.key === 'push' && keys.indexOf('approve') < 0
+      ? h('p', { class: 'cms-muted', 'data-approve-note': true, text: loginOf(p).toLowerCase() === login.toLowerCase()
+        ? 'Someone else approves your own proposal.'
+        : 'Approve is for the site\'s maintainers here, or for a project\'s owners on that project\'s pages.' })
+      : null;
     const isAuthor = loginOf(p).toLowerCase() === login.toLowerCase();
     const box = keys.indexOf('request-changes') >= 0
       ? h('textarea', { class: 'cms-comment', rows: 3, 'aria-label': 'What should change',
@@ -745,7 +754,7 @@
       act(keys[i], ctx(), ui);
     }));
     return h('section', { class: 'cms-actions', 'aria-label': 'Review actions' },
-      h('h2', { text: 'Your review' }), box, h('div', { class: 'cms-action-row' }, ...buttons),
+      h('h2', { text: 'Your review' }), box, h('div', { class: 'cms-action-row' }, ...buttons), approveNote,
       confirm, result);
   }
 
@@ -928,13 +937,14 @@
       }
     }
     const pages = sha && files ? C.previewPages(files, await headRegistries(sha, files)) : [];
+    const owners = await ownersRegistry();                 // main's data/projects.json: the project owners for Approve
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
       ...statusBlock(status, notes),
       vercel ? h('p', null, link(vercel, 'Vercel\'s preview comment'), ' (a deploy preview, when Vercel made one)') : null,
       showOnPage(n, sha, files, pages, C.previewScope(files)),
-      actionsBlock(p, n, sha, epoch, status),
+      actionsBlock(p, n, sha, epoch, status, files, owners),
       h('h3', { class: 'hc-card-title', text: 'Files changed' }), filesBlock(files),
     ]);
     markPage();
@@ -971,8 +981,11 @@
       h('dl', { class: 'cms-facts' },
         h('dt', { text: 'Admin' }), h('dd', { text: 'everything, and managing who can edit' }),
         h('dt', { text: 'Maintainer' }), h('dd', { text: 'reviews and merges proposals' }),
-        h('dt', { text: 'Editor' }), h('dd', { text: 'edits pages and proposes changes' }),
+        h('dt', { text: 'Editor' }), h('dd', { text: 'edits pages and proposes changes; approves and merges only on the '
+          + 'pages of a project it owns (the project\'s owners list), never its own proposal' }),
         h('dt', { text: 'Read-only' }), h('dd', { text: 'reads proposals and previews' })),
+      h('p', { class: 'cms-muted', text: 'A new picture also changes the shared image list, so a maintainer approves it, '
+        + 'even on a project page.' }),
       h('p', null, 'How proposals are reviewed and merged: ', link(C.PROTOCOLS_URL, 'the maintainer protocols'), '.'),
       h('p', null, 'Every page can also be edited on github.com: ',
         link(`${C.GITHUB_WEB}/tree/main/content`, 'open its file and click the pencil'), '.'),
@@ -991,6 +1004,26 @@
       get('data/setup.json'), get('data/projects.json'), get('data/tools.json')]);
     state.regs = { setup, projects, tools };
     return state.regs;
+  }
+
+  /* The project owners (Kyle, 2026-10-14) from MAIN's data/projects.json, read through GitHub: read
+     again when a proposal is drawn more than a minute after the last read, so an owner an admin added or
+     removed shows here without a reload. A read that fails gives null: no owner's Approve until one succeeds.
+     -> the document or null. */
+  const OWNERS_TTL_MS = 60 * 1000;
+  let ownersRead = { at: 0, doc: null };
+  async function ownersRegistry() {
+    if (ownersRead.doc && Date.now() - ownersRead.at < OWNERS_TTL_MS) return ownersRead.doc;
+    // main's own file through GitHub (pinned to main's head now), never the copy the hosting deployment serves:
+    // a preview deployment of a branch must not be able to name new owners
+    let doc = null;
+    try {
+      const sha = await C.resolveRef(state.client, 'main');
+      const answer = await sessionCache().get(sha, 'data/projects.json');
+      doc = answer && answer.ok ? JSON.parse(answer.text) : null;
+    } catch (e) { doc = null; }
+    ownersRead = { at: doc ? Date.now() : 0, doc };          // a failed read fails closed: no owner rights until it reads
+    return doc;
   }
 
   // ------------------------------------------------------------ the editor ---

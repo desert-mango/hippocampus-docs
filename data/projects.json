@@ -7,6 +7,7 @@
  "projects": [
   {
    "id": "hippocampus-vehicle",
+   "owners": [],
    "name": "HippoCampus vehicle",
    "status": "active",
    "tagline": "The lab's own micro AUV: hull, electronics, ESCs, and the CAD that defines it.",
@@ -112,6 +113,7 @@
   },
   {
    "id": "core-stack",
+   "owners": [],
    "name": "Core software stack (ROS 2)",
    "status": "active",
    "tagline": "The shared ROS 2 packages every vehicle runs: control, estimation, messages, and the meta packages that tie them together.",
@@ -258,6 +260,7 @@
   },
   {
    "id": "simulation",
+   "owners": [],
    "name": "Simulation",
    "status": "maintained",
    "tagline": "Gazebo worlds, plugins, and vehicle models for testing in software before the tank.",
@@ -323,6 +326,7 @@
   },
   {
    "id": "localization",
+   "owners": [],
    "name": "Localization",
    "status": "active",
    "tagline": "Knowing where the vehicle is: visual localization with AprilTags, EKF fusion, and the older acoustic and RF approaches.",
@@ -437,6 +441,7 @@
   },
   {
    "id": "acoustics",
+   "owners": [],
    "name": "Acoustics & DVL",
    "status": "maintained",
    "tagline": "Acoustic ranging, modems, and the doppler velocity log driver.",
@@ -487,6 +492,9 @@
   },
   {
    "id": "scalar-field",
+   "owners": [
+    "kyle-nelson-berkeley"
+   ],
    "name": "Scalar-field exploration",
    "status": "active",
    "tagline": "Informative path planning over scalar fields: a Gaussian-process belief, a field simulator, trajectory generation, and an infrared benchmark rig.",
@@ -572,6 +580,7 @@
   },
   {
    "id": "uvms",
+   "owners": [],
    "name": "UVMS — BlueROV2 + Alpha arm",
    "status": "maintained",
    "tagline": "Underwater vehicle-manipulator system: end-effector trajectory tracking with a BlueROV2 Heavy carrying a Reach Robotics Alpha 5 arm.",
@@ -613,6 +622,7 @@
   },
   {
    "id": "lab-infrastructure",
+   "owners": [],
    "name": "Lab & tank infrastructure",
    "status": "active",
    "tagline": "Everything around the water: Qualisys motion capture, the gantry over the tank, and the physical button boxes.",
@@ -700,6 +710,7 @@
   },
   {
    "id": "radio-comms",
+   "owners": [],
    "name": "Radio & communications",
    "status": "legacy",
    "tagline": "Radio links for vehicles at and under the surface: HippoLink telemetry over Si1000 radios, MAVLink plumbing, and software-defined radio experiments.",
@@ -804,6 +815,7 @@
   },
   {
    "id": "cameras",
+   "owners": [],
    "name": "Cameras",
    "status": "maintained",
    "tagline": "Getting image streams into ROS: USB MJPEG cameras and event cameras.",
@@ -845,6 +857,7 @@
   },
   {
    "id": "dev-infrastructure",
+   "owners": [],
    "name": "Deployment & dev infrastructure",
    "status": "active",
    "tagline": "How code gets onto robots and packages get released: systemd deployment, the build bot, rosdep definitions, and release tooling.",
@@ -901,6 +914,7 @@
   },
   {
    "id": "legacy-ros1",
+   "owners": [],
    "name": "Legacy ROS 1 stack",
    "status": "archive",
    "tagline": "The pre-ROS 2 HippoCampus software, kept for history and for reading old experiments.",
@@ -966,6 +980,7 @@
   },
   {
    "id": "teaching",
+   "owners": [],
    "name": "Teaching — Formulas and Vehicles",
    "status": "active",
    "tagline": "The course side of the lab: the Formulas and Vehicles class docs and the python onramp.",
@@ -995,6 +1010,7 @@
   },
   {
    "id": "docs-and-site",
+   "owners": [],
    "name": "Documentation & site",
    "status": "active",
    "tagline": "The public lab reference: setup guides, project maps, code search, and the tooling that keeps the site consistent.",
@@ -1033,6 +1049,9 @@
   },
   {
    "id": "underwater-localization",
+   "owners": [
+    "kyle-nelson-berkeley"
+   ],
    "name": "Underwater localization & temperature exploration",
    "status": "active",
    "tagline": "Known-map localization, change mapping, and temperature-guided exploration tested in the measured HippoCampus pool simulation.",
@@ -1045,6 +1064,9 @@
   },
   {
    "id": "learning-to-swim",
+   "owners": [
+    "kyle-nelson-berkeley"
+   ],
    "name": "Learning to Swim replication",
    "status": "active",
    "tagline": "A simulation replication and vehicle-specific evaluation of the published reinforcement-learning control pipeline.",
@@ -1063,6 +1085,9 @@
   },
   {
    "id": "learning-to-swim-run-guide",
+   "owners": [
+    "kyle-nelson-berkeley"
+   ],
    "name": "Learning to Swim: simulation run guide",
    "status": "active",
    "tagline": "Run one simulated HippoCampus heat-course flight on a computer or the vehicle's Raspberry Pi, and check that it worked.",
@@ -1081,6 +1106,7 @@
   },
   {
    "id": "holiday-fun",
+   "owners": [],
    "name": "Holiday fun",
    "status": "archive",
    "tagline": "hippo-christmas: the lab's holiday hardware humor, preserved.",

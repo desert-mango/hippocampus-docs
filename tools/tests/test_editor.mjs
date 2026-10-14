@@ -182,6 +182,7 @@ function openSite(opts) {
   const sessions = [];    // app.js's onSession callback
   const listeners = {};
   const docListeners = {};
+  const hcReads = [];     // the site files read through HC.fetchJSON
   const created = [];
   const replaced = [];
   const storage = o.storage || memoryStorage();
@@ -209,7 +210,7 @@ function openSite(opts) {
     confirm: () => true,
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     HC: Object.freeze({ preview: false,
-      fetchJSON: async (p) => (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p) ? o.hc[p] : JSON.parse(readRepo(p))) }),
+      fetchJSON: async (p) => { hcReads.push(p); return (o.hc && Object.prototype.hasOwnProperty.call(o.hc, p) ? o.hc[p] : JSON.parse(readRepo(p))); } }),
     URLSearchParams,
     // the sign-in's popup watch must not keep node alive after a test
     setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref(); return t; }, clearInterval, clearTimeout,
@@ -231,6 +232,7 @@ function openSite(opts) {
   const page = {
     win, body, header, content, host, calls, listeners, location, created, replaced, storage, mql,
     docListeners: (type) => docListeners[type] || [],
+    hcReads,
     started, opens, told, sessions,
     all: (pred) => findAll(body, pred),
     one: (pred) => findAll(body, pred)[0],
@@ -849,9 +851,12 @@ test('Proposals: a card per open proposal, "touches this page"; the card expands
   assert.match(here[0].textContent, /← this page/);
   const status = findAll(open, (e) => e.classList.contains('cms-check'))[0];
   assert.ok(status, 'the gate status is shown');
-  for (const a of ['approve', 'request-changes', 'show-on-page']) {
+  for (const a of ['request-changes', 'show-on-page']) {
     assert.ok(findAll(open, (e) => e.attrs['data-action'] === a).length, `has ${a}`);
   }
+  // Kyle, 2026-10-14: a Write member does not approve a setup page; the card says who does
+  assert.equal(findAll(open, (e) => e.attrs['data-action'] === 'approve').length, 0, 'no Approve for an Editor on setup');
+  assert.ok(findAll(open, (e) => e.attrs['data-approve-note'] !== undefined).length, 'with the reason');
   // the old full-width preview frame is not drawn in the tray: "Show on page" replaces it
   assert.equal(page.all((e) => e.tagName === 'IFRAME' && e.classList.contains('cms-preview-frame')).length, 0);
   // a second click on the open card's title folds it
@@ -1954,7 +1959,7 @@ test('overlay: clicking a PR-only block opens that proposal\'s card and starts n
   }
 });
 
-test('roles (D8) exactly as reviewActionsFor: read-only no buttons, Write no Merge, Maintainer and Admin all', async () => {
+test('roles (D8) exactly as reviewActionsFor: read-only no buttons, Write no Approve/Merge on setup, Maintainer and Admin all', async () => {
   const actionsIn = async (variant) => {
     const page = await ubuntuOn({ variant });
     findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray')[0].click();
@@ -1964,7 +1969,7 @@ test('roles (D8) exactly as reviewActionsFor: read-only no buttons, Write no Mer
       .filter((a) => findAll(card, (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === a).length);
   };
   assert.deepEqual(await actionsIn('readonly'), []);
-  assert.deepEqual(await actionsIn('push'), ['approve', 'request-changes', 'update', 'close']);
+  assert.deepEqual(await actionsIn('push'), ['request-changes', 'update', 'close'], 'Write: setup is not its project');
   assert.deepEqual(await actionsIn('maintain'), ['approve', 'request-changes', 'merge', 'update', 'close']);
   assert.deepEqual(await actionsIn('admin'), ['approve', 'request-changes', 'merge', 'update', 'close']);
 });
@@ -2458,7 +2463,9 @@ test('new project: exactly two files — the registry entry with the six keys, a
   assert.equal(out.files['content/projects/sonar-rig.md'], '## What it is\n\nA rig.\n');
   const doc = JSON.parse(out.files['data/projects.json']);
   const entry = doc.projects.at(-1);
-  assert.deepEqual(Object.keys(entry), ['id', 'name', 'status', 'tagline', 'file', 'repos']);
+  assert.deepEqual(Object.keys(entry), ['id', 'owners', 'name', 'status', 'tagline', 'file', 'repos']);
+  // (the six keys of the name, plus owners since 2026-10-14: a new project starts with none; an admin names them)
+  assert.deepEqual(entry.owners, [], 'a new project starts with no owners');
   assert.deepEqual(entry.repos, [
     { name: 'sonar_rig', url: 'https://github.com/HippoCampusRobotics/sonar_rig' },
     { name: 'sonar-rig-cad', url: 'https://github.com/HippoCampusRobotics/sonar-rig-cad' }]);
@@ -3507,7 +3514,7 @@ test('js/editor.js Review PR: no finished run yet is "still checking", and asks 
   await confirmThenMerge(boss, HEAD_1);
   assert.ok(!page.calls.some((c) => c.url.includes('/annotations')));
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']),
-    ['approve', 'request-changes', 'update', 'close'], 'an Editor gets no Merge button');
+    ['request-changes', 'update', 'close'], 'an Editor gets no Merge, and no Approve outside its own projects');
 });
 
 test('js/editor.js Review PR: Merge sends exactly one PUT pinned to the shown sha; a 409 says reload', async () => {
@@ -4028,4 +4035,56 @@ test('V2: a message (or the image picker\'s button) unfolds a tucked bubble, wit
   assert.equal(page.body.classList.contains('hc-dock-collapsed'), false, 'the bubble unfolded');
   assert.ok(page.action('image-pick'), 'with "Pick the new image" in it');
   assert.equal(page.one((e) => e.classList.contains('hc-dock')).attrs.inert, undefined, 'and it is not inert');
+});
+
+/* Kyle, 2026-10-14: a Write member who owns a project (main's data/projects.json `owners`) sees Approve and
+   Merge on someone else's proposal that only touches that project; not on their own; not when it also
+   touches another file. */
+test('owners: Approve and Merge for a Write owner on its own project\'s proposal by someone else; not on its own', async () => {
+  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
+  const owner = 'kyle-nelson-berkeley';
+  let page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['approve', 'request-changes', 'merge', 'update', 'close']);
+  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr(owner, ['content/projects/learning-to-swim.md']) } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'merge', 'update', 'close'], 'its own: no Approve');
+  assert.match(trayText(page), /Someone else approves your own proposal/);
+  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md', 'content/about.md']) } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About is not its project');
+  page = await reviewSite('someone-else', { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not an owner');
+});
+
+test('owners: read again from the site after a minute, so a changed owners list shows without a reload', async () => {
+  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
+  const page = await reviewSite('kyle-nelson-berkeley', { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  // the owners come from main's file through GitHub: each read asks where main points now (the file itself is
+  // cached by commit, so an unchanged main costs one small read)
+  const reads = () => page.calls.filter((c) => /\/git\/ref\/heads\/main$/.test(c.url)).length;
+  assert.ok(page.calls.some((c) => /\/contents\/data\/projects\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
+  const redraw = async () => { page.tab('changes').click(); await settle(); page.tab('proposals').click(); await settle(); };
+  const first = reads();
+  assert.ok(first >= 1, 'the owners were read');
+  assert.ok(actionButton(page, 'approve'), 'drawn with Approve');
+  await redraw();
+  assert.ok(actionButton(page, 'approve'), 'the card is drawn again');
+  assert.equal(reads(), first, 'kept for a minute');
+  const D = vm.runInContext('Date', page.win);                    // the editor's own clock
+  const realNow = D.now;
+  try {
+    D.now = () => realNow.call(D) + 61 * 1000;
+    await redraw();
+  } finally { D.now = realNow; }
+  assert.ok(reads() > first, 'read again after the minute');
+});
+
+test('owners: a rename out of a file it does not own, or a file list GitHub cut short, gives no Approve or Merge', async () => {
+  const owner = 'kyle-nelson-berkeley';
+  const renamed = { pull: openPull(1, 'nathalie', HEAD_1), runs: runs(gateRun()), comments: [],
+    files: [Object.assign(fileRow('content/projects/learning-to-swim.md'), { status: 'renamed', previous_filename: 'content/about.md' })] };
+  let page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: renamed } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About moved into the project');
+  const cut = { pull: openPull(1, 'nathalie', HEAD_1, { changed_files: 4000 }), runs: runs(gateRun()), comments: [],
+    files: [fileRow('content/projects/learning-to-swim.md')] };
+  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: cut } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not every file was listed');
 });

@@ -597,6 +597,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/test_check_projects.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "0a286be0782e559e5a22506b57462748b234b424f6f4d9043b30f76c16efb922",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "14 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the project registry rules in the site quality gate: owners and their shape."
+      },
+      "reason": "First-party test written for the editor redesign (project owners, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
+    },
     "tools/tests/test_cms_core.mjs": {
       "classification": "included",
       "evidence": {

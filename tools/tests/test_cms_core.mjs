@@ -1005,12 +1005,13 @@ test('Vercel\'s preview comment: a link to the bot\'s comment on this repository
   assert.equal(C.vercelCommentUrl(null), null);
 });
 
-test('actions by role: Read-only none, Editor no Merge, Maintainer and Admin all; merged -> Undo only', () => {
+test('actions by role: Read-only none, Editor no Approve/Merge outside its projects, Maintainer and Admin all; merged -> Undo only', () => {
   const open = { state: 'open', merged: false, merged_at: null };
   const role = (perms) => C.roleFromPermissions(perms);
   assert.deepEqual(C.reviewActionsFor(role({ pull: true }), open), []);
   assert.deepEqual(C.reviewActionsFor(null, open), []);
-  assert.deepEqual(C.reviewActionsFor(role({ push: true }), open), ['approve', 'request-changes', 'update', 'close']);
+  // Kyle, 2026-10-14: Write approves (and merges) only a proposal wholly inside a project it owns
+  assert.deepEqual(C.reviewActionsFor(role({ push: true }), open), ['request-changes', 'update', 'close']);
   const all = ['approve', 'request-changes', 'merge', 'update', 'close'];
   assert.deepEqual(C.reviewActionsFor(role({ maintain: true, push: true }), open), all);
   assert.deepEqual(C.reviewActionsFor(role({ admin: true }), open), all);
@@ -1432,4 +1433,43 @@ test('sign-out: clearSession also removes every hc-org-cache:* key, and nothing 
   assert.deepEqual([...m.keys()], ['hc-draft:content/about.md'], 'the session and every org-cache answer are gone');
   const hostile = { get length() { throw new Error('x'); }, key() { throw new Error('x'); }, removeItem() { throw new Error('x'); } };
   assert.doesNotThrow(() => C.clearSession(hostile));
+});
+
+/* Kyle, 2026-10-14 (feedback item 9): Approve is shown to repo Admin/Maintain everywhere, and to a Write member
+   only on a proposal whose every file belongs to a project that member owns (owners from MAIN's
+   data/projects.json), never on their own proposal. A Write owner may also merge such a proposal. Setup, Agent
+   tools, About and Lab pages, and any shared file (an image list, a registry), are never theirs. */
+test('owners: approve and merge for Write only inside its own projects; never its own proposal', () => {
+  const role = (perms) => C.roleFromPermissions(perms);
+  const W = role({ push: true });
+  const projects = { projects: [
+    { id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] },
+    { id: 'scalar-field', owners: ['Kyle-Nelson-Berkeley', 'someone-else'] },
+    { id: 'hippocampus-vehicle', owners: [] },
+    { id: 'odd', owners: 'kyle-nelson-berkeley' },                         // a string, not a list: owns nothing
+  ] };
+  const pull = (author) => ({ state: 'open', merged: false, merged_at: null, user: { login: author } });
+  const ctx = (files, login) => ({ login: login || 'kyle-nelson-berkeley', files, projects });
+  const rest = ['request-changes', 'update', 'close'];
+  const mine = ['approve', 'request-changes', 'merge', 'update', 'close'];
+  const of = (files, author, login) => C.reviewActionsFor(W, pull(author || 'nathalie'), ctx(files, login));
+  assert.deepEqual(of(['content/projects/learning-to-swim.md']), mine, 'an owner on its project');
+  assert.deepEqual(of(['content/projects/scalar-field.md', 'content/projects/learning-to-swim.md']), mine, 'two projects it owns (case-insensitive)');
+  assert.deepEqual(of(['content/projects/learning-to-swim.md'], 'kyle-nelson-berkeley'), ['request-changes', 'merge', 'update', 'close'], 'its own proposal: no Approve');
+  assert.deepEqual(of(['content/projects/hippocampus-vehicle.md']), rest, 'another project');
+  assert.deepEqual(of(['content/projects/odd.md']), rest, 'owners that are not a list');
+  assert.deepEqual(of(['content/projects/learning-to-swim.md', 'data/cloudinary-manifest.json']), rest, 'a shared file in the proposal');
+  for (const f of ['content/setup/lab-gantry/usage.md', 'content/tools/claude-code.md', 'content/about.md', 'data/projects.json',
+    'data/people.json', 'js/lab.js', 'content/projects/learning-to-swim.md.bak', 'content/projects/../about.md']) {
+    assert.deepEqual(of([f]), rest, f);
+  }
+  assert.deepEqual(of([]), rest, 'no files known');
+  assert.deepEqual(C.reviewActionsFor(W, pull('x'), { login: 'kyle-nelson-berkeley', files: null, projects }), rest, 'files not read yet');
+  assert.deepEqual(of(['content/projects/learning-to-swim.md'], 'x', 'someone-else'), rest, 'not an owner of that one');
+  // Admin and Maintain are unchanged
+  const all = ['approve', 'request-changes', 'merge', 'update', 'close'];
+  assert.deepEqual(C.reviewActionsFor(role({ admin: true }), pull('x'), ctx(['content/setup/a.md'])), all);
+  assert.deepEqual(C.reviewActionsFor(role({ maintain: true }), pull('x'), ctx(['content/about.md'])), all);
+  assert.equal(C.ownsAll({ login: 'kyle-nelson-berkeley', files: ['content/projects/learning-to-swim.md'], projects }), true);
+  assert.equal(C.ownsAll({ login: '', files: ['content/projects/hippocampus-vehicle.md'], projects }), false);
 });
