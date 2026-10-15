@@ -106,7 +106,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "22 September 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
       },
@@ -188,7 +188,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Fetch site content same-origin, or through the CMS preview bridge inside a preview frame."
       },
@@ -860,7 +860,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
       },
@@ -890,7 +890,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
       },

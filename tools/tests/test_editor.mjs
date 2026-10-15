@@ -4274,3 +4274,40 @@ test('U4b: older tab drafts are never handed to another person, and are kept whe
   assert.ok(C.createDraftStore(local, C.draftsKey('bob')).get(PAGE_ID), 'bob restored this tab: his');
   assert.equal(C.createDraftStore(local, C.draftsKey('alice')).list().length, 0, 'never alice\'s');
 });
+
+// ---- round 2, R1: the edit palette passes contrast in both themes (Kyle 2026-10-15) ----
+test('edit palette: magenta and the five proposer colours reach 4.5:1 on every page background, both themes', () => {
+  const site = fs.readFileSync(path.join(ROOT, 'css', 'site.css'), 'utf8');
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
+  const block = (src, sel, marker) => {
+    const re = new RegExp(`${sel.replace(/[[\]"().]/g, '\\$&')}\\s*\\{([^}]*${marker}[^}]*)\\}`);
+    const m = re.exec(src);
+    assert.ok(m, `${sel} block with ${marker}`);
+    const vars = {};
+    for (const [, k, v] of m[1].matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)) vars[k] = v;
+    return vars;
+  };
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  for (const [sel, theme] of [[':root', 'dark'], ['[data-theme="light"]', 'light']]) {
+    const bg = block(site, sel, '--bg:');
+    const ed = block(css, sel, '--hc-edit:');
+    const backs = ['bg', 'bg-soft', 'surface', 'surface-2'].map((k) => bg[k]);
+    assert.equal(backs.filter(Boolean).length, 4, `${theme}: four backgrounds read`);
+    const inks = ['hc-edit', 'hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5'];
+    for (const k of inks) {
+      assert.ok(ed[k], `${theme}: --${k} is a hex colour`);
+      for (const b of backs) assert.ok(ratio(ed[k], b) >= 4.5, `${theme}: --${k} ${ed[k]} on ${b} is ${ratio(ed[k], b).toFixed(2)}`);
+    }
+    assert.ok(ratio(ed['hc-edit-on'], ed['hc-edit']) >= 4.5, `${theme}: button text on the magenta fill`);
+  }
+  // light keeps Desert Mango's own magenta
+  assert.equal(block(css, '[data-theme="light"]', '--hc-edit:')['hc-edit'].toUpperCase(), '#C9257F');
+  // Editor chrome no longer paints with the site's blue
+  assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)|var\(--hc-accent-ink\)/g) || []).length, 0,
+    'every Editor accent is an edit token');
+});

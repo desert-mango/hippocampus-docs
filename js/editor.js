@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte
@@ -2828,7 +2828,7 @@
   }
 
   const blankView = (page) => ({ mode: ed.show ? 'show' : 'main', file: page ? page.file : null, pr: null, files: null,
-    ov: null, marks: [], touching: [], others: [], check: null, failed: false });
+    ov: null, tint: 0, marks: [], touching: [], others: [], check: null, failed: false });
 
   async function pageView(page, main) {
     const pv = blankView(page);
@@ -2856,6 +2856,8 @@
     if (!t) return pv;
     pv.pr = t.pull;
     pv.files = t.files;
+    // round 2 (R1): the proposer's own colour; the viewer's own proposal is magenta like their draft
+    pv.tint = C.slotOf(C.proposerSlots(all.map((x) => x.pull), state.session && state.session.login), loginOf(t.pull));
     const head = headShaOf(t.pull);
     const [ov, check] = await Promise.all([
       proposalOverlay(t, page.file, main, pv.mode === 'show' ? 'head' : 'main')
@@ -3634,8 +3636,10 @@
     const w = ed.frame && ed.frame.contentWindow;
     const nonce = ed.host && ed.host.nonce();
     if (!w || !nonce || !ed.ready) return;
+    const tint = ed.pv && ed.pv.pr && Number.isInteger(ed.pv.tint) ? ed.pv.tint : 0;
+    if (document.body) document.body.setAttribute('data-hc-tint', String(tint));   // the bar and the review cards
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot() }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint }, '*');
   }
 
   /* The block the frame may open for typing in the page (U2): the selected block of MY draft, its

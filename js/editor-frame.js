@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent.
 /* HCEditorFrame — the FRAME side of the Editor mode (plan D-D, D-E, D-N).
@@ -473,6 +473,9 @@
       b.classList.toggle(SETTING_CLASS.compact, s.on && s.settings.compact);
       b.classList.toggle('hc-hide-suggestions', s.on && !s.settings.suggestions);
       b.classList.toggle('hc-diff-side', s.on && s.settings.diff === 'side');
+      // round 2 (R1): the drawn proposal's proposer colour (css/editor.css body[data-hc-tint])
+      if (s.on) b.setAttribute('data-hc-tint', String(Number.isInteger(s.tint) ? s.tint : 0));
+      else b.removeAttribute('data-hc-tint');
     }
 
     function addCss() {

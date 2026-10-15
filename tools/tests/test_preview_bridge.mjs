@@ -503,15 +503,19 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null });
+    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, tint: 0 });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, tint: 0 });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
+  // round 2, R1: the proposer's colour slot, a whole number 0..5, else 0
+  for (const [v, want] of [[3, 3], [5, 5], [0, 0], [6, 0], [-1, 0], [2.5, 0], ['2', 0], [null, 0]]) {
+    assert.equal(SRC.editorMessage({ type: 'hc-editor', on: true, tint: v }).tint, want, `tint ${v}`);
+  }
 });
 
 test('editor mode: the sentinel prefix is the first 16 characters of this load\'s nonce', () => {

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Fetch site content same-origin, or through the CMS preview bridge inside a preview frame.
 /* HC — the content-source seam. js/app.js, js/search.js and js/graph.js read
@@ -147,7 +147,7 @@
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot}, '*')
+          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot, tint}, '*')
         on        true: draw the block marks (false: draw none)
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         theme     'light' | 'dark' | absent: the site's theme now (the frame sets
@@ -156,6 +156,8 @@
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
         hot       a block index to light (its review card is hovered or active), or null (U5b)
+        tint      the drawn proposal's proposer colour slot, a whole number 0..5 (0: the viewer's own
+                  magenta; else 0) — round 2, R1
         open      {index, md, kind, as} | null: the block to type in, its Markdown
                   (a string of at most MAX_BLOCK_MD characters), its
                   HCCore.splitBlocks kind (OPEN_KINDS), and as: 'markdown' when
@@ -184,6 +186,7 @@
   const BLOCK_INSERT_KINDS = Object.freeze(['note', 'warning', 'tabs', 'image', 'attention', 'video', 'repo']);
   const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
   const MAX_OVERLAY = 5000;
+  const MAX_TINT = 5;              // css/editor.css --hc-p1..--hc-p5 (HCCore.PROPOSER_SLOTS)
   const MAX_PX = 1e7;                // a block rectangle's coordinates (hc-block-rects), in CSS pixels
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
   const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'mdbox', 'markdown', 'closed']);
@@ -335,6 +338,8 @@
         && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
         ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
       hot: isIndex(m.hot) ? m.hot : null,          // U5b: the block whose review card is hovered or active
+      // round 2 (R1): the drawn proposal's proposer colour slot, 0 = the viewer's own magenta
+      tint: Number.isInteger(m.tint) && m.tint >= 0 && m.tint <= MAX_TINT ? m.tint : 0,
     };
   }
 

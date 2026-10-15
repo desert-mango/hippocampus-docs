@@ -62,6 +62,7 @@ class El extends Node {
   set textContent(t) { this.childNodes.forEach((c) => { c.parentNode = null; }); this.childNodes = t ? [new Text(this.ownerDocument, String(t))] : []; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+  removeAttribute(k) { delete this.attrs[k]; }
   _detach(c) { if (c.parentNode) { const s = c.parentNode.childNodes; s.splice(s.indexOf(c), 1); } }
   appendChild(c) { this._detach(c); this.childNodes.push(c); c.parentNode = this; return c; }
   insertBefore(c, ref) {
@@ -246,6 +247,18 @@ test('editor-frame: hc-framed, settings, hc-selected and the overlay classes fol
     assert.ok(css.includes(sel), `${sel} is hidden`);
   }
   assert.match(css, /body\.hc-framed \.skip-link \{ display: none !important; \}/);
+});
+
+test('editor-frame (round 2, R1): the proposer\'s colour slot reaches the page as body[data-hc-tint]', () => {
+  const { doc } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  HC.send({ on: true, tint: 3 });
+  assert.equal(doc.body.getAttribute('data-hc-tint'), '3');
+  HC.send({ on: true, tint: 0 });
+  assert.equal(doc.body.getAttribute('data-hc-tint'), '0');
+  HC.send({ on: false });
+  assert.equal(doc.body.getAttribute('data-hc-tint'), null, 'off: no tint');
 });
 
 test('editor-frame (U5b): the marked blocks\' rectangles go to the parent (numbers only); hot lights one block', () => {

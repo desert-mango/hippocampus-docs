@@ -1520,3 +1520,24 @@ test('a merge the ruleset refuses says why in plain words: a code owner\'s appro
     'Not merged yet: the site check must pass first.');
   assert.match(C.actionOutcome('merge', res('Pull Request is not mergeable')).message, /^GitHub cannot merge this proposal: Pull Request is not mergeable/);
 });
+
+// ---- round 2, R1: each proposer's own colour slot (Kyle 2026-10-15) ----
+test('proposerSlots: the viewer is 0; others get 1..5 by their oldest open proposal, case-insensitive, wrapping', () => {
+  const pr = (number, login) => ({ number, state: 'open', user: { login } });
+  const pulls = [pr(9, 'Zed'), pr(3, 'amy'), pr(4, 'Kyle'), pr(7, 'bob'), pr(5, 'AMY'),
+    pr(11, 'c1'), pr(12, 'c2'), pr(13, 'c3'), pr(14, 'c4')];
+  const s = C.proposerSlots(pulls, 'kyle');
+  assert.equal(s.kyle, 0, 'the viewer: magenta, whatever the order');
+  assert.equal(s.amy, 1, 'amy opened #3, the oldest of the others');
+  assert.equal(s.bob, 2);
+  assert.equal(s.zed, 3);
+  assert.equal(s.c1, 4);
+  assert.equal(s.c2, 5);
+  assert.equal(s.c3, 1, 'more than five others wrap around');
+  assert.equal(C.slotOf(s, 'AMY'), 1, 'looked up case-insensitively');
+  assert.equal(C.slotOf(s, 'nobody'), 0, 'an unknown login falls back to slot 0');
+  assert.deepEqual(Object.keys(C.proposerSlots(null, null)), []);
+  // merged-only proposers (extra list) come after the open ones
+  const s2 = C.proposerSlots([pr(3, 'amy')], 'kyle', [{ number: 1, user: { login: 'old' } }]);
+  assert.equal(s2.old, 2);
+});

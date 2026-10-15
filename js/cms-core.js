@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 22 September 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test
@@ -148,6 +148,30 @@
     const mine = (p) => (me && loginOf(p) === me ? 0 : 1);
     return open.slice().sort((a, b) => (mine(a) - mine(b)) || (b.number - a.number));
   }
+
+  /* Round 2 (Kyle, 2026-10-15): each proposer's own colour. The viewer is slot 0 (Desert Mango magenta,
+     css/editor.css --hc-edit); every other proposer gets 1..PROPOSER_SLOTS in the order of their OLDEST open
+     proposal (lowest number), so the proposals list and the page agree; more than PROPOSER_SLOTS others wrap.
+     `extra` (merged-only proposers, for the list) come after the open ones. -> {login (lower case): slot} */
+  const PROPOSER_SLOTS = 5;
+  function proposerSlots(pulls, viewer, extra) {
+    const me = typeof viewer === 'string' ? viewer.toLowerCase() : null;
+    const out = {};
+    if (me) out[me] = 0;
+    const order = (list) => (Array.isArray(list) ? list : []).filter(isPull).slice().sort((a, b) => a.number - b.number);
+    let next = 0;
+    for (const p of [...order(pulls), ...order(extra)]) {
+      const who = loginOf(p);
+      if (!who || who in out) continue;
+      out[who] = (next % PROPOSER_SLOTS) + 1;
+      next += 1;
+    }
+    return out;
+  }
+  const slotOf = (slots, login) => {
+    const k = typeof login === 'string' ? login.toLowerCase() : '';
+    return slots && Object.prototype.hasOwnProperty.call(slots, k) ? slots[k] : 0;
+  };
 
   function recentMerges(pulls, limit) {
     const n = Number.isInteger(limit) && limit > 0 ? limit : 5;
@@ -3464,7 +3488,7 @@
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
     POPUP_CLOSE_GRACE_MS,
     ROUTES, BRIDGE_PATH_RE,
-    roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges,
+    roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges, proposerSlots, slotOf, PROPOSER_SLOTS,
     createGeneration, randomHex, authorizeUrl, createSignIn,
     makeSession, readSession, writeSession, clearSession,
     assertRepoPath, createGitHubClient, READ_METHODS, WRITE_METHODS, isAllowedWrite,
