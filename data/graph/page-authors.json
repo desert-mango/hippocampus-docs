@@ -6,7 +6,8 @@
   2,
   3,
   4,
-  5
+  5,
+  6
  ],
  "pages": {
   "about": {
@@ -1618,7 +1619,7 @@
     {
      "pr": 6,
      "by": "desert-mango-robotics",
-     "state": "open"
+     "state": "closed"
     }
    ]
   },
