@@ -1058,6 +1058,15 @@ what changed before any write**: a block is typed in the page, the frame sends i
 (`hc-block-md`, a string, never HTML), and the parent accepts it only for the one block it marked
 open, in author mode, with a length cap; the text outside that block's span stays byte-identical,
 and nothing reaches GitHub until the person reads the changes and sends them.
+Since U5 (2026-10-15) the frame also reports where its marked blocks are (`hc-block-rects`: numbers
+only) and the parent may name one block to light (`hot`: an index). The review cards beside the
+frame are the parent's own DOM and data (text set as text); their Approve and Reject buttons ignore
+activation for 400 ms after a card appears or moves, so a frame cannot slide a card under a click.
+Their one write is an approval record, `POST /issues/<n>/comments` whose body must be exactly one
+`hc-approved|hc-declined <key>…` line (`isAllowedWrite` checks the body). Turning records into
+changes on `main` is `.github/workflows/go-live.yml` (server side, as the derive App, after the gate),
+which trusts a record only from an admin or the page's project owner, never the author or a
+committer, and never runs proposal code.
 
 (3) **The gate.** `check.py` 6d rejects scripts, handlers and `javascript:` URLs in content
 before merge. `index.html` is judged like the old shell pages: no inline `<script>`, no `on*=`

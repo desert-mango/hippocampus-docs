@@ -40,7 +40,7 @@ reviewed and merged. The step-by-step protocols for reviewers are in
   pencil editor on the same branch, and the check runs again.
 - Nathalie or a Maintainer she names looks at the change on its page in the Proposals tab,
   approves, and merges. The site then deploys automatically.
-- **The robot's commit:** right after a merge, `github-actions[bot]` adds a commit named
+- **The robot's commit:** right after a merge, the site's robot (`hippocampus-derive[bot]`) adds a commit named
   `derive: regenerate derived data after <short sha>`. It rebuilds the search index and
   graph data from your change — no action for you. After a merge that adds a page, the
   old site keeps showing for one to three minutes, until that commit deploys.

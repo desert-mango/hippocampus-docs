@@ -69,7 +69,9 @@ verbatim on every pull request and every push to `main`; on pull requests it fir
 regenerates the derived data in the workspace (not committed), and after a red gate it
 re-emits each finding as a GitHub annotation. `.github/workflows/derive.yml` (job `derive`)
 runs after every push to `main`: it regenerates the derived data, runs the gate, and commits
-the result as `github-actions[bot]`.
+the result as the org's derive App (`hippocampus-derive[bot]`). A third,
+`.github/workflows/go-live.yml`, puts edits approved one by one on the page onto `main`, as the
+same App, after the gate.
 
 When images, the Cloudinary manifest, or people-card links changed, also run the network
 half of the gate — it probes exactly those URLs for liveness (check.py itself stays

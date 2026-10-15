@@ -52,7 +52,7 @@ A few words used on this page:
 5. **To add a picture:** while you edit a block in the **Changes** tab, click
    **Image from Media**, upload a PNG, JPEG, GIF or WebP image under 5 MB (or pick one the site
    has), describe it, click **Insert into page**, and propose the page (section 7).
-6. **A "derive" commit is:** the robot (`github-actions[bot]`) rebuilding the site's search index
+6. **A "derive" commit is:** the robot (`hippocampus-derive[bot]`) rebuilding the site's search index
    and graph data right after a merge; it needs nothing from you.
 7. **For a "machinery" badge:** do not merge; ask Desert Mango, who reviews every change to the
    site's code.
@@ -80,10 +80,14 @@ repository.
 
 The badge shows in the header, next to your name, once you are signed in.
 
-Nathalie and the Maintainers merge. An Editor's **Approve** is a useful second opinion, but
-only Nathalie or a Maintainer turns a proposal into a merge. A Write member could still merge on
-github.com, because nothing on the repository blocks a merge on purpose. The rule is simply: lab
-members propose, Nathalie and the Maintainers merge.
+Nathalie and the Maintainers merge. Since 15 October 2026 GitHub enforces who may approve:
+`main` has a rule (the `main-review` ruleset) that every change needs a pull request, the green
+`check`, and one approval from a **code owner** of the changed files. The code owners are the
+site's admins for everything, and a project's `owners` (in `data/projects.json`) for that
+project's own page and facts file. So a lab member can approve and merge only proposals that
+stay inside their own project, and never their own proposal. Admins can still push to `main`
+directly; so can the site's robot (`hippocampus-derive[bot]`), which only ever adds the derived
+data and the changes reviewers approved on the page (below).
 
 ## 1. Make a change on github.com (lab members)
 
@@ -235,6 +239,42 @@ block to open its proposal. The **View** tab turns this off ("Show others’ sug
 switches the "Diff style" between **Inline** and **Side by side**. These settings are yours
 only and stay in your browser.
 
+**Approve one change at a time, on the page.** When a proposal is drawn on the page, a column
+of cards stands beside it: one card per changed block, with who proposed it, when, and the
+change in words ("Replace: … with …", "Add: …", "Delete: …"). Hover a card and its block gets the
+blue line. If you may approve that page (an admin anywhere; a project's owner on that project's
+pages; never your own proposal), the card has a check mark (**Approve**) and a cross (**Reject**),
+and the bar above the page has **Approve all (N)**.
+
+- **Approve** puts that one change on the live site by itself, in about a minute: the card says
+  "Approved. Going live… (about a minute)", and the page reloads with the change in place. The
+  site's robot does it (`.github/workflows/go-live.yml`), after the same site rules as a merge;
+  the commit carries the proposer's name.
+- **Reject** marks the change as declined; it never goes live. Changed your mind? A declined card
+  offers **Approve** again (the latest decision counts).
+- When every change of a proposal is live or declined, the robot closes the proposal with
+  "Everything here is live (or declined)."
+- "Not live: site rules: …" means that change would break a site rule; it stays out, and the
+  proposer should fix it (a new version of the proposal can be approved again). "This part
+  changed on the site since it was proposed" means the live page moved on: use **Review** to ask
+  for changes. If a card still says "Still waiting" after five minutes, follow its link to the
+  robot's runs, or ask Desert Mango.
+- Only proposals made in Editor mode that change existing pages can be approved this way.
+  Anything else (a new page, a project's facts, the image list) is reviewed as a whole with
+  **Review**, **Approve** and **Merge**.
+- Once any change of a proposal was approved or declined on the page, the card in the
+  Proposals tab no longer offers **Merge** (a merge would bring declined changes back). On
+  github.com the **Merge** button still exists for a code owner; do not use it for such a
+  proposal.
+- On a narrow window the cards become small round markers beside the page; click one to open
+  its card. On a phone, **Review N changes** in the bar opens them as a sheet.
+
+Two limits, stated plainly: anyone with write access can make a "this did not go live" note
+appear on a card (it can stop a change from going live until the proposal is updated, never
+make one go live); and when an admin is a proposal's author and its only valid code owner,
+GitHub showed a non-owner's approval of it as enough (seen 15 October 2026), so admins ask
+another admin, not a lab member, to approve their own proposals.
+
 If Editor mode does not load, do the same review on github.com: open the pull request at
 `https://github.com/desert-mango/hippocampus-docs/pulls`, check that the `check` line shows a
 green ✓, open the **Files changed** tab, click **Review changes**, choose **Approve**, click
@@ -322,7 +362,7 @@ filter on the pull request list) and start at step 3.
 
 ## 5. The robot's "derive" commit, and the short wait after a merge
 
-After every merge, a robot (`github-actions[bot]`) rebuilds the site's search index and graph
+After every merge, a robot (`hippocampus-derive[bot]`) rebuilds the site's search index and graph
 data and commits them to the site. Its commit is named
 `derive: regenerate derived data after <short sha>`, where `<short sha>` is the short code
 GitHub gives the merge's commit. This is normal and needs nothing from you.

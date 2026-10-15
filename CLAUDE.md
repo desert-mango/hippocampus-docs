@@ -77,9 +77,18 @@ Notes on the rows (agents):
   (`tools/derive.py --annotate`); the Editor's Proposals tab reads those. The old
   `search-shard-advisory` job is retired.
 - The second workflow, `.github/workflows/derive.yml` (job `derive`), runs after every push
-  to `main`: it regenerates the derived outputs, runs the gate, and commits them as
-  `github-actions[bot]` (`derive: regenerate derived data after <short sha>`); it pushes
-  nothing when the gate is red.
+  to `main`: it regenerates the derived outputs, runs the gate, and commits them as the org's
+  derive App, `hippocampus-derive[bot]` (`derive: regenerate derived data after <short sha>`);
+  it pushes nothing when the gate is red, and skips every push made by a bot.
+- The third, `.github/workflows/go-live.yml` (job `go-live`), puts per-edit approvals on
+  `main`: a reviewer's Approve on the page writes a record comment (`hc-approved <key>`) on
+  the proposal; the workflow (on such a comment, every 30 minutes, or by hand) runs
+  `tools/go_live.mjs` from `main`'s own files, applies the edits whose records it trusts
+  (an admin, or the project's owner on that project's pages; never the author or a
+  committer), runs the gate after each, and pushes as the same App. Proposal code is never
+  run: their texts are read as data. Both workflows mint the App's token with
+  `tools/github_app_token.py` (this repository only, contents: write only, revoked after)
+  from the repository environment `derive`, which admits `main` only.
 - Who does what: lab members are Write collaborators who work on branches in this
   repository (no fork, no "Approve and run"); Nathalie (Admin) and the Maintainers she names
   review and merge; outsiders use forks. The site editor (Editor mode on the site's own
@@ -114,7 +123,7 @@ Notes on the rows (agents):
   `js/editor-frame.js`, `js/graph.js`, `js/lab.js`, `tools/bench_librarian.mjs`,
   `tools/build_contributors.py`, `tools/build_github_data.py`, `tools/github_names.py`,
   `tools/build_repo_graphs.py`, `tools/build_search_index.py`, `tools/build_wiki_graph.py`,
-  `tools/check.py`, `tools/check_urls.py`, `tools/derive.py` (paths only), `tools/projects_registry.py`,
+  `tools/check.py`, `tools/check_urls.py`, `tools/derive.py` (paths only), `tools/go_live.mjs`, `tools/projects_registry.py`,
   `tools/build_codeowners.py` (writes `.github/CODEOWNERS` from the owners; the gate checks it is in step),
   `js/source.js` (the project index's ids, to fetch and merge each facts file), `tools/rst_convert.py`
   — re-derive the list with
@@ -156,6 +165,7 @@ Notes on the rows (agents):
   | `OPENROUTER_API_KEY` | Vercel env (Production + Preview) | `api/librarian.js` |
   | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Vercel env (Production + Preview), with the key pair made for this site | `api/media.js` (signed uploads) |
   | `GH_VIEWER_CLIENT_ID`, `GH_VIEWER_CLIENT_SECRET` | Vercel env, after the handoff | the read-only viewer App |
+  | `DERIVE_APP_PRIVATE_KEY`, `DERIVE_APP_ID` (both secrets) | GitHub repository environment `derive` (`main` only); never in the deploy | `derive.yml`, `go-live.yml` (the App token) |
 - **Done means merged.** Work is not done until it is safely merged into `main` and
   pushed. Kyle is the sole or primary contributor of this project (true of every project
   so far, this one included), so an agent working for Kyle integrates through the
@@ -166,10 +176,12 @@ Notes on the rows (agents):
   not done" and list the unmerged commits.
   - Two paths, by who is pushing. Outside contributors and lab members use the
     pull-request pipeline above (`.github/`, `CONTRIBUTING.md`) and never push `main`.
-    Kyle's agents push `main` directly with Kyle's own identity: `main` has no branch
-    protection (declined 2026-09-06, `docs/cms-plan.md` §6 — never re-propose it), so a
-    direct push just works. If protection is ever added, an agent's path becomes "open the
-    PR, get `check` green, merge it" — done still means merged, never "PR opened".
+    Kyle's agents push `main` directly as `desert-mango-robotics`: `main` carries the
+    `main-review` ruleset (Kyle, 2026-10-14, reversing the 2026-09-06 decline: a pull
+    request, one code owner's approval and the `check` status), and the repository Admin
+    role bypasses it, as does the derive App. Every `gh` write to this repository uses
+    `GH_TOKEN=$(gh auth token --user desert-mango-robotics)` (gh's active account is the
+    Write one, which the ruleset stops). Done still means merged, never "PR opened".
   - The one exception: when Kyle is a small contributor to someone else's project, an
     agent never pushes that project's `main`; it opens a pull request against it
     instead. No project has been in that mode yet, so before using it an agent must

@@ -36,11 +36,12 @@ for the three places reality diverged from the original plan.*
 >    not approve on github.com what the site editor would not let them approve (Setup, Agent tools,
 >    About, Lab: admins; a project's pages: that project's `owners`). Shipped: `.github/CODEOWNERS`
 >    generated from `data/projects.json` owners (`tools/build_codeowners.py`, kept in step by the
->    gate) and the editor's Approve rule. Not on yet: the ruleset on `main` (PR + 1 code-owner approval
->    + the `check` status, admin bypass). GitHub refuses the GitHub Actions app as a bypass actor on
->    this repository (HTTP 422), and `derive.yml` pushes to `main` with `GITHUB_TOKEN`, so turning the
->    ruleset on needs a new derive credential (a deploy key in a `derive` environment): Kyle's call.
->    Item 1 below is the historical record.
+>    gate) and the editor's Approve rule. The ruleset on `main` (PR + 1 code-owner approval
+>    + the `check` status, admin bypass). **On since 2026-10-15** (ruleset `main-review`, id 25157116):
+>    GitHub refused the GitHub Actions app as a bypass actor (HTTP 422), so Kyle made an org-owned
+>    App, `hippocampus-derive` (contents: write, this repository only, key in the `main`-only
+>    environment `derive`); it and the repository Admin role are the bypass actors. `derive.yml` and
+>    `go-live.yml` push as that App. Item 1 below is the historical record.
 > 1. **Branch protection was DECLINED (2026-09-06), permanently.** The §6 G3 rule and the §5
 >    "belt-and-braces" framing are **not a to-do and are never to be re-proposed** — a blocked
 >    merge state must never land on a lab member. `main` carries no branch protection; the
