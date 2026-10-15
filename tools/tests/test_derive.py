@@ -540,7 +540,8 @@ class TestGoLiveWorkflow(unittest.TestCase):
 
     def test_the_key_only_in_the_push_step_and_unset_after_minting(self):
         g = self.g
-        self.assertEqual(sorted(set(re.findall(r"secrets\.([A-Z_]+)", g))), ["DERIVE_APP_PRIVATE_KEY"])
+        self.assertEqual(sorted(set(re.findall(r"secrets\.([A-Z_]+)", g))), ["DERIVE_APP_ID", "DERIVE_APP_PRIVATE_KEY"])
+        self.assertIn("DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID || secrets.DERIVE_APP_ID }}", g)
         steps = g.split("      - name: ")
         with_key = [s for s in steps if "DERIVE_APP_PRIVATE_KEY: ${{" in s]
         self.assertEqual(len(with_key), 1)
@@ -554,6 +555,7 @@ class TestGoLiveWorkflow(unittest.TestCase):
         sweep = [s for s in steps if "node tools/go_live.mjs --plan" in s]
         self.assertEqual(len(sweep), 1)
         self.assertNotIn("DERIVE_APP", sweep[0])
+        self.assertEqual(sum("secrets.DERIVE_APP_ID" in s for s in steps), 1, "the App id only in the push step too")
 
     def test_pushes_are_plain_fast_forwards(self):
         for text in (self.g, self.derive):

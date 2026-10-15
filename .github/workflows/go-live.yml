@@ -74,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ATTEMPT: ${{ inputs.attempt || '1' }}
-          DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID }}
+          DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID || secrets.DERIVE_APP_ID }}
           DERIVE_APP_PRIVATE_KEY: ${{ secrets.DERIVE_APP_PRIVATE_KEY }}
         run: |
           set -euo pipefail
