@@ -424,8 +424,43 @@
         w.classList.toggle('hc-selected', sel);
         if (sel) chosen = w;
         for (const mark of Object.keys(MARK_CLASS)) w.classList.toggle(MARK_CLASS[mark], marks.get(i) === mark);
+        w.classList.toggle('hc-hot', i !== null && s.hot === i);      // U5b: its review card is hovered or active
       });
       return chosen;
+    }
+
+    /* U5b: where the MARKED blocks are, for the parent's review rail (numbers only; js/source.js rounds
+       and checks them). Sent after each apply, scroll and resize, once per animation frame, and only when
+       something moved; when the marks go, one empty report clears the rail. */
+    let lastRects = '[]';
+    let rectsQueued = false;
+    function reportRects() {
+      const s = state;
+      if (!s || !s.on) return;
+      const marked = new Set((Array.isArray(s.overlay) ? s.overlay : []).map((o) => o && o.index));
+      const rects = [];
+      if (marked.size) {
+        const root = doc.getElementById('content') || doc.body;
+        for (const body of pageBodies(root, prefix)) {
+          for (const w of blocksIn(body)) {
+            const i = indexOfBlock(w);
+            if (i === null || !marked.has(i) || typeof w.getBoundingClientRect !== 'function') continue;
+            const r = w.getBoundingClientRect();
+            rects.push({ index: i, top: r.top, height: r.height });
+          }
+        }
+      }
+      const key = JSON.stringify(rects);
+      if (key === lastRects) return;
+      lastRects = key;
+      HC.post('hc-block-rects', { rects, view: Number(win.innerHeight) || 0 });
+    }
+    function queueRects() {
+      if (rectsQueued) return;
+      rectsQueued = true;
+      const next = typeof win.requestAnimationFrame === 'function' ? (fn) => win.requestAnimationFrame(fn)
+        : (fn) => win.setTimeout(fn, 16);
+      next(() => { rectsQueued = false; reportRects(); });
     }
 
     function setBodyClasses(s) {
@@ -469,6 +504,7 @@
         }
       }
       syncOpen(s);
+      queueRects();
     }
 
     /* A block (partly) on screen is never scrolled: the reader clicked it where it is. */
@@ -765,6 +801,8 @@
       }).observe(content, { childList: true, subtree: true });
     }
 
+    win.addEventListener('scroll', queueRects);
+    win.addEventListener('resize', queueRects);
     win.addEventListener('hashchange', () => {
       const h = String(win.location.hash || '');
       if (h.indexOf('#preview=') === 0) return;      // js/source.js turns that into a reload

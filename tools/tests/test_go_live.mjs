@@ -469,3 +469,107 @@ test('engine: two proposals on one page make two commits, each with the page as 
   const plan = ENGINE.commitPlan(out.groups);
   assert.deepEqual(plan.map((c) => [c.author_name, c.texts[P]]), [['someone', headA], ['other', both]]);
 });
+
+// ------------------------------------------------ U5b: the review rail's data (pure) --
+
+test('proposalEligible: per-edit review only for a cms/ proposal of this repository, not a draft, page edits only', () => {
+  const pull = { draft: false, state: 'open', head: { ref: 'cms/a/x', repo: { full_name: REPO } } };
+  const rows = [{ filename: P, status: 'modified' }];
+  assert.equal(C.proposalEligible(pull, rows), true);
+  assert.equal(C.proposalEligible({ ...pull, draft: true }, rows), false);
+  assert.equal(C.proposalEligible({ ...pull, head: { ...pull.head, ref: 'feature/x' } }, rows), false);
+  assert.equal(C.proposalEligible({ ...pull, head: { ...pull.head, repo: { full_name: 'm/fork' } } }, rows), false);
+  assert.equal(C.proposalEligible(pull, [...rows, { filename: 'data/projects.json', status: 'modified' }]), false);
+  assert.equal(C.proposalEligible(pull, [{ filename: 'content/setup/new.md', status: 'added' }]), false);
+  assert.equal(C.proposalEligible(pull, null), false);
+});
+
+test('proposalEdits: each edit names its head block (adds and changes) for the page anchors', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n\nA new para.\n';
+  const e = await C.proposalEdits(P, BASE, head, BASE);
+  const H = C.splitBlocks(head).blocks;
+  for (const x of e) assert.equal(H[x.headIndex].text.trim(), x.head);
+});
+
+test('reviewCards: one card per edit at its overlay entry; states from records, failures and main', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n\nA new para.\n';
+  const edits = await C.proposalEdits(P, BASE, head, BASE);
+  const ov = C.overlayOnMain(BASE, BASE, head);
+  const [kc, ka] = edits.map((x) => x.key);
+  const S = HEAD1;
+  const comments = [rec(1, 'desert-mango-robotics', `hc-approved ${kc}`),
+    { id: 2, user: { login: 'github-actions[bot]', type: 'Bot' }, body: C.failureBody(ka, S, 'site rules: x'), created_at: 't', updated_at: 't' }];
+  const cards = C.reviewCards({ edits, overlay: ov.overlay, comments, author: 'someone', headSha: S,
+    trusted: () => true, may: () => true, eligible: true, pending: new Set() });
+  assert.deepEqual(cards.map((c) => [c.kind, c.state, c.canAct]), [['change', 'going', false], ['add', 'failed', true]]);
+  assert.equal(ov.overlay[cards[0].anchor].source, 'pr-del', 'a change is anchored at its old block');
+  assert.equal(ov.overlay[cards[1].anchor].source, 'pr-add');
+  assert.equal(cards[1].reason, 'site rules: x');
+  assert.equal(cards[0].by, 'desert-mango-robotics');
+  // an untrusted approval leaves the card waiting; a page reader (may: false) gets no buttons
+  const c2 = C.reviewCards({ edits, overlay: ov.overlay, comments: [rec(1, 'mallory', `hc-approved ${kc}`)], author: 'someone',
+    headSha: S, trusted: (l) => l !== 'mallory', may: () => false, eligible: true, pending: new Set() });
+  assert.deepEqual(c2.map((c) => [c.state, c.canAct]), [['waiting', false], ['waiting', false]]);
+  // not eligible: every card says so and offers nothing
+  const c3 = C.reviewCards({ edits, overlay: ov.overlay, comments: [], author: 'someone', headSha: S,
+    trusted: () => true, may: () => true, eligible: false, pending: new Set() });
+  assert.deepEqual([...new Set(c3.map((c) => `${c.state}:${c.canAct}`))], ['whole:false']);
+  // a key the browser just recorded is "going" before GitHub lists the comment
+  const c4 = C.reviewCards({ edits, overlay: ov.overlay, comments: [], author: 'someone', headSha: S,
+    trusted: () => true, may: () => true, eligible: true, pending: new Map([[ka, 'approved']]) });
+  assert.equal(c4[1].state, 'going');
+  // live and declined
+  const live = await C.proposalEdits(P, BASE, head, head);
+  const c5 = C.reviewCards({ edits: live, overlay: C.overlayOnMain(head, BASE, head).overlay, comments: [], author: 'someone',
+    headSha: S, trusted: () => true, may: () => true, eligible: true, pending: new Set() });
+  assert.deepEqual(c5.map((c) => [c.state, c.anchor]), [['live', null], ['live', null]]);
+  const c6 = C.reviewCards({ edits, overlay: ov.overlay, comments: [rec(3, 'desert-mango-robotics', `hc-declined ${kc}`)],
+    author: 'someone', headSha: S, trusted: () => true, may: () => true, eligible: true, pending: new Set() });
+  assert.deepEqual([c6[0].state, c6[0].acts], ['declined', ['approve']], 'a Reject can be undone by approving');
+});
+
+test('cardText: the change in words, clipped, plain text', () => {
+  const t = C.cardText('change', 'Old words.', 'New words.');
+  assert.deepEqual(t, { verb: 'Replace', from: 'Old words.', to: 'New words.' });
+  assert.deepEqual(C.cardText('add', '', '## A **bold** title'), { verb: 'Add', from: '', to: 'A bold title' });
+  assert.deepEqual(C.cardText('delete', 'Gone.', ''), { verb: 'Delete', from: 'Gone.', to: '' });
+  assert.ok(C.cardText('add', '', 'x'.repeat(500)).to.length <= 161);
+  // code and snake_case survive; real tags and a note box's title read as words
+  assert.equal(C.cardText('change', 'x', 'Files in `gantry/config/motor_<axis_name>.yaml` and my_var.').to,
+    'Files in gantry/config/motor_<axis_name>.yaml and my_var.');
+  assert.equal(C.cardText('add', '', '<div class="adm adm-note"><p class="adm-title">Note</p>\n\nKeep *this* _short_.\n\n</div>').to,
+    'Note: Keep this short.');
+});
+
+test('railLayout: cards keep their order, never overlap, the active card sits on its line and the others step aside', () => {
+  const cards = [{ key: 'a', want: 100, height: 80 }, { key: 'b', want: 120, height: 80 }, { key: 'c', want: 400, height: 60 }];
+  const t = C.railLayout(cards, null, 8);
+  assert.deepEqual(t, { a: 100, b: 188, c: 400 });
+  const act = C.railLayout(cards, 'b', 8);
+  assert.equal(act.b, 120, 'the active card on its own line');
+  assert.ok(act.a + 80 + 8 <= act.b, 'the one above stepped up');
+  assert.equal(act.c, 400);
+  const tight = C.railLayout([{ key: 'a', want: 0, height: 50 }, { key: 'b', want: 10, height: 50 }, { key: 'c', want: 20, height: 50 }], 'c', 8);
+  assert.ok(tight.a + 58 <= tight.b && tight.b + 58 <= tight.c && tight.c === 20);
+});
+
+test('reviewActionsFor: Merge is gone once a proposal has an edit-by-edit record (declined edits must not come back)', () => {
+  const role = { key: 'admin', canPush: true };
+  const pull = { state: 'open', user: { login: 'someone' } };
+  assert.ok(C.reviewActionsFor(role, pull, {}).includes('merge'));
+  assert.ok(!C.reviewActionsFor(role, pull, { hasRecords: true }).includes('merge'));
+});
+
+test('runRecord: sends each chunk through the one-repo client and says what came of it', async () => {
+  const sent = [];
+  const client = { send: async (m, p, o) => { sent.push([m, p, o.body.body.split(' ').length - 1]); return { ok: true, status: 201, data: {} }; } };
+  const keys = Array.from({ length: 60 }, (_, i) => sha(`k${i}`));
+  const out = await C.runRecord(client, 7, 'approved', keys);
+  assert.deepEqual(out, { ok: true, status: 201, message: 'Approved. Going live in about a minute.', sent: true });
+  assert.deepEqual(sent.map((x) => x[2]), [50, 10]);
+  const no = await C.runRecord({ send: async () => ({ ok: false, status: 403, data: { message: 'Resource not accessible' } }) }, 7, 'declined', [K1]);
+  assert.equal(no.ok, false);
+  assert.match(no.message, /GitHub says you may not do this: Resource not accessible/);
+  const bad = await C.runRecord(client, 7, 'approved', []);
+  assert.deepEqual([bad.ok, bad.sent], [false, false]);
+});

@@ -133,13 +133,21 @@
                                              one block it marked open, in
                                              author mode, and shows the changed
                                              text itself before any write.
+        hc-block-rects   {rects, view}       where the MARKED blocks are on screen
+                                             (U5b, the review rail): rects =
+                                             [{index, top, height}] in the
+                                             frame's viewport, view = its height;
+                                             numbers only. The parent only lines
+                                             its own cards up with them; a card's
+                                             text and buttons come from the
+                                             parent's data, never from this.
       index is a whole number 0..100000. HC.post builds the message itself
       (frameMessage below): an unknown type or a bad field posts nothing.
       The parent acts on one only when event.source is ITS frame's window
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open}, '*')
+          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot}, '*')
         on        true: draw the block marks (false: draw none)
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         theme     'light' | 'dark' | absent: the site's theme now (the frame sets
@@ -147,6 +155,7 @@
                   fragment as &theme=light)
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
+        hot       a block index to light (its review card is hovered or active), or null (U5b)
         open      {index, md, kind, as} | null: the block to type in, its Markdown
                   (a string of at most MAX_BLOCK_MD characters), its
                   HCCore.splitBlocks kind (OPEN_KINDS), and as: 'markdown' when
@@ -175,6 +184,7 @@
   const BLOCK_INSERT_KINDS = Object.freeze(['note', 'warning', 'tabs', 'image', 'attention', 'video', 'repo']);
   const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
   const MAX_OVERLAY = 5000;
+  const MAX_PX = 1e7;                // a block rectangle's coordinates (hc-block-rects), in CSS pixels
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
   const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'mdbox', 'markdown', 'closed']);
   const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
@@ -280,6 +290,18 @@
       return (isIndex(d.index) && typeof d.md === 'string' && d.md.length <= MAX_BLOCK_MD)
         ? { type, index: d.index, md: d.md } : null;
     }
+    if (type === 'hc-block-rects') {
+      // U5b: where the MARKED blocks are on screen (the parent's review rail lines its cards up with
+      // them). Numbers only, rounded; one bad entry drops the whole message.
+      const num = (v, lo) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= MAX_PX;
+      if (!Array.isArray(d.rects) || d.rects.length > MAX_OVERLAY || !num(d.view, 0)) return null;
+      const rects = [];
+      for (const r of d.rects) {
+        if (!r || typeof r !== 'object' || !isIndex(r.index) || !num(r.top, -MAX_PX) || !num(r.height, 0)) return null;
+        rects.push({ index: r.index, top: Math.round(r.top), height: Math.round(r.height) });
+      }
+      return { type, rects, view: Math.round(d.view) };
+    }
     return null;
   }
 
@@ -312,6 +334,7 @@
       open: (m.open && typeof m.open === 'object' && isIndex(m.open.index) && typeof m.open.md === 'string'
         && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
         ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
+      hot: isIndex(m.hot) ? m.hot : null,          // U5b: the block whose review card is hovered or active
     };
   }
 

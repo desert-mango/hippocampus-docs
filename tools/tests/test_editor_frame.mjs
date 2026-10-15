@@ -248,6 +248,35 @@ test('editor-frame: hc-framed, settings, hc-selected and the overlay classes fol
   assert.match(css, /body\.hc-framed \.skip-link \{ display: none !important; \}/);
 });
 
+test('editor-frame (U5b): the marked blocks\' rectangles go to the parent (numbers only); hot lights one block', () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  const win = fakeWin();
+  win.innerHeight = 800;
+  EF.create(win, doc, HC);
+  HC.send({ on: true });
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-block-rects').length, 0, 'no marks: nothing to report');
+  const [, , w3, w5] = blocksOf(body);
+  w3.getBoundingClientRect = () => ({ top: 120.4, height: 60, bottom: 180.4 });
+  w5.getBoundingClientRect = () => ({ top: 400, height: 90, bottom: 490 });
+  HC.send({ on: true, overlay: [{ index: 3, mark: 'change' }, { index: 5, mark: 'del' }], hot: 5 });
+  const rects = HC.posts.filter((p) => p.type === 'hc-block-rects');
+  assert.deepEqual(rects[rects.length - 1], { type: 'hc-block-rects', rects: [{ index: 3, top: 120.4, height: 60 }, { index: 5, top: 400, height: 90 }], view: 800 });
+  assert.ok(w5.classList.contains('hc-hot') && !w3.classList.contains('hc-hot'));
+  // a scroll reports again; the same rectangles twice are not sent twice
+  const before = HC.posts.length;
+  w3.getBoundingClientRect = () => ({ top: 20, height: 60, bottom: 80 });
+  for (const fn of win.listeners.scroll || []) fn({});
+  assert.deepEqual(HC.posts.slice(before).map((p) => p.type), ['hc-block-rects']);
+  for (const fn of win.listeners.scroll || []) fn({});
+  assert.equal(HC.posts.length, before + 1, 'unchanged: not sent again');
+  // the marks go: one empty report clears the rail, then silence
+  HC.send({ on: true, overlay: [] });
+  const last = HC.posts.filter((p) => p.type === 'hc-block-rects').pop();
+  assert.deepEqual(last.rects, []);
+  assert.ok(!w5.classList.contains('hc-hot'));
+});
+
 test('editor-frame: Enter on a focused block and a click select it (no pencil); a link does not; "+" offers the snippet kinds', () => {
   const { doc, body } = setupPage();
   const HC = fakeHC();
@@ -347,7 +376,7 @@ test('editor-frame: under the walk, hc-walk-scroll answers this document\'s scro
   assert.equal(rig.observers.length, 2, 'the marks observer plus the walk\'s own');
   assert.equal(rig.observers[1].target, content);
   assert.equal((win.listeners.message || []).length, 1, 'still one message listener');
-  assert.equal((win.listeners.scroll || []).length, 1);
+  assert.equal((win.listeners.scroll || []).length, 2, 'the review rail\'s (U5b) and the walk\'s');
   win.scrollY = 0;
   rig.observers[1].cb([]);                                         // the page body changes
   rig.timers[0].fn();
@@ -401,7 +430,7 @@ test('editor-frame: the walk hook is absent off localhost and in the real Editor
     const rig = scrollRig(win);
     EF.create(win, doc, fakeHC());
     assert.equal(win.listeners.message, undefined, `${host} framed=${framed}: no message listener`);
-    assert.equal(win.listeners.scroll, undefined, `${host} framed=${framed}: no scroll listener`);
+    assert.equal((win.listeners.scroll || []).length, 1, `${host} framed=${framed}: no walk scroll listener (only the review rail's, U5b)`);
     assert.equal(rig.timers.length, 0, `${host} framed=${framed}: no timer`);
     assert.equal(rig.observers.length, 1, `${host} framed=${framed}: only the marks observer`);
   }

@@ -178,6 +178,8 @@
       contents: { [sha('ba5e')]: { [file]: base.join('') }, [sha('b2')]: { [file]: head.join('') } },
       compare: { [sha('b2')]: sha('ba5e') },
       checks: { [sha('b2')]: checks },
+      comments: { 2: [] },                     // U5b: the approval records the walk's Approve writes land here
+      roles: { 'walk-proposer': 'write', 'kyle-nelson-berkeley': variant === 'readonly' ? 'read' : (variant || 'write') },
     };
     if (step === 'two-prs') {
       extra.pulls.push(pull(3, 'newer-proposer', '2026-09-30T09:00:00Z', sha('b3')));
@@ -212,7 +214,24 @@
     return { orgCommits, repoCommits };
   }
 
+  // &variant=admin|maintain|readonly (U5b: a reviewer who may approve any page); default: Write
+  const variant = ['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant') : undefined;
+  // U5b: an approval record written by the page is kept as proposal #2's comment (window.walkWrites lists every write)
+  window.walkWrites = [];
+  const onWrite = (extra) => (method, url, body) => {
+    window.walkWrites.push({ method, url, body });
+    const m = /\/issues\/([0-9]+)\/comments$/.exec(url);
+    if (method === 'POST' && m && extra && extra.comments && body && typeof body.body === 'string') {
+      const t = new Date().toISOString();
+      (extra.comments[m[1]] = extra.comments[m[1]] || []).push({ id: Date.now(), user: { login: 'kyle-nelson-berkeley', type: 'User' },
+        body: body.body, created_at: t, updated_at: t });
+      return { status: 201, body: {} };
+    }
+    return { status: 405, body: { message: 'the walk takes no other writes' } };
+  };
   const fakeFor = (extra) => window.HCFakeGitHub.createFakeGitHub({
+    variant,
+    onWrite: onWrite(extra),
     readFixture: (name) => readText(`fixtures/github-data/${name}`),
     readFile: (p) => (/^[A-Za-z0-9._/-]+$/.test(p) && p.indexOf('..') < 0 ? readText(`../../${p}`) : Promise.resolve(null)),
     extra,

@@ -929,15 +929,17 @@
     if (r.canPush !== true) return [];
     if (p.merged === true || typeof p.merged_at === 'string') return ['undo'];
     if (p.state !== 'open') return [];
-    if (r.key === 'maintain' || r.key === 'admin') return ['approve', 'request-changes', 'merge', 'update', 'close'];
     const c = ctx || {};
+    // plan-u5: once a proposal has an edit-by-edit record, Merge would bring declined edits back: no Merge here
+    const noMerge = (list) => (c.hasRecords === true ? list.filter((k) => k !== 'merge') : list);
+    if (r.key === 'maintain' || r.key === 'admin') return noMerge(['approve', 'request-changes', 'merge', 'update', 'close']);
     const owns = ownsAll(c);
     const author = p.user && typeof p.user.login === 'string' ? p.user.login.toLowerCase() : '';
     const own = !author || author === String(c.login || '').toLowerCase();
     const out = ['request-changes', 'update', 'close'];
     if (owns) out.splice(1, 0, 'merge');
     if (owns && !own) out.unshift('approve');
-    return out;
+    return noMerge(out);
   }
 
   const isSha = (s) => typeof s === 'string' && /^([0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
@@ -995,6 +997,36 @@
     }
     if (!out.length) throw new Error('no edits to record');
     return out;
+  }
+
+  /* U5b: write the approval (or decline) records for keys on proposal n, chunk by chunk; stops at the
+     first refusal. -> {ok, status, message, sent}. */
+  async function runRecord(client, n, kind, keys) {
+    let reqs;
+    try {
+      reqs = recordRequests(n, kind, keys);
+    } catch (e) {
+      return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
+    }
+    let res = null;
+    for (const r of reqs) {
+      try {
+        res = await client.send(r.method, r.path, { body: r.body });
+      } catch (e) {
+        return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
+      }
+      if (!res || res.ok !== true) break;
+    }
+    if (res && res.ok === true) {
+      return { ok: true, status: res.status, message: kind === 'approved' ? 'Approved. Going live in about a minute.' : 'Declined.', sent: true };
+    }
+    const status = res && Number.isInteger(res.status) ? res.status : 0;
+    const words = githubWords(res && res.data);
+    const said = words ? `: ${words}` : '';
+    if (status === 401) return { ok: false, status, message: 'Your sign-in has ended. Please sign in again.', sent: true };
+    if (status === 403) return { ok: false, status, message: `GitHub says you may not do this${said}`, sent: true };
+    if (status === 0) return { ok: false, status, message: 'GitHub could not be reached. Reload to see whether it happened.', sent: true };
+    return { ok: false, status, message: `GitHub refused (HTTP ${status})${said}`, sent: true };
   }
 
   const DONE_TEXT = Object.freeze({
@@ -2759,7 +2791,7 @@
           if (am === null) state = 'anchor-gone';
           else mainAfter = run.lastLive !== null ? run.lastLive : am;
         }
-        raw.push({ kind: 'add', base: '', head, baseIndex: null, anchor: at,
+        raw.push({ kind: 'add', base: '', head, baseIndex: null, headIndex: d.b, anchor: at,
           anchorText: at < 0 ? '' : blockCore(Bs.blocks[at]), ordinal: run.ordinal, state, mainAfter });
         run.ordinal += 1;
         continue;
@@ -2772,14 +2804,15 @@
       if (m.status === 'same') state = 'open';
       else if (m.status === 'del') state = d.status === 'del' ? 'live' : 'conflict';
       else state = d.status === 'change' && blockCore(M.blocks[m.b]) === head ? 'live' : 'conflict';
-      raw.push({ kind: d.status === 'del' ? 'delete' : 'change', base, head, baseIndex: d.a, anchor: null,
+      raw.push({ kind: d.status === 'del' ? 'delete' : 'change', base, head, baseIndex: d.a,
+        headIndex: d.status === 'change' ? d.b : null, anchor: null,
         ordinal: null, state, mainAfter: state === 'open' ? m.b : null });
     }
     const out = [];
     for (const e of raw) {
       const key = await (e.kind === 'add' ? editKey(path, '', e.head, e.anchorText, e.ordinal, subtle)
         : editKey(path, e.base, e.head, undefined, undefined, subtle));
-      out.push({ key, kind: e.kind, base: e.base, head: e.head, baseIndex: e.baseIndex, anchor: e.anchor,
+      out.push({ key, kind: e.kind, base: e.base, head: e.head, baseIndex: e.baseIndex, headIndex: e.headIndex, anchor: e.anchor,
         ordinal: e.ordinal, state: e.state, mainAfter: e.mainAfter });
     }
     const count = new Map();
@@ -2915,6 +2948,108 @@
     if (c.permission !== 'maintain' && c.permission !== 'write') return false;
     return ownsAll({ login, files: [c.path], projects: c.projects });
   }
+  /* plan-u5 B3: edit-by-edit review only for a proposal the editor made (head ref cms/… in THIS
+     repository), open, not a draft, whose every changed file is an existing page (content/**.md,
+     modified). Anything else is reviewed as a whole on GitHub. rows: the PR's file list. */
+  const GO_LIVE_PAGE_RE = /^content\/[a-z0-9/_-]+\.md$/;
+  function proposalEligible(pull, rows) {
+    const p = pull || {};
+    const h = isObj(p.head) ? p.head : {};
+    if (p.draft === true || (p.state && p.state !== 'open')) return false;
+    if (typeof h.ref !== 'string' || h.ref.indexOf('cms/') !== 0) return false;
+    if (!isObj(h.repo) || h.repo.full_name !== `${REPO_OWNER}/${REPO_NAME}`) return false;
+    const r = listOf(rows);
+    return Array.isArray(rows) && r.length > 0
+      && r.every((f) => isObj(f) && f.status === 'modified' && GO_LIVE_PAGE_RE.test(String(f.filename)));
+  }
+
+  /* One edit's change in words for its card: {verb, from, to}, Markdown marks dropped, one line, at
+     most CARD_CLIP characters per side. Plain text: the caller sets it with textContent. */
+  const CARD_CLIP = 160;
+  const HTML_TAG_RE = /<\/?(?:a|b|br|code|details|div|em|figcaption|figure|h[1-6]|hr|i|img|kbd|li|ol|p|pre|span|strong|sub|summary|sup|table|tbody|td|th|thead|tr|u|ul)(?:\s[^<>]{0,300})?\/?>/gi;
+  function plainLine(md) {
+    const t = String(md || '')
+      .replace(/<p class="adm-title">([^<]{0,60})<\/p>/g, '$1: ')          // a note box's title: "Note: …"
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(HTML_TAG_RE, ' ')                                          // real HTML tags only: <axis_name> stays
+      .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
+      .replace(/(\*\*|~~|`)/g, '')
+      .replace(/(^|[^\w])[*_]([^\s*_][^*_]*?)[*_](?=[^\w]|$)/g, '$1$2')       // *x* and _x_, never snake_case
+      .replace(/\s+/g, ' ').replace(/\s+:/g, ':').trim();
+    return t.length > CARD_CLIP ? `${t.slice(0, CARD_CLIP - 1).trimEnd()}…` : t;
+  }
+  function cardText(kind, base, head) {
+    const verb = kind === 'add' ? 'Add' : kind === 'delete' ? 'Delete' : 'Replace';
+    return { verb, from: kind === 'add' ? '' : plainLine(base), to: kind === 'delete' ? '' : plainLine(head) };
+  }
+
+  /* The review rail's cards (plan-u5 U5b), built from the ENGINE's own edits (proposalEdits), so the page
+     and go-live.yml cannot disagree. o: {edits, overlay (overlayOnMain's entries), comments (the PR's),
+     author, headSha, trusted(login) (the engine's rule for a record's author on this page), may() (the
+     signed-in person may approve this page), eligible (proposalEligible), pending (keys this tab has just
+     recorded: Map key -> 'approved'|'declined', or a Set of approved keys)}.
+     -> [{key, kind, verb, from, to, anchor (overlay index | null when not drawn), state, by, reason, acts}]
+     state: waiting | going (approved, on its way) | live | declined | failed (site rules) | conflict |
+     ambiguous | whole (review this proposal as a whole). acts: what the person may click. */
+  function reviewCards(o) {
+    const c = o || {};
+    const list = listOf(c.overlay);
+    const records = parseRecords(c.comments, { author: c.author }).list;
+    const d = decisions(records, typeof c.trusted === 'function' ? c.trusted : () => false);
+    const failures = parseFailures(c.comments);
+    const pend = (k) => (c.pending instanceof Map ? c.pending.get(k) : (c.pending && c.pending.has && c.pending.has(k) ? 'approved' : null));
+    const mayAct = c.eligible === true && typeof c.may === 'function' && c.may() === true;
+    return listOf(c.edits).map((e) => {
+      let anchor = null;
+      if (e.state !== 'live') {
+        const at = list.findIndex((x) => (e.kind === 'add'
+          ? x.source === 'pr-add' && x.pr && x.pr.head === e.headIndex
+          : (x.source === 'pr-del' || x.source === 'conflict') && x.pr && x.pr.base === e.baseIndex));
+        anchor = at >= 0 ? at : null;
+      }
+      const dec = d.get(e.key) || null;
+      const fail = listOf(failures.get(e.key)).find((f) => f.sha === c.headSha) || null;
+      const p = pend(e.key);
+      let state = 'waiting';
+      let by = null;
+      let reason = null;
+      if (e.state === 'live') state = 'live';
+      else if (c.eligible !== true) state = 'whole';
+      else if (e.state === 'conflict' || e.state === 'anchor-gone') state = 'conflict';
+      else if (e.state === 'ambiguous') state = 'ambiguous';
+      else if (dec && dec.kind === 'declined') { state = 'declined'; by = dec.login; }
+      else if (fail) { state = 'failed'; reason = fail.reason; }
+      else if (dec) { state = 'going'; by = dec.login; }
+      else if (p === 'declined') state = 'declined';
+      else if (p) state = 'going';
+      // a Reject is undone by approving it after all (the latest trusted record wins)
+      const acts = !mayAct ? [] : state === 'waiting' ? ['approve', 'decline'] : state === 'failed' ? ['decline']
+        : state === 'declined' ? ['approve'] : [];
+      const t = cardText(e.kind, e.base, e.head);
+      return Object.freeze({ key: e.key, kind: e.kind, verb: t.verb, from: t.from, to: t.to, anchor, state, by, reason,
+        acts: Object.freeze(acts), canAct: acts.length > 0 });
+    });
+  }
+
+  /* Card tops for the rail: cards = [{key, want (the block's top), height}] in page order. They keep
+     their order and never overlap (gap between); with an active card, it sits exactly on its block's
+     line, the cards above step up and the cards below step down. -> {key: top}. */
+  function railLayout(cards, activeKey, gap) {
+    const g = Number.isFinite(gap) ? gap : 8;
+    const list = listOf(cards);
+    const out = {};
+    let at = list.findIndex((x) => x.key === activeKey);
+    if (at < 0) at = 0;
+    const top = list.map((x) => x.want);
+    if (activeKey !== null && activeKey !== undefined && list[at] && list[at].key === activeKey) {
+      for (let i = at - 1; i >= 0; i -= 1) top[i] = Math.min(list[i].want, top[i + 1] - g - list[i].height);
+    } else at = 0;
+    for (let i = at + 1; i < list.length; i += 1) top[i] = Math.max(list[i].want, top[i - 1] + list[i - 1].height + g);
+    list.forEach((x, i) => { out[x.key] = top[i]; });
+    return out;
+  }
+
 
   // ------------------------------------------ cached fetcher + resolveRef ---
 
@@ -3212,8 +3347,8 @@
     createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
     PROJECT_FACTS_FILE_RE, projectFactsFile, mergeProjects,
     BLOCK_KINDS, imageParts, imageWith, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
-    blockDiff, overlayOnMain, editKey, proposalEdits, applyEdits, recordBody, recordRequests, parseRecords, decisions,
-    failureBody, parseFailures, mayApproveEdit, RECORD_MAX, cachedFetcher, resolveRef, viewSettings, membersOnly,
+    blockDiff, overlayOnMain, editKey, proposalEdits, applyEdits, recordBody, recordRequests, runRecord, parseRecords, decisions,
+    failureBody, parseFailures, mayApproveEdit, proposalEligible, cardText, reviewCards, railLayout, RECORD_MAX, cachedFetcher, resolveRef, viewSettings, membersOnly,
     ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,
   });
 

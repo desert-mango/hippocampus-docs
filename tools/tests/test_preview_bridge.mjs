@@ -503,14 +503,14 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null });
+    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
 });
 
@@ -590,6 +590,26 @@ test('the theme crosses into the frame: &theme=light in the fragment, theme in h
   assert.equal(SRC.editorMessage({ ...base, theme: 'dark' }).theme, 'dark');
   assert.equal(SRC.editorMessage({ ...base, theme: '<b>' }).theme, null);
   assert.equal(SRC.editorMessage(base).theme, null, 'absent: the frame keeps what it has');
+});
+
+/* U5b: the review rail. The frame reports where its MARKED blocks are (numbers only), and the parent may ask it
+   to light one block (an index only). */
+test('hc-block-rects carries numbers only, rounded; anything else drops the whole message', () => {
+  assert.deepEqual(SRC.frameMessage('hc-block-rects', { rects: [{ index: 3, top: 10.6, height: 40.2, html: '<b>' }], view: 812.5, md: 'x' }),
+    { type: 'hc-block-rects', rects: [{ index: 3, top: 11, height: 40 }], view: 813 });
+  assert.deepEqual(SRC.frameMessage('hc-block-rects', { rects: [], view: 800 }), { type: 'hc-block-rects', rects: [], view: 800 });
+  for (const bad of [{ rects: 'x', view: 1 }, { rects: [{ index: -1, top: 0, height: 1 }], view: 1 },
+    { rects: [{ index: 1, top: NaN, height: 1 }], view: 1 }, { rects: [{ index: 1, top: 0, height: -1 }], view: 1 },
+    { rects: [{ index: 1, top: 2e7, height: 1 }], view: 1 }, { rects: [], view: 'tall' },
+    { rects: Array.from({ length: 5001 }, (_, i) => ({ index: i, top: 0, height: 1 })), view: 1 }]) {
+    assert.equal(SRC.frameMessage('hc-block-rects', bad), null, JSON.stringify(bad).slice(0, 80));
+  }
+});
+
+test('hc-editor hot: one block index to light, or nothing', () => {
+  const base = { type: 'hc-editor', on: true };
+  assert.equal(SRC.editorMessage({ ...base, hot: 7 }).hot, 7);
+  for (const bad of [-1, 1.5, '7', null, undefined, { index: 7 }]) assert.equal(SRC.editorMessage({ ...base, hot: bad }).hot, null);
 });
 
 /* V2 (Kyle, 2026-10-14): an image block is dragged to another place in the page; the frame says only the two

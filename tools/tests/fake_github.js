@@ -26,7 +26,8 @@
                             checks: {<head sha>: check-runs payload},
                             updates: {<n>: <new head sha>},
                             trees: {<commit sha>: <tree sha>},
-                            orgCommits, repoCommits, orgDeny (U4, below)}
+                            orgCommits, repoCommits, orgDeny (U4, below),
+                            comments: {<n>: [issue comments]}, roles: {<login>: role_name} (U5b)}
                          They join pulls?state=…, answer pulls/<n>,
                          pulls/<n>/files, contents at their head sha,
                          compare/<x>...<head>, commits/<head>/check-runs and
@@ -220,6 +221,14 @@
       if (xp) {
         if (!n[2]) return answer(200, xp);
         return answer(200, Number(q.page || 1) > 1 ? [] : (x.files && x.files[n[1]]) || []);
+      }
+      // U5b: a synthetic proposal's issue comments (the approval records) and the collaborators' roles
+      n = /^\/issues\/([0-9]+)\/comments$/.exec(rest);
+      if (n && x.comments && own(x.comments, n[1])) return answer(200, Number(q.page || 1) > 1 ? [] : x.comments[n[1]]);
+      n = /^\/collaborators\/([^/]+)\/permission$/.exec(rest);
+      if (n && x.roles && own(x.roles, decodeURIComponent(n[1]))) {
+        const r = x.roles[decodeURIComponent(n[1])];
+        return answer(200, { permission: r === 'maintain' ? 'write' : r, role_name: r });
       }
       n = /^\/compare\/([0-9a-f]{7,40})\.\.\.([0-9a-f]{7,40})$/.exec(rest);
       if (n && xHead(n[2]) && own(x.compare, xHead(n[2]))) {

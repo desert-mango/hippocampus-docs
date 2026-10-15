@@ -456,6 +456,12 @@
     dockCount.textContent = !editing ? '' : (n === 0 ? 'No changes yet' : `${n} ${n === 1 ? 'change' : 'changes'}`);
     dockSend.hidden = !editing;
     dockSend.disabled = n === 0;
+    // the page bar keeps its buttons clear of the bubble above it (css/editor.css reads the width)
+    const bs = document.body.style;
+    if (bs && typeof bs.setProperty === 'function') {
+      bs.setProperty('--hc-dock-w', `${Math.round(dock.offsetWidth || 0)}px`);
+      bs.setProperty('--hc-dock-h', `${Math.round(dock.offsetHeight || 0)}px`);
+    }
     // Editor off, signed out, nothing left to send, or another page's draft on screen: the box goes
     if (!signedIn || !editing || n === 0 || (sendBox && (!ed.draft || ed.draft.key !== sendKey))) closeSendBox();
     if (signedIn) {
@@ -723,13 +729,14 @@
   const ACTION_LABEL = { approve: 'Approve', 'request-changes': 'Request changes', merge: 'Merge',
     update: 'Update from main', close: 'Close' };
 
-  function actionsBlock(p, n, sha, epoch, status, files, owners) {
+  function actionsBlock(p, n, sha, epoch, status, files, owners, hasRecords) {
     const login = (state.session && state.session.login) || '';
     // who may approve (Kyle, 2026-10-14): owners come from MAIN's data/projects.json (state.regs), never the proposal's
     // every path the proposal touches: a rename's old path too; a list GitHub cut short counts as unknown
     const complete = Array.isArray(files) && !(Number.isInteger(p.changed_files) && files.length < p.changed_files);
     const paths = complete ? files.flatMap((f) => [f && f.filename, f && f.previous_filename].filter((x) => typeof x === 'string')) : null;
-    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, projects: owners || null });
+    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, projects: owners || null,
+      hasRecords: hasRecords === true });
     if (!keys.length) {
       return h('p', { class: 'cms-muted', text: 'You can read this proposal. Reviewing it needs write access to this site\'s repository.' });
     }
@@ -944,12 +951,16 @@
     const pages = sha && files ? C.previewPages(files, await headRegistries(sha, files)) : [];
     const owners = await ownersRegistry();                 // main's data/projects.json: the project owners for Approve
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
+    // plan-u5: a proposal with edit-by-edit records (by people with access) is not merged whole: no Merge
+    const recs = comments && comments.ok ? C.parseRecords(comments.data, { author: loginOf(p).toLowerCase() }).list : [];
+    const recRoles = await Promise.all(recs.map((r) => roleNameOf(r.login).catch(() => 'none')));
+    const hasRecords = recRoles.some((r) => r === 'admin' || r === 'maintain' || r === 'write');
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
       ...statusBlock(status, notes),
       vercel ? h('p', null, link(vercel, 'Vercel\'s preview comment'), ' (a deploy preview, when Vercel made one)') : null,
       showOnPage(n, sha, files, pages, C.previewScope(files)),
-      actionsBlock(p, n, sha, epoch, status, files, owners),
+      actionsBlock(p, n, sha, epoch, status, files, owners, hasRecords),
       h('h3', { class: 'hc-card-title', text: 'Files changed' }), filesBlock(files),
     ]);
     markPage();
@@ -2520,7 +2531,10 @@
       sandbox: 'allow-scripts allow-popups', referrerpolicy: 'no-referrer' });
     pageBar = h('div', { class: 'hc-pagebar', role: 'status', 'aria-label': 'Proposals on this page' });
     pageBar.hidden = true;
-    frameHost.replaceChildren(showBar, pageBar, frame);      // "Showing proposal #N" sits on the page it is about
+    rail.el = h('aside', { class: 'hc-rail', 'aria-label': 'Suggested changes on this page' });
+    rail.el.hidden = true;
+    // "Showing proposal #N" sits on the page it is about; the review rail (U5b) beside the frame, in the parent
+    frameHost.replaceChildren(showBar, pageBar, h('div', { class: 'hc-frame-row' }, frame, rail.el));
     ed.frame = frame;
     ed.host = C.createPreviewHost({
       getFrameWindow: () => frame.contentWindow,
@@ -2532,6 +2546,9 @@
   }
 
   function dropFrame() {
+    railReset();
+    if (rail.el) rail.el.remove();
+    rail.el = null;
     if (ed.host) ed.host.dispose();
     if (ed.frame) ed.frame.remove();
     if (pageBar) pageBar.remove();
@@ -2643,7 +2660,9 @@
     }
     if (mine !== ed.loads || !sessionGen.isCurrent(gen) || !ed.on || !ed.host) return;
     ed.pv = pv;
+    railReset();
     drawPageBar();
+    loadRail(pv, page, sha, mine).catch(shown);
     ed.prefix = null;
     ed.inPage = null;     // the new document reopens the block itself and says so
     ed.ready = false;     // a new document: it hears nothing until its own hc-ready
@@ -2874,6 +2893,7 @@
     if (!pv || !pv.ov) return selectBlock(k);
     const e = pv.ov.overlay[k];
     if (!e) return undefined;
+    if (e.source !== 'main' && railActivateAt(k)) return undefined;     // U5b: its card in the rail
     if (e.source !== 'main') { openCard(pv.pr.number); return undefined; }
     return selectBlock(e.mainIndex, true);
   }
@@ -3009,7 +3029,8 @@
         h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }), link(prLink(n), `PR #${n}`),
         h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }),
         h('span', { class: `hc-pagebar-check is-${state2}`, text: CHECK_WORD[state2] }),
-        pageBarButton('review-in-tray', n, 'Review', () => openCard(n), true),
+        pageBarButton('review-in-tray', n, 'Review', () => openCard(n), !railApprovable().length),
+        ...railBarButtons(n),
         pv.mode === 'show' ? back() : null));
       const note = ed.barNote;
       if (note && note.number === n && note.head === headShaOf(pv.pr)) {
@@ -3051,6 +3072,367 @@
     pageBar.hidden = !rows.length;
   }
 
+  // ------------------------------------------------- the review rail (U5b) ---
+  /* plan-u5 U5b. When a proposal is drawn over the page, the PARENT shows one card per edit beside the
+     frame: who proposed it, the change in words, and (for someone who may approve that page) Approve and
+     Reject. The cards come from HCCore.reviewCards over HCCore.proposalEdits, the go-live engine's own
+     functions; the frame only reports where the marked blocks are (hc-block-rects, numbers) and lights the
+     one whose card is hovered or active (hot). Every write is HCCore.runRecord: one approval record on the
+     proposal, which .github/workflows/go-live.yml turns into a change on main.
+       wide (>= RAIL_WIDE px)   cards in a column beside the frame, each on its block's line
+       narrow                   an avatar marker per change; a click opens its card beside the marker
+       phone (PHONE_QUERY)      "Review N changes" in the page bar opens them as a bottom sheet
+     Card safety (plan §7): a card's buttons ignore activation for CLICK_GUARD_MS after it appears or
+     moves, so a frame that moves a block under the pointer cannot turn a click into an approval. */
+  const RAIL_WIDE = 1100;
+  const CLICK_GUARD_MS = 400;
+  const POLL_MS = 15000;
+  const POLL_LIMIT_MS = 5 * 60 * 1000;
+  const GO_LIVE_RUNS = `${C.GITHUB_WEB}/actions/workflows/go-live.yml`;
+  const ROLE_NAME = { admin: 'admin', maintain: 'maintain', push: 'write' };
+  const rail = { el: null, data: null, cards: [], rects: new Map(), view: 0, active: null, hover: null,
+    pending: new Map(), pollUntil: 0, timer: null, nodes: new Map(), sheet: null, pop: null, stale: false };
+  const collabRoles = new Map();           // login -> role_name, for this session
+
+  function railReset() {
+    if (rail.timer) clearTimeout(rail.timer);
+    Object.assign(rail, { data: null, cards: [], rects: new Map(), view: 0, active: null, hover: null, pending: new Map(),
+      pollUntil: 0, timer: null, nodes: new Map(), stale: false });
+    closeSheet();
+    if (rail.el) { rail.el.replaceChildren(); rail.el.hidden = true; }
+    document.body.classList.remove('hc-has-rail');
+  }
+
+  async function roleNameOf(login) {
+    const key = String(login).toLowerCase();
+    if (!collabRoles.has(key)) {
+      const p = apiResponse(`${C.REPO_API_PATH}/collaborators/${encodeURIComponent(key)}/permission`)
+        .then((res) => (res.ok && res.data && typeof res.data.role_name === 'string' ? res.data.role_name : 'none'));
+      collabRoles.set(key, p);
+      p.catch(() => collabRoles.delete(key));
+    }
+    return collabRoles.get(key);
+  }
+
+  /* Everything the cards need, read once per load (texts through the session's sha cache). */
+  async function loadRail(pv, page, main, mine) {
+    if (!pv || pv.mode !== 'overlay' || !pv.ov || !pv.pr || !page || !rail.el) return;
+    const pull = pv.pr;
+    const n = pull.number;
+    const head = headShaOf(pull);
+    if (!head) return;
+    const base = await mergeBaseOf(main, head);
+    const [baseText, headText, mainText, comments, commits, projects] = await Promise.all([
+      textAt(base, page.file, true), textAt(head, page.file, true), textAt(main, page.file, false),
+      apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100`),
+      apiResponse(`${C.REPO_API_PATH}/pulls/${n}/commits?per_page=100`),
+      ownersRegistry()]);
+    const edits = await C.proposalEdits(page.file, baseText, headText, mainText);
+    if (mine !== ed.loads || ed.pv !== pv || !edits) return;
+    const author = loginOf(pull).toLowerCase();
+    const committers = new Set();
+    for (const c of (commits.ok && Array.isArray(commits.data) ? commits.data : [])) {
+      for (const who of [c && c.author, c && c.committer]) {
+        const l = who && typeof who.login === 'string' ? who.login.toLowerCase() : '';
+        if (l && l !== 'web-flow') committers.add(l);
+      }
+    }
+    const list = comments.ok && Array.isArray(comments.data) ? comments.data : [];
+    const roles = new Map();
+    for (const r of C.parseRecords(list, { author }).list) {
+      if (!roles.has(r.login)) roles.set(r.login, await roleNameOf(r.login).catch(() => 'none'));
+    }
+    const me = String((state.session && state.session.login) || '').toLowerCase();
+    const myRole = ROLE_NAME[state.role && state.role.key] || 'read';
+    const rule = (login, permission) => !committers.has(login)
+      && C.mayApproveEdit({ login, permission, path: page.file, projects, author });
+    rail.data = { n, pull, file: page.file, head, base, baseText, headText, edits, comments: list, author,
+      eligible: C.proposalEligible(pull, pv.files), trusted: (login) => rule(login, roles.get(login)),
+      may: () => Boolean(me) && rule(me, myRole), main };
+    renderRail();
+  }
+
+  function railCards() {
+    const d = rail.data;
+    if (!d) return [];
+    return C.reviewCards({ edits: d.edits, overlay: ed.pv && ed.pv.ov ? ed.pv.ov.overlay : [], comments: d.comments,
+      author: d.author, headSha: d.head, trusted: d.trusted, may: d.may, eligible: d.eligible, pending: rail.pending });
+  }
+  const railApprovable = () => rail.cards.filter((c) => c.acts.indexOf('approve') >= 0);
+
+  function railBarButtons(n) {
+    const out = [];
+    const ready = railApprovable();
+    if (ready.length) {
+      out.push(pageBarButton('approve-all', n, `Approve all (${ready.length})`, () => decide('approved', ready.map((c) => c.key)), true));
+    }
+    const drawn = rail.cards.filter((c) => c.anchor !== null);
+    if (drawn.length && document.body.classList.contains('hc-phone')) {
+      out.push(pageBarButton('rail-sheet', n, `Review ${drawn.length} ${plural(drawn.length, 'change', 'changes')}`, openSheet));
+    }
+    return out;
+  }
+
+  const ICON = {
+    approve: 'M4 10.5l4 4 8-9',
+    decline: 'M5 5l10 10M15 5L5 15',
+  };
+  function icon(kind) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', ICON[kind]);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  // "Oct 14, 4:12 PM" in the reader's own locale and time zone (the card says when, not a raw date)
+  function cardWhen(iso) {
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return '';
+    try {
+      return new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return day(iso); }
+  }
+
+  function stateLine(c) {
+    const by = c.by ? ` by ${c.by}` : '';
+    if (c.state === 'going') {
+      if (rail.stale) {
+        return h('p', { class: 'hc-rcard-state is-going', role: 'status' },
+          `Approved${by}. Still waiting to go live — `, link(GO_LIVE_RUNS, 'see the site robot’s runs'), '.');
+      }
+      return h('p', { class: 'hc-rcard-state is-going', role: 'status' }, h('span', { class: 'hc-spin', 'aria-hidden': 'true' }),
+        `Approved${by}. Going live… (about a minute)`);
+    }
+    const words = {
+      declined: `Declined${by}.`,
+      failed: `Not live: ${c.reason || 'the site check failed'}.`,
+      conflict: 'This part changed on the site since it was proposed. Use Review to ask for changes.',
+      ambiguous: 'Two identical changes here: review the whole proposal.',
+      whole: 'This proposal is reviewed as a whole (Review).',
+    }[c.state];
+    if (words) return h('p', { class: `hc-rcard-state is-${c.state}`, role: 'status', text: words });
+    if (!c.canAct) return h('p', { class: 'hc-rcard-state', text: 'Waiting for review.' });
+    return null;
+  }
+
+  function cardNode(c) {
+    const d = rail.data;
+    const login = loginOf(d.pull);
+    const when = cardWhen(d.pull.updated_at || d.pull.created_at);
+    const acts = h('div', { class: 'hc-rcard-acts' });
+    for (const a of c.acts) {
+      const b = h('button', { type: 'button', class: `hc-rcard-btn is-${a}`, 'data-act': a,
+        'aria-label': a === 'approve' ? 'Approve this change' : 'Reject this change',
+        title: a === 'approve' ? 'Approve (goes live)' : 'Reject' }, icon(a));
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (Date.now() < Number(card.dataset.armedAt || 0)) return;     // card safety: it just appeared or moved
+        decide(a === 'approve' ? 'approved' : 'declined', [c.key]);
+      });
+      acts.appendChild(b);
+    }
+    const body = h('p', { class: 'hc-rcard-body' }, h('b', { text: `${c.verb}: ` }));
+    if (c.from) body.appendChild(h('span', { class: 'hc-rcard-from', text: `“${c.from}”` }));
+    if (c.from && c.to) body.appendChild(h('b', { text: ' with ' }));
+    if (c.to) body.appendChild(h('span', { class: 'hc-rcard-to', text: `“${c.to}”` }));
+    const card = h('article', { class: `hc-rcard is-${c.state}`, 'data-key': c.key, tabindex: '0',
+      'aria-label': `${c.verb} suggested by ${login}` },
+    h('div', { class: 'hc-rcard-head' }, avatarFace(login, login),
+      h('div', { class: 'hc-rcard-id' }, h('span', { class: 'hc-rcard-who', text: login }),
+        h('span', { class: 'hc-rcard-when', text: when })), acts),
+    body, stateLine(c));
+    card.dataset.armedAt = String(Date.now() + CLICK_GUARD_MS);
+    card.addEventListener('mouseenter', () => { rail.hover = c.key; postEditor(); });
+    card.addEventListener('mouseleave', () => { if (rail.hover === c.key) { rail.hover = null; postEditor(); } });
+    card.addEventListener('focus', () => { rail.hover = c.key; postEditor(); });
+    card.addEventListener('blur', () => { if (rail.hover === c.key) { rail.hover = null; postEditor(); } });
+    card.addEventListener('click', () => railActivate(c.key));
+    card.addEventListener('keydown', (e) => {
+      if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      railActivate(c.key);
+    });
+    return card;
+  }
+
+  function renderRail() {
+    if (!rail.el) return;
+    rail.cards = railCards();
+    drawPageBar();
+    const drawn = rail.cards.filter((c) => c.anchor !== null);
+    const on = drawn.length > 0;
+    rail.el.hidden = !on;
+    document.body.classList.toggle('hc-has-rail', on);
+    rail.nodes = new Map();
+    rail.el.replaceChildren(...drawn.map((c) => {
+      const node = cardNode(c);
+      rail.nodes.set(c.key, node);
+      const marker = h('button', { type: 'button', class: 'hc-rmark', 'data-key': c.key,
+        'aria-label': `${c.verb} suggested by ${loginOf(rail.data.pull)}: open its card` }, avatarFace(loginOf(rail.data.pull), loginOf(rail.data.pull)));
+      marker.addEventListener('click', () => railActivate(rail.active === c.key ? null : c.key));
+      return h('div', { class: 'hc-rslot', 'data-key': c.key }, marker, node);
+    }));
+    if (rail.sheet) openSheet();
+    layoutRail();
+    postEditor();
+  }
+
+  function railRects(rects, view) {
+    rail.rects = new Map(rects.filter((r) => r && Number.isInteger(r.index)).map((r) => [r.index, r]));
+    rail.view = Number(view) || 0;
+    layoutRail();
+  }
+
+  /* Each card on its block's line (railLayout: no overlap; the active one exactly on its line). */
+  function layoutRail() {
+    if (!rail.el || rail.el.hidden) return;
+    const narrow = window.innerWidth < RAIL_WIDE;
+    rail.el.classList.toggle('is-markers', narrow);
+    const drawn = rail.cards.filter((c) => c.anchor !== null && rail.rects.has(c.anchor));
+    // the bubble sits top right, under the header: cards start below it where it covers the rail
+    let minTop = -Infinity;
+    if (dock && !document.body.classList.contains('hc-dock-collapsed') && typeof dock.getBoundingClientRect === 'function') {
+      const b = dock.getBoundingClientRect();
+      const r = rail.el.getBoundingClientRect();
+      if (b.left < r.right && b.right > r.left && b.bottom > r.top) minTop = b.bottom - r.top + 8;
+    }
+    // a card whose block is scrolled out of sight (or hidden under the bubble) is not drawn
+    const view = rail.view || window.innerHeight;
+    const seen = drawn.filter((c) => { const r = rail.rects.get(c.anchor); return r.top + r.height > Math.max(0, minTop) && r.top < view; });
+    for (const c of seen) { const node = rail.nodes.get(c.key); if (node && node.parentNode) node.parentNode.hidden = false; }
+    const want = seen.map((c) => {
+      const node = rail.nodes.get(c.key);
+      const slot = node ? node.parentNode : null;
+      const hgt = narrow ? 40 : (node ? node.offsetHeight || 96 : 96);     // measured shown (a hidden slot is 0 high)
+      return { key: c.key, want: Math.max(rail.rects.get(c.anchor).top, minTop), height: hgt, slot };
+    });
+    const tops = C.railLayout(want, narrow ? null : rail.active, 8);
+    for (const w of want) {
+      if (!w.slot) continue;
+      const before = Number(w.slot.dataset.top);
+      const top = Math.round(tops[w.key]);
+      if (!Number.isFinite(before) || Math.abs(before - top) > 4) {
+        const node = rail.nodes.get(w.key);
+        if (node) node.dataset.armedAt = String(Date.now() + CLICK_GUARD_MS);     // it moved: re-arm the guard
+      }
+      w.slot.dataset.top = String(top);
+      w.slot.style.transform = `translateY(${top}px)`;
+      w.slot.hidden = false;
+    }
+    for (const [key, node] of rail.nodes) {
+      const slot = node.parentNode;
+      if (slot && !want.some((w) => w.key === key)) slot.hidden = true;             // its block is not drawn (yet)
+      if (slot) {
+        slot.classList.toggle('is-active', rail.active === key);
+        const mark = slot.querySelector('.hc-rmark');
+        if (mark) mark.setAttribute('aria-expanded', narrow && rail.active === key ? 'true' : 'false');
+        node.classList.toggle('is-active', rail.active === key);
+        node.classList.toggle('is-hot', rail.hover === key);
+      }
+    }
+  }
+
+  function railHot() {
+    const key = rail.hover || rail.active;
+    const c = key ? rail.cards.find((x) => x.key === key) : null;
+    return c && c.anchor !== null ? c.anchor : null;
+  }
+
+  function railActivate(key) {
+    rail.active = key;
+    const node = key ? rail.nodes.get(key) : null;
+    if (node) node.dataset.armedAt = String(Date.now() + CLICK_GUARD_MS);
+    layoutRail();
+    postEditor();
+  }
+
+  /* A click on a marked block in the frame: its card (a change is two entries, old then new). */
+  function railActivateAt(k) {
+    if (!rail.cards.length) return false;
+    const c = rail.cards.find((x) => x.anchor === k || (x.kind === 'change' && x.anchor === k - 1));
+    if (!c) return false;
+    if (document.body.classList.contains('hc-phone')) openSheet(c.key);
+    else railActivate(c.key);
+    return true;
+  }
+
+  function openSheet(focusKey) {
+    closeSheet();
+    const drawn = rail.cards.filter((c) => c.anchor !== null);
+    if (!drawn.length) return;
+    const close = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'rail-sheet-close' }, 'Close');
+    close.addEventListener('click', closeSheet);
+    const sheet = h('section', { class: 'hc-rsheet', role: 'dialog', 'aria-label': 'Suggested changes' },
+      h('div', { class: 'hc-rsheet-head' }, h('b', { text: `${drawn.length} suggested ${plural(drawn.length, 'change', 'changes')}` }), close),
+      ...drawn.map((c) => { const n = cardNode(c); if (c.key === focusKey) n.classList.add('is-active'); return n; }));
+    sheet.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+    document.body.appendChild(sheet);
+    rail.sheet = sheet;
+    close.focus();
+  }
+  function closeSheet() {
+    if (rail.sheet) rail.sheet.remove();
+    rail.sheet = null;
+  }
+
+  /* Approve or Reject: the record goes to the proposal; approved keys are then watched on main. */
+  async function decide(kind, keys) {
+    const d = rail.data;
+    if (!d || !keys.length || !state.client) return;
+    const out = await C.runRecord(state.client, d.n, kind, keys);
+    say(out.message, out.ok ? null : 'error');
+    if (!out.ok) return;
+    for (const k of keys) rail.pending.set(k, kind);
+    renderRail();
+    if (kind === 'approved') watchMain();
+  }
+
+  /* After an approval: read main again every POLL_MS (one ref read; the page text only when main moved)
+     until every approved key is live (the page then reloads to show main as it is), or POLL_LIMIT_MS
+     passed (the cards then say where to look). */
+  function watchMain() {
+    if (!rail.pollUntil) rail.pollUntil = Date.now() + POLL_LIMIT_MS;
+    if (rail.timer) return;
+    const mine = ed.loads;
+    const tick = async () => {
+      rail.timer = null;
+      const d = rail.data;
+      if (!d || mine !== ed.loads || !ed.on) return;
+      let sha;
+      try { sha = await C.resolveRef(state.client, 'main'); } catch (e) { sha = null; }
+      if (sha && sha !== d.main) {
+        const [text, comments] = await Promise.all([textAt(sha, d.file, false).catch(() => null),
+          apiResponse(`${C.REPO_API_PATH}/issues/${d.n}/comments?per_page=100`).catch(() => null)]);
+        if (mine !== ed.loads || rail.data !== d) return;
+        if (comments && comments.ok && Array.isArray(comments.data)) d.comments = comments.data;
+        const edits = text === null ? null : await C.proposalEdits(d.file, d.baseText, d.headText, text);
+        const waiting = [...rail.pending].filter(([, k]) => k === 'approved').map(([key]) => key);
+        if (edits && waiting.every((k) => { const e = edits.find((x) => x.key === k); return !e || e.state === 'live'; })) {
+          say('Approved and live.');
+          ed.mainSha = null;
+          forgetProposals();
+          frameTo(ed.route, true);                           // main as it is now, the rest still drawn over it
+          return;
+        }
+      } else {
+        const comments = await apiResponse(`${C.REPO_API_PATH}/issues/${d.n}/comments?per_page=100`).catch(() => null);
+        if (comments && comments.ok && Array.isArray(comments.data) && rail.data === d) d.comments = comments.data;
+      }
+      if (rail.data !== d) return;
+      if (Date.now() > rail.pollUntil) { rail.stale = true; renderRail(); return; }
+      renderRail();
+      rail.timer = setTimeout(tick, POLL_MS);
+    };
+    rail.timer = setTimeout(tick, POLL_MS);
+  }
+
   /* hc-editor goes to the frame only once THIS load said hc-ready: before
      that the window may still hold another document. A post held back is
      not queued: the hc-ready answer carries the state as it is then. */
@@ -3059,7 +3441,7 @@
     const nonce = ed.host && ed.host.nonce();
     if (!w || !nonce || !ed.ready) return;
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage() }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot() }, '*');
   }
 
   /* The block the frame may open for typing in the page (U2): the selected block of MY draft, its
@@ -3137,6 +3519,7 @@
     else if (m.type === 'hc-block-md' && index !== null) blockTyped(index, m.md);
     else if (m.type === 'hc-block-move' && index !== null && Number.isInteger(m.to) && m.to >= 0 && m.to <= MAX_INDEX) moveImage(index, m.to).catch(shown);
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
+    else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
     return true;
   }
   const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };
@@ -3642,6 +4025,7 @@
         .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     }
     // phones: the tray is a bottom sheet (css/editor.css); the class says so to scripts and tests
+    if (typeof window.addEventListener === 'function') window.addEventListener('resize', () => layoutRail());
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia(PHONE_QUERY) : null;
     if (mq) {
       const apply = () => document.body.classList.toggle('hc-phone', Boolean(mq.matches));

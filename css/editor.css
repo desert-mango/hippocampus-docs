@@ -47,9 +47,11 @@ body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover::after { bac
 body.hc-edit-on .page-body > .hc-block:focus-visible::after,
 body.hc-edit-on .page-body > .hc-block.hc-selected::after,
 body.hc-edit-on .page-body > .hc-block.hc-open::after,
+body.hc-edit-on .page-body > .hc-block.hc-hot::after,
 body.hc-edit-on .page-body > .hc-side > .hc-block:focus-visible::after,
 body.hc-edit-on .page-body > .hc-side > .hc-block.hc-selected::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block.hc-open::after { background: var(--accent); }
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-open::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-hot::after { background: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   body.hc-edit-on .page-body > .hc-block::after, body.hc-edit-on .page-body > .hc-side > .hc-block::after { transition: none; } }
 
@@ -293,6 +295,14 @@ body.hc-editor-on #content { display: none; }
   color: var(--body-soft); border-bottom: 1px solid color-mix(in srgb, var(--hc-add) 35%, var(--edge));
   background: color-mix(in srgb, var(--hc-add) 7%, var(--bg)); }
 .hc-pagebar[hidden] { display: none; }
+/* U5b: the bubble sits over the bar's right end (top right, under the header): the bar's buttons stay clear of it */
+@media (min-width: 768px) {
+  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-right: calc(var(--hc-dock-w, 0px) + 2rem); }
+}
+/* a phone: the bubble spans the width, so the bar starts below it */
+@media (max-width: 767px) {
+  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-top: calc(var(--hc-dock-h, 0px) + 1rem); }
+}
 .hc-pagebar-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin: 0; overflow-wrap: anywhere; }
 .hc-pagebar-line b { color: var(--heading); font-weight: 600; }
 .hc-pagebar-line.is-warn { color: var(--warn); }
@@ -591,4 +601,79 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--accent); outline-offset
   .hc-sendbox { right: 8px; left: 8px; width: auto; max-height: calc(100vh - var(--header-h) - 140px); }
   /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
   body.hc-editor-on .sidebar { display: none; }
+}
+
+/* ---------------------------------------------------------------- the review rail (U5b) ---
+   Beside the frame, in the parent: one card per suggested change, on its block's line. Cards are the
+   parent's own data (textContent only); js/editor.js positions them from the frame's hc-block-rects. */
+.hc-frame-row { display: flex; flex: 1 1 auto; min-height: 0; }
+.hc-frame-row > .hc-frame { flex: 1 1 auto; min-width: 0; height: auto; }
+/* the page slides into its own left gutter so the cards fit beside it (D1): the layout takes the full width */
+body.hc-has-rail .layout { width: 100%; max-width: none; }
+.hc-rail { position: relative; flex: none; width: 18.5rem; overflow: hidden; border-left: 1px solid var(--edge-soft);
+  background: var(--bg); }
+.hc-rail[hidden] { display: none; }
+.hc-rslot { position: absolute; top: 0; left: .75rem; right: .75rem; transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.hc-rslot[hidden] { display: none; }
+.hc-rslot.is-active { z-index: 2; }
+.hc-rmark { display: none; }
+.hc-rcard { box-sizing: border-box; padding: .6rem .65rem .65rem .75rem; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--edge); color: var(--body); font-size: .8rem; line-height: 1.45; cursor: pointer;
+  transition: border-color .15s ease-out, box-shadow .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1); }
+.hc-rcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hc-rcard.is-hot { border-color: color-mix(in srgb, var(--accent) 55%, var(--edge)); }
+.hc-rcard.is-active { border-color: color-mix(in srgb, var(--accent) 70%, var(--edge)); cursor: default;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28); transform: translateX(-8px); }
+:root[data-theme="light"] .hc-rcard.is-active { box-shadow: 0 8px 24px rgba(24, 24, 27, .12); }
+.hc-rcard-head { display: flex; align-items: center; gap: .55rem; }
+.hc-rcard-head > .hc-avatar-img, .hc-rcard-head > .hc-initials { width: 26px; height: 26px; flex: none; border-radius: 50%; }
+.hc-rcard-head > .hc-initials { display: grid; place-items: center; font-size: .72rem; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent); }
+.hc-rcard-id { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.hc-rcard-who { font-weight: 600; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-rcard-when { color: var(--body-soft); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.hc-rcard-acts { display: flex; gap: .15rem; margin-right: -.2rem; }
+.hc-rcard-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  touch-action: manipulation;
+  background: none; color: var(--body-soft); cursor: pointer; transition: background-color .15s ease-out, color .15s ease-out; }
+.hc-rcard-btn svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hc-rcard-btn.is-approve { color: var(--accent); }
+.hc-rcard-btn.is-approve:hover { background: var(--accent-soft); }
+.hc-rcard-btn.is-decline:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.hc-rcard-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hc-rcard-btn:active { transform: scale(.94); }
+@media (pointer: coarse) { .hc-rcard-btn { width: 44px; height: 44px; } }
+.hc-rcard-body { margin: .45rem 0 0; color: var(--body); overflow-wrap: anywhere; }
+.hc-rcard-body b { color: var(--heading); font-weight: 600; }
+.hc-rcard:not(.is-active) .hc-rcard-body { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.hc-rcard-state { display: flex; align-items: center; gap: .4rem; margin: .5rem 0 0; padding: .35rem .5rem; border-radius: 7px;
+  font-size: .74rem; color: var(--body-soft); background: var(--bg-soft); }
+.hc-rcard-state.is-going { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.hc-rcard-state.is-failed, .hc-rcard-state.is-conflict { color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.hc-rcard-state.is-declined { color: var(--muted); }
+.hc-rcard.is-declined .hc-rcard-body { text-decoration: line-through; text-decoration-color: var(--muted); }
+.hc-spin { width: .7rem; height: .7rem; flex: none; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
+  animation: hc-spin .8s linear infinite; }
+@keyframes hc-spin { to { transform: rotate(360deg); } }
+/* narrow: an avatar marker per change; the active one opens its card beside the marker, over the page's edge */
+.hc-rail.is-markers { width: 3.25rem; overflow: visible; z-index: 30; }
+.hc-rail.is-markers .hc-rslot { left: .45rem; right: auto; }
+.hc-rail.is-markers .hc-rmark { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  border: 2px solid var(--edge); background: var(--surface); cursor: pointer; overflow: hidden; touch-action: manipulation; }
+.hc-rail.is-markers .hc-rmark:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hc-rail.is-markers .hc-rmark > * { width: 100%; height: 100%; border-radius: 50%; }
+.hc-rail.is-markers .hc-rslot.is-active .hc-rmark { border-color: var(--accent); }
+.hc-rail.is-markers .hc-rcard { display: none; }
+.hc-rail.is-markers .hc-rslot.is-active .hc-rcard { display: block; position: absolute; top: 0; right: calc(100% + .5rem);
+  width: 17.5rem; transform: none; }
+/* phone: the cards as a bottom sheet from the page bar's "Review N changes" */
+.hc-rsheet { position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 90;
+  max-height: 62vh; overflow: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: .5rem; padding: .7rem; border-radius: 14px; background: var(--bg-soft);
+  border: 1px solid var(--edge); box-shadow: 0 -8px 30px rgba(0, 0, 0, .35); }
+.hc-rsheet-head { display: flex; align-items: center; justify-content: space-between; color: var(--heading); }
+@media (max-width: 767px) { .hc-rail { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .hc-rslot, .hc-rcard, .hc-rcard-btn { transition: none; }
+  .hc-spin { animation: none; }
 }

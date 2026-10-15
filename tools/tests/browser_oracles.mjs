@@ -551,7 +551,7 @@ test('U2 walk: typing in the page in a real Chrome: suggestions, the draft by sp
 
 /* The DevTools harness of the walks above, as one helper: the real site in Editor mode at `page`
    (editor_walk.html?step=on), with the sandboxed page frame's context found (it runs out of process). */
-async function editorWalk(page, scratch, query = '') {
+async function editorWalk(page, scratch, query = '', step = 'on') {
   const chrome = findChrome();
   const server = await startServer(ROOT, []);
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -596,8 +596,8 @@ async function editorWalk(page, scratch, query = '') {
   await send('Page.enable');
   await send('Runtime.enable');
   await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
-  await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=on&page=${page}${query}` });
-  await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === 'on:ready' || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), 'the walk at "on"');
+  await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=${step}&page=${page}${query}` });
+  await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === `${step}:ready` || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), `the walk at "${step}"`);
   const frameCtx = async () => {
     for (const c of contexts.values()) {
       if (!c.ctx.auxData || !c.ctx.auxData.isDefault) continue;
@@ -870,6 +870,88 @@ test('V2 walk: the editor page from the bubble, an image click opens the file di
     await sleep(600);
     await shot('v2-image-moved');
     console.log('V2 walk: full editor page from the bubble, Escape back; trusted image click -> file dialog; Alt+Down moves the image');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* U5b (plan-u5) in a real Chrome: a proposal drawn over the page gets a review rail BESIDE the frame, in the
+   parent: one card per change on its block's line, no two overlapping; hovering a card lights its block in
+   the frame; Approve (by mouse and by keyboard) writes exactly one approval record, and not within the 400 ms
+   card guard; narrow windows show markers whose click opens the card. */
+test('U5b walk: the review rail beside the page, cards on their lines, Approve writes one record, markers when narrow', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u5b-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&variant=admin', 'overlay-inline');
+    const { send, ev, F, site, until, sleep, shot } = W;
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    await until(() => S("!!document.querySelector('.hc-rail') && !document.querySelector('.hc-rail').hidden && document.querySelectorAll('.hc-rslot:not([hidden])').length >= 2"), 'the rail with its cards');
+    await sleep(400);
+    const geo = await S(`(() => { const f = document.querySelector('.hc-frame').getBoundingClientRect(), r = document.querySelector('.hc-rail').getBoundingClientRect();
+      const cards = [...document.querySelectorAll('.hc-rslot:not([hidden]) .hc-rcard')].map((c) => { const b = c.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, key: c.dataset.key, acts: [...c.querySelectorAll('[data-act]')].map((x) => x.dataset.act) }; });
+      return { frameRight: f.right, railLeft: r.left, railRight: r.right, cards, approveAll: (document.querySelector('[data-action=approve-all]') || {}).textContent || null }; })()`);
+    assert.ok(geo.railLeft >= geo.frameRight - 1, `the rail is beside the frame, not over it (${JSON.stringify(geo)})`);
+    for (let i = 1; i < geo.cards.length; i += 1) assert.ok(geo.cards[i].top >= geo.cards[i - 1].bottom, 'no two cards overlap');
+    assert.ok(geo.cards.every((c) => c.left >= geo.railLeft - 12), 'every card is in the rail');
+    assert.ok(geo.cards.some((c) => c.acts.join() === 'approve,decline'), 'an admin gets Approve and Reject');
+    assert.match(geo.approveAll || '', /^Approve all \(\d+\)$/);
+    await shot('u5b-rail-dark-1280');
+    // a card's line: the card of the changed paragraph starts within 40 px of its block (frame coordinates + offset)
+    const lines = await ev(`[...document.querySelectorAll('.hc-block.hc-prop-del, .hc-block.hc-prop-add')].map((b) => Math.round(b.getBoundingClientRect().top))`, F);
+    const frameTop = await S("document.querySelector('.hc-frame').getBoundingClientRect().top");
+    assert.ok(geo.cards.some((c) => lines.some((t) => Math.abs(c.top - (frameTop + t)) <= 40)), `a card on its block's line (${JSON.stringify({ lines, frameTop, cards: geo.cards.map((c) => c.top) })})`);
+    // hover a card: its block is lit in the frame
+    await S("document.querySelector('.hc-rslot:not([hidden]) .hc-rcard').dispatchEvent(new MouseEvent('mouseenter'))");
+    await until(() => ev("document.querySelectorAll('.hc-block.hc-hot').length === 1", F), 'the hovered card lights its block');
+    // the click guard: an Approve right after the card appeared does nothing
+    const key = geo.cards.find((c) => c.acts.includes('approve')).key;
+    await S(`(() => { const c = document.querySelector('.hc-rcard[data-key="${key}"]'); c.dataset.armedAt = String(Date.now() + 400); c.querySelector('[data-act=approve]').click(); })()`);
+    await sleep(150);
+    assert.equal(await ev('window.walkWrites.length'), 0, 'no write inside the 400 ms guard');
+    // keyboard: focus Approve, press Enter (after the guard)
+    await sleep(450);
+    await S(`document.querySelector('.hc-rcard[data-key="${key}"] [data-act=approve]').focus()`);
+    assert.equal(await S("document.activeElement && document.activeElement.dataset.act"), 'approve', 'Approve has the focus');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await until(() => ev('window.walkWrites.length === 1'), 'one write');
+    const w = await ev('window.walkWrites[0]');
+    assert.equal(w.method, 'POST');
+    assert.match(w.url, /\/repos\/desert-mango\/hippocampus-docs\/issues\/2\/comments$/);
+    assert.deepEqual(w.body, { body: `hc-approved ${key}` });
+    await until(() => S(`/Going live/.test(document.querySelector('.hc-rcard[data-key="${key}"]').textContent)`), 'the card says it is going live');
+    await shot('u5b-going-live-dark-1280');
+    // light theme
+    await S("document.getElementById('theme-toggle').click()");
+    await sleep(500);
+    await shot('u5b-rail-light-1280');
+    // narrow: markers; a click opens the card beside the marker
+    await send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 900, deviceScaleFactor: 1, mobile: false });
+    await until(() => S("document.querySelector('.hc-rail').classList.contains('is-markers')"), 'markers when narrow');
+    await sleep(300);
+    await S("document.querySelector('.hc-rslot:not([hidden]) .hc-rmark').click()");
+    await sleep(300);
+    const pop = await S("(() => { const c = document.querySelector('.hc-rslot.is-active .hc-rcard'); if (!c) return null; const b = c.getBoundingClientRect(); return { w: b.width, right: b.right, vis: getComputedStyle(c).display }; })()");
+    assert.ok(pop && pop.vis === 'block' && pop.w > 200, `the marker opens its card (${JSON.stringify(pop)})`);
+    await shot('u5b-markers-light-1024');
+    W.close();
+    W = null;
+    // a phone (the site 390 px wide): no rail; the page bar's "Review N changes" opens them as a bottom sheet
+    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&variant=admin&width=390&theme=light', 'overlay-inline');
+    const P = (x) => W.ev(`${W.site}.eval(${JSON.stringify(x)})`);
+    await W.until(() => P("!!document.querySelector('[data-action=rail-sheet]')"), 'the page bar offers the sheet');
+    assert.equal(await P("getComputedStyle(document.querySelector('.hc-rail')).display"), 'none', 'no rail on a phone');
+    await P("document.querySelector('[data-action=rail-sheet]').click()");
+    await W.until(() => P("document.querySelectorAll('.hc-rsheet .hc-rcard').length >= 2"), 'the sheet with the cards');
+    const sheet = await P("(() => { const r = document.querySelector('.hc-rsheet').getBoundingClientRect(); return { left: r.left, right: innerWidth - r.right, bottom: innerHeight - r.bottom, focus: document.activeElement && document.activeElement.dataset.action }; })()");
+    assert.ok(sheet.left <= 12 && sheet.right <= 12 && sheet.bottom <= 12, `a bottom sheet (${JSON.stringify(sheet)})`);
+    assert.equal(sheet.focus, 'rail-sheet-close', 'the focus moves into the sheet');
+    await W.shot('u5b-sheet-light-390');
+    await P("document.querySelector('.hc-rsheet').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    await W.until(() => P("!document.querySelector('.hc-rsheet')"), 'Escape closes the sheet');
+    console.log('U5b walk: rail beside the frame, cards on their lines without overlap, hover lights the block, guard holds, Enter approves with one record, markers at 1024, a bottom sheet at 390');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });
