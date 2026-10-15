@@ -1067,6 +1067,11 @@ Their one write is an approval record, `POST /issues/<n>/comments` whose body mu
 changes on `main` is `.github/workflows/go-live.yml` (server side, as the derive App, after the gate),
 which trusts a record only from an admin or the page's project owner, never the author or a
 committer, and never runs proposal code.
+U6 adds conversations on a change: two more checked writes (`POST /pulls/<n>/comments` with exactly
+{body, commit_id, path (a page), line, side}, and `…/comments/<id>/replies` with {body}), and **a second
+stated exception to the one-repository API rule: one GraphQL door** (`client.graphql`), which sends only
+three literal operations with this repository written into their text (list a proposal's review threads,
+resolve one, reopen one), variables checked, the body compared string for string before `fetch`.
 
 (3) **The gate.** `check.py` 6d rejects scripts, handlers and `javascript:` URLs in content
 before merge. `index.html` is judged like the old shell pages: no inline `<script>`, no `on*=`

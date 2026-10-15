@@ -266,6 +266,10 @@ and the bar above the page has **Approve all (N)**.
   Proposals tab no longer offers **Merge** (a merge would bring declined changes back). On
   github.com the **Merge** button still exists for a code owner; do not use it for such a
   proposal.
+- **Talk about a change:** click its card. It opens the change's conversations (they are review
+  comments on the proposal, so they show on github.com too), a **Reply** box, **Resolve** (or
+  **Reopen**), and **Comment on this change** to start one. A closed card says how many comments
+  the change has. Comments are shown as plain text.
 - On a narrow window the cards become small round markers beside the page; click one to open
   its card. On a phone, **Review N changes** in the bar opens them as a sheet.
 
