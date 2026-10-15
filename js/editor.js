@@ -3222,23 +3222,32 @@
   }
 
   // ---- U6: conversations on a change (review comments on the proposal; resolve through the GraphQL door)
+  const TALK_PAGES = 30;
   async function loadTalk(n) {
     const comments = [];
-    for (let page = 1; page <= 10; page += 1) {
+    let partial = false;                               // more than we read, or a page that failed: the card says so
+    for (let page = 1; page <= TALK_PAGES; page += 1) {
       const res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}/comments?per_page=100&page=${page}`);
-      if (!res.ok || !Array.isArray(res.data)) break;
+      if (!res.ok || !Array.isArray(res.data)) { partial = true; break; }
       comments.push(...res.data);
       if (res.data.length < 100) break;
+      if (page === TALK_PAGES) partial = true;
     }
     const resolved = new Map();                        // root comment id -> {threadId, isResolved}
-    const g = state.client && typeof state.client.graphql === 'function' ? await state.client.graphql('threads', { n }) : null;
-    const nodes = g && g.ok && g.data && g.data.data && g.data.data.repository && g.data.data.repository.pullRequest
-      ? g.data.data.repository.pullRequest.reviewThreads.nodes : [];
-    for (const t of Array.isArray(nodes) ? nodes : []) {
-      const first = t && t.comments && t.comments.nodes && t.comments.nodes[0];
-      if (first && Number.isInteger(first.databaseId) && typeof t.id === 'string') resolved.set(first.databaseId, { threadId: t.id, isResolved: t.isResolved === true });
+    let after = null;
+    for (let i = 0; i < TALK_PAGES && state.client && typeof state.client.graphql === 'function'; i += 1) {
+      const g = await state.client.graphql('threads', after ? { n, after } : { n });
+      const rt = g && g.ok && g.data && g.data.data && g.data.data.repository && g.data.data.repository.pullRequest
+        ? g.data.data.repository.pullRequest.reviewThreads : null;
+      if (!rt) break;
+      for (const t of Array.isArray(rt.nodes) ? rt.nodes : []) {
+        const first = t && t.comments && t.comments.nodes && t.comments.nodes[0];
+        if (first && Number.isInteger(first.databaseId) && typeof t.id === 'string') resolved.set(first.databaseId, { threadId: t.id, isResolved: t.isResolved === true });
+      }
+      if (!rt.pageInfo || rt.pageInfo.hasNextPage !== true || typeof rt.pageInfo.endCursor !== 'string') break;
+      after = rt.pageInfo.endCursor;
     }
-    return { comments, resolved, ok: true };
+    return { comments, resolved, ok: true, partial };
   }
   function talkOf(key) {
     const d = rail.data;
@@ -3285,6 +3294,9 @@
       return count ? h('p', { class: 'hc-rcard-replies', text: `${count} ${plural(count, 'comment', 'comments')}` }) : null;
     }
     const box = h('div', { class: 'hc-talk' });
+    if (d.talk.partial) {
+      box.appendChild(h('p', { class: 'hc-rcard-state' }, 'Not every comment could be read here — ', link(prLink(d.n), 'see the proposal on GitHub'), '.'));
+    }
     for (const t of threads) {
       const info = d.talk.resolved.get(t.rootId);
       const done = Boolean(info && info.isResolved);

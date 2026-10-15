@@ -1030,7 +1030,7 @@
   /* U6: the ONE GraphQL door (plan-final §7): exactly three operations, this repository written into their
      text, their variables checked; isAllowedGraphql compares a body with them string for string. */
   const GRAPHQL_OPS = Object.freeze({
-    threads: `query($n: Int!) { repository(owner: "${REPO_OWNER}", name: "${REPO_NAME}") { pullRequest(number: $n) { reviewThreads(first: 100) { nodes { id isResolved comments(first: 1) { nodes { databaseId } } } } } } }`,
+    threads: `query($n: Int!, $after: String) { repository(owner: "${REPO_OWNER}", name: "${REPO_NAME}") { pullRequest(number: $n) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first: 1) { nodes { databaseId } } } } } } }`,
     resolve: 'mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }',
     unresolve: 'mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }',
   });
@@ -1038,7 +1038,10 @@
   function graphqlVarsOk(name, v) {
     if (!isObj(v)) return false;
     const keys = Object.keys(v);
-    if (name === 'threads') return keys.length === 1 && Number.isInteger(v.n) && v.n >= 1 && v.n <= 999999999;
+    if (name === 'threads') {
+      return keys.every((k) => k === 'n' || k === 'after') && Number.isInteger(v.n) && v.n >= 1 && v.n <= 999999999
+        && (v.after === undefined || v.after === null || (typeof v.after === 'string' && /^[A-Za-z0-9+/=_-]{1,200}$/.test(v.after)));
+    }
     return keys.length === 1 && typeof v.id === 'string' && THREAD_ID_RE.test(v.id);
   }
   function graphqlRequest(name, vars) {

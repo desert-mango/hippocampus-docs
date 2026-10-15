@@ -74,12 +74,14 @@ test('graphqlRequest: only the three literal operations, this repository written
   assert.equal(list.method, 'POST');
   assert.equal(list.path, '/graphql');
   assert.match(list.body.query, /repository\(owner: "desert-mango", name: "hippocampus-docs"\)/);
+  assert.match(list.body.query, /pageInfo \{ hasNextPage endCursor \}/);
   assert.deepEqual(list.body.variables, { n: 7 });
   const res = C.graphqlRequest('resolve', { id: 'PRRT_kwDOabc123' });
   assert.match(res.body.query, /^mutation\(\$id: ID!\) \{ resolveReviewThread/);
   assert.match(C.graphqlRequest('unresolve', { id: 'PRRT_kwDOabc123' }).body.query, /unresolveReviewThread/);
   assert.ok(C.isAllowedGraphql(list.body) && C.isAllowedGraphql(res.body));
-  for (const [name, vars] of [['threads', { n: 0 }], ['threads', { n: '7' }], ['resolve', { id: 'x' }], ['resolve', { id: 'PRRT_a"}' }],
+  assert.deepEqual(C.graphqlRequest('threads', { n: 7, after: 'Y3Vyc29yOnYyOpK0' }).body.variables, { n: 7, after: 'Y3Vyc29yOnYyOpK0' });
+  for (const [name, vars] of [['threads', { n: 7, after: 'x"}' }], ['threads', { n: 0 }], ['threads', { n: '7' }], ['resolve', { id: 'x' }], ['resolve', { id: 'PRRT_a"}' }],
     ['delete', {}], ['threads', { n: 7, extra: 1 }]]) {
     assert.throws(() => C.graphqlRequest(name, vars), undefined, name);
   }
