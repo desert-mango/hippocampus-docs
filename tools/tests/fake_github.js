@@ -222,7 +222,13 @@
         if (!n[2]) return answer(200, xp);
         return answer(200, Number(q.page || 1) > 1 ? [] : (x.files && x.files[n[1]]) || []);
       }
-      // U5b: a synthetic proposal's issue comments (the approval records) and the collaborators' roles
+      // U5b: a synthetic proposal's commits (its author's), issue comments (the approval records), and roles
+      n = /^\/pulls\/([0-9]+)\/commits$/.exec(rest);
+      const xc = n ? xPulls.find((p) => String(p.number) === n[1]) : null;
+      if (xc) {
+        const who = { login: xc.user && xc.user.login };
+        return answer(200, Number(q.page || 1) > 1 ? [] : [{ sha: xc.head.sha, author: who, committer: { login: 'web-flow' } }]);
+      }
       n = /^\/issues\/([0-9]+)\/comments$/.exec(rest);
       if (n && x.comments && own(x.comments, n[1])) return answer(200, Number(q.page || 1) > 1 ? [] : x.comments[n[1]]);
       n = /^\/collaborators\/([^/]+)\/permission$/.exec(rest);

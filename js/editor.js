@@ -3127,18 +3127,13 @@
     const [baseText, headText, mainText, list, commits, projects] = await Promise.all([
       textAt(base, page.file, true), textAt(head, page.file, true), textAt(main, page.file, false),
       allComments(n).catch((e) => { if (quiet(e)) throw e; return []; }),
-      apiResponse(`${C.REPO_API_PATH}/pulls/${n}/commits?per_page=100`),
+      committersOf(n).catch((e) => { if (quiet(e)) throw e; return null; }),
       ownersRegistry()]);
     const edits = await C.proposalEdits(page.file, baseText, headText, mainText);
     if (mine !== ed.loads || ed.pv !== pv || !edits) return;
     const author = loginOf(pull).toLowerCase();
-    const committers = new Set();
-    for (const c of (commits.ok && Array.isArray(commits.data) ? commits.data : [])) {
-      for (const who of [c && c.author, c && c.committer]) {
-        const l = who && typeof who.login === 'string' ? who.login.toLowerCase() : '';
-        if (l && l !== 'web-flow') committers.add(l);
-      }
-    }
+    // committers unknown: nobody's record is trusted and nobody gets Approve (the engine would refuse them)
+    const committers = commits || { has: () => true };
     const roles = new Map();
     for (const r of C.parseRecords(list, { author }).list) {
       if (!roles.has(r.login)) roles.set(r.login, await roleNameOf(r.login).catch(() => 'none'));
@@ -3166,18 +3161,30 @@
     return out;
   }
 
+  /* Everyone who authored or committed a commit of proposal n (every page, as the go-live engine reads
+     them; GitHub lists at most 250). A reader that fails counts as unknown: the caller trusts no record. */
+  async function committersOf(n) {
+    const out = new Set();
+    for (let page = 1; page <= 3; page += 1) {
+      const res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}/commits?per_page=100&page=${page}`);
+      if (!res.ok || !Array.isArray(res.data)) return null;
+      for (const c of res.data) {
+        for (const who of [c && c.author, c && c.committer]) {
+          const l = who && typeof who.login === 'string' ? who.login.toLowerCase() : '';
+          if (l && l !== 'web-flow') out.add(l);
+        }
+      }
+      if (res.data.length < 100) break;
+    }
+    return out;
+  }
+
   async function trustedRecordExists(pull, files, comments, projects) {
     const author = loginOf(pull).toLowerCase();
     const recs = C.parseRecords(comments, { author }).list;
     if (!recs.length || !C.proposalEligible(pull, files)) return false;
-    const commits = await apiResponse(`${C.REPO_API_PATH}/pulls/${pull.number}/commits?per_page=100`).catch(() => null);
-    const committers = new Set();
-    for (const c of (commits && commits.ok && Array.isArray(commits.data) ? commits.data : [])) {
-      for (const who of [c && c.author, c && c.committer]) {
-        const l = who && typeof who.login === 'string' ? who.login.toLowerCase() : '';
-        if (l && l !== 'web-flow') committers.add(l);
-      }
-    }
+    const committers = await committersOf(pull.number).catch((e) => { if (quiet(e)) throw e; return null; });
+    if (!committers) return false;                     // unknown: keep Merge (GitHub's own rules still apply)
     // only a record of an edit in the proposal's CURRENT diff counts (an old head's key is stale to go-live too)
     const head = headShaOf(pull);
     const keysOf = new Map();                          // path -> Set of current edit keys
