@@ -17,6 +17,7 @@ needs. Nothing here runs a real builder or writes into the repo. The
 --contributors-if-changed tests make a throwaway git repository in the temp
 directory (git is the only external program used).
 """
+import re
 import io
 import os
 import subprocess
@@ -434,14 +435,38 @@ class TestWorkflows(unittest.TestCase):
         d = self.derive
         self.assertIn("branches: [main]", d)
         self.assertIn("concurrency: derive-main", d)
-        self.assertIn("contents: write", d)
-        self.assertIn("if: github.actor != 'github-actions[bot]'", d)
+        # A push made with the App token starts workflows (GITHUB_TOKEN's did not),
+        # so the loop guard is load-bearing: no bot push and no derive commit
+        # ever runs derive again.
+        self.assertIn("!endsWith(github.actor, '[bot]')", d)
+        self.assertIn("!startsWith(github.event.head_commit.message, "
+                      "'derive: regenerate derived data after ')", d)
         self.assertIn("fetch-depth: 2", d)
         self.assertIn("--contributors-if-changed", d)
-        self.assertIn("41898282+github-actions[bot]@users.noreply.github.com", d)
         self.assertIn("derive: regenerate derived data after", d)
         self.assertIn("python3 tools/check.py", d)
-        self.assertNotIn("secrets.", d)
+
+    def test_derive_pushes_as_the_app_only(self):
+        d = self.derive
+        # The secret lives in the `derive` environment (main only); the job names it.
+        self.assertIn("    environment: derive\n", d)
+        secrets = sorted(set(re.findall(r"secrets\.([A-Z_]+)", d)))
+        self.assertEqual(secrets, ["DERIVE_APP_PRIVATE_KEY"])
+        self.assertIn("vars.DERIVE_APP_ID", d)
+        self.assertIn("python3 tools/github_app_token.py", d)
+        # The token is masked before anything else and revoked on exit.
+        mint = d.index("python3 tools/github_app_token.py)")
+        self.assertIn('echo "::add-mask::$APP_TOKEN"', d[mint:mint + 400])
+        self.assertIn("python3 tools/github_app_token.py --revoke", d)
+        # checkout keeps no credentials: the read-only GITHUB_TOKEN never pushes,
+        # and the App token goes only to the push, never into .git/config.
+        self.assertIn("persist-credentials: false", d)
+        self.assertIn("GIT_CONFIG_KEY_0: ", d.replace("GIT_CONFIG_KEY_0=", "GIT_CONFIG_KEY_0: "))
+        self.assertNotIn("x-access-token:$APP_TOKEN@", d)
+        perms = d[d.index("    permissions:"):d.index("    steps:")]
+        self.assertNotIn("contents: write", perms)
+        self.assertIn("contents: read", perms)
+        self.assertNotIn("github-actions[bot]@users.noreply", d)
 
     def test_derive_workflow_github_data(self):
         d = self.derive
@@ -449,7 +474,6 @@ class TestWorkflows(unittest.TestCase):
         self.assertEqual(len(run), 1, run)
         self.assertIn('--contributors-if-changed "$BEFORE" --github-data', run[0])
         perms = d[d.index("    permissions:"):d.index("    steps:")]
-        self.assertIn("contents: write", perms)
         self.assertIn("pull-requests: read", perms)
         self.assertIn("::warning", d)
         self.assertIn(SOFT_FAIL, d)

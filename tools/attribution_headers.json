@@ -1045,6 +1045,36 @@
         "purpose": "Draw the in-page block editors: the Markdown box with live preview, the note-box bar, code language, format bar."
       },
       "reason": "First-party site code written for the editor redesign (unit U3, the block editors in the page); the baseline is the file as introduced."
+    },
+    "tools/github_app_token.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "e1d0f60a2caf9f11b4bedcd79d1cc517b22c35a5065915d5f31a9c5d0e5b957b",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "15 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Mint a short-lived, contents-only GitHub App installation token for derive.yml's push to main."
+      },
+      "reason": "First-party site tool written for the editor redesign (derive's push identity under the main-review ruleset, Kyle's 2026-10-15 decision); the baseline is the file as introduced."
+    },
+    "tools/tests/test_github_app_token.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "1d9eddb33858156c3170ddb0bb61f29924b1c24adf9fc6f6705f0107344a1da9",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "15 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the derive App token minter: the signed JWT, the narrow token request, and no key on disk."
+      },
+      "reason": "First-party test written for the editor redesign (derive's push identity, Kyle's 2026-10-15 decision); the baseline is the file as introduced."
     }
   },
   "schema_version": 1
