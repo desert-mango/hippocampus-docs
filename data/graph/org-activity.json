@@ -5,7 +5,7 @@
  "window_days": 365,
  "totals": {
   "public_repos": 94,
-  "commits_365d": 79,
+  "commits_365d": 81,
   "authors_365d": 5,
   "repos_touched_365d": 12,
   "stars": 30,
@@ -479,7 +479,7 @@
     0,
     0,
     0,
-    0
+    1
    ]
   },
   {
@@ -644,7 +644,7 @@
     0,
     0,
     0,
-    0,
+    1,
     null,
     null,
     null
@@ -652,6 +652,12 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_interfaces",
+   "sha": "8a0760e",
+   "date": "2026-10-15",
+   "msg": "Merge pull request #2 from Latfoo/main"
+  },
   {
    "repo": "ir_field_hardware",
    "sha": "a6e80a4",
@@ -699,6 +705,12 @@
    "sha": "f0053ba",
    "date": "2026-07-28",
    "msg": "update launch instructions for final demo event"
+  },
+  {
+   "repo": "scalar_field_interfaces",
+   "sha": "0ce79ed",
+   "date": "2026-07-12",
+   "msg": "Add measurement_noise_variance to QueryScalarFieldBeliefCovariance response"
   },
   {
    "repo": "scalar_field_interfaces",
@@ -789,18 +801,6 @@
    "sha": "92e7097",
    "date": "2026-06-10",
    "msg": "add ruff settings"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "d0c7e7f",
-   "date": "2026-06-10",
-   "msg": "add ruff settings"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "b7944e6",
-   "date": "2026-06-10",
-   "msg": "fix query() rebuilding training tensor, nicer shutdown behaviour, first clean up"
   }
  ],
  "most_active_repos": [
@@ -830,9 +830,9 @@
   },
   {
    "name": "scalar_field_interfaces",
-   "commits": 6,
+   "commits": 8,
    "language": "CMake",
-   "pushed_at": "2026-07-03"
+   "pushed_at": "2026-10-15"
   },
   {
    "name": "ir_field_hardware",
