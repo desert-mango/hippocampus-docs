@@ -434,7 +434,8 @@
       if (text != null) el.textContent = String(text);
       return el;
     }
-    function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+    // (a child that is not el's own stops it: a stand-in node never loops forever)
+    function clear(el) { while (el.firstChild && el.firstChild.parentNode === el) el.removeChild(el.firstChild); }
     function connected(el) { return !!el && (!('isConnected' in el) || el.isConnected); }
     function link(href, cls, text) {
       const a = h('a', cls, text);
@@ -794,15 +795,17 @@
       return col;
     }
 
-    function renderLab(container, isCurrent) {
+    /* opts.embedded (round 2, R5): a section of the Team page — an h2, no kicker, no page frame of its own. */
+    function renderLab(container, isCurrent, opts) {
       if (!doc || !container) return Promise.resolve();
+      const embedded = Boolean(opts && opts.embedded);
       return need(['activity', 'people', 'roster']).then((d) => {
         if (typeof isCurrent === 'function' && !isCurrent()) return;
         clear(container);
-        const root = h('div', 'page-body hc-lab');
+        const root = h('div', embedded ? 'hc-lab is-embedded' : 'page-body hc-lab');
         root.setAttribute('data-hc-surface', 'lab');
-        root.appendChild(h('p', 'kicker', 'HippoCampusRobotics on GitHub'));
-        root.appendChild(h('h1', '', 'Lab activity'));
+        if (!embedded) root.appendChild(h('p', 'kicker', 'HippoCampusRobotics on GitHub'));
+        root.appendChild(h(embedded ? 'h2' : 'h1', '', 'Lab activity'));
         const act = d.activity.ok && d.activity.value && typeof d.activity.value === 'object'
           ? d.activity.value : null;
         if (!act) {

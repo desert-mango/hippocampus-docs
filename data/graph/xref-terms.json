@@ -75,7 +75,6 @@
   "with"
  ],
  "terms": {
-  "About this site": "about",
   "Acoustic Modems": "setup/hardware/acoustic-modems",
   "acoustic_localization": "repo:acoustic_localization",
   "acoustic_msgs": "repo:acoustic_msgs",

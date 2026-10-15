@@ -597,15 +597,26 @@ async function editorWalk(page, scratch, query = '', step = 'on') {
   await send('Runtime.enable');
   await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
   await send('Page.navigate', { url: `${origin}/tools/tests/editor_walk.html?step=${step}&page=${page}${query}` });
-  await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === `${step}:ready` || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), `the walk at "${step}"`);
+  // a walk that never gets ready closes its Chrome and server before it throws (else the test run hangs)
+  const abort = (e) => { try { ws.close(); } catch { /* closed */ } try { child.kill('SIGKILL'); } catch { /* gone */ } server.closeAllConnections?.(); server.close(); throw e; };
+  await until(() => ev("document.body && document.body.getAttribute('data-walk-step')").then((s) => s === `${step}:ready` || (s && s.endsWith(':failed') ? Promise.reject(new Error(s)) : false)), `the walk at "${step}"`).catch(abort);
   const frameCtx = async () => {
     for (const c of contexts.values()) {
       if (!c.ctx.auxData || !c.ctx.auxData.isDefault) continue;
-      try { if (await ev("typeof HC !== 'undefined' && HC.preview === true && !!document.querySelector('.hc-block')", c)) return c; } catch (e) { /* gone */ }
+      // a page with blocks, or the Team page (round 2, R5: data, no blocks — its people roster instead)
+      try { if (await ev("typeof HC !== 'undefined' && HC.preview === true && !!document.querySelector('.hc-block, #people-root .person-card')", c)) return c; } catch (e) { /* gone */ }
     }
     return null;
   };
-  const F = await until(frameCtx, 'the page frame grouped');
+  const F = await until(frameCtx, 'the page frame grouped').catch(async (e) => {
+    // say what each page context holds, so a frame that never grouped can be read from the failure
+    const seen = [];
+    for (const c of contexts.values()) {
+      if (!c.ctx.auxData || !c.ctx.auxData.isDefault) continue;
+      try { seen.push(await ev("location.href.slice(0, 80) + ' | ' + document.body.className + ' | ' + ((document.getElementById('content') || {}).textContent || '').slice(0, 160)", c)); } catch (x) { /* gone */ }
+    }
+    return abort(new Error(`${e.message}; contexts: ${seen.join(' ## ')}`));
+  });
   const site = "document.querySelector('iframe').contentWindow";
   const draft = (key, file) => ev(`(() => { const C = ${site}.HCCore; const d = C.createDraftStore(${site}.localStorage, (Object.keys(${site}.localStorage).find((k) => k.startsWith(C.DRAFTS_KEY + ':')) || '').split('/')[0]).get('${key}'); return d ? d.files['${file}'] : null; })()`);
   // click the block whose text matches `needle` (a JS regexp source), at a point inside it
@@ -1009,6 +1020,161 @@ test('U6 walk: a conversation on a change: comment, reply, resolve, all from the
     await S("[...document.querySelectorAll('.hc-rslot:not([hidden]) .hc-rcard')].find((c) => c.dataset.key !== " + JSON.stringify(key) + ").click()");
     await until(() => S(`/2 comments/.test(document.querySelector('.hc-rcard[data-key="${key}"]').textContent)`), 'the count on the closed card');
     console.log('U6 walk: comment on the change line, reply, resolve via the GraphQL door; text stays text; the count on a closed card');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* Round 2 (R5): the guest site itself (no Editor), in a real Chrome at `hash`. */
+async function siteWalk(hash, scratch, theme) {
+  const chrome = findChrome();
+  const server = await startServer(ROOT, []);
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const child = spawn(chrome, ['--headless=new', '--disable-gpu', ...HERMETIC, '--window-size=1280,1100',
+    `--user-data-dir=${mkdtempSync(path.join(scratch, 'profile-'))}`, '--remote-debugging-port=0', 'about:blank'],
+  { stdio: ['ignore', 'ignore', 'pipe'] });
+  let err = '';
+  child.stderr.on('data', (d) => { err += d; });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let port = null;
+  for (let i = 0; i < 150 && !port; i++) { const m = /ws:\/\/127\.0\.0\.1:(\d+)\//.exec(err); if (m) port = m[1]; else await sleep(100); }
+  const target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((r) => { ws.onopen = r; });
+  let id = 0;
+  const pend = new Map();
+  ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } };
+  const send = (method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
+  const ev = async (expression) => {
+    const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    if (r.result && r.result.exceptionDetails) throw new Error(`${expression.slice(0, 80)}: ${JSON.stringify(r.result.exceptionDetails.exception && r.result.exceptionDetails.exception.description)}`);
+    return r.result && r.result.result ? r.result.result.value : undefined;
+  };
+  const until = async (fn, what, ms = 20000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timed out: ${what}`); await sleep(100); } };
+  await send('Page.enable');
+  await send('Runtime.enable');
+  if (theme === 'light') await send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('hc-theme', 'light'); } catch (e) {}" });
+  await send('Page.navigate', { url: `${origin}/${hash}` });
+  const shot = async (name) => {
+    const dir = process.env.HC_WALK_SHOTS;
+    if (!dir) return;
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    if (r.result && r.result.data) { mkdirSync(dir, { recursive: true }); writeFileSync(path.join(dir, `${name}.png`), Buffer.from(r.result.data, 'base64')); }
+  };
+  const close = () => { try { ws.close(); } catch { /* closed */ } try { child.kill('SIGKILL'); } catch { /* gone */ } server.closeAllConnections?.(); server.close(); };
+  return { send, ev, until, sleep, shot, close, origin };
+}
+
+test('R5: the Team page — #/about and #/lab land on #/team; Lab activity, then People; whole cards are links; Kyle highlighted', { timeout: 120000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-r5-team-'));
+  let W = null;
+  try {
+    for (const [from, theme, to] of [['#/about', 'dark', '#/team'], ['#/lab', 'light', '#/team'], ['#/about?x=1@people', 'dark', '#/team?x=1@people']]) {
+      W = await siteWalk(from, scratch, theme);
+      const { ev, until } = W;
+      await until(() => ev(`location.hash === ${JSON.stringify(to)} && document.querySelectorAll('.person-card').length > 5`), `${from} -> ${to} with the people`);
+      await until(() => ev("!!document.querySelector('.team-lab .hc-heat, .team-lab .hc-tiles')"), 'the lab activity');
+      const page = await ev(`(async () => {
+        const roster = await (await fetch('data/people.json')).json();
+        const pub = await (await fetch('data/graph/people-public.json')).json();
+        const lab = document.querySelector('.team-lab'), ppl = document.querySelector('.team-people');
+        const nav = [...document.querySelectorAll('.site-nav a')].map((a) => a.dataset.nav);
+        const cards = [...document.querySelectorAll('.team-people .person-card')];
+        const kyle = cards.find((c) => /Kyle Nelson/.test(c.textContent));
+        const title = kyle && kyle.querySelector('.person-title');
+        const team = [...document.querySelectorAll('[data-hc-list="team"] .person-name')].map((n) => n.textContent);
+        return {
+          h1: document.querySelector('#content h1').textContent.trim(),
+          order: lab && ppl ? lab.compareDocumentPosition(ppl) & Node.DOCUMENT_POSITION_FOLLOWING : 0,
+          labH2: lab && lab.querySelector('h2') ? lab.querySelector('h2').textContent : null,
+          kicker: !!(lab && lab.querySelector('.kicker')),
+          nav,
+          linkedAreLinks: cards.filter((c) => c.dataset.link === '1').every((c) => c.tagName === 'A'),
+          imgInsideLink: cards.filter((c) => c.querySelector('img')).filter((c) => c.tagName === 'A').length,
+          triggers: document.querySelectorAll('.team-people .hc-pp-trigger, .team-people [role="button"]').length,
+          kyleTag: kyle && kyle.tagName, highlight: title && title.classList.contains('is-highlight'), titleText: title && title.textContent,
+          titleColor: title && getComputedStyle(title).color,
+          accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+          team,
+          expect: HCLab.splitTeam(roster, pub, new Date().toISOString().slice(0, 10)).team.map((e) => e.person.name),
+        };
+      })()`);
+      assert.equal(page.h1, 'Team');
+      assert.ok(page.order, 'Lab activity comes before People');
+      assert.equal(page.labH2, 'Lab activity');
+      assert.equal(page.kicker, false, 'no kicker above it');
+      assert.ok(page.nav.includes('team') && !page.nav.includes('about') && !page.nav.includes('lab'), JSON.stringify(page.nav));
+      assert.ok(page.linkedAreLinks, 'a card with a link is one <a>');
+      assert.ok(page.imgInsideLink >= 3, 'the photo is inside the link');
+      assert.equal(page.triggers, 0, 'no popover trigger on the cards');
+      assert.equal(page.kyleTag, 'A');
+      assert.equal(page.highlight, true);
+      assert.equal(page.titleText, 'Site creator');
+      assert.deepEqual(page.team, page.expect, 'the current team is splitTeam over the committed data');
+      for (const n of ['Kyle Nelson', 'Nathalie Bauschmann', 'Vincent Lenz', 'Finn Breuer']) assert.ok(page.team.includes(n), n);
+      const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+      if (theme === 'dark') assert.equal(page.titleColor, rgb(page.accent), 'the highlighted title is the site accent');
+      else {                                                       // light: the accent darkened for small text
+        const k = /^color\(/.test(page.titleColor) ? 255 : 1;        // color-mix() computes as color(srgb r g b)
+        const [r, , bl] = page.titleColor.match(/[\d.]+/g).map((x) => Number(x) * k);
+        assert.ok(bl > r + 60, `a blue title in light mode too (${page.titleColor})`);
+      }
+      await W.shot(`r5-team-${theme}-1280`);
+      W.close(); W = null;
+    }
+    console.log('R5: #/about and #/lab redirect to #/team; lab then people; whole-card links; Kyle highlighted');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('R5 walk: the Team page in Editor mode — card tools (no block line), the menu, Alt+Down, a refused move, "+"', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-r5-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/team', scratch, '&theme=light');
+    const { ev, F, site, until, sleep, draft, shot } = W;
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    await until(() => ev("document.querySelectorAll('.hc-padd').length === 2", F), 'a "+" card at the end of each list');
+    const look = await ev(`(() => { const c = document.querySelector('[data-hc-list="team"] .person-card[data-hc-ptools]');
+      return { blocks: document.querySelectorAll('.hc-block').length, cursor: getComputedStyle(c).cursor, edit: document.body.classList.contains('hc-people-edit') }; })()`, F);
+    assert.deepEqual(look, { blocks: 0, cursor: 'grab', edit: true }, 'cards, not blocks: no block bar over the roster');
+    await ev("document.getElementById('people-root').scrollIntoView({ block: 'start' })", F);
+    await sleep(300);
+    await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').focus()", F);
+    await shot('r5-team-editor-light-1280');
+    // the menu on a card: a click opens it, not the person's page
+    const first = await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').getAttribute('data-hc-name')", F);
+    await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').click()", F);
+    await until(() => ev("!!document.querySelector('.hc-pmenu')", F), 'the card menu');
+    const items = await ev("[...document.querySelectorAll('.hc-pmenu [data-pact]')].map((b) => b.getAttribute('data-pact'))", F);
+    assert.deepEqual(items.slice(0, 3), ['up', 'down', 'other']);
+    await shot('r5-team-menu-light-1280');
+    // an active, linked, unpinned person cannot be sent to the alumni: the note says why, nothing is posted
+    const active = await ev("(document.querySelector('[data-hc-list=\"team\"] .person-card[data-active=\"1\"][data-pinned=\"0\"]') || {}).getAttribute?.('data-hc-name') || null", F);
+    if (active) {
+      await ev(`(() => { const c = [...document.querySelectorAll('.person-card[data-hc-name]')].find((x) => x.getAttribute('data-hc-name') === ${JSON.stringify(active)}); c.click(); document.querySelector('.hc-pmenu [data-pact="other"]').click(); })()`, F);
+      await until(() => ev("/active on GitHub in the last 30 days/.test((document.querySelector('.hc-pnote') || {}).textContent || '')", F), 'the refused-move note');
+    }
+    // "+" on the alumni list opens the New person form with that list chosen; Escape comes back
+    await ev("document.querySelector('.hc-padd[data-hc-padd=\"alumni\"]').click()", F);
+    await until(() => S("!document.querySelector('#hc-tray').hidden && document.querySelector('#hc-tray select[data-field=group]') && document.querySelector('#hc-tray select[data-field=group]').value === 'alumni'"), 'New person for the alumni');
+    await shot('r5-team-add-light-1280');
+    await S("document.querySelector('#hc-tray').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    await until(() => S("document.querySelector('#hc-tray').hidden"), 'back to the page');
+    // Alt+Down on the first card: my draft of data/people.json changes, the bubble counts it
+    await ev(`(() => { const c = document.querySelector('[data-hc-list="team"] .person-card[data-hc-ptools]'); c.focus();
+      c.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true, cancelable: true })); })()`, F);
+    await until(() => S("/^\\d+ changes?$/.test(document.querySelector('[data-dock-count]').textContent)"), 'the bubble counts the change', 10000);
+    await until(() => draft('data/people', 'data/people.json').then((t) => t && JSON.parse(t).groups[0].people[1].name === first), 'my draft: the first person moved down', 10000);
+    await sleep(1500);
+    await shot('r5-team-moved-light-1280');
+    await S("document.getElementById('theme-toggle').click()");
+    await sleep(800);
+    await shot('r5-team-moved-dark-1280');
+    console.log('R5 walk: Team page cards with tools, menu, refused move, Alt+Down into the draft');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });

@@ -1244,13 +1244,13 @@
     'data/setup.json': { route: '/setup', label: 'Setup' },
     'data/projects.json': { route: '/projects', label: 'Projects' },
     'data/tools.json': { route: '/tools', label: 'Tools' },
-    'data/people.json': { route: '/about', label: 'About' },
+    'data/people.json': { route: '/team', label: 'Team' },        // round 2 (R5): the Team page
   });
   const textOr = (v, fallback) => (typeof v === 'string' && v.trim() ? v.trim() : fallback);
 
   function pageForFile(file, regs) {
     const r = regs || {};
-    if (file === 'content/about.md') return { route: '/about', label: 'About' };
+    if (file === 'content/about.md') return { route: '/team', label: 'Team' };
     if (Object.prototype.hasOwnProperty.call(DATA_ROUTES, file)) return DATA_ROUTES[file];
     const byFile = (list) => listOf(list).find((x) => x && typeof x === 'object' && x.file === file);
     if (file.indexOf('content/setup/') === 0) {
@@ -1408,7 +1408,7 @@
       .map((x) => pageRow(`${prefix}/${x.id}`, textOr(x.name, x.id), x.file, `${route}/${x.id}`));
     out.push({ key: 'projects', title: 'Projects', pages: listed(projectRows(r), 'project', '/projects') });
     out.push({ key: 'tools', title: 'Agent tools', pages: listed(r.tools && r.tools.tools, 'tool', '/tools') });
-    out.push({ key: 'about', title: 'About', pages: [pageRow('about', 'About', 'content/about.md', '/about')] });
+    out.push({ key: 'about', title: 'Team', pages: [pageRow('about', 'Team', 'content/about.md', '/team')] });
     out.push({ key: 'registries', title: 'Registries (raw JSON)', pages: RAW_REGISTRIES.map((f) => pageRow(
       f.slice(0, -5), f, f, DATA_ROUTES[f].route)) });
     return out;
@@ -1848,6 +1848,92 @@
     group.people.push({ name, title: trimmed(f.title), photo, link });
     return { problem: null, text: formatLike(peopleText, reg.doc) };
   }
+  /* Round 2 (R5, Kyle 2026-10-15): the Team page's lists, edited in place (drag, the card menu, pins).
+     team / alumni = the lists as shown, [{name, pinned}], in order. They become group 'active' and group
+     'alumni' of data/people.json, every person keeping all their other fields; pinned true sets the pin, anything
+     else removes it. Nobody may be added or dropped this way (the "+" card is the New person form).
+     -> {problem: null, text} | {problem} */
+  function peopleOrderText(peopleText, team, alumni) {
+    const fail = (problem) => ({ problem });
+    const reg = parsedRegistry('data/people.json', peopleText, 'groups');
+    if (reg.problem) return fail(reg.problem);
+    const groups = reg.doc.groups;
+    const act = groups.find((g) => isObj(g) && g.id === 'active' && Array.isArray(g.people));
+    const alu = groups.find((g) => isObj(g) && g.id === 'alumni' && Array.isArray(g.people));
+    if (!act || !alu || groups.length !== 2) return fail("data/people.json must have exactly the groups 'active' and 'alumni' to be reordered here — edit it on GitHub");
+    const all = new Map();
+    for (const g of [act, alu]) for (const p of g.people) if (isObj(p) && typeof p.name === 'string') all.set(p.name, p);
+    const shown = [...listOf(team), ...listOf(alumni)].map((x) => (isObj(x) && typeof x.name === 'string' ? x.name : ''));
+    const seen = new Set();
+    for (const n of shown) {
+      if (seen.has(n)) return fail(`'${n}' is listed twice`);
+      if (!all.has(n)) return fail(`'${n}' is not in data/people.json`);
+      seen.add(n);
+    }
+    const missing = [...all.keys()].filter((n) => !seen.has(n));
+    if (missing.length) return fail(`${missing.map((n) => `'${n}'`).join(', ')} would be dropped — nobody is removed by reordering`);
+    const place = (list) => listOf(list).map((x) => {
+      const p = all.get(x.name);
+      if (x.pinned === true) p.pinned = true; else delete p.pinned;
+      return p;
+    });
+    act.people = place(team);
+    alu.people = place(alumni);
+    return { problem: null, text: formatLike(peopleText, reg.doc) };
+  }
+
+  /* What a people.json change does, person by person (the marks on the Team page for my draft and for an
+     opened people proposal): add, del (with the old group and title, so the page can show a ghost), move (the
+     group changed, or the person left the order the others keep: the longest kept order stays unmarked), pin,
+     unpin, edit (title, photo, link or highlight). -> [{name, mark, group?, title?}] ([] for unreadable text) */
+  function peopleFlat(text) {
+    try {
+      const doc = JSON.parse(text);
+      const out = new Map();
+      listOf(doc && doc.groups).forEach((g) => listOf(isObj(g) ? g.people : null).forEach((p, i) => {
+        if (isObj(p) && typeof p.name === 'string' && !out.has(p.name)) out.set(p.name, { group: String(g.id || ''), index: i, p });
+      }));
+      return out;
+    } catch (e) { return null; }
+  }
+  function keptOrder(seq) {                  // indices of the longest increasing run of base positions
+    const n = seq.length;
+    const len = new Array(n).fill(1);
+    const prev = new Array(n).fill(-1);
+    for (let i = 0; i < n; i += 1) {
+      for (let j = 0; j < i; j += 1) if (seq[j] < seq[i] && len[j] + 1 > len[i]) { len[i] = len[j] + 1; prev[i] = j; }
+    }
+    let best = -1;
+    for (let i = 0; i < n; i += 1) if (best < 0 || len[i] > len[best]) best = i;
+    const keep = new Set();
+    for (let i = best; i >= 0; i = prev[i]) keep.add(i);
+    return keep;
+  }
+  function peopleMarks(baseText, headText) {
+    const base = peopleFlat(baseText);
+    const head = peopleFlat(headText);
+    if (!base || !head) return [];
+    const out = [];
+    const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+    for (const [name, b] of base) if (!head.has(name)) out.push({ name, mark: 'del', group: b.group, title: textOr(b.p.title, '') });
+    const groups = [...new Set([...head.values()].map((x) => x.group))];
+    for (const g of groups) {
+      const stay = [...head].filter(([n, x]) => x.group === g && base.has(n) && base.get(n).group === g).sort((a, c) => a[1].index - c[1].index);
+      const keep = keptOrder(stay.map(([n]) => base.get(n).index));
+      stay.forEach(([n], i) => { if (!keep.has(i)) out.push({ name: n, mark: 'move' }); });
+    }
+    for (const [name, x] of head) {
+      const b = base.get(name);
+      if (!b) { out.push({ name, mark: 'add' }); continue; }
+      if (b.group !== x.group) out.push({ name, mark: 'move' });
+      if (b.p.pinned !== true && x.p.pinned === true) out.push({ name, mark: 'pin' });
+      if (b.p.pinned === true && x.p.pinned !== true) out.push({ name, mark: 'unpin' });
+      if (['title', 'photo', 'link', 'highlight'].some((k) => !same(b.p[k], x.p[k]))) out.push({ name, mark: 'edit' });
+    }
+    return out;
+  }
+  const peopleChangeCount = (baseText, headText) => new Set(peopleMarks(baseText, headText).map((m) => m.name)).size;
+
 
   /* ---- Propose (R1-F14): one commit per proposal, through the Git Data
      API — blobs -> one tree on the base's tree -> one commit -> a new
@@ -3528,7 +3614,7 @@
     editKind, pageTree, pageList, pageIdForFile, routeForPage,
     jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
-    PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText,
+    PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     ownProposals, collectProposal, proposeRequest, runPropose,
     MEDIA_FUNCTION, MEDIA_ROOT, MEDIA_SUBFOLDERS, MANIFEST_FILE, MANIFEST_KEY, MANIFEST_LABEL, MEDIA_MAX_BYTES,

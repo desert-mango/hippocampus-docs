@@ -1177,7 +1177,7 @@ test('preview pages: changed files -> the site routes that show them, via the PR
     fileRow('content/tools/gone.md', { status: 'removed' }), fileRow('content/tools/runpod-mcp.md'),
     fileRow('data/people.json'), fileRow('content/about.md'), fileRow('data/site.json'),
     fileRow('content/setup/not-in-registry.md')], regs);
-  assert.deepEqual(mixed.map((x) => x.route), ['/projects/uvms', '/tools/runpod-mcp', '/about', '/']);
+  assert.deepEqual(mixed.map((x) => x.route), ['/projects/uvms', '/tools/runpod-mcp', '/team', '/']);
   // a PR's registries are not checked yet: every shape is guarded
   for (const bad of [null, {}, { setup: 'x', projects: { projects: 'abc' }, tools: { tools: [null, 7] } },
     { setup: { sections: [{ pages: [{ id: '../x', file: 'content/setup/concepts/colcon.md' }] }] } },
@@ -1565,4 +1565,67 @@ test('proposalRows: who, which pages, when, status; open newest first then merge
   const r2 = C.proposalRows([open[0]], [], () => null, regs, 'kyle');
   assert.equal(r2[0].filesKnown, false);
   assert.deepEqual(r2[0].pages, []);
+});
+
+// ---- round 2, R5: editing the Team page's lists in place (Kyle 2026-10-15, item 10) ----
+const PEOPLE = `{
+  "groups": [
+    {
+      "id": "active",
+      "title": "Team",
+      "people": [
+        { "name": "Ann", "title": "A", "photo": null, "link": null },
+        { "name": "Ben", "title": "B", "photo": null, "link": null, "pinned": true }
+      ]
+    },
+    {
+      "id": "alumni",
+      "title": "Alumni",
+      "people": [
+        { "name": "Cid", "title": "C", "photo": null, "link": null },
+        { "name": "Dot", "title": "D", "photo": null, "link": null }
+      ]
+    }
+  ]
+}
+`;
+test('peopleOrderText: the shown lists become the registry\'s groups, pins set or cleared; nobody added or dropped', () => {
+  const out = C.peopleOrderText(PEOPLE, [{ name: 'Cid', pinned: true }, { name: 'Ann', pinned: false }],
+    [{ name: 'Ben', pinned: false }, { name: 'Dot', pinned: false }]);
+  assert.equal(out.problem, null);
+  const doc = JSON.parse(out.text);
+  assert.deepEqual(doc.groups[0].people.map((p) => p.name), ['Cid', 'Ann']);
+  assert.deepEqual(doc.groups[1].people.map((p) => p.name), ['Ben', 'Dot']);
+  assert.equal(doc.groups[0].people[0].pinned, true);
+  assert.equal('pinned' in doc.groups[1].people[0], false, 'an unpin removes the key');
+  assert.equal(doc.groups[0].title, 'Team', 'everything else is kept');
+  assert.match(out.text, /^\{\n  "groups"/, 'the file keeps its formatting');
+  assert.match(C.peopleOrderText(PEOPLE, [{ name: 'Ann' }], [{ name: 'Cid' }, { name: 'Dot' }]).problem, /Ben/);
+  assert.match(C.peopleOrderText(PEOPLE, [{ name: 'Ann' }, { name: 'Ann' }, { name: 'Ben' }], [{ name: 'Cid' }, { name: 'Dot' }]).problem, /twice/);
+  assert.match(C.peopleOrderText(PEOPLE, [{ name: 'Ann' }, { name: 'Ben' }, { name: 'Zed' }], [{ name: 'Cid' }, { name: 'Dot' }]).problem, /Zed/);
+});
+
+test('peopleMarks: added, removed, moved (only those out of order), pinned, unpinned, edited; the count of people changed', () => {
+  const head = JSON.parse(PEOPLE);
+  head.groups[0].people.push({ name: 'Eve', title: 'E', photo: null, link: null });            // added
+  head.groups[1].people = head.groups[1].people.filter((p) => p.name !== 'Dot');               // removed
+  const cid = head.groups[1].people.shift();                                                   // Cid moves to the team
+  head.groups[0].people.unshift(Object.assign(cid, { pinned: true }));
+  delete head.groups[0].people.find((p) => p.name === 'Ben').pinned;                           // unpinned
+  head.groups[0].people.find((p) => p.name === 'Ann').title = 'Lead';                          // edited
+  const marks = C.peopleMarks(PEOPLE, JSON.stringify(head, null, 2));
+  const by = (n) => marks.filter((m) => m.name === n).map((m) => m.mark).sort();
+  assert.deepEqual(by('Eve'), ['add']);
+  assert.deepEqual(by('Dot'), ['del']);
+  assert.equal(marks.find((m) => m.name === 'Dot').group, 'alumni');
+  assert.deepEqual(by('Cid'), ['move', 'pin']);
+  assert.deepEqual(by('Ben'), ['unpin'], 'Ben did not move: Cid came in before him');
+  assert.deepEqual(by('Ann'), ['edit']);
+  assert.equal(C.peopleChangeCount(PEOPLE, JSON.stringify(head)), 5);
+  assert.equal(C.peopleChangeCount(PEOPLE, PEOPLE), 0);
+  assert.deepEqual(C.peopleMarks('not json', PEOPLE), []);
+  // a swap inside one list marks one of the two as moved
+  const swap = JSON.parse(PEOPLE);
+  swap.groups[1].people.reverse();
+  assert.equal(C.peopleMarks(PEOPLE, JSON.stringify(swap)).filter((m) => m.mark === 'move').length, 1);
 });

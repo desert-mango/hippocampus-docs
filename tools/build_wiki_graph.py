@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 21 September 2026
+# Last substantive modification: 15 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Build page and repository graph nodes, summaries, and cross-reference terms.
 """Build the wiki graph: one node per page, index view, and org repo.
@@ -214,8 +214,8 @@ def page_rows(root, reg):
         rows.append({"id": f"tools/{t['id']}", "kind": "tool", "title": t["name"],
                      "route": f"#/tools/{t['id']}", "where": "Agent tool",
                      "file": t["file"], "tagline": t.get("tagline", "")})
-    rows.append({"id": "about", "kind": "about", "title": "About this site",
-                 "route": "#/about", "where": "About", "file": "content/about.md",
+    rows.append({"id": "about", "kind": "about", "title": "Team",
+                 "route": "#/team", "where": "Team", "file": "content/about.md",
                  "tagline": ""})
     seen = set()
     for r in rows:

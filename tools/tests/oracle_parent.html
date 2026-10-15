@@ -87,7 +87,9 @@
     if (current === cur) ev.source.postMessage({ type: 'hc-file', nonce: m.nonce, id: m.id, ok: ans.ok, status: ans.status, text: ans.text }, location.origin);
   });
 
-  const bodyOf = (doc) => doc.querySelector('#project-md > .page-body') || doc.querySelector('#content > .page-body');
+  // (round 2, R5: content/about.md renders inside the Team page's people section)
+  const bodyOf = (doc) => doc.querySelector('#project-md > .page-body') || doc.querySelector('#content .team-people > .page-body')
+    || doc.querySelector('#content > .page-body');
 
   /* Render `text` as `file` at `route`; resolve {doc, body, frame} once
      settled, or {error}. The caller removes the frame. */

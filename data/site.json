@@ -18,7 +18,7 @@
      "text": "17 projects covering all 94 repositories in the org."},
     {"href": "#/tools", "title": "Agent tools",
      "text": "3 MCP servers: GPU compute and CAD access."},
-    {"href": "#/about", "title": "About & people",
-     "text": "Who is in the lab, and how this site is built."}
+    {"href": "#/team", "title": "Team",
+     "text": "Who is in the lab now, who was, and what the lab did on GitHub."}
   ]
 }

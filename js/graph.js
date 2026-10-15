@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Link related page terms and display graph previews and project contributors.
 /* HippoCampus Robotics docs — semantic graph UI layer.
@@ -127,7 +127,7 @@
     }
     if (seg[0] === 'projects') return seg.length === 1 ? 'index:projects' : 'projects/' + seg[1];
     if (seg[0] === 'tools') return seg.length === 1 ? 'index:tools' : 'tools/' + seg[1];
-    if (seg[0] === 'about') return 'about';
+    if (seg[0] === 'about' || seg[0] === 'team') return 'about';     // round 2 (R5): #/team is the about page's node
     return null;
   }
 

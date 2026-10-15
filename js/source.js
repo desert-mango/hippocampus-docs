@@ -35,7 +35,7 @@
                (e.g. 32 hex characters from crypto.getRandomValues);
         route  the site route to open WITHOUT its leading '#', exactly as it
                would appear in the site's own hash: '/setup/lab-marker/design',
-               '/projects/uvms', '/about', '/search?q=controller',
+               '/projects/uvms', '/team', '/search?q=controller',
                '/setup/x@some-heading'. It rides URI-encoded in `route=`;
                omitted means '/'. Anything that does not start with a single
                '/' (or holds a control character) is replaced by '/'.
@@ -133,6 +133,10 @@
                                              one block it marked open, in
                                              author mode, and shows the changed
                                              text itself before any write.
+        hc-people        {op: 'order', team,  the Team page's lists as shown after a drag
+                          alumni} |           or a card-menu move or pin: [{name, pinned}]
+                         {op: 'add', group}  (names only, at most 500), or "+" on the
+                                             'team' / 'alumni' list (round 2, R5)
         hc-block-rects   {rects, view}       where the MARKED blocks are on screen
                                              (U5b, the review rail): rects =
                                              [{index, top, height}] in the
@@ -147,7 +151,7 @@
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot, tint}, '*')
+          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot, tint, people}, '*')
         on        true: draw the block marks (false: draw none)
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         theme     'light' | 'dark' | absent: the site's theme now (the frame sets
@@ -158,6 +162,10 @@
         hot       a block index to light (its review card is hovered or active), or null (U5b)
         tint      the drawn proposal's proposer colour slot, a whole number 0..5 (0: the viewer's own
                   magenta; else 0) — round 2, R1
+        people    {edit, marks, focus}: on the Team page (round 2, R5), edit = the card tools are on; marks =
+                  [{name, mark: add|del|move|pin|unpin|edit, group, title}] for the people a draft or a
+                  proposal changes (names at most 200 characters, at most 500 marks); focus = the
+                  person to scroll back to after a reload (a name, or null)
         open      {index, md, kind, as} | null: the block to type in, its Markdown
                   (a string of at most MAX_BLOCK_MD characters), its
                   HCCore.splitBlocks kind (OPEN_KINDS), and as: 'markdown' when
@@ -186,7 +194,12 @@
   const BLOCK_INSERT_KINDS = Object.freeze(['note', 'warning', 'tabs', 'image', 'attention', 'video', 'repo']);
   const OVERLAY_MARKS = Object.freeze(['add', 'del', 'change', 'conflict']);
   const MAX_OVERLAY = 5000;
-  const MAX_TINT = 5;              // css/editor.css --hc-p1..--hc-p5 (HCCore.PROPOSER_SLOTS)
+  const MAX_TINT = 5;
+  // round 2 (R5): the Team page's people tools
+  const MAX_PEOPLE = 500;
+  const PEOPLE_MARKS = Object.freeze(['add', 'del', 'move', 'pin', 'unpin', 'edit']);
+  const PEOPLE_LISTS = Object.freeze(['team', 'alumni']);
+  const personName = (v) => (typeof v === 'string' && v.trim() && v.length <= 200 ? v : null);              // css/editor.css --hc-p1..--hc-p5 (HCCore.PROPOSER_SLOTS)
   const MAX_PX = 1e7;                // a block rectangle's coordinates (hc-block-rects), in CSS pixels
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
   const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'mdbox', 'markdown', 'closed']);
@@ -293,6 +306,26 @@
       return (isIndex(d.index) && typeof d.md === 'string' && d.md.length <= MAX_BLOCK_MD)
         ? { type, index: d.index, md: d.md } : null;
     }
+    if (type === 'hc-people') {
+      // round 2 (R5): the Team page in Editor mode — the lists as shown after a drag or a card-menu move or pin
+      // (names and pins only; the parent checks the names are exactly the draft's), or "+" on a list
+      if (d.op === 'add') return PEOPLE_LISTS.indexOf(d.group) >= 0 ? { type, op: 'add', group: d.group } : null;
+      if (d.op !== 'order' || !Array.isArray(d.team) || !Array.isArray(d.alumni)
+        || d.team.length + d.alumni.length > MAX_PEOPLE) return null;
+      const clean = (list) => {
+        const out = [];
+        for (const x of list) {
+          const name = x && typeof x === 'object' ? personName(x.name) : null;
+          if (!name) return null;
+          out.push({ name, pinned: x.pinned === true });
+        }
+        return out;
+      };
+      const team = clean(d.team);
+      const alumni = clean(d.alumni);
+      // focus: the person just moved (the page comes back to them after it reloads), or null
+      return team && alumni ? { type, op: 'order', team, alumni, focus: personName(d.focus) } : null;
+    }
     if (type === 'hc-block-rects') {
       // U5b: where the MARKED blocks are on screen (the parent's review rail lines its cards up with
       // them). Numbers only, rounded; one bad entry drops the whole message.
@@ -340,6 +373,18 @@
       hot: isIndex(m.hot) ? m.hot : null,          // U5b: the block whose review card is hovered or active
       // round 2 (R1): the drawn proposal's proposer colour slot, 0 = the viewer's own magenta
       tint: Number.isInteger(m.tint) && m.tint >= 0 && m.tint <= MAX_TINT ? m.tint : 0,
+      // round 2 (R5): on the Team page — the card tools on/off, and each changed person's mark
+      people: (() => {
+        const p = m.people && typeof m.people === 'object' ? m.people : {};
+        const marks = [];
+        for (const x of Array.isArray(p.marks) ? p.marks.slice(0, MAX_PEOPLE) : []) {
+          const name = x && typeof x === 'object' ? personName(x.name) : null;
+          if (!name || PEOPLE_MARKS.indexOf(x.mark) < 0) continue;
+          marks.push({ name, mark: x.mark, group: PEOPLE_LISTS.concat(['active']).indexOf(x.group) >= 0 ? x.group : null,
+            title: typeof x.title === 'string' ? x.title.slice(0, 300) : '' });
+        }
+        return { edit: p.edit === true, marks, focus: personName(p.focus) };
+      })(),
     };
   }
 

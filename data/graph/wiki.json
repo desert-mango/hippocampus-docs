@@ -16,10 +16,10 @@
   {
    "id": "about",
    "kind": "about",
-   "title": "About this site",
-   "route": "#/about",
-   "where": "About",
-   "summary": "This is the documentation home of the **HippoCampusRobotics** lab at TUHH's Institute of\nMechanics and Ocean Engineering. It brings four things into one place: setup guides\n(migrated page for page from the old Sphinx sit",
+   "title": "Team",
+   "route": "#/team",
+   "where": "Team",
+   "summary": "Who is on the lab's current team (GitHub work in the last 30 days, or an admin's pin), the alumni, and what the lab's public repositories did on GitHub.",
    "file": "content/about.md"
   },
   {

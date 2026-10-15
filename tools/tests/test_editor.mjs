@@ -2214,7 +2214,7 @@ test('page tree: exactly the registries\' pages — every setup page, project, t
     assert.ok(typeof p.title === 'string' && p.title, p.pageId);
   }
   assert.equal(C.routeForPage('setup/bluerov/dvl', REGS), '/setup/bluerov/dvl');
-  assert.equal(C.routeForPage('about', REGS), '/about');
+  assert.equal(C.routeForPage('about', REGS), '/team', 'round 2 (R5): About became the Team page');
   const tree = C.pageTree(REGS);
   assert.deepEqual(tree.map((g) => g.key).filter((k, i, a) => a.indexOf(k) === i),
     ['setup', 'projects', 'tools', 'about', 'registries']);
@@ -2222,7 +2222,7 @@ test('page tree: exactly the registries\' pages — every setup page, project, t
   const regs = tree.find((g) => g.key === 'registries').pages;
   assert.deepEqual(regs.map((p) => p.pageId), ['data/people', 'data/projects', 'data/site', 'data/tools']);
   assert.deepEqual(regs.map((p) => p.file), C.RAW_REGISTRIES);
-  assert.deepEqual(regs.map((p) => p.route), ['/about', '/projects', '/', '/tools']);
+  assert.deepEqual(regs.map((p) => p.route), ['/team', '/projects', '/', '/tools']);
 });
 
 test('page tree: a broken or missing registry lists nothing from it, never a guessed page', () => {
@@ -2801,9 +2801,11 @@ test('js/editor.js page tree (#/pages): one edit link per page and registry, plu
   // every page of the registries' page tree is the site's own page: on screen, it is the Changes tab's page
   for (const p of C.pageList(REGS_NOW)) {
     await page.go(`#${p.route}`);
-    const head = page.one((e) => e.tagName === 'CODE' && e.textContent === p.file);
-    assert.ok(head, `${p.pageId}: the Changes tab names ${p.file}`);
-    assert.ok(page.linkTo(C.pencilUrl(p.file)), `${p.pageId}: and its github.com pencil link`);
+    // round 2 (R5): the Team page (content/about.md's route) is edited as its data, data/people.json
+    const file = p.pageId === 'about' ? 'data/people.json' : p.file;
+    const head = page.one((e) => e.tagName === 'CODE' && e.textContent === file);
+    assert.ok(head, `${p.pageId}: the Changes tab names ${file}`);
+    assert.ok(page.linkTo(C.pencilUrl(file)), `${p.pageId}: and its github.com pencil link`);
   }
 });
 
@@ -4366,4 +4368,36 @@ test('R3: the list reads the gate\'s status for at most 10 open proposals (codex
   const page = await reviewSite('bob', { perms: { push: true }, pulls });
   assert.equal(page.all((e) => e.classList.contains('hc-prow')).length, 14);
   assert.equal(page.calls.filter((c) => /\/check-runs/.test(c.url)).length, 10);
+});
+
+// ---- round 2, R5: the Team page in Editor mode (Kyle 2026-10-15, items 5 and 10) ----
+test('R5: on the Team page the card tools are on, no blocks; an order from the frame becomes my people draft; "+" opens New person for that list', async () => {
+  const page = await editorOn({ hash: '#/team' });
+  await page.send({ type: 'hc-ready' });
+  const m = page.editorMessages().at(-1);
+  assert.equal(m.people.edit, true, 'the card tools');
+  assert.equal(m.people.marks.length, 0);
+  const text = readRepo('data/people.json');
+  assert.equal((await page.asks('data/people.json')).text, text, 'the data file as it is: no block sentinels (item 5: no block bar)');
+  const roster = JSON.parse(text);
+  const team = roster.groups[0].people.map((p) => ({ name: p.name, pinned: p.pinned === true })).reverse();
+  const alumni = roster.groups[1].people.map((p) => ({ name: p.name, pinned: false }));
+  alumni.push(team.pop());                                        // the last of the reversed team moves to the alumni
+  await page.send({ type: 'hc-people', op: 'order', team, alumni });
+  await settle();
+  const now = JSON.parse((await page.asks('data/people.json')).text);
+  assert.deepEqual(now.groups[0].people.map((p) => p.name), team.map((x) => x.name), 'served from my draft');
+  assert.equal(now.groups[1].people.at(-1).name, alumni.at(-1).name);
+  await page.send({ type: 'hc-ready' });
+  assert.ok(page.editorMessages().at(-1).people.marks.some((x) => x.mark === 'move'), 'my changes are marked');
+  assert.match(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /^\d+ changes?$/);
+  // an order that drops someone is refused, said, and changes nothing
+  await page.send({ type: 'hc-people', op: 'order', team: team.slice(1), alumni });
+  await settle();
+  assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /would be dropped/);
+  // "+" on the alumni list: the New person form, its group set
+  await page.send({ type: 'hc-people', op: 'add', group: 'alumni' });
+  await settle();
+  assert.equal(page.tray().hidden, false);
+  assert.equal(page.one((e) => e.tagName === 'SELECT' && e.attrs['data-field'] === 'group').value, 'alumni');
 });

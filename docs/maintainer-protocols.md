@@ -121,8 +121,11 @@ github.com."
    switch to turn Editor mode off and on. To sign out, click your picture, then **Sign out**.
 
 Once you are signed in, the link at the bottom of every page says **Edit this page**. It turns
-Editor mode on with the **Changes** tab open. The tray starts closed: the tab
-**Editor · N proposals** on the right edge opens it, and **×** hides it again.
+Editor mode on, on the page itself. The bubble at the top right holds your picture, your name
+and role, a small **Proposals N** link, the **Editor** switch, and below them the change count
+and **Send for review**. **Proposals N** opens the list of proposals: who, which page, when,
+status; click one to see its page with its changes marked, each person in their own colour (your
+own are magenta). **×** tucks the bubble into a tag on the right edge.
 
 **Change a block.**
 
@@ -198,6 +201,27 @@ proposed. The words, exactly as the editor shows them:
   open the page again and put your change back in."
 - Your proposal was merged or closed meanwhile: "Your proposal #n is no longer open: discard
   these changes and start from the live site."
+
+### The Team page: who is on the current team
+
+The Team page (`#/team`) shows Lab activity, then the people: the **current team**, then the
+**alumni**. A person whose GitHub account is linked to their card is on the current team when they
+made a commit, a pull request or a review in the lab's repositories in the last 30 days, or when
+an admin **pinned** them. A person with no linked GitHub account stays in the list an admin put
+them in.
+
+To change the lists, turn Editor on on the Team page:
+
+1. **Move someone:** drag their card, or click it (or press Enter on it) for **Move up**, **Move
+   down**, **Move to Alumni** / **Move to the current team** and **Pin to the team** / **Unpin**.
+   With the keyboard, Alt+Up and Alt+Down move the focused card.
+2. Moving a linked person who did no GitHub work lately onto the current team pins them; moving a
+   pinned person to the alumni unpins them. Someone who worked on GitHub in the last 30 days stays
+   on the current team: the page says "… is active on GitHub in the last 30 days, so they stay on
+   the current team."
+3. **Add someone:** the dashed **Add a person** card at the end of each list opens the New person
+   form for that list.
+4. **Send for review** proposes the new `data/people.json`. An admin approves people changes.
 
 ## 2. Review, approve and merge (Nathalie and Maintainers)
 

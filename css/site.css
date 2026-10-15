@@ -309,7 +309,15 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
 .repo-row { display: flex; align-items: baseline; gap: 0.5rem; }
 .repo-row .role { color: var(--muted); font-size: 0.75rem; }
 
-/* ---------- people (about page) ---------- */
+/* ---------- the Team page (round 2, R5): lab activity, then the people ---------- */
+.hc-team > h1 { margin-bottom: 1.2rem; }
+.hc-team .team-lab { margin-bottom: 2.8rem; }
+.hc-team .team-people > h2, .hc-lab.is-embedded > h2 { margin: 0 0 0.4rem; font-size: 1.25rem; color: var(--heading); }
+/* a highlighted title (people.json highlight: true) in the site's blue; light mode darkens it for small text */
+.person-title.is-highlight { color: var(--accent); font-weight: 600; }
+[data-theme="light"] .person-title.is-highlight { color: color-mix(in srgb, var(--accent) 82%, #000); }
+
+/* ---------- people (the Team page) ---------- */
 .people-group h3 {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em;
   color: var(--muted); font-weight: 600; margin: 1.9rem 0 0.7rem;

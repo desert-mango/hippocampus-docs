@@ -452,8 +452,8 @@ test('signed in: the footer entry is "Edit this page" -> the page with ?editor=c
   const e = app.click();
   assert.equal(e.defaultPrevented, false, 'a plain link: js/editor.js reads the parameter');
   assert.equal(app.opens.length, 0);
-  await app.go('#/about');
-  assert.equal(app.editLink().attrs.href, '#/about?editor=changes');
+  // (round 2, R5: #/about now redirects to #/team, which this fake DOM cannot draw; the Team page is tested in a
+  // real Chrome in browser_oracles.mjs)
   await app.go('#/projects');
   assert.equal(app.editLink().hidden, true);
   app.starts[0].onSession(false);

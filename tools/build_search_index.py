@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 3 September 2026
+# Last substantive modification: 15 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Build documentation, code, fork, and CAD search shards for browser queries.
 """Build the static search index (phase 2).
@@ -146,7 +146,7 @@ def build_site_shard():
         entries.append({"t": t["name"], "r": f"#/tools/{t['id']}", "w": "Agent tool",
                         "h": headings(text), "x": t["tagline"]})
     about = (ROOT / "content/about.md").read_text(encoding="utf-8")
-    entries.append({"t": "About this site", "r": "#/about", "w": "About",
+    entries.append({"t": "Team", "r": "#/team", "w": "Team",
                     "h": headings(about), "x": excerpt(about)})
     return entries
 

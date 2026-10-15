@@ -187,8 +187,8 @@ class TestNodes(FixtureCase):
         self.assertEqual(n["file"], "content/setup/getting-started/install.md")
         self.assertEqual(by_id["projects/p-one"]["where"], "Project")
         self.assertEqual(by_id["tools/tool-one"]["where"], "Agent tool")
-        self.assertEqual(by_id["about"]["where"], "About")
-        self.assertEqual(by_id["about"]["route"], "#/about")
+        self.assertEqual(by_id["about"]["where"], "Team")      # round 2 (R5): About became the Team page
+        self.assertEqual(by_id["about"]["route"], "#/team")
         self.assertEqual(by_id["index:projects"]["route"], "#/projects")
         self.assertEqual(by_id["index:tools"]["title"], "Agent tools")
         self.assertEqual(by_id["index:home"]["summary"], "Site lead.")

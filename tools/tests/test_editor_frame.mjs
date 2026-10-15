@@ -556,3 +556,29 @@ test('an image block: draggable, dropped before or after a block, Alt+ArrowUp/Do
   assert.equal(moves().length, 3);
   assert.ok(HC.posts.every((p) => Object.values(p).every((v) => typeof v !== 'string' || !/</.test(v))), 'no HTML in any message');
 });
+
+// ---- round 2, R5: the Team page's move rules (the card menu, Alt+arrows and drag share them) ----
+test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop; an active person cannot be sent to the alumni', () => {
+  const P = (name, linked, active, pinned) => ({ name, linked, active, pinned });
+  const lists = () => ({ team: [P('Ann', true, true, false), P('Ben', true, false, true), P('Uli', false, false, false)],
+    alumni: [P('Cid', true, false, false), P('Dot', false, false, false)] });
+  const names = (o) => ({ team: o.team.map((x) => `${x.name}${x.pinned ? '*' : ''}`), alumni: o.alumni.map((x) => `${x.name}${x.pinned ? '*' : ''}`) });
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'down', name: 'Ann' })), { team: ['Ben*', 'Ann', 'Uli'], alumni: ['Cid', 'Dot'] });
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'up', name: 'Dot' })), { team: ['Ann', 'Ben*', 'Uli'], alumni: ['Dot', 'Cid'] });
+  assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Ann' }), null, 'already first: nothing to do');
+  // to the team: a linked, quiet person is pinned (or GitHub would send them back); an unlinked one just moves
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Cid' })).team, ['Ann', 'Ben*', 'Uli', 'Cid*']);
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Dot' })).team, ['Ann', 'Ben*', 'Uli', 'Dot']);
+  // to the alumni: a pin comes off; an ACTIVE person is refused, with the reason
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Ben' })).alumni, ['Ben', 'Cid', 'Dot']);
+  assert.match(EF.peopleMove(lists(), { op: 'other', name: 'Ann' }).refused, /active on GitHub in the last 30 days/);
+  // pin / unpin (linked only)
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Cid' })).alumni, ['Cid*', 'Dot']);
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Ben' })).team, ['Ann', 'Ben', 'Uli']);
+  assert.equal(EF.peopleMove(lists(), { op: 'pin', name: 'Uli' }), null, 'no pin without a GitHub link');
+  // a drop: into a list at an index, the same rules
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Uli', list: 'team', index: 0 })).team, ['Uli', 'Ann', 'Ben*']);
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Cid', list: 'team', index: 1 })).team, ['Ann', 'Cid*', 'Ben*', 'Uli']);
+  assert.ok(EF.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 0 }).refused);
+  assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Nobody' }), null);
+});

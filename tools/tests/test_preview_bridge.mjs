@@ -503,14 +503,14 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, tint: 0 });
+    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null } });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, tint: 0 });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null } });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
   // round 2, R1: the proposer's colour slot, a whole number 0..5, else 0
   for (const [v, want] of [[3, 3], [5, 5], [0, 0], [6, 0], [-1, 0], [2.5, 0], ['2', 0], [null, 0]]) {
@@ -649,4 +649,27 @@ test('HC.fetchProjects: the index merged with each project\'s facts file, in the
   assert.ok(!asked.some((u) => u.includes('evil')), 'an id that is not a page address is never fetched');
   assert.deepEqual(SRC.mergeProjects({ projects: [{ id: 'a', owners: [] }] }, [{ name: 'A' }]).projects[0], { id: 'a', owners: [], name: 'A' });
   assert.equal(SRC.mergeProjects(null, []), null);
+});
+
+// ---- round 2, R5: the Team page's people tools ----
+test('hc-people (frame -> parent): an order of names with pins, or "+" for a list; anything else posts nothing', () => {
+  const ok = SRC.frameMessage('hc-people', { op: 'order', team: [{ name: 'Ann', pinned: true, x: 1 }], alumni: [{ name: 'Ben' }] });
+  assert.deepEqual(ok, { type: 'hc-people', op: 'order', team: [{ name: 'Ann', pinned: true }], alumni: [{ name: 'Ben', pinned: false }], focus: null });
+  assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: [{ name: 'Ann' }], alumni: [], focus: 'Ann' }).focus, 'Ann');
+  assert.deepEqual(SRC.frameMessage('hc-people', { op: 'add', group: 'alumni' }), { type: 'hc-people', op: 'add', group: 'alumni' });
+  assert.equal(SRC.frameMessage('hc-people', { op: 'add', group: 'staff' }), null);
+  assert.equal(SRC.frameMessage('hc-people', { op: 'drop', name: 'Ann' }), null);
+  assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: [{ name: '' }], alumni: [] }), null);
+  assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: [{ name: 'x'.repeat(201) }], alumni: [] }), null);
+  assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: 'Ann', alumni: [] }), null);
+  assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: new Array(501).fill({ name: 'a' }), alumni: [] }), null);
+});
+
+test('hc-editor.people (parent -> frame): edit on/off and the marks, cleaned', () => {
+  const m = SRC.editorMessage({ type: 'hc-editor', on: true, people: { edit: true,
+    marks: [{ name: 'Ann', mark: 'add' }, { name: 'Dot', mark: 'del', group: 'alumni', title: 'D' }, { name: 'X', mark: 'boom' }, { name: 5, mark: 'add' }] } });
+  assert.deepEqual(m.people, { edit: true, marks: [{ name: 'Ann', mark: 'add', group: null, title: '' },
+    { name: 'Dot', mark: 'del', group: 'alumni', title: 'D' }], focus: null });
+  assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: true }).people, { edit: false, marks: [], focus: null });
+  assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: true, people: { edit: 'yes', focus: 'Ann' } }).people, { edit: false, marks: [], focus: 'Ann' });
 });

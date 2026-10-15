@@ -440,6 +440,7 @@
     const d = ed.draft;
     const page = ed.page;
     if (!d || !page || !d.files || typeof d.files[page.file] !== 'string' || !d.originals) return 0;
+    if (page.data) return C.peopleChangeCount(d.originals[page.file], d.files[page.file]);   // the Team page: people changed
     const diff = C.blockDiff(d.originals[page.file], d.files[page.file]);
     if (!diff) return d.files[page.file] !== d.originals[page.file] ? 1 : 0;   // a page the block model refuses (CRLF): changed or not
     return diff.filter((e) => e.status !== 'same').length;
@@ -1722,6 +1723,8 @@
     const f = { group: field('select', 'group') };
     for (const g of groups) f.group.appendChild(h('option', { value: g.id }, g.title));
     if (groups.length) f.group.value = groups[0].id;
+    if (ed.addGroup && groups.some((g) => g.id === ed.addGroup)) f.group.value = ed.addGroup;   // R5: the "+" card's list
+    ed.addGroup = null;
     for (const k of ['name', 'title', 'link']) f[k] = field('input', k);
     if (!open && own.length) {
       f.base = field('select', 'base', { 'aria-label': 'Start from' });
@@ -1785,6 +1788,15 @@
       d.files[FILE] = out.text;
       drafts.put(d);
       if (d.base.number) chosenBase.set(d.key, { number: d.base.number }); else chosenBase.delete(d.key);
+      if (ed.on && ed.page && ed.page.data && ed.page.pageId === d.key) {
+        // round 2 (R5): added from the Team page's "+": back to the page, the new card on it (marked New)
+        ed.draft = d;
+        ed.peopleFocus = String(f.name.value || '').trim() || null;
+        closeTray();
+        refreshDock();
+        frameTo(ed.route, true);
+        return;
+      }
       trayGo(`#/edit/${d.key}`);
     } catch (e) {
       if (e && (e.message === 'signed out' || e.message === STALE)) return;
@@ -2430,12 +2442,16 @@
     if (seg[0] === 'setup') return seg.length === 1 ? 'setup/start/index' : `setup/${seg.slice(1).join('/')}`;
     if (seg[0] === 'projects' && seg.length === 2) return `project/${seg[1]}`;
     if (seg[0] === 'tools' && seg.length === 2) return `tool/${seg[1]}`;
-    if (seg[0] === 'about' && seg.length === 1) return 'about';
+    // round 2 (R5): the Team page is edited as data — data/people.json, in place (drag, card menu, "+")
+    if ((seg[0] === 'team' || seg[0] === 'about') && seg.length === 1) return PEOPLE_PAGE;
     return null;
   }
+  const PEOPLE_PAGE = 'data/people';
+  const PEOPLE_FILE = 'data/people.json';
 
   function pageForRoute(route) {
     const pageId = pageIdForRoute(route);
+    if (pageId === PEOPLE_PAGE) return { pageId, file: PEOPLE_FILE, label: 'Team', route: '/team', data: true };
     const file = pageId && state.regs ? C.editPath(pageId, state.regs) : null;
     if (!file) return null;
     const hit = C.pageList(state.regs).find((p) => p.pageId === pageId);
@@ -2735,6 +2751,7 @@
     if (moved) {
       clearSelection();
       ed.barNote = null;
+      ed.peopleFocus = null;              // R5: "come back to this person" holds for the Team page's own reloads only
     }
     ed.route = route;
     ed.page = page;
@@ -2782,6 +2799,10 @@
     const page = ed.page;
     const show = ed.show;
     const pv = ed.pv;
+    // round 2 (R5): a people proposal drawn on the Team page: its head's data/people.json (marked by hc-editor.people)
+    if (pv && page && page.data && p === page.file && typeof pv.peopleHead === 'string') {
+      return { ok: true, status: 200, text: pv.peopleHead };
+    }
     // a proposal drawn on this page: the composite, its blocks marked with this load's sentinels
     if (pv && pv.ov && page && pv.file === page.file && p === page.file && prefix) {
       return { ok: true, status: 200, text: C.withSentinels(pv.ov.text, prefix, pv.ov.overlay) };
@@ -2794,7 +2815,7 @@
     }
     const sha = ed.draft ? ed.draft.base.sha : await mainSha();
     const answer = await C.draftFetcher(draftFiles(sha), sessionCache().at(sha))(p);
-    if (!answer.ok || !page || p !== page.file || !prefix) return answer;
+    if (!answer.ok || !page || page.data || p !== page.file || !prefix) return answer;   // data: no blocks
     const marked = C.withSentinels(answer.text, prefix);
     return marked === null ? answer : { ok: true, status: answer.status, text: marked };
   }
@@ -2923,7 +2944,7 @@
   }
 
   const blankView = (page) => ({ mode: ed.show ? 'show' : 'main', file: page ? page.file : null, pr: null, files: null,
-    ov: null, tint: 0, marks: [], touching: [], others: [], check: null, failed: false });
+    ov: null, tint: 0, marks: [], touching: [], others: [], check: null, failed: false, people: [], peopleHead: null });
 
   async function pageView(page, main) {
     const pv = blankView(page);
@@ -2936,6 +2957,7 @@
       return pv;                         // no proposals to draw: the page works without them
     }
     pv.touching = all.filter((t) => fileRow(t.files, page.file)).sort(newestFirst);
+    if (page.data) return peopleView(pv, page, main);
     let t = null;
     const focus = ed.focusPr !== null ? pv.touching.find((x) => x.pull.number === ed.focusPr) || null : null;
     if (ed.show) {
@@ -2968,6 +2990,39 @@
     pv.failed = !ov;
     pv.marks = ov ? overlayMarks(ov.overlay) : [];
     pv.check = check;
+    return pv;
+  }
+
+  /* Round 2 (R5): the Team page (data/people.json). My draft: its marks against what it started from, the
+     card tools on. Else the proposal opened from the list (or the newest touching it, with "Show others'
+     suggestions" on): its head's file, marked against its merge base, in its proposer's colour; tools off. */
+  async function peopleView(pv, page, main) {
+    pv.people = [];
+    const focus = ed.focusPr !== null ? pv.touching.find((x) => x.pull.number === ed.focusPr) || null : null;
+    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
+    if (!focus && d) {
+      pv.mode = 'draft';
+      pv.people = C.peopleMarks(d.originals[page.file], d.files[page.file]);
+      return pv;
+    }
+    const t = focus || (pv.touching.length && currentView().suggestions ? pv.touching[0] : null);
+    if (!t) { if (pv.touching.length) pv.mode = 'hidden'; return pv; }
+    pv.mode = 'overlay';
+    pv.pr = t.pull;
+    pv.files = t.files;
+    pv.others = pv.touching.filter((x) => x !== t);
+    pv.tint = C.slotOf(C.proposerSlots(pv.touching.map((x) => x.pull), state.session && state.session.login), loginOf(t.pull));
+    const head = headShaOf(t.pull);
+    try {
+      const base = head ? await mergeBaseOf(main, head) : null;
+      const [was, now, check] = await Promise.all([textAt(base || main, page.file, true), head ? textAt(head, page.file, true) : null,
+        head ? checkOf(head).catch(() => ({ state: 'unknown' })) : { state: 'unknown' }]);
+      pv.check = check;
+      if (typeof now === 'string') { pv.peopleHead = now; pv.people = C.peopleMarks(was, now); } else pv.failed = true;
+    } catch (e) {
+      if (quiet(e)) throw e;
+      pv.failed = true;
+    }
     return pv;
   }
 
@@ -3739,8 +3794,12 @@
     if (!w || !nonce || !ed.ready) return;
     const tint = ed.pv && ed.pv.pr && Number.isInteger(ed.pv.tint) ? ed.pv.tint : 0;
     if (document.body) document.body.setAttribute('data-hc-tint', String(tint));   // the bar and the review cards
+    // round 2 (R5): the Team page's card tools (my own edits only, never over a drawn proposal) and its marks
+    const onTeam = Boolean(ed.page && ed.page.data);
+    const people = { edit: onTeam && canEdit() && !ed.show && !(ed.pv && ed.pv.pr), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
+      focus: onTeam ? ed.peopleFocus || null : null };
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people }, '*');
   }
 
   /* The block the frame may open for typing in the page (U2): the selected block of MY draft, its
@@ -3819,6 +3878,7 @@
     else if (m.type === 'hc-block-move' && index !== null && Number.isInteger(m.to) && m.to >= 0 && m.to <= MAX_INDEX) moveImage(index, m.to).catch(shown);
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
+    else if (m.type === 'hc-people' && (m.op === 'order' || m.op === 'add')) peopleEdit(m).catch(shown);
     return true;
   }
   const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };
@@ -4043,6 +4103,34 @@
       : 'Image replaced. The new file goes into your proposal with this page.');
     frameTo(ed.route, true);
   }
+  /* Round 2 (R5): the Team page's tools. order: the lists as the frame shows them after a drag, a card-menu move
+     or a pin — written into my draft of data/people.json (HCCore.peopleOrderText refuses any add or drop);
+     add: "+" opens the New person form for that list, which comes back to the page. */
+  async function peopleEdit(m) {
+    const page = ed.page;
+    if (!page || !page.data || !canEdit() || showing() || (ed.pv && ed.pv.pr)) return;
+    if (m.op === 'add') {
+      ed.addGroup = m.group === 'team' ? 'active' : 'alumni';
+      ed.trayOpen = true;
+      applyTray();
+      trayGo('#/new/person');
+      return;
+    }
+    const d = await pageDraft(page);
+    if (ed.page !== page || ed.show) return;
+    const out = C.peopleOrderText(d.files[page.file], m.team, m.alumni);
+    if (out.problem) { say(out.problem, 'error'); frameTo(ed.route, true); return; }
+    if (out.text === d.files[page.file]) return;
+    ed.draft = d;
+    d.files[page.file] = out.text;
+    drafts.put(d);
+    ed.peopleFocus = typeof m.focus === 'string' ? m.focus : null;   // the reloaded page comes back to them
+    say('');
+    drawDraftList(false);
+    refreshDock();
+    frameTo(ed.route, true);
+  }
+
   async function moveImage(from, to) {
     const page = ed.page;
     if (!page || !canEdit() || showing() || (ed.pv && ed.pv.ov)) return;
