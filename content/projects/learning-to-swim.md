@@ -19,5 +19,3 @@ reproducibility and vehicle-specific behavior rather than claiming that upstream
 The simulation replication and analysis are complete enough to expose both positive and
 negative results. The work has not established transfer to either physical vehicle, and it
 does not present simulated control performance as a hardware result.
-
-Go-live check (15 October 2026): an approved change went live on its own; this line is removed again right after.
