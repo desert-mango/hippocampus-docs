@@ -585,6 +585,24 @@ test('U4a: the Editor switch and the avatar sit in the dock (top right since V1)
   assert.equal(page.one((e) => e.classList.contains('hc-dock-tag')).hidden, true, 'the tag is not in the tab order while the dock shows');
 });
 
+test('R2a (round 2): the bubble is balanced: photo, name with role and the Proposals link, then the switch; count and Send below', async () => {
+  const page = await editorOn();
+  await new Promise((r) => setImmediate(r));
+  const dock = page.one((e) => e.classList.contains('hc-dock'));
+  const order = findAll(dock, (e) => e.attrs['data-action'] === 'avatar' || e.attrs['data-editor-switch'] !== undefined
+    || e.classList.contains('hc-login') || e.classList.contains('hc-role') || e.classList.contains('hc-dock-pages')
+    || e.attrs['data-action'] === 'dock-collapse' || e.attrs['data-dock-count'] !== undefined || e.attrs['data-action'] === 'dock-send')
+    .map((e) => e.attrs['data-action'] || (e.attrs['data-editor-switch'] !== undefined ? 'switch' : null)
+      || (e.attrs['data-dock-count'] !== undefined ? 'count' : null) || e.className.split(' ')[0]);
+  assert.deepEqual(order, ['avatar', 'hc-login', 'hc-role', 'tray-open', 'switch', 'dock-collapse', 'count', 'dock-send']);
+  const id = page.one((e) => e.classList.contains('hc-id'));
+  assert.ok(id, 'name and role sit above the Proposals link in one column');
+  const link = page.handle();
+  assert.ok(findAll(id, (x) => x === link).length, 'the Proposals link is under the name');
+  assert.ok(link.classList.contains('hc-dock-link'), 'a small text link, not a button chip');
+  assert.equal(link.textContent, 'Proposals1');
+});
+
 test('U4a: the dock counts this page\'s changes; Send for review opens the propose form below the dock', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });

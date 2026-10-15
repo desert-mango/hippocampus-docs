@@ -412,16 +412,17 @@
       title: 'Hide (the tag on the right edge brings it back)' }, '×');
     x.addEventListener('click', () => collapseDock(true));
     const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount, dockSend);
-    // the editor page (Proposals and Data) opens from here; it replaced the right tray and its edge handle
-    handle = h('button', { type: 'button', class: 'hc-dock-pages', 'data-action': 'tray-open', 'aria-expanded': 'false',
-      title: 'Proposals and data' }, 'Proposals');
+    // the proposals list opens from here: a small text link with the open count, under the name (round 2, R2a)
+    handle = h('button', { type: 'button', class: 'hc-dock-pages hc-dock-link', 'data-action': 'tray-open', 'aria-expanded': 'false',
+      title: 'Open proposals' }, 'Proposals');
     handle.hidden = true;
-    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, handle, sendWrap, x);
+    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, x, sendWrap);
     dockTag = h('button', { type: 'button', class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
       title: 'Show the editor controls' });
     dockTag.addEventListener('click', () => collapseDock(false));
     document.body.appendChild(dock);
     document.body.appendChild(dockTag);
+    if (typeof window.addEventListener === 'function') window.addEventListener('resize', placeSendBox);   // the bubble rewraps
     let collapsed = false;
     try { const s = localStore(); collapsed = Boolean(s && s.getItem(DOCK_KEY) === 'collapsed'); } catch (e) { collapsed = false; }
     document.body.classList.toggle('hc-dock-collapsed', collapsed);
@@ -464,12 +465,24 @@
     }
     // Editor off, signed out, nothing left to send, or another page's draft on screen: the box goes
     if (!signedIn || !editing || n === 0 || (sendBox && (!ed.draft || ed.draft.key !== sendKey))) closeSendBox();
+    else placeSendBox();
     if (signedIn) {
       const login = String(state.session.login);
       const kids = [avatarFace(login, login)];
       if (n) kids.push(h('span', { class: 'hc-dock-badge', text: String(n) }));
       dockTag.replaceChildren(...kids);
     }
+  }
+  /* The send box sits below the bubble, whatever its height (two rows; wrapped on a narrow screen); measured again
+     whenever the bubble is redrawn and on the next frame, so a bubble that grew after the box opened is never covered. */
+  function placeSendBox() {
+    if (!sendBox || !dock || typeof dock.getBoundingClientRect !== 'function') return;
+    const put = () => {
+      const below = sendBox && dock.getBoundingClientRect();
+      if (below && below.bottom > 0) sendBox.style.top = `${Math.round(below.bottom + 8)}px`;
+    };
+    put();
+    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(put);
   }
   /* Send for review: the page's draft goes through the same propose form the tray uses, in a box
      below the dock. */
@@ -484,9 +497,7 @@
       h('div', { class: 'hc-sendbox-head' }, h('strong', { text: 'Send for review' }), close), slot);
     sendKey = d.key;
     document.body.appendChild(sendBox);
-    // below the bubble, whatever its height (two rows; wrapped on a narrow screen)
-    const below = typeof dock.getBoundingClientRect === 'function' ? dock.getBoundingClientRect() : null;
-    if (below && below.bottom > 0) sendBox.style.top = `${Math.round(below.bottom + 8)}px`;
+    placeSendBox();
     const own = await myProposals();
     if (!sendBox || sendKey !== d.key || !ed.draft || ed.draft.key !== d.key) return;   // closed or moved on meanwhile
     openPropose(d, routeEpoch, slot, own);
@@ -512,11 +523,13 @@
     avatarBtn.replaceChildren(avatarFace(login, first));
     menuWho.textContent = `Signed in as ${login}`;
     who.appendChild(avatarBtn);
-    who.appendChild(h('span', { class: 'hc-login', title: login, text: first }));
+    // name with role on the first line, the Proposals link under them (round 2, R2a)
+    const line = h('span', { class: 'hc-id-line' }, h('span', { class: 'hc-login', title: login, text: first }));
     if (state.role && state.access === 'ok') {
-      who.appendChild(h('span', { class: `hc-role cms-role cms-role-${state.role.key}`,
+      line.appendChild(h('span', { class: `hc-role cms-role cms-role-${state.role.key}`,
         title: 'Your role on this site\'s repository', text: state.role.label }));
     }
+    who.appendChild(h('span', { class: 'hc-id' }, line, handle));
     who.appendChild(menu);
   }
 
@@ -4162,7 +4175,8 @@
     const escape = (e) => { if (e && e.key === 'Escape') closeMenu(); };
     avatarBtn.addEventListener('keydown', escape);
     menu.addEventListener('keydown', escape);
-    controls = h('span', { class: 'hc-editor-controls' }, switchBtn, who);
+    // round 2 (R2a, Kyle 2026-10-15): who comes first (photo, name with role, the Proposals link under it), then the switch
+    controls = h('span', { class: 'hc-editor-controls' }, who, switchBtn);
     mountDock();
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
