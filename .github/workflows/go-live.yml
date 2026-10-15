@@ -1,0 +1,124 @@
+# go-live — put approved per-edit changes from open proposals onto main (plan-u5, Kyle's go-live.yml "yes").
+#
+# A reviewer approves one edit of a proposal on the page; the site editor writes a record, a comment
+# `hc-approved <key> …` on the proposal's pull request. This workflow runs tools/go_live.mjs, which sweeps
+# EVERY open proposal (so a cancelled or failed run loses nothing), applies the edits whose records it
+# trusts, runs the site check after each, and pushes main as the org's derive App — the `main-review`
+# ruleset's bypass actor, because a reviewed edit must not need a second pull request.
+#
+# Safety, in order:
+#   - It runs MAIN's workflow and MAIN's tools only (issue_comment, schedule and workflow_dispatch all run
+#     the default branch). It never checks out or runs proposal code: proposal texts are data read
+#     through the contents API.
+#   - Who may approve is the engine's rule (js/cms-core.js mayApproveEdit): an admin anywhere, a
+#     project's owner (its CODEOWNERS line) on that project's pages, never the proposal's author or anyone
+#     who committed to it. Comments from people without access do not even start a run.
+#   - The App key lives in the `derive` environment (main only), is read only by the push step, and is
+#     unset as soon as the token is minted; the token is this repository only, contents: write only,
+#     masked, and revoked on exit. The push is exactly `git push origin HEAD:main`: never a force, a `+`
+#     refspec or a delete (the bypass would allow them).
+#   - The commits may hold only the approved pages plus search/ and data/graph/ (go_live.mjs --commit
+#     refuses anything else), and check.py must be green before the push.
+#   - On a moved main the job starts itself again (at most 3 attempts) instead of looping with the key.
+# A push by the App starts CI's `check` but not derive.yml (its bot guard); go-live already derived.
+name: go-live
+
+on:
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      attempt:
+        description: 'Attempt number (the job starts itself again on a moved main, up to 3)'
+        required: false
+        default: '1'
+
+# One run at a time; every run sweeps everything, so a replaced pending run loses nothing.
+concurrency: go-live-main
+
+permissions:
+  contents: read
+
+jobs:
+  go-live:
+    name: go-live
+    if: >-
+      ${{ github.event_name != 'issue_comment' || (github.event.issue.pull_request &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      (startsWith(github.event.comment.body, 'hc-approved ') || startsWith(github.event.comment.body, 'hc-declined '))) }}
+    runs-on: ubuntu-24.04
+    environment: derive
+    permissions:
+      contents: read        # the App token pushes; GITHUB_TOKEN only reads the tree
+      issues: write         # failure records and the closing note on a proposal
+      pull-requests: write  # close a proposal with nothing left open
+      actions: write        # start this workflow again on a moved main
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 — resolved via gh api repos/actions/checkout/git/ref/tags/v7 on 2026-09-03
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Sweep the approval records and apply what passes the site check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node tools/go_live.mjs --plan "$RUNNER_TEMP/go-live-plan.json"
+
+      - name: Commit and push as the derive App
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ inputs.attempt || '1' }}
+          DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID }}
+          DERIVE_APP_PRIVATE_KEY: ${{ secrets.DERIVE_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          plan="$RUNNER_TEMP/go-live-plan.json"
+          count=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$plan")
+          if [ "$count" = "0" ]; then
+            unset DERIVE_APP_PRIVATE_KEY
+            echo "go-live: nothing to push"
+            exit 0
+          fi
+          APP_TOKEN=""
+          trap 'DERIVE_APP_TOKEN="$APP_TOKEN" python3 tools/github_app_token.py --revoke || true' EXIT
+          creds=$(python3 tools/github_app_token.py)
+          unset DERIVE_APP_PRIVATE_KEY
+          APP_TOKEN=${creds%%$'\n'*}
+          echo "::add-mask::$APP_TOKEN"
+          rest=${creds#*$'\n'}
+          unset creds
+          bot_name=${rest%%$'\n'*}
+          bot_email=${rest#*$'\n'}
+          export GIT_COMMITTER_NAME="$bot_name" GIT_COMMITTER_EMAIL="$bot_email"
+          git config user.name "$bot_name"
+          git config user.email "$bot_email"
+          node tools/go_live.mjs --commit "$plan"
+          python3 tools/check.py
+          header="$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"
+          echo "::add-mask::$header"
+          if out=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+                   GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header" git push origin HEAD:main 2>&1); then
+            echo "$out"
+            exit 0
+          fi
+          echo "$out"
+          if ! grep -qE 'non-fast-forward|fetch first|\[rejected\]' <<<"$out"; then
+            echo "::error title=go-live::push refused (not a moved main) — see the lines above"
+            exit 1
+          fi
+          if [ "$ATTEMPT" -ge 3 ]; then
+            echo "::error title=go-live::main kept moving; 3 attempts made — the next sweep tries again"
+            exit 1
+          fi
+          echo "main moved; starting go-live again (attempt $((ATTEMPT + 1)))"
+          gh workflow run go-live.yml --ref main -f attempt="$((ATTEMPT + 1))"
+
+      - name: Close proposals with nothing left open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/go_live.mjs --close-done

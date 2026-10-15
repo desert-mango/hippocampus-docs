@@ -132,6 +132,9 @@ CONTRIB_MAX_ROWS = 12
 #   to git diff and dereferences no key), tools/github_names.py (people.json
 #   and github-links.json only, both excluded below), tools/projects_registry.py
 #   tools/build_codeowners.py (projects[].id and .owners, guarded),
+#   tools/go_live.mjs (2026-10-15: main's data/projects.json, handed to
+#   js/cms-core.js mayApproveEdit/ownsAll, which read projects[].id and .owners
+#   guarded; the spec below already names both),
 #   and js/source.js (2026-10-14: both read data/projects.json's projects[].id
 #   to fetch each project's facts file, data/projects/<id>.json, and merge it;
 #   the facts files' own spec is PROJECT_FACTS_SPEC), tools/rst_convert.py

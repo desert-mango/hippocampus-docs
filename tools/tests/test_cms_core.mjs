@@ -1075,7 +1075,8 @@ test('write allowlist: the client sends a write verb only to the exact paths lis
     ['POST', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/7/reviews`],
     ['PATCH', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/07/merge`], ['PUT', `${R}/pulls/7/merge/`],
     ['PUT', `${R}/pulls/7/merge?x=1`], ['PATCH', `${R}/pulls/0`], ['PATCH', `${R}`],
-    ['PUT', `${R}/contents/content/about.md`], ['POST', `${R}/issues/7/comments`],
+    ['PUT', `${R}/contents/content/about.md`], ['POST', `${R}/issues/7/comments`], // no record body: refused
+    ['POST', `${R}/issues/07/comments`], ['POST', `${R}/issues/7/comments/1`], ['PATCH', `${R}/issues/comments/1`],
     // never main, never a ref outside refs/heads/cms/<login>/…, never a tag or an update of a blob
     ['PATCH', `${R}/git/refs/heads/main`], ['PATCH', `${R}/git/refs/heads/cms`], ['PATCH', `${R}/git/refs/heads/cms/bob`],
     ['PATCH', `${R}/git/refs/heads/feature/x`], ['PATCH', `${R}/git/refs/tags/cms/bob/x`], ['POST', `${R}/git/refs/heads/cms/bob/x`],
@@ -1094,7 +1095,16 @@ test('write allowlist: the client sends a write verb only to the exact paths lis
     await assert.rejects(client.send(m, `${R}/pulls/7`), /does not send/, m);
   }
   await assert.rejects(client.get(`${R}/pulls/7`, { body: {} }), /no body/);
-  assert.equal(gh.calls.length, allowed.length, 'only the allowed writes reached fetch');
+  // U5: an issue comment only as ONE approval record (recordBody's exact text), nothing else
+  const rec = `hc-approved ${'a'.repeat(64)}`;
+  assert.equal(C.isAllowedWrite('POST', `${R}/issues/7/comments`, { body: rec }), true);
+  await client.send('POST', `${R}/issues/7/comments`, { body: { body: rec } });
+  for (const bad of [{ body: `${rec} hi` }, { body: '@someone hc-approved' }, { body: rec, extra: 1 }, { body: 'thanks!' },
+    { body: `hc-go-live-failed ${'a'.repeat(64)} ${'b'.repeat(40)}: \`x\`` }, null, rec]) {
+    assert.equal(C.isAllowedWrite('POST', `${R}/issues/7/comments`, bad), false, JSON.stringify(bad));
+    await assert.rejects(client.send('POST', `${R}/issues/7/comments`, { body: bad }), /does not send/);
+  }
+  assert.equal(gh.calls.length, allowed.length + 1, 'only the allowed writes reached fetch');
   const merge = gh.calls[1];
   assert.equal(merge.init.method, 'PUT');
   assert.equal(merge.init.headers['Content-Type'], 'application/json');

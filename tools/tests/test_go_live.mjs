@@ -1,0 +1,453 @@
+// Author: Kyle Nelson
+// Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
+// Last substantive modification: 15 October 2026
+// Affiliation: TUHH HippoCampus Robotics
+// Purpose: Test per-edit go-live: edit keys, the already-live rule, applying edits to main, and approval records.
+/* Unit tests for the go-live half of js/cms-core.js (plan-u5 U5a):
+
+     editKey / proposalEdits   one entry per change, add or delete of a page's
+                               block diff, keyed by content (never an index),
+                               with its state against the CURRENT main
+     overlayOnMain             the already-live rule (main already holds it)
+     applyEdits                approved edits onto main's text, bytes outside
+                               the touched blocks unchanged
+     parseRecords / recordBody the `hc-approved` / `hc-declined` comments
+     mayApproveEdit            who may approve one edit (shared with Unit P)
+
+     node --test tools/tests/test_go_live.mjs
+*/
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const ROOT = path.resolve(new URL('../..', import.meta.url).pathname);
+const C = require(path.join(ROOT, 'js', 'cms-core.js'));
+
+const sha = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+const P = 'content/projects/learning-to-swim.md';
+
+const BASE = '# Title\n\nFirst para.\n\nSecond para.\n\nThird para.\n';
+
+// ------------------------------------------------------------- editKey --
+
+test('editKey: sha256 of path NUL base NUL head (plus anchor and ordinal for an add)', async () => {
+  assert.equal(await C.editKey(P, 'old', 'new'), sha(`${P}\0old\0new`));
+  assert.equal(await C.editKey(P, '', 'added', 'anchor', 0), sha(`${P}\0\0added\0anchor\x000`));
+  // a committed vector, so the browser and the engine can never drift (plan-u5 r1 A8)
+  assert.equal(await C.editKey('content/x.md', 'Ä b', 'Ä c'),
+    '2d098526549ef1b3a8ddc02a88096947270d34624c58725beef8d871e0a91b1b');
+  assert.notEqual(await C.editKey(P, 'a', 'b'), await C.editKey('content/about.md', 'a', 'b'),
+    'two identical fixes on two pages keep distinct keys');
+});
+
+// ------------------------------------------------------ proposalEdits --
+
+test('proposalEdits: a change, an add and a delete, each open on an unchanged main', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nA new para.\n';
+  const e = await C.proposalEdits(P, BASE, head, BASE);
+  assert.deepEqual(e.map((x) => [x.kind, x.state]), [['change', 'open'], ['change', 'open']],
+    'LCS pairs the delete of Third with the add after Second as one change');
+  const head2 = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n\nA new para.\n';
+  const e2 = await C.proposalEdits(P, BASE, head2, BASE);
+  assert.deepEqual(e2.map((x) => [x.kind, x.base, x.head, x.state]), [
+    ['change', 'First para.', 'First para, fixed.', 'open'],
+    ['add', '', 'A new para.', 'open'],
+  ]);
+  assert.equal(e2[0].key, sha(`${P}\0First para.\0First para, fixed.`));
+  assert.equal(e2[1].key, sha(`${P}\0\0A new para.\0Third para.\x000`), 'an add is keyed with its anchor block and ordinal');
+  const head3 = '# Title\n\nFirst para.\n\nThird para.\n';
+  const e3 = await C.proposalEdits(P, BASE, head3, BASE);
+  assert.deepEqual(e3.map((x) => [x.kind, x.base, x.head]), [['delete', 'Second para.', '']]);
+});
+
+test('proposalEdits: state live once main holds the head version, in all three shapes', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nThird para.\n\nA new para.\n';
+  // main already has every edit
+  const e = await C.proposalEdits(P, BASE, head, head);
+  assert.ok(e.length >= 2);
+  assert.deepEqual([...new Set(e.map((x) => x.state))], ['live']);
+});
+
+test('proposalEdits: main changed the same block differently -> conflict, never guessed', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const main = '# Title\n\nFirst para, main\'s own fix.\n\nSecond para.\n\nThird para.\n';
+  const e = await C.proposalEdits(P, BASE, head, main);
+  assert.deepEqual(e.map((x) => x.state), ['conflict']);
+});
+
+test('proposalEdits: two identical adds after the same block keep distinct keys (the ordinal) and go live in order', async () => {
+  const head = '# Title\n\nFirst para.\n\nSame.\n\nSame.\n\nSecond para.\n\nThird para.\n';
+  const e = await C.proposalEdits(P, BASE, head, BASE);
+  assert.deepEqual(e.map((x) => x.state), ['open', 'open']);
+  assert.notEqual(e[0].key, e[1].key);
+  const r = await C.applyEdits(P, BASE, head, BASE, [e[1].key]);
+  assert.equal(r.text, '# Title\n\nFirst para.\n\nSame.\n\nSecond para.\n\nThird para.\n');
+  const after = await C.proposalEdits(P, BASE, head, r.text);
+  assert.deepEqual(after.map((x) => x.state), ['live', 'open'], 'the first twin is the one main holds');
+  const all = await C.applyEdits(P, BASE, head, r.text, [e[0].key, e[1].key]);
+  assert.equal(all.text, head);
+});
+
+test('applyEdits: adds of one run land in head order whatever order they were approved in', async () => {
+  const head = '# Title\n\nFirst para.\n\nA1.\n\nA2.\n\nA3.\n\nSecond para.\n\nThird para.\n';
+  const e = await C.proposalEdits(P, BASE, head, BASE);
+  assert.deepEqual(e.map((x) => x.kind), ['add', 'add', 'add']);
+  const [k1, k2, k3] = e.map((x) => x.key);
+  // the 2nd before the 1st, in one call (applied in head order)
+  const r1 = await C.applyEdits(P, BASE, head, BASE, [k2, k1]);
+  assert.equal(r1.text, '# Title\n\nFirst para.\n\nA1.\n\nA2.\n\nSecond para.\n\nThird para.\n');
+  // the 2nd alone, then the 1st in a later run
+  const s2 = (await C.applyEdits(P, BASE, head, BASE, [k2])).text;
+  const s21 = (await C.applyEdits(P, BASE, head, s2, [k1])).text;
+  assert.equal(s21, r1.text);
+  // 1st and 3rd, then the 2nd
+  const s13 = (await C.applyEdits(P, BASE, head, BASE, [k3, k1])).text;
+  assert.equal(s13, '# Title\n\nFirst para.\n\nA1.\n\nA3.\n\nSecond para.\n\nThird para.\n');
+  assert.equal((await C.applyEdits(P, BASE, head, s13, [k2])).text, head);
+});
+
+test('proposalEdits: a text that does not split gives null (whole-proposal path)', async () => {
+  assert.equal(await C.proposalEdits(P, 'x\r\n', 'y\n', 'x\n'), null);
+});
+
+// -------------------------------------------- overlayOnMain already-live --
+
+test('overlayOnMain: a change main already holds is drawn as plain main, no conflict', () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const o = C.overlayOnMain(head, BASE, head);
+  assert.deepEqual(o.conflicts, []);
+  assert.deepEqual([...new Set(o.overlay.map((x) => x.source))], ['main']);
+});
+
+test('overlayOnMain: an add main already holds at that anchor is skipped; a delete on both sides draws nothing', () => {
+  const headAdd = '# Title\n\nFirst para.\n\nSecond para.\n\nAdded.\n\nThird para.\n';
+  const o = C.overlayOnMain(headAdd, BASE, headAdd);
+  assert.deepEqual(o.overlay.map((x) => x.source), ['main', 'main', 'main', 'main', 'main']);
+  const headDel = '# Title\n\nFirst para.\n\nThird para.\n';
+  const o2 = C.overlayOnMain(headDel, BASE, headDel);
+  assert.deepEqual(o2.conflicts, []);
+  assert.deepEqual(o2.overlay.map((x) => x.source), ['main', 'main', 'main']);
+});
+
+// ---------------------------------------------------------- applyEdits --
+
+test('applyEdits: approved edits land on main; every byte outside them is unchanged', async () => {
+  const main = '# Title\n\nFirst para.\n\nSecond para.\n\n\nThird para.\n\n<!-- tail -->\n';
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n\nA new para.\n';
+  const edits = await C.proposalEdits(P, BASE, head, main);
+  const keys = edits.map((x) => x.key);
+  const r = await C.applyEdits(P, BASE, head, main, keys);
+  assert.deepEqual(r.refused, []);
+  assert.deepEqual(r.applied.sort(), keys.slice().sort());
+  assert.equal(r.text, '# Title\n\nFirst para, fixed.\n\nSecond para.\n\n\nThird para.\n\nA new para.\n\n<!-- tail -->\n');
+  // only the first one
+  const one = await C.applyEdits(P, BASE, head, main, [keys[0]]);
+  assert.equal(one.text, '# Title\n\nFirst para, fixed.\n\nSecond para.\n\n\nThird para.\n\n<!-- tail -->\n');
+});
+
+test('applyEdits: a delete takes its blank lines; an add at the top of the page', async () => {
+  const head = 'Intro.\n\n# Title\n\nFirst para.\n\nThird para.\n';
+  const edits = await C.proposalEdits(P, BASE, head, BASE);
+  assert.deepEqual(edits.map((x) => x.kind).sort(), ['add', 'delete']);
+  const r = await C.applyEdits(P, BASE, head, BASE, edits.map((x) => x.key));
+  assert.equal(r.text, head);
+});
+
+test('applyEdits: unknown, live, conflict and ambiguous keys are refused by reason; nothing else moves', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const main = '# Title\n\nFirst para, main\'s own fix.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, main);
+  const r = await C.applyEdits(P, BASE, head, main, [e.key, 'f'.repeat(64)]);
+  assert.equal(r.text, main);
+  assert.deepEqual(r.refused.map((x) => x.reason).sort(), ['conflict', 'stale']);
+  const live = await C.applyEdits(P, BASE, head, head, [e.key]);
+  assert.deepEqual(live.refused, []);
+  assert.deepEqual(live.done, [e.key]);
+  assert.equal(live.text, head);
+});
+
+// --------------------------------------------------- records + approvers --
+
+const rec = (id, login, body, extra) => ({ id, user: { login }, body, created_at: '2026-10-15T00:00:00Z',
+  updated_at: '2026-10-15T00:00:00Z', ...extra });
+const K1 = 'a'.repeat(64);
+const K2 = 'b'.repeat(64);
+
+test('recordBody: the only text the editor ever writes as a record', () => {
+  assert.equal(C.recordBody('approved', [K1, K2]), `hc-approved ${K1} ${K2}`);
+  assert.equal(C.recordBody('declined', [K1]), `hc-declined ${K1}`);
+  assert.throws(() => C.recordBody('approved', []));
+  assert.throws(() => C.recordBody('approved', ['zz']));
+  assert.throws(() => C.recordBody('merged', [K1]));
+  assert.throws(() => C.recordBody('approved', Array(51).fill(K1)));
+});
+
+test('parseRecords: author by API login; edited, self-authored and malformed records ignored', () => {
+  const r = C.parseRecords([
+    rec(1, 'Reviewer', `hc-approved ${K1}`),
+    rec(2, 'author', `hc-approved ${K2}`),                                     // the proposal's author
+    rec(3, 'reviewer', `hc-approved ${K2}`, { updated_at: '2026-10-15T00:01:00Z' }), // edited
+    rec(4, 'reviewer', `hc-approved ${K2} extra words`),                       // malformed
+    rec(5, 'reviewer', `I said hc-approved ${K2}`),                            // not at the start
+    rec(6, 'other', `hc-declined ${K2}`),
+    rec(7, 'reviewer', `hc-approved ${K1.toUpperCase()}`),
+  ], { author: 'Author' });
+  assert.deepEqual(r.list.map((x) => [x.id, x.login, x.kind, x.keys]), [[1, 'reviewer', 'approved', [K1]], [6, 'other', 'declined', [K2]]]);
+});
+
+test('mayApproveEdit: admin anywhere; maintain or write only as the project\'s owner (= CODEOWNERS); never the author', () => {
+  const projects = { projects: [{ id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] }, { id: 'other', owners: [] }] };
+  const base = { login: 'kyle-nelson-berkeley', projects, author: 'someone' };
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'admin', path: 'content/setup/x.md' }), true);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'maintain', path: 'content/about.md' }), false,
+    'a Maintainer who is not a code owner cannot approve on GitHub, so not through the App either');
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'maintain', path: P }), true);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P }), true);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: 'content/projects/other.md' }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: 'content/setup/x.md' }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P, author: 'Kyle-Nelson-Berkeley' }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'admin', path: P, author: 'kyle-nelson-berkeley' }), false,
+    'nobody approves their own proposal edit by edit');
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'read', path: P }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'triage', path: P }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P, projects: null }), false, 'no registry: no');
+});
+
+test('recordRequests: Approve all is chunked into records of at most RECORD_MAX keys, each one allowed write', () => {
+  const keys = Array.from({ length: 120 }, (_, i) => sha(String(i)));
+  const reqs = C.recordRequests(7, 'approved', keys);
+  assert.equal(reqs.length, 3);
+  assert.deepEqual(reqs.map((r) => r.body.body.split(' ').length - 1), [50, 50, 20]);
+  for (const r of reqs) {
+    assert.equal(r.method, 'POST');
+    assert.equal(r.path, `${C.REPO_API_PATH}/issues/7/comments`);
+    assert.equal(C.isAllowedWrite(r.method, r.path, r.body), true);
+  }
+  assert.throws(() => C.recordRequests(0, 'approved', keys));
+});
+
+test('decisions: the latest trusted record per key wins (approve then decline, and back)', () => {
+  const r = C.parseRecords([
+    rec(1, 'a', `hc-approved ${K1} ${K2}`, { created_at: '2026-10-15T00:00:01Z', updated_at: '2026-10-15T00:00:01Z' }),
+    rec(2, 'b', `hc-declined ${K1}`, { created_at: '2026-10-15T00:00:02Z', updated_at: '2026-10-15T00:00:02Z' }),
+    rec(3, 'x', `hc-approved ${K1}`, { created_at: '2026-10-15T00:00:03Z', updated_at: '2026-10-15T00:00:03Z' }), // untrusted
+  ], { author: 'author' });
+  const d = C.decisions(r.list, (login) => login !== 'x');
+  assert.deepEqual(d.get(K1), { kind: 'declined', login: 'b', id: 2 });
+  assert.deepEqual(d.get(K2), { kind: 'approved', login: 'a', id: 1 });
+  const all = C.decisions(r.list, () => true);
+  assert.equal(all.get(K1).kind, 'approved');
+});
+
+test('failures: trusted only from github-actions[bot] (type Bot), unedited, exact format; the body is mention-free', () => {
+  const S = 'c'.repeat(40);
+  const body = C.failureBody(K1, S, 'site rules: @nathalie broke `x`\nline 2');
+  assert.equal(body, `hc-go-live-failed ${K1} ${S}: \`site rules: nathalie broke x line 2\``);
+  const bot = { login: 'github-actions[bot]', type: 'Bot' };
+  const f = C.parseFailures([
+    { id: 1, user: bot, body, created_at: 't', updated_at: 't' },
+    { id: 2, user: { login: 'github-actions[bot]', type: 'User' }, body: C.failureBody(K2, S, 'x'), created_at: 't', updated_at: 't' },
+    { id: 3, user: { login: 'mallory', type: 'User' }, body: C.failureBody(K2, S, 'x'), created_at: 't', updated_at: 't' },
+    { id: 4, user: bot, body: C.failureBody(K2, S, 'x'), created_at: 't', updated_at: 'u' },
+  ]);
+  assert.deepEqual([...f.keys()], [K1]);
+  assert.deepEqual(f.get(K1), [{ sha: S, reason: 'site rules: nathalie broke x line 2' }]);
+  assert.throws(() => C.failureBody('zz', S, 'x'));
+});
+
+// ------------------------------------------------- the engine (tools/go_live.mjs) --
+
+const ENGINE = await import(path.join(ROOT, 'tools', 'go_live.mjs'));
+const REPO = 'desert-mango/hippocampus-docs';
+const RA = `/repos/${REPO}`;
+const PROJECTS = JSON.stringify({ projects: [{ id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] }] });
+const HEAD1 = '1'.repeat(40);
+const BASE1 = '0'.repeat(40);
+const SETUP = 'content/setup/a.md';
+
+/* A fake GitHub: open PRs with files, comments, commits and texts by sha; collaborators' role_name. */
+function fakeWorld(o) {
+  const posted = [];
+  const patched = [];
+  const pulls = o.pulls;
+  const roles = Object.assign({ 'kyle-nelson-berkeley': 'write', 'desert-mango-robotics': 'admin', mallory: 'read' }, o.roles || {});
+  const api = {
+    async get(p) {
+      const u = new URL(`https://x${p}`);
+      const q = u.pathname.slice(RA.length);
+      const page = Number(u.searchParams.get('page') || 1);
+      const one = (data) => ({ status: 200, data: page === 1 ? data : [] });
+      if (q === '/pulls') return one(pulls.map((x) => x.pull));
+      let m;
+      if ((m = /^\/pulls\/(\d+)\/files$/.exec(q))) return one(pulls.find((x) => x.pull.number === +m[1]).files);
+      if ((m = /^\/pulls\/(\d+)\/commits$/.exec(q))) return one(pulls.find((x) => x.pull.number === +m[1]).commits || []);
+      if ((m = /^\/issues\/(\d+)\/comments$/.exec(q))) return one(pulls.find((x) => x.pull.number === +m[1]).comments);
+      if ((m = /^\/collaborators\/([^/]+)\/permission$/.exec(q))) {
+        const r = roles[decodeURIComponent(m[1])];
+        return r ? { status: 200, data: { permission: r === 'maintain' ? 'write' : r, role_name: r } } : { status: 404, data: null };
+      }
+      if ((m = /^\/compare\/main\.\.\.([0-9a-f]{40})$/.exec(q))) return { status: 200, data: { merge_base_commit: { sha: BASE1 } } };
+      throw new Error(`unexpected GET ${p}`);
+    },
+    async getRaw(p) {
+      const u = new URL(`https://x${p}`);
+      const file = decodeURIComponent(u.pathname.slice(`${RA}/contents/`.length));
+      const t = (o.texts[u.searchParams.get('ref')] || {})[file];
+      return t === undefined ? { status: 404, text: '' } : { status: 200, text: t };
+    },
+    async post(p, body) { posted.push({ p: p.slice(RA.length), body }); return { status: 201, data: {} }; },
+    async patch(p, body) { patched.push({ p: p.slice(RA.length), body }); return { status: 200, data: {} }; },
+  };
+  const files = Object.assign({ 'data/projects.json': PROJECTS }, o.main);
+  const fs = {
+    read: async (f) => (f in files ? files[f] : null),
+    write: async (f, t) => { files[f] = t; },
+  };
+  return { api, fs, files, posted, patched };
+}
+
+const pr = (n, o) => ({
+  pull: { number: n, draft: false, state: 'open', user: { login: o.author || 'someone', id: 99 },
+    head: { ref: o.ref || `cms/someone/x-${n}`, sha: o.head || HEAD1, repo: { full_name: o.repo || REPO } } },
+  files: o.files.map((f) => ({ filename: f, status: 'modified' })),
+  commits: o.commits || [{ author: { login: o.author || 'someone' }, committer: { login: 'web-flow' } }],
+  comments: o.comments || [],
+});
+
+const greenGate = async () => ({ ok: true, finding: '' });
+
+test('engine: an owner\'s record on their project page goes live; the plan names the author; nothing else moves', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'kyle-nelson-berkeley', `hc-approved ${e.key}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE },
+  });
+  const out = await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: greenGate });
+  assert.equal(w.files[P], head);
+  assert.deepEqual(out.groups.map((g) => [g.pr, g.path, g.applied.length]), [[7, P, 1]]);
+  assert.equal(out.groups[0].author.login, 'someone');
+  assert.deepEqual(w.posted, [], 'no failure, no comment');
+  const plan = ENGINE.commitPlan(out.groups);
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].author_email, '99+someone@users.noreply.github.com');
+  assert.deepEqual(plan[0].files, [P]);
+  assert.match(plan[0].message, /^go-live: content\/projects\/learning-to-swim\.md \(1 change from #7, approved by kyle-nelson-berkeley\)/);
+});
+
+test('engine: untrusted records change nothing (not an owner, read role, the author, a committer, a fork, a draft, not cms/)', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const kp = (await C.proposalEdits(P, BASE, head, BASE))[0].key;
+  const ks = (await C.proposalEdits(SETUP, BASE, head, BASE))[0].key;
+  const w = fakeWorld({
+    pulls: [
+      pr(1, { files: [SETUP], comments: [rec(1, 'kyle-nelson-berkeley', `hc-approved ${ks}`)] }),     // not an owner of setup
+      pr(2, { files: [P], comments: [rec(2, 'mallory', `hc-approved ${kp}`)] }),                       // read role
+      pr(3, { files: [P], author: 'kyle-nelson-berkeley', comments: [rec(3, 'kyle-nelson-berkeley', `hc-approved ${kp}`)] }),
+      pr(4, { files: [P], commits: [{ author: { login: 'someone' } }, { author: { login: 'kyle-nelson-berkeley' } }],
+        comments: [rec(4, 'kyle-nelson-berkeley', `hc-approved ${kp}`)] }),                            // pushed into the PR
+      pr(5, { files: [P], repo: 'mallory/fork', comments: [rec(5, 'desert-mango-robotics', `hc-approved ${kp}`)] }),
+      { ...pr(6, { files: [P], comments: [rec(6, 'desert-mango-robotics', `hc-approved ${kp}`)] }), pull: { ...pr(6, { files: [P] }).pull, draft: true } },
+      pr(8, { files: [P], ref: 'feature/x', comments: [rec(8, 'desert-mango-robotics', `hc-approved ${kp}`)] }),
+      pr(9, { files: [P, 'data/projects.json'], comments: [rec(9, 'desert-mango-robotics', `hc-approved ${kp}`)] }), // mixed PR
+    ],
+    texts: { [BASE1]: { [P]: BASE, [SETUP]: BASE }, [HEAD1]: { [P]: head, [SETUP]: head } }, main: { [P]: BASE, [SETUP]: BASE },
+  });
+  const out = await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: greenGate });
+  assert.deepEqual(out.groups, []);
+  assert.equal(w.files[P], BASE);
+  assert.equal(w.files[SETUP], BASE);
+  assert.deepEqual(w.posted, []);
+});
+
+test('engine: a red main stops the run before anything is applied or posted', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'desert-mango-robotics', `hc-approved ${e.key}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE },
+  });
+  await assert.rejects(ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: async () => ({ ok: false, finding: 'x' }) }), /main is red/);
+  assert.equal(w.files[P], BASE);
+  assert.deepEqual(w.posted, []);
+});
+
+test('engine: a group that turns the gate red is dropped with a mention-free failure record; the others still go', async () => {
+  const P2 = 'content/projects/learning-to-swim-b.md';
+  const headA = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const headB = '# Title\n\nFirst para, broken @nathalie.\n\nSecond para.\n\nThird para.\n';
+  const kA = (await C.proposalEdits(P, BASE, headA, BASE))[0].key;
+  const kB = (await C.proposalEdits(P2, BASE, headB, BASE))[0].key;
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'desert-mango-robotics', `hc-approved ${kA}`)] }),
+      pr(8, { files: [P2], head: '2'.repeat(40), comments: [rec(2, 'desert-mango-robotics', `hc-approved ${kB}`)] })],
+    texts: { [BASE1]: { [P]: BASE, [P2]: BASE }, [HEAD1]: { [P]: headA }, ['2'.repeat(40)]: { [P2]: headB } },
+    main: { [P]: BASE, [P2]: BASE },
+  });
+  const gate = async () => (String(w.files[P2]).includes('broken') ? { ok: false, finding: 'content: @x broken `link`' } : { ok: true, finding: '' });
+  const out = await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate });
+  assert.deepEqual(out.groups.map((g) => g.pr), [7]);
+  assert.equal(w.files[P], headA);
+  assert.equal(w.files[P2], BASE, 'the red group is put back');
+  assert.deepEqual(w.posted, [{ p: '/issues/8/comments', body: { body: C.failureBody(kB, '2'.repeat(40), 'site rules: content: x broken link') } }]);
+  // the next sweep (same head) neither retries nor posts again
+  w.pulls = null;
+  const again = fakeWorld({
+    pulls: [pr(8, { files: [P2], head: '2'.repeat(40), comments: [rec(2, 'desert-mango-robotics', `hc-approved ${kB}`),
+      { id: 3, user: { login: 'github-actions[bot]', type: 'Bot' }, body: w.posted[0].body.body, created_at: 't', updated_at: 't' }] })],
+    texts: { [BASE1]: { [P2]: BASE }, ['2'.repeat(40)]: { [P2]: headB } }, main: { [P2]: BASE },
+  });
+  let gates = 0;
+  const out2 = await ENGINE.sweep({ api: again.api, repo: REPO, fs: again.fs, gate: async () => { gates += 1; return { ok: true, finding: '' }; } });
+  assert.deepEqual(out2.groups, []);
+  assert.deepEqual(again.posted, []);
+  assert.equal(gates, 0, 'nothing to apply: not even the main gate runs (no idle work)');
+});
+
+test('engine: a declined record wins over an earlier approval; dry-run writes and posts nothing', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [
+      rec(1, 'desert-mango-robotics', `hc-approved ${e.key}`, { created_at: '2026-10-15T00:00:01Z', updated_at: '2026-10-15T00:00:01Z' }),
+      rec(2, 'desert-mango-robotics', `hc-declined ${e.key}`, { created_at: '2026-10-15T00:00:02Z', updated_at: '2026-10-15T00:00:02Z' })] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE },
+  });
+  assert.deepEqual((await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: greenGate })).groups, []);
+  const w2 = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'desert-mango-robotics', `hc-approved ${e.key}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE },
+  });
+  const dry = await ENGINE.sweep({ api: w2.api, repo: REPO, fs: w2.fs, gate: greenGate, dryRun: true });
+  assert.equal(dry.groups.length, 1);
+  assert.equal(w2.files[P], BASE);
+  assert.deepEqual(w2.posted, []);
+});
+
+test('closeDone: closes a PR whose every edit is live or declined and that has a trusted record; never otherwise', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para, too.\n';
+  const [e1, e2] = await C.proposalEdits(P, BASE, head, BASE);
+  const mainNow = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';   // e1 live, e2 open
+  const mk = (comments) => fakeWorld({ pulls: [pr(7, { files: [P], comments })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: mainNow } });
+  const open = mk([rec(1, 'desert-mango-robotics', `hc-approved ${e1.key}`)]);
+  assert.deepEqual(await ENGINE.closeDone({ api: open.api, repo: REPO, fs: open.fs }), []);
+  const done = mk([rec(1, 'desert-mango-robotics', `hc-approved ${e1.key}`), rec(2, 'desert-mango-robotics', `hc-declined ${e2.key}`)]);
+  assert.deepEqual(await ENGINE.closeDone({ api: done.api, repo: REPO, fs: done.fs }), [7]);
+  assert.deepEqual(done.patched, [{ p: '/pulls/7', body: { state: 'closed' } }]);
+  assert.equal(done.posted[0].body.body, 'Everything here is live (or declined).');
+  const untrusted = mk([rec(1, 'mallory', `hc-declined ${e2.key}`)]);
+  assert.deepEqual(await ENGINE.closeDone({ api: untrusted.api, repo: REPO, fs: untrusted.fs }), []);
+});
+
+test('keys do not move when main moves: edit 1 goes live, edit 2 keeps its key (base = the merge base)', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n\nA1.\n\nA2.\n';
+  const before = await C.proposalEdits(P, BASE, head, BASE);
+  const r = await C.applyEdits(P, BASE, head, BASE, [before[1].key]);
+  const after = await C.proposalEdits(P, BASE, head, r.text);
+  assert.deepEqual(after.map((e) => e.key), before.map((e) => e.key));
+  assert.deepEqual(after.map((e) => e.state), ['open', 'live', 'open']);
+});

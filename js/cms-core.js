@@ -423,6 +423,7 @@
      may go to, relative to /repos/desert-mango/hippocampus-docs, with no
      query string. <n> is a pull request number. */
   const PULL_N = '[1-9][0-9]{0,8}';
+  const RECORD_BODY_RE = /^hc-(approved|declined)((?: [0-9a-f]{64}){1,50})$/;   // = RECORD_RE (U5)
   const WRITE_METHODS = Object.freeze([
     // U8: approve, or request changes (the review's `event` says which)
     { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/reviews$`), unit: 'U8' },
@@ -442,16 +443,19 @@
     { method: 'PATCH', path: /^\/git\/refs\/heads\/cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/, unit: 'U7b' },
     // U7b: open the proposal
     { method: 'POST', path: /^\/pulls$/, unit: 'U7b' },
+    // U5: an approval record on a proposal: the body must be exactly ONE record (recordBody's text)
+    { method: 'POST', path: new RegExp(`^/issues/${PULL_N}/comments$`), unit: 'U5',
+      body: (b) => isObj(b) && Object.keys(b).length === 1 && typeof b.body === 'string' && RECORD_BODY_RE.test(b.body) },
   ].map((w) => Object.freeze(w)));
 
   /* True only for a write WRITE_METHODS lists: the method, and a path under
      this repository whose rest matches the row exactly (assertRepoPath has
      already refused dot segments, encodings and other repositories). */
-  function isAllowedWrite(method, p) {
+  function isAllowedWrite(method, p, body) {
     if (typeof p !== 'string' || p.indexOf('?') >= 0) return false;
     if (p.indexOf(`${REPO_API_PATH}/`) !== 0) return false;
     const rest = p.slice(REPO_API_PATH.length);
-    return WRITE_METHODS.some((w) => w.method === method && w.path.test(rest));
+    return WRITE_METHODS.some((w) => w.method === method && w.path.test(rest) && (!w.body || w.body(body)));
   }
 
   function createGitHubClient(deps) {
@@ -466,7 +470,7 @@
       if (methods.indexOf(method) < 0) throw new Error(`the CMS does not send ${method}`);
       assertRepoPath(p);
       const isWrite = READ_METHODS.indexOf(method) < 0;
-      if (isWrite && !isAllowedWrite(method, p)) {
+      if (isWrite && !isAllowedWrite(method, p, (opts || {}).body)) {
         throw new Error(`the CMS does not send ${method} to ${String(p).slice(0, 80)}`);
       }
       const o = opts || {};
@@ -979,6 +983,18 @@
       default:
         throw new Error(`no such action: ${String(action).slice(0, 40)}`);
     }
+  }
+
+  /* U5: the approval-record writes for keys on proposal n, chunked to RECORD_MAX keys per record. */
+  function recordRequests(n, kind, keys) {
+    if (!Number.isInteger(n) || n < 1 || n > 999999999) throw new Error('no proposal number');
+    const k = listOf(keys);
+    const out = [];
+    for (let i = 0; i < k.length; i += RECORD_MAX) {
+      out.push({ method: 'POST', path: `${REPO_API_PATH}/issues/${n}/comments`, body: { body: recordBody(kind, k.slice(i, i + RECORD_MAX)) } });
+    }
+    if (!out.length) throw new Error('no edits to record');
+    return out;
   }
 
   const DONE_TEXT = Object.freeze({
@@ -2607,13 +2623,32 @@
         prAdds.get(anchorAt).push(d.b);
       }
     }
+    // Already live (plan-u5): the blocks main itself added after each base block, so a
+    // PR add that main already holds at that anchor is drawn as main's, never twice.
+    const mainSplit = diffSplits(Bs, M);
+    const mainAdds = new Map();
+    anchorAt = -1;
+    for (const d of mainSplit) {
+      if (d.a !== null) anchorAt = d.a;
+      if (d.status === 'add') {
+        if (!mainAdds.has(anchorAt)) mainAdds.set(anchorAt, []);
+        mainAdds.get(anchorAt).push(blockCore(M.blocks[d.b]));
+      }
+    }
     const entries = [];
     const conflicts = [];
     const main = (mi) => entries.push({ source: 'main', mainIndex: mi, pr: null, text: blockCore(M.blocks[mi]) });
-    const addsAfter = (baseIndex) => listOf(prAdds.get(baseIndex)).forEach((h) => entries.push({
-      source: 'pr-add', mainIndex: null, pr: { base: baseIndex < 0 ? null : baseIndex, head: h }, text: blockCore(H.blocks[h]) }));
+    const addsAfter = (baseIndex) => {
+      const held = listOf(mainAdds.get(baseIndex)).slice();
+      listOf(prAdds.get(baseIndex)).forEach((h) => {
+        const at = held.indexOf(blockCore(H.blocks[h]));
+        if (at >= 0) { held.splice(at, 1); return; }
+        entries.push({ source: 'pr-add', mainIndex: null, pr: { base: baseIndex < 0 ? null : baseIndex, head: h },
+          text: blockCore(H.blocks[h]) });
+      });
+    };
     addsAfter(-1);
-    for (const d of diffSplits(Bs, M)) {
+    for (const d of mainSplit) {
       if (d.status === 'add') { main(d.b); continue; }
       const p = prOf.get(d.a) || { status: 'same', b: null };
       const prHead = p.status === 'change' ? p.b : null;
@@ -2627,6 +2662,10 @@
         }
       } else if (p.status === 'same') {
         if (d.status === 'change') main(d.b);
+      } else if (d.status === 'change' && prHead !== null && blockCore(M.blocks[d.b]) === blockCore(H.blocks[prHead])) {
+        main(d.b);                                         // already live: main holds the PR's version
+      } else if (d.status === 'del' && p.status === 'del') {
+        // already live: deleted on both sides, nothing to draw, no conflict
       } else {
         const mi = d.status === 'change' ? d.b : null;
         conflicts.push({ mainIndex: mi, base: d.a, head: prHead });
@@ -2643,6 +2682,238 @@
     });
     if (text) text += '\n';
     return { text, overlay, conflicts };
+  }
+
+  // ---------------------------------------------- per-edit go-live (U5) ---
+
+  /* plan-u5: an EDIT is one entry of a page's block diff from the proposal's merge base to its head: a
+     'change' (one base block replaced), an 'add' (a new block after `anchor`, the base block before it;
+     -1 = the top) or a 'delete'. Its key is content, never an index:
+       sha256(path NUL baseBlock NUL headBlock)                       change, delete (head '')
+       sha256(path NUL '' NUL headBlock NUL anchorBlock NUL ordinal)  add (anchorBlock '' at the top;
+                                                                      ordinal = its place among the head's
+                                                                      adds after that anchor)
+     so two identical fixes on two pages stay apart, twins in one run stay apart, and a key names the same
+     edit after main moves. Texts are the raw UTF-8 file bytes (splitBlocks refuses \r). */
+  const HEX64_RE = /^[0-9a-f]{64}$/;
+  const RECORD_MAX = 50;
+  async function sha256Hex(s, subtle) {
+    const sub = subtle || (typeof crypto !== 'undefined' && crypto && crypto.subtle);  // eslint-disable-line no-undef
+    if (!sub) throw new Error('sha256: no WebCrypto here');
+    const buf = await sub.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function editKey(path, base, head, anchor, ordinal, subtle) {
+    const parts = [path, base, head];
+    if (typeof anchor === 'string') parts.push(anchor, String(ordinal));
+    return sha256Hex(parts.join('\0'), subtle);
+  }
+
+  /* -> [{key, kind, base, head, baseIndex, anchor, ordinal, state, mainAfter}] in HEAD order | null (a
+     text that does not split: the whole-proposal path). state against the CURRENT main: 'open'
+     (approvable), 'live' (main already holds it: the overlay's already-live rule), 'conflict' (main
+     changed or deleted that block since the merge base), 'anchor-gone' (an add whose anchor block main
+     deleted), 'ambiguous' (two edits share a key: never approvable one by one). For an open add,
+     mainAfter is the main block it goes after (the latest EARLIER add of its run that is live, else its
+     anchor; -1 = the top of the page). */
+  async function proposalEdits(path, baseText, headText, mainText, subtle) {
+    const Bs = splitBlocks(baseText);
+    const H = splitBlocks(headText);
+    const M = splitBlocks(mainText);
+    if (!Bs.ok || !H.ok || !M.ok) return null;
+    const toMain = new Map();                              // base index -> its diff entry vs main
+    const mainAdds = new Map();                            // base index -> [{mi, text}] main added after it
+    let at = -1;
+    for (const d of diffSplits(Bs, M)) {
+      if (d.a !== null) { toMain.set(d.a, d); at = d.a; }
+      if (d.status === 'add') {
+        if (!mainAdds.has(at)) mainAdds.set(at, []);
+        mainAdds.get(at).push({ mi: d.b, text: blockCore(M.blocks[d.b]) });
+      }
+    }
+    const anchorMain = (a) => {
+      if (a < 0) return -1;
+      const m = toMain.get(a);
+      return m && m.b !== null ? m.b : null;
+    };
+    const raw = [];
+    const runs = new Map();                                // anchor -> {ordinal, poolAt, lastLive}
+    at = -1;
+    for (const d of diffSplits(Bs, H)) {
+      if (d.status === 'same') { at = d.a; continue; }
+      if (d.status === 'add') {
+        const head = blockCore(H.blocks[d.b]);
+        if (!runs.has(at)) runs.set(at, { ordinal: 0, poolAt: 0, lastLive: null });
+        const run = runs.get(at);
+        const pool = listOf(mainAdds.get(at));
+        let k = run.poolAt;
+        while (k < pool.length && pool[k].text !== head) k += 1;
+        let state = 'open';
+        let mainAfter = null;
+        if (k < pool.length) {
+          state = 'live';
+          run.poolAt = k + 1;
+          run.lastLive = pool[k].mi;
+        } else {
+          const am = anchorMain(at);
+          if (am === null) state = 'anchor-gone';
+          else mainAfter = run.lastLive !== null ? run.lastLive : am;
+        }
+        raw.push({ kind: 'add', base: '', head, baseIndex: null, anchor: at,
+          anchorText: at < 0 ? '' : blockCore(Bs.blocks[at]), ordinal: run.ordinal, state, mainAfter });
+        run.ordinal += 1;
+        continue;
+      }
+      at = d.a;
+      const base = blockCore(Bs.blocks[d.a]);
+      const head = d.status === 'change' ? blockCore(H.blocks[d.b]) : '';
+      const m = toMain.get(d.a);
+      let state;
+      if (m.status === 'same') state = 'open';
+      else if (m.status === 'del') state = d.status === 'del' ? 'live' : 'conflict';
+      else state = d.status === 'change' && blockCore(M.blocks[m.b]) === head ? 'live' : 'conflict';
+      raw.push({ kind: d.status === 'del' ? 'delete' : 'change', base, head, baseIndex: d.a, anchor: null,
+        ordinal: null, state, mainAfter: state === 'open' ? m.b : null });
+    }
+    const out = [];
+    for (const e of raw) {
+      const key = await (e.kind === 'add' ? editKey(path, '', e.head, e.anchorText, e.ordinal, subtle)
+        : editKey(path, e.base, e.head, undefined, undefined, subtle));
+      out.push({ key, kind: e.kind, base: e.base, head: e.head, baseIndex: e.baseIndex, anchor: e.anchor,
+        ordinal: e.ordinal, state: e.state, mainAfter: e.mainAfter });
+    }
+    const count = new Map();
+    out.forEach((e) => count.set(e.key, (count.get(e.key) || 0) + 1));
+    return out.map((e) => Object.freeze(count.get(e.key) > 1 ? { ...e, state: 'ambiguous' } : e));
+  }
+
+  /* The first non-space block index after main block `mi` (where an add goes), or the end. */
+  function afterBlock(blocks, mi) {
+    let j = mi + 1;
+    while (j < blocks.length && blocks[j].kind === 'space') j += 1;
+    return j;
+  }
+
+  /* Apply one OPEN edit (its mainAfter is against mainText). -> text | null. */
+  function applyOne(mainText, e) {
+    const M = splitBlocks(mainText);
+    if (!M.ok || !Number.isInteger(e.mainAfter)) return null;
+    if (e.kind === 'add') {
+      const r = insertAt(mainText, e.mainAfter < 0 ? 0 : afterBlock(M.blocks, e.mainAfter), e.head);
+      return r ? r.text : null;
+    }
+    if (e.kind === 'delete') return deleteBlock(mainText, e.mainAfter);
+    const b = M.blocks[e.mainAfter];
+    return replaceSpan(mainText, { start: b.start, end: b.start + blockCore(b).length }, e.head).text;
+  }
+
+  /* Approved keys onto main's text, in HEAD order (never key order); after each, the edits are derived
+     again against the new main (keys are content, so each still names its edit). -> {text, applied,
+     done, refused: [{key, reason}]}: done = already live; reason 'stale' (no such edit in the head's
+     CURRENT diff: never redirected to newer content), 'conflict', 'anchor-gone', 'ambiguous', or
+     'unsplittable'. Text outside the touched blocks keeps its bytes. */
+  async function applyEdits(path, baseText, headText, mainText, keys, subtle) {
+    const want = [...new Set(listOf(keys).filter((k) => typeof k === 'string'))];
+    const first = await proposalEdits(path, baseText, headText, mainText, subtle);
+    if (!first) return { text: mainText, applied: [], done: [], refused: want.map((key) => ({ key, reason: 'unsplittable' })) };
+    const order = first.map((e) => e.key);
+    const refused = want.filter((k) => order.indexOf(k) < 0).map((key) => ({ key, reason: 'stale' }));
+    const queue = want.filter((k) => order.indexOf(k) >= 0).sort((x, y) => order.indexOf(x) - order.indexOf(y));
+    let text = mainText;
+    const applied = [];
+    const done = [];
+    for (const key of queue) {
+      const edits = await proposalEdits(path, baseText, headText, text, subtle);
+      const e = edits ? edits.find((x) => x.key === key) : null;
+      if (!e) { refused.push({ key, reason: edits ? 'stale' : 'unsplittable' }); continue; }
+      if (e.state === 'live') { done.push(key); continue; }
+      if (e.state !== 'open') { refused.push({ key, reason: e.state }); continue; }
+      const next = applyOne(text, e);
+      if (typeof next !== 'string') { refused.push({ key, reason: 'conflict' }); continue; }
+      text = next;
+      applied.push(key);
+    }
+    return { text, applied, done, refused };
+  }
+
+  /* The approval records (plan-final §7, kept): issue comments on the proposal PR whose WHOLE body is
+     `hc-approved <key> [<key> …]` or `hc-declined <key> [...]`, at most RECORD_MAX keys, lowercase hex.
+     Who made a record is the comment's API user.login, never its text. Ignored: an edited comment, one by
+     the proposal's author, anything malformed. -> {list: [{id, login (lowercase), kind, keys, at}]} in
+     comment order; `decisions` then applies the caller's trust rule. */
+  const RECORD_RE = /^hc-(approved|declined)((?: [0-9a-f]{64}){1,50})$/;
+  function recordBody(kind, keys) {
+    const k = listOf(keys);
+    if (kind !== 'approved' && kind !== 'declined') throw new Error('recordBody: approved or declined');
+    if (!k.length || k.length > RECORD_MAX || !k.every((x) => typeof x === 'string' && HEX64_RE.test(x))) {
+      throw new Error(`recordBody: 1 to ${RECORD_MAX} edit keys`);
+    }
+    return `hc-${kind} ${k.join(' ')}`;
+  }
+  function parseRecords(comments, ctx) {
+    const author = String((ctx && ctx.author) || '').toLowerCase();
+    const list = [];
+    for (const c of listOf(comments)) {
+      if (!isObj(c) || !isObj(c.user) || typeof c.user.login !== 'string' || typeof c.body !== 'string') continue;
+      if (typeof c.created_at !== 'string' || c.updated_at !== c.created_at) continue;
+      const login = c.user.login.toLowerCase();
+      if (!login || login === author) continue;
+      const m = RECORD_RE.exec(c.body);
+      if (!m) continue;
+      list.push({ id: c.id, login, kind: m[1], keys: [...new Set(m[2].trim().split(' '))], at: c.created_at });
+    }
+    return { list };
+  }
+  /* key -> {kind, login, id}: the LATEST record per key among those whose login `trusted(login)` accepts
+     (by created_at, then comment id). */
+  function decisions(list, trusted) {
+    const ok = typeof trusted === 'function' ? trusted : () => false;
+    const sorted = listOf(list).filter((r) => ok(r.login))
+      .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : (x.id || 0) - (y.id || 0)));
+    const out = new Map();
+    for (const r of sorted) for (const k of r.keys) out.set(k, { kind: r.kind, login: r.login, id: r.id });
+    return out;
+  }
+
+  /* A go-live failure, written by the go-live workflow (github-actions[bot]) for one key at one head sha:
+     `hc-go-live-failed <key> <head sha>: `<reason>``. The reason is plain words: no @ (no one is
+     mentioned), no backticks, no control characters, at most 200 characters. parseFailures trusts only
+     that bot (type Bot), unedited. -> Map key -> [{sha, reason}]. */
+  const FAILURE_RE = /^hc-go-live-failed ([0-9a-f]{64}) ([0-9a-f]{40}): `([^`@\x00-\x1f]{0,200})`$/;
+  function failureBody(key, sha, reason) {
+    if (typeof key !== 'string' || !HEX64_RE.test(key) || typeof sha !== 'string' || !/^[0-9a-f]{40}$/.test(sha)) {
+      throw new Error('failureBody: an edit key and a head sha');
+    }
+    const words = String(reason || '').replace(/[@`]/g, '').replace(/[\x00-\x1f\x7f]+/g, ' ')
+      .replace(/\s+/g, ' ').trim().slice(0, 200);
+    return `hc-go-live-failed ${key} ${sha}: \`${words}\``;
+  }
+  function parseFailures(comments) {
+    const out = new Map();
+    for (const c of listOf(comments)) {
+      if (!isObj(c) || !isObj(c.user) || c.user.login !== 'github-actions[bot]' || c.user.type !== 'Bot') continue;
+      if (typeof c.body !== 'string' || c.updated_at !== c.created_at) continue;
+      const m = FAILURE_RE.exec(c.body);
+      if (!m) continue;
+      if (!out.has(m[1])) out.set(m[1], []);
+      out.get(m[1]).push({ sha: m[2], reason: m[3] });
+    }
+    return out;
+  }
+
+  /* Who may approve ONE edit of `path` (plan-u5 r1): what GitHub's ruleset would let them approve. A
+     repository admin anywhere (the admin role bypasses the ruleset); a maintainer or write member only on
+     a page of a project they own (owners from MAIN's data/projects.json = its CODEOWNERS line); nobody on
+     their own proposal. permission: the collaborator API's role_name ('admin' | 'maintain' | 'write' |
+     'triage' | 'read'; its `permission` field reports Maintain as write). */
+  function mayApproveEdit(o) {
+    const c = o || {};
+    const login = typeof c.login === 'string' ? c.login.toLowerCase() : '';
+    const author = typeof c.author === 'string' ? c.author.toLowerCase() : '';
+    if (!login || !author || login === author) return false;
+    if (c.permission === 'admin') return true;
+    if (c.permission !== 'maintain' && c.permission !== 'write') return false;
+    return ownsAll({ login, files: [c.path], projects: c.projects });
   }
 
   // ------------------------------------------ cached fetcher + resolveRef ---
@@ -2941,7 +3212,8 @@
     createMediaClient, uploadPlan, manifestEntry, addManifestEntry, runUpload, imageMarkdown, insertText,
     PROJECT_FACTS_FILE_RE, projectFactsFile, mergeProjects,
     BLOCK_KINDS, imageParts, imageWith, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
-    blockDiff, overlayOnMain, cachedFetcher, resolveRef, viewSettings, membersOnly,
+    blockDiff, overlayOnMain, editKey, proposalEdits, applyEdits, recordBody, recordRequests, parseRecords, decisions,
+    failureBody, parseFailures, mayApproveEdit, RECORD_MAX, cachedFetcher, resolveRef, viewSettings, membersOnly,
     ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,
   });
 

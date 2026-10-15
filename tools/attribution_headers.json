@@ -1075,6 +1075,36 @@
         "purpose": "Test the derive App token minter: the signed JWT, the narrow token request, and no key on disk."
       },
       "reason": "First-party test written for the editor redesign (derive's push identity, Kyle's 2026-10-15 decision); the baseline is the file as introduced."
+    },
+    "tools/go_live.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "51ba56ae3083c75e9e3d9e9c3c98ec9c86ffe6293c64113065cca26557b2d1e8",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "15 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Put approved per-edit changes from open proposals onto main, under the site's trust rules and gate."
+      },
+      "reason": "First-party site tool written for the editor redesign (per-edit go-live, plan-u5 U5a); the baseline is the file as introduced."
+    },
+    "tools/tests/test_go_live.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "14fe4c2d8ea110904845c1b96cacf6488d308bcbc6be6818685dd580f5119e43",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "15 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test per-edit go-live: edit keys, the already-live rule, applying edits to main, and approval records."
+      },
+      "reason": "First-party test written for the editor redesign (per-edit go-live, plan-u5 U5a); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

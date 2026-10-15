@@ -480,6 +480,99 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("set -euo pipefail", d)
 
 
+class TestGoLiveWorkflow(unittest.TestCase):
+    """go-live.yml (plan-u5 U5a): shape rules, plain text (no YAML parser in the stdlib)."""
+
+    def setUp(self):
+        self.g = (REPO / ".github/workflows/go-live.yml").read_text()
+        self.derive = (REPO / ".github/workflows/derive.yml").read_text()
+
+    def test_events_and_the_job_condition(self):
+        g = self.g
+        self.assertIn("  issue_comment:\n    types: [created]\n", g)
+        self.assertIn("  schedule:\n    - cron: '*/30 * * * *'\n", g)
+        self.assertIn("  workflow_dispatch:\n", g)
+        cond = g[g.index("    if: >-"):g.index("    runs-on:")]
+        # schedule and workflow_dispatch always run; a comment only when it is a record on a PR by
+        # someone with access
+        self.assertIn("github.event_name != 'issue_comment' ||", cond)
+        self.assertIn("github.event.issue.pull_request", cond)
+        self.assertIn("""contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)""", cond)
+        self.assertIn("startsWith(github.event.comment.body, 'hc-approved ')", cond)
+        self.assertIn("startsWith(github.event.comment.body, 'hc-declined ')", cond)
+        self.assertIn("concurrency: go-live-main", g)
+
+    def test_no_event_text_inside_run(self):
+        # values reach a script only through env: (never ${{ }} spliced into the shell text)
+        for text in (self.g, self.derive):
+            lines = text.splitlines()
+            blocks = 0
+            for i, line in enumerate(lines):
+                m = re.match(r"^(\s+)run: ?(.*)$", line)
+                if not m:
+                    continue
+                blocks += 1
+                self.assertNotIn("${{", m.group(2), line)
+                if m.group(2).strip() not in ("|", "|-", ">", ">-"):
+                    continue
+                for body in lines[i + 1:]:
+                    if body.strip() and len(body) - len(body.lstrip()) <= len(m.group(1)):
+                        break
+                    self.assertNotIn("${{", body, body)
+            self.assertGreaterEqual(blocks, 1)
+
+    def test_main_only_no_pr_code(self):
+        g = self.g
+        self.assertIn("          ref: main\n", g)
+        self.assertIn("persist-credentials: false", g)
+        self.assertNotIn("pull_request_target", g)
+        self.assertNotIn("head.sha }}", g)
+        self.assertNotIn("head_ref", g)
+
+    def test_permissions_explicit_and_narrow(self):
+        g = self.g
+        top = g[g.index("\npermissions:"):g.index("\njobs:")]
+        self.assertEqual(top.strip(), "permissions:\n  contents: read")
+        perms = g[g.index("    permissions:"):g.index("    steps:")]
+        lines = sorted(l.split("#")[0].strip() for l in perms.splitlines()[1:] if l.strip())
+        self.assertEqual(lines, ["actions: write", "contents: read", "issues: write", "pull-requests: write"])
+        self.assertIn("    environment: derive\n", g)
+
+    def test_the_key_only_in_the_push_step_and_unset_after_minting(self):
+        g = self.g
+        self.assertEqual(sorted(set(re.findall(r"secrets\.([A-Z_]+)", g))), ["DERIVE_APP_PRIVATE_KEY"])
+        steps = g.split("      - name: ")
+        with_key = [s for s in steps if "DERIVE_APP_PRIVATE_KEY: ${{" in s]
+        self.assertEqual(len(with_key), 1)
+        push = with_key[0]
+        self.assertTrue(push.startswith("Commit and push as the derive App"))
+        mint = push.index("creds=$(python3 tools/github_app_token.py)")
+        self.assertLess(mint, push.index("unset DERIVE_APP_PRIVATE_KEY", mint))
+        self.assertLess(push.index("unset DERIVE_APP_PRIVATE_KEY", mint), push.index("node tools/go_live.mjs --commit"))
+        self.assertIn('echo "::add-mask::$APP_TOKEN"', push)
+        self.assertIn("python3 tools/github_app_token.py --revoke", push)
+        sweep = [s for s in steps if "node tools/go_live.mjs --plan" in s]
+        self.assertEqual(len(sweep), 1)
+        self.assertNotIn("DERIVE_APP", sweep[0])
+
+    def test_pushes_are_plain_fast_forwards(self):
+        for text in (self.g, self.derive):
+            pushes = [l.strip() for l in text.splitlines() if "git push" in l and not l.strip().startswith("#")]
+            self.assertTrue(pushes)
+            for l in pushes:
+                self.assertTrue(l.endswith("git push origin HEAD:main 2>&1); then"), l)
+                for bad in ("--force", "-f ", "+HEAD", "--delete", ":refs", "--mirror"):
+                    self.assertNotIn(bad, l)
+
+    def test_check_before_push_and_bounded_restart(self):
+        g = self.g
+        push = g[g.index("Commit and push as the derive App"):]
+        self.assertLess(push.index("python3 tools/check.py"), push.index("git push origin HEAD:main"))
+        self.assertIn('if [ "$ATTEMPT" -ge 3 ]; then', push)
+        self.assertIn('gh workflow run go-live.yml --ref main -f attempt="$((ATTEMPT + 1))"', push)
+        self.assertIn("node tools/go_live.mjs --close-done", g)
+
+
 class TestHygiene(unittest.TestCase):
     def test_stdlib_only(self):
         src = (REPO / "tools/derive.py").read_text()
