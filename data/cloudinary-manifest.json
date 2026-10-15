@@ -448,6 +448,14 @@
       "url": "https://res.cloudinary.com/dr76gues0/image/upload/v1790120327/hippocampus-docs/projects/ul_localization_loop.png",
       "bytes": 69906,
       "sha256": "460e0cc76c663ab96247c27c45ef65f675c4020fbcab3182369e58ea7894a6fe"
+    },
+    {
+      "source": "assets/people/kyle-nelson.jpg",
+      "folder": "hippocampus-docs/people",
+      "public_id": "hippocampus-docs/people/kyle-nelson",
+      "url": "https://res.cloudinary.com/dr76gues0/image/upload/v1792071495/hippocampus-docs/people/kyle-nelson.jpg",
+      "bytes": 27398,
+      "sha256": "920ca141aa9139d8cd694768e45dbdb685fe0408526853c59058455493879fed"
     }
   ]
 }

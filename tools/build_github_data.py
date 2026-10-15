@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 29 September 2026
+# Last substantive modification: 15 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Project public GitHub org activity, repo cards, page authorship and people into privacy-filtered site data.
 """Build the GitHub layer under data/graph/ — the four public files and avatars.
@@ -27,7 +27,10 @@ before it writes anything):
                                  for project/tool/about pages), the conversion,
                                  and this repository's pull requests
   data/graph/people-public.json  per login: login, display name, a committed
-                                 avatar path, profile link, roster name; the
+                                 avatar path, profile link, roster name and,
+                                 for a roster-linked login only, last_active
+                                 (the newest day of a commit, PR or review in
+                                 the lab's repositories; round 2, R4); the
                                  logins of contributors.json (via a project
                                  with a non-fork org repo) and page-authors
   data/graph/avatars/<login>.<png|jpg>  64-px copies (PNG/JPEG by magic
@@ -43,6 +46,8 @@ Reads (plan D-K; typically under 100 calls, under 250 worst case):
                                           (a cut names the repo in "truncated",
                                           so a count is never silently short)
   users/<login>                           display name and avatar id only
+  orgs/<org>/events, repos/<this>/events  public work events (push, PR, review),
+                                          up to 3 pages each: last_active only
   repos/<org>/docs/commits?path=…         the old docs history of a setup page:
                                           the current path, then the pre-move
                                           path (and the pre-restructure one)
@@ -116,6 +121,11 @@ HEATMAP_WEEKS = 53
 RECENT_COMMITS = 25
 ACTIVE_REPOS = 8
 RECENT_RELEASES = 10
+# round 2 (R4): the public events counted as work for the Team page's last_active — a push (commits), a pull
+# request, a review or a review comment. GitHub keeps 90 days of public events, at most 300 (3 pages of 100).
+WORK_EVENTS = frozenset({"PushEvent", "PullRequestEvent", "PullRequestReviewEvent",
+                         "PullRequestReviewCommentEvent"})
+EVENT_PAGES = 3
 
 # The old docs repository moved every page under contents/ on 2025-03-10
 # ("moving all contents to seperate folder", dc94dad). The same day, a
@@ -135,8 +145,10 @@ PAGE_NOTE = ("who wrote each page: names only, no counts and no dates; "
              "2025-03-10 folder move; 'blob' is the cache key of pages whose "
              "history lives in this repository")
 PEOPLE_NOTE = ("public GitHub data only: login, the display name GitHub "
-               "publishes, a 64-px avatar copy, the profile link and the "
-               "People-roster name it matches (tools/github_names.py)")
+               "publishes, a 64-px avatar copy, the profile link, the "
+               "People-roster name it matches (tools/github_names.py) and, for a "
+               "roster-linked login only, the day of its latest public commit, PR "
+               "or review in the lab's repositories (the Team page's 30-day rule)")
 REPO_NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,100}")
 
 
@@ -461,6 +473,7 @@ class Build:
         self.window_start = today - dt.timedelta(days=WINDOW_DAYS)
         self.since = f"{self.window_start.isoformat()}T00:00:00Z"
         self.bots = set()
+        self.active = {}            # login -> newest day of work seen (commits here, events below)
 
     def load(self, rel, default=None):
         p = self.root / rel
@@ -520,6 +533,8 @@ class Build:
                     continue
                 f["repo"] = name
                 flat.append(f)
+                if f["login"]:
+                    self.note_active(f["login"], day)
                 per_repo[name] += 1
             releases, cut = paged(self.api, f"repos/{ORG}/{name}/releases",
                                   {"per_page": PER_PAGE})
@@ -593,6 +608,29 @@ class Build:
         repos_doc = {"generated": GENERATED, "read_at": self.read_at, "org": ORG,
                      "repos": cards}
         return doc, repos_doc
+
+    # ---- who worked lately (round 2, R4) --------------------------------
+    def note_active(self, login, day):
+        if isinstance(login, str) and rules.DAY_RE.fullmatch(day or "") and day <= self.read_at:
+            if day > self.active.get(login, ""):
+                self.active[login] = day
+
+    def events(self):
+        """Public work events in the org and in this repository (the lab's docs site) -> self.active."""
+        for where in (f"orgs/{ORG}/events", f"repos/{THIS_REPO}/events"):
+            rows, cut = paged(self.api, where, {"per_page": PER_PAGE}, max_pages=EVENT_PAGES)
+            if cut:
+                # GitHub serves at most 300 public events (90 days); older work there is unreadable, so a
+                # person whose only work is older shows by commits alone (or a pin). Said, never silent.
+                self.log.warn(f"{where}: more than {EVENT_PAGES} pages of events — the oldest were not read")
+            for e in rows:
+                if not isinstance(e, dict) or e.get("type") not in WORK_EVENTS:
+                    continue
+                actor = e.get("actor") if isinstance(e.get("actor"), dict) else {}
+                login = actor.get("login")
+                if actor.get("type") == "Bot" or is_bot_login(login):
+                    continue
+                self.note_active(login, str(e.get("created_at") or "")[:10])
 
     # ---- page authorship -------------------------------------------------
     def history(self, repo, path, until=None):
@@ -726,8 +764,16 @@ class Build:
                 logins.add(page["converted"]["by"])
             for e in page["edited_here"]:
                 logins.add(e["by"])
+        # round 2 (R4): a login an admin named in data/github-links.json "links" (to a roster name) joins,
+        # so a new member can be linked and dated; nobody else is added from the activity reads
+        for login, name in (self.links.get("links") or {}).items():
+            if isinstance(name, str) and isinstance(login, str):
+                logins.add(login)
+        # ... and anyone who worked lately is a CANDIDATE: read, kept only when the name match links them to a
+        # roster name (a stranger's profile is read and dropped, never published)
+        candidates = {login for login in self.active if login not in logins}
         profiles = {}
-        for login in sorted(logins):
+        for login in sorted(logins | candidates):
             if login in self.excluded or is_bot_login(login):
                 continue
             if not rules.LOGIN_RE.fullmatch(login):
@@ -751,12 +797,16 @@ class Build:
             self.links)
         for w in warnings:
             self.log.warn(w)
+        for login in candidates:
+            if not linked.get(login):
+                profiles.pop(login, None)
         people, avatars = {}, {}
         for login, prof in profiles.items():
             avatar = self.avatar(login, prof["id"], avatars)
+            roster = linked.get(login)
             people[login] = project_person(login, clean(
                 prof["name"] or login, f"users/{login} name", self.log) or login,
-                avatar, linked.get(login))
+                avatar, roster, self.active.get(login) if roster else None)
         return people, avatars
 
     def avatar(self, login, uid, staged):
@@ -800,6 +850,7 @@ class Build:
         tools = self.load("data/tools.json")
         repos = self.repo_rows = self.repositories()
         activity, repo_doc = self.activity(repos)
+        self.events()
         pages = self.page_authors(enumerate_pages(setup, projects, tools))
         people, avatars = self.people(pages)
         gone = self.bots | self.excluded
@@ -822,10 +873,11 @@ class Build:
         return docs, avatars
 
 
-def project_person(login, name, avatar, roster):
-    """The public person: exactly five fields (section 11)."""
+def project_person(login, name, avatar, roster, last_active=None):
+    """The public person: exactly six fields (section 11); last_active only with a roster name."""
     return {"login": login, "name": name, "avatar": avatar,
-            "html_url": f"https://github.com/{login}", "roster": roster}
+            "html_url": f"https://github.com/{login}", "roster": roster,
+            "last_active": last_active if roster else None}
 
 
 def verify(docs, avatars):

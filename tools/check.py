@@ -33,7 +33,8 @@ Validates, failing loudly with actionable messages:
   6b. hygiene: no credentials, key material or personal emails in content/**.md,
      data/**/*.json (the graph shards included) or .mcp.json;
   6c. people: data/people.json (when present) carries exactly name/title/photo/
-     link per person, every photo resolves to a manifest entry, every link is an
+     link per person (plus the optional booleans pinned and highlight), every
+     photo resolves to a manifest entry, every link is an
      http(s) URL;
   6d. content safety: no script-capable tag, on*= attribute, srcdoc or
      javascript:/vbscript:/data:text/html link in content/**.md or in any
@@ -350,7 +351,7 @@ READER_REQUIRED_KEYS = {
     "data/graph/people-public.json": {
         "keys": ("people",),
         "values": {"people": {"keys": ("login", "name", "avatar", "html_url",
-                                       "roster")}},
+                                       "roster", "last_active")}},
     },
 }
 # Registries with an entry above that may be absent (checked when present).
@@ -1829,10 +1830,17 @@ def main():
                             f"{type(p).__name__}")
                         continue
                     who = f"data/people.json: {p.get('name') or '<unnamed>'}"
-                    extra = sorted(set(p) - {"name", "title", "photo", "link"})
+                    # round 2 (R4, Kyle 2026-10-15): two optional flags an admin sets — pinned (stays on
+                    # the Team page's current team without recent GitHub work) and highlight (the title
+                    # in the site's accent). Booleans only: the string "false" would be truthy in js/app.js.
+                    extra = sorted(set(p) - {"name", "title", "photo", "link", "pinned", "highlight"})
                     if extra:
                         err(f"{who}: unknown field(s) {extra} — a person is exactly "
-                            f"name/title/photo/link (typo?)")
+                            f"name/title/photo/link, plus optional pinned/highlight (typo?)")
+                    for flag in ("pinned", "highlight"):
+                        if flag in p and not isinstance(p[flag], bool):
+                            err(f"{who}: '{flag}' must be true or false (no quotes), "
+                                f"got {p[flag]!r}")
                     for key in ("name", "title", "photo", "link"):
                         if key not in p:
                             err(f"{who}: missing '{key}'")

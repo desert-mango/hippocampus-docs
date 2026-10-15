@@ -2,154 +2,175 @@
  "generated": "run tools/build_github_data.py to regenerate",
  "read_at": "2026-10-15",
  "org": "HippoCampusRobotics",
- "note": "public GitHub data only: login, the display name GitHub publishes, a 64-px avatar copy, the profile link and the People-roster name it matches (tools/github_names.py)",
+ "note": "public GitHub data only: login, the display name GitHub publishes, a 64-px avatar copy, the profile link, the People-roster name it matches (tools/github_names.py) and, for a roster-linked login only, the day of its latest public commit, PR or review in the lab's repositories (the Team page's 30-day rule)",
  "people": {
   "DanielDuecker": {
    "login": "DanielDuecker",
    "name": "Daniel Duecker",
    "avatar": "data/graph/avatars/DanielDuecker.jpg",
    "html_url": "https://github.com/DanielDuecker",
-   "roster": "Daniel-André Dücker"
+   "roster": "Daniel-André Dücker",
+   "last_active": null
   },
   "EugenSol": {
    "login": "EugenSol",
    "name": "EugenSol",
    "avatar": "data/graph/avatars/EugenSol.png",
    "html_url": "https://github.com/EugenSol",
-   "roster": "Eugen Solowjow"
+   "roster": "Eugen Solowjow",
+   "last_active": null
   },
   "FinnBreu": {
    "login": "FinnBreu",
    "name": "Finn Breuer",
    "avatar": "data/graph/avatars/FinnBreu.jpg",
    "html_url": "https://github.com/FinnBreu",
-   "roster": "Finn Breuer"
+   "roster": "Finn Breuer",
+   "last_active": "2026-09-25"
   },
   "JohTobi": {
    "login": "JohTobi",
    "name": "JohTobi",
    "avatar": "data/graph/avatars/JohTobi.jpg",
    "html_url": "https://github.com/JohTobi",
-   "roster": "Tobias Johannink"
+   "roster": "Tobias Johannink",
+   "last_active": null
   },
   "Latfoo": {
    "login": "Latfoo",
    "name": "Bennett Latosinszky",
    "avatar": "data/graph/avatars/Latfoo.png",
    "html_url": "https://github.com/Latfoo",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "LorenzMeier": {
    "login": "LorenzMeier",
    "name": "Lorenz Meier",
    "avatar": "data/graph/avatars/LorenzMeier.png",
    "html_url": "https://github.com/LorenzMeier",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "NBauschmann": {
    "login": "NBauschmann",
    "name": "Nathalie Bauschmann",
    "avatar": "data/graph/avatars/NBauschmann.jpg",
    "html_url": "https://github.com/NBauschmann",
-   "roster": "Nathalie Bauschmann"
+   "roster": "Nathalie Bauschmann",
+   "last_active": "2026-09-17"
   },
   "RHochdahl": {
    "login": "RHochdahl",
    "name": "RHochdahl",
    "avatar": "data/graph/avatars/RHochdahl.png",
    "html_url": "https://github.com/RHochdahl",
-   "roster": "René Hochdahl"
+   "roster": "René Hochdahl",
+   "last_active": null
   },
   "Scot3004": {
    "login": "Scot3004",
    "name": "Sergio C. Orozco Torres",
    "avatar": "data/graph/avatars/Scot3004.png",
    "html_url": "https://github.com/Scot3004",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "VincentTUHH": {
    "login": "VincentTUHH",
    "name": "Vincent Lenz",
    "avatar": "data/graph/avatars/VincentTUHH.jpg",
    "html_url": "https://github.com/VincentTUHH",
-   "roster": "Vincent Lenz"
+   "roster": "Vincent Lenz",
+   "last_active": "2026-02-13"
   },
   "ZenHarbinger": {
    "login": "ZenHarbinger",
    "name": "Matthew Aguirre",
    "avatar": "data/graph/avatars/ZenHarbinger.png",
    "html_url": "https://github.com/ZenHarbinger",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "desert-mango-robotics": {
    "login": "desert-mango-robotics",
    "name": "Desert Mango",
    "avatar": "data/graph/avatars/desert-mango-robotics.png",
    "html_url": "https://github.com/desert-mango-robotics",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "josina1234": {
    "login": "josina1234",
    "name": "Josina Gerdes",
    "avatar": "data/graph/avatars/josina1234.png",
    "html_url": "https://github.com/josina1234",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "kyle-nelson-berkeley": {
    "login": "kyle-nelson-berkeley",
    "name": "Kyle Nelson",
    "avatar": "data/graph/avatars/kyle-nelson-berkeley.jpg",
    "html_url": "https://github.com/kyle-nelson-berkeley",
-   "roster": "Kyle Nelson"
+   "roster": "Kyle Nelson",
+   "last_active": "2026-10-15"
   },
   "lennartalff": {
    "login": "lennartalff",
    "name": "Thies Lennart Alff",
    "avatar": "data/graph/avatars/lennartalff.jpg",
    "html_url": "https://github.com/lennartalff",
-   "roster": "Thies Lennart Alff"
+   "roster": "Thies Lennart Alff",
+   "last_active": null
   },
   "maxheld83": {
    "login": "maxheld83",
    "name": "Max Held",
    "avatar": "data/graph/avatars/maxheld83.jpg",
    "html_url": "https://github.com/maxheld83",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "mmistakes": {
    "login": "mmistakes",
    "name": "Michael Rose",
    "avatar": "data/graph/avatars/mmistakes.jpg",
    "html_url": "https://github.com/mmistakes",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "thoemmi": {
    "login": "thoemmi",
    "name": "Thomas Freudenberg",
    "avatar": "data/graph/avatars/thoemmi.png",
    "html_url": "https://github.com/thoemmi",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "timzarhansen": {
    "login": "timzarhansen",
    "name": "Tim",
    "avatar": "data/graph/avatars/timzarhansen.png",
    "html_url": "https://github.com/timzarhansen",
-   "roster": "Tim Hansen"
+   "roster": "Tim Hansen",
+   "last_active": null
   },
   "tobie": {
    "login": "tobie",
    "name": "Tobie Langel",
    "avatar": "data/graph/avatars/tobie.jpg",
    "html_url": "https://github.com/tobie",
-   "roster": null
+   "roster": null,
+   "last_active": null
   },
   "yihangho": {
    "login": "yihangho",
    "name": "Yihang Ho",
    "avatar": "data/graph/avatars/yihangho.jpg",
    "html_url": "https://github.com/yihangho",
-   "roster": null
+   "roster": null,
+   "last_active": null
   }
  }
 }

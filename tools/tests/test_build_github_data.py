@@ -183,6 +183,9 @@ def standard_fixture(dirpath):
            [{"filename": "js/app.js", "status": "modified"},
             {"filename": "content/projects/p1.md", "status": "renamed",
              "previous_filename": "content/projects/old.md"}])
+    # round 2 (R4): the activity reads (90 days of public events), empty unless a test says otherwise
+    fx.add("/orgs/HippoCampusRobotics/events", {"per_page": "100"}, [])
+    fx.add(f"{THIS}/events", {"per_page": "100"}, [])
     users = {}
     for login in ("NBauschmann", "lennartalff", "DanielDuecker", "FinnBreu",
                   "RHochdahl", "timzarhansen"):
@@ -191,6 +194,12 @@ def standard_fixture(dirpath):
     users["kyle-nelson-berkeley"] = me
     users["josina1234"] = {**copy.deepcopy(users["FinnBreu"]), "login": "josina1234",
                            "name": "Josina Gerdes", "id": 424242}
+    # round 2 (R4): every commit author in the window is a candidate the builder reads (kept only when
+    # the name match links them); a plain profile for each one the captures do not already answer
+    for c in docs_commits + common:
+        who = (c.get("author") or {}).get("login") if isinstance(c.get("author"), dict) else None
+        if who and who not in users and not who.endswith("[bot]"):
+            users[who] = {"login": who, "name": who, "id": 900000 + len(users), "type": "User"}
     for login, payload in users.items():
         fx.add(f"/users/{login}", {}, payload)
         fx.avatar(payload["id"], PNG)
@@ -352,14 +361,15 @@ class Shapes(BuildCase):
         self.assertEqual(sorted(people), sorted([
             "DanielDuecker", "timzarhansen", "RHochdahl",            # contributors
             "NBauschmann", "lennartalff", "josina1234",              # page history
-            "kyle-nelson-berkeley"]))                                # conversion + PRs
+            "kyle-nelson-berkeley",                                  # conversion + PRs
+            "FinnBreu"]))                                            # recent commits, matched by name (R4)
         self.assertNotIn("hippocampusmum", people)                   # excluded
         roster = {k: v["roster"] for k, v in people.items()}
         self.assertEqual(roster, {
             "DanielDuecker": "Daniel-André Dücker", "timzarhansen": "Tim Hansen",
             "RHochdahl": "René Hochdahl", "NBauschmann": "Nathalie Bauschmann",
             "lennartalff": "Thies Lennart Alff", "josina1234": None,
-            "kyle-nelson-berkeley": "Kyle Nelson"})
+            "kyle-nelson-berkeley": "Kyle Nelson", "FinnBreu": "Finn Breuer"})
         for login, p in people.items():
             self.assertEqual(set(p), rules.PERSON_KEYS)
             self.assertEqual(p["html_url"], f"https://github.com/{login}")
@@ -414,6 +424,97 @@ class Shapes(BuildCase):
         for row in entry["contributors"]:
             self.assertEqual(bool(row.get("roster")),
                              people[row["login"]]["roster"] is not None, row["login"])
+
+
+class Activity(BuildCase):
+    """Round 2 (R4, Kyle 2026-10-15): last_active per roster-linked login, for the Team page's 30-day rule."""
+
+    def event(self, kind, login, day, bot=False):
+        return {"type": kind, "actor": {"login": login, "type": "Bot" if bot else "User"},
+                "created_at": f"{day}T10:00:00Z", "repo": {"name": "x/y"}, "payload": {}}
+
+    def with_events(self, org, this):
+        self.fx.drop("/orgs/HippoCampusRobotics/events")
+        self.fx.drop(f"{THIS}/events")
+        self.fx.add("/orgs/HippoCampusRobotics/events", {"per_page": "100"}, org)
+        self.fx.add(f"{THIS}/events", {"per_page": "100"}, this)
+
+    def test_last_active_is_the_newest_commit_pr_or_review_and_only_for_linked_logins(self):
+        links = json.loads((self.site / "data/github-links.json").read_text(encoding="utf-8"))
+        links["links"]["FinnBreu"] = "Finn Breuer"                      # an admin named him
+        (self.site / "data/github-links.json").write_text(json.dumps(links), encoding="utf-8")
+        self.with_events(
+            [self.event("PullRequestEvent", "NBauschmann", "2026-09-28"),
+             self.event("WatchEvent", "lennartalff", "2026-09-28"),        # a star is not work
+             self.event("PushEvent", "josina1234", "2026-09-27"),          # unlinked: never dated
+             self.event("PullRequestReviewEvent", "dependabot[bot]", "2026-09-27", bot=True),
+             self.event("PullRequestEvent", "drive-by", "2026-09-26")],    # a stranger: not added
+            [self.event("PullRequestReviewEvent", "FinnBreu", "2026-09-25"),
+             self.event("PullRequestEvent", "kyle-nelson-berkeley", "2026-09-27"),
+             self.event("PullRequestReviewCommentEvent", "kyle-nelson-berkeley", "2026-09-20")])
+        self.fx.add("/users/drive-by", {}, {"login": "drive-by", "name": "Some Stranger", "id": 778, "type": "User"})
+        self.ok()
+        people = self.out("people-public")["people"]
+        self.assertEqual(people["NBauschmann"]["last_active"], "2026-09-28")
+        self.assertEqual(people["kyle-nelson-berkeley"]["last_active"], "2026-09-27")
+        self.assertEqual(people["FinnBreu"]["last_active"], "2026-09-25", "added because the map names him")
+        self.assertEqual(people["FinnBreu"]["roster"], "Finn Breuer")
+        self.assertIsNone(people["josina1234"]["last_active"], "no roster name: no date")
+        self.assertNotEqual(people["lennartalff"]["last_active"], "2026-09-28", "a WatchEvent counts for nothing")
+        self.assertNotIn("drive-by", people)
+        self.assertNotIn("dependabot[bot]", people)
+        for login, p in people.items():
+            self.assertEqual(set(p), rules.PERSON_KEYS)
+            if p["roster"] is None:
+                self.assertIsNone(p["last_active"], login)
+
+    def test_a_recent_worker_matched_by_name_joins_but_a_stranger_does_not(self):
+        self.with_events([self.event("PullRequestReviewEvent", "VincentTUHH", "2026-09-26"),
+                          self.event("PullRequestEvent", "drive-by", "2026-09-26")], [])
+        self.fx.drop("/users/VincentTUHH")
+        self.fx.add("/users/VincentTUHH", {}, {"login": "VincentTUHH", "name": "Vincent Lenz", "id": 777, "type": "User"})
+        self.fx.add("/users/drive-by", {}, {"login": "drive-by", "name": "Some Stranger", "id": 778, "type": "User"})
+        self.fx.avatar(777, PNG)
+        self.fx.avatar(778, PNG)
+        self.ok()
+        people = self.out("people-public")["people"]
+        self.assertEqual(people["VincentTUHH"]["roster"], "Vincent Lenz")
+        self.assertEqual(people["VincentTUHH"]["last_active"], "2026-09-26")
+        self.assertNotIn("drive-by", people, "read, not matched, not published")
+        self.assertFalse((self.site / "data/graph/avatars/drive-by.png").exists())
+
+    def test_a_cut_event_list_is_said_in_the_log(self):
+        self.fx.drop("/orgs/HippoCampusRobotics/events")
+        self.fx.drop(f"{THIS}/events")
+        nxt = "https://api.github.com/organizations/1/events?per_page=100&page={}"
+        for page in (1, 2, 3):
+            q = {"per_page": "100"} if page == 1 else {"per_page": "100", "page": str(page)}
+            path = "/orgs/HippoCampusRobotics/events" if page == 1 else "/organizations/1/events"
+            self.fx.add(path, q, [self.event("PushEvent", "NBauschmann", "2026-09-2" + str(page))], link=f'<{nxt.format(page + 1)}>; rel="next"')
+        self.fx.add(f"{THIS}/events", {"per_page": "100"}, [])
+        log = self.ok()
+        self.assertIn("the oldest were not read", log)
+        self.assertEqual(self.out("people-public")["people"]["NBauschmann"]["last_active"], "2026-09-23")
+
+    def test_a_commit_in_the_org_counts(self):
+        self.with_events([], [])
+        self.ok()
+        people = self.out("people-public")["people"]
+        dated = {k: v["last_active"] for k, v in people.items() if v["last_active"]}
+        self.assertTrue(dated, "org commits by linked logins give a date")
+        for day in dated.values():
+            self.assertRegex(day, r"^\d{4}-\d{2}-\d{2}$")
+            self.assertLessEqual(day, TODAY)
+
+    def test_the_gate_refuses_a_bad_last_active(self):
+        self.with_events([], [])
+        self.ok()
+        doc = self.out("people-public")
+        login = next(iter(doc["people"]))
+        for bad in ("yesterday", 20260901, "2026-9-1"):
+            doc["people"][login]["last_active"] = bad
+            rep = rules.check_github_layer({"people-public": doc}, lambda rel: (self.site / rel).read_bytes())
+            self.assertTrue(any("last_active" in r for r in rep), (bad, rep))
 
 
 class Hostile(BuildCase):
@@ -572,8 +673,8 @@ class Hostile(BuildCase):
         before = self.outputs_bytes()
         original = bgd.project_person
 
-        def leaky(login, name, avatar, roster):
-            row = original(login, name, avatar, roster)
+        def leaky(login, name, avatar, roster, last_active=None):
+            row = original(login, name, avatar, roster, last_active)
             row["email"] = None                  # a copied profile key
             return row
         bgd.project_person = leaky

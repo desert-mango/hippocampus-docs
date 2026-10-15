@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 29 September 2026
+# Last substantive modification: 15 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Hold the one copy of the text-safety patterns and the GitHub-layer rules the gate and builder share.
 """Rules shared by tools/check.py and tools/build_github_data.py (plan D-B2).
@@ -173,7 +173,11 @@ AUTHOR_KEYS = {"login", "name"}
 CONVERTED_KEYS = {"date", "by", "tool", "commit"}
 EDIT_KEYS = {"pr", "by", "state"}
 EDIT_STATES = ("open", "merged", "closed")
-PERSON_KEYS = {"login", "name", "avatar", "html_url", "roster"}
+# last_active (round 2, R4, Kyle 2026-10-15): the newest day of a commit, PR or review in the lab's repositories,
+# or null. Written ONLY for a login linked to a roster name (the Team page's 30-day rule); never drawn. A
+# deliberate change to plan D-B's "no per-person dates": day precision, roster-linked logins only.
+PERSON_KEYS = {"login", "name", "avatar", "html_url", "roster", "last_active"}
+DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 FREE_TEXT_KEYS = ("name", "msg", "description")
 
 # The whole shape, leaf by leaf: a dict names an object's keys, a one-item list
@@ -448,6 +452,11 @@ def _check_people_public(doc, rep, read_avatar):
         roster = p.get("roster")
         if not (roster is None or isinstance(roster, str)):
             rep.add(f"{label}.roster must be a roster name or null")
+        last = p.get("last_active")
+        if not (last is None or (isinstance(last, str) and DAY_RE.fullmatch(last))):
+            rep.add(f"{label}.last_active must be null or a day YYYY-MM-DD, got {last!r}")
+        elif last is not None and roster is None:
+            rep.add(f"{label}.last_active is only written for a login linked to a roster name")
         avatar = p.get("avatar")
         if avatar is None:
             continue

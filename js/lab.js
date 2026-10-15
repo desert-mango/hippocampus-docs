@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this.
 /* HippoCampus Robotics docs — the public GitHub layer.
@@ -21,7 +21,9 @@
      copies under data/graph/avatars/ — never avatars.githubusercontent.com.
    - Every GitHub-derived string (display names, commit messages, descriptions) is
      set with textContent. This file never writes innerHTML, not even for the SVG.
-   - Nothing members-only is drawn: no per-person counts or dates, no "last active".
+   - Nothing members-only is drawn: no per-person counts or dates, no "last active". (Round 2, R4: the
+     public layer now carries last_active for roster-linked logins; splitTeam reads it ONLY to sort the Team
+     page into the current team and alumni — it is never drawn.)
    - Roster linkage is by login through people-public.json (login -> roster name),
      the same rule js/graph.js uses for Primary contributors.
    - A missing file degrades: the Lab page says "GitHub data not built yet"; the
@@ -309,6 +311,51 @@
     return authorParts(entry, idx).map((line) => line.map(tokenText).join(''));
   }
   function authorLine(entry, idx) { return authorLines(entry, idx).join(' '); }
+
+  /* Round 2 (R4, Kyle 2026-10-15): who is on the current team. A roster person linked to a GitHub login
+     (people-public.json `roster` == name) is current when pinned (an admin's `pinned: true`) or when one of
+     their logins did a commit, PR or review in the lab's repositories in the last ACTIVE_DAYS days (`last_active`,
+     a day, compared with today); else an alumnus. A person with no linked login stays in the group an admin put
+     them in. Order: the team = the 'active' group's current people, then the promoted; the alumni = the demoted,
+     then the rest. No GitHub layer: everyone stays where they are.
+     -> {team: [entry], alumni: [entry]}, entry = {person, from: group id, linked, active, pinned, last} */
+  const ACTIVE_DAYS = 30;
+  function dayNumber(v) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str(v));
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : null;
+  }
+  function splitTeam(roster, peoplePublic, today) {
+    const latest = new Map();          // roster name -> newest day number, or null when linked without one
+    const people = peoplePublic && typeof peoplePublic === 'object' ? peoplePublic.people : null;
+    if (people && typeof people === 'object') {
+      for (const login of Object.keys(people)) {
+        const p = people[login];
+        const name = p && typeof p.roster === 'string' ? p.roster : null;
+        if (!name) continue;
+        const d = dayNumber(p.last_active);
+        const was = latest.has(name) ? latest.get(name) : null;
+        latest.set(name, d !== null && (was === null || d > was) ? d : was);
+      }
+    }
+    const now = dayNumber(today);
+    const groups = roster && Array.isArray(roster.groups) ? roster.groups : [];
+    const team = [], alumni = [], promoted = [], demoted = [];
+    for (const g of groups) {
+      const fromTeam = g && g.id === 'active';
+      for (const person of (g && Array.isArray(g.people) ? g.people : [])) {
+        if (!person || typeof person.name !== 'string' || !person.name.trim()) continue;
+        const linked = latest.has(person.name);
+        const last = linked ? latest.get(person.name) : null;
+        const active = linked && last !== null && now !== null && now - last <= ACTIVE_DAYS;
+        const pinned = person.pinned === true;
+        const entry = { person, from: fromTeam ? 'active' : String((g && g.id) || ''), linked, active, pinned, last };
+        const current = linked ? (active || pinned) : fromTeam;
+        if (fromTeam) (current ? team : demoted).push(entry);
+        else (current ? promoted : alumni).push(entry);
+      }
+    }
+    return { team: team.concat(promoted), alumni: demoted.concat(alumni) };
+  }
 
   function repoIndex(file) {
     const map = new Map();
@@ -860,6 +907,8 @@
     avatarPath: avatarPath,
     githubProfileUrl: githubProfileUrl,
     readAtDay: readAtDay,
+    splitTeam: splitTeam,
+    ACTIVE_DAYS: ACTIVE_DAYS,
     createLab: createLab,
   }, runtime));
 

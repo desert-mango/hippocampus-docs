@@ -723,3 +723,40 @@ test('js/app.js asks "who wrote this" with the keys data/graph/page-authors.json
   prefixes.forEach((p) => assert.ok(pages.some((k) => (p.endsWith('/') ? k.startsWith(p) : k === p)),
     `page-authors.json has ${p} keys`));
 });
+
+// ---- round 2, R4: who is on the current team (Kyle 2026-10-15, item 9) ----
+test('splitTeam: GitHub work in the last 30 days or an admin pin keeps a linked person on the team; unlinked stay put', () => {
+  const p = (name, extra) => Object.assign({ name, title: '', photo: null, link: null }, extra);
+  const roster = { groups: [
+    { id: 'active', title: 'Team', people: [p('Day29'), p('Day30'), p('Day31'), p('NeverWorked'), p('PinnedQuiet', { pinned: true }),
+      p('UnlinkedNow')] },
+    { id: 'alumni', title: 'Alumni', people: [p('Returned'), p('OldTimer'), p('UnlinkedPast')] },
+  ] };
+  const person = (login, name, day) => ({ login, name, avatar: null, html_url: `https://github.com/${login}`, roster: name, last_active: day });
+  const pub = { people: {
+    d29: person('d29', 'Day29', '2026-09-16'), d30: person('d30', 'Day30', '2026-09-15'), d31: person('d31', 'Day31', '2026-09-14'),
+    nw: person('nw', 'NeverWorked', null), pq: person('pq', 'PinnedQuiet', null),
+    ret: person('ret', 'Returned', '2026-10-10'), old: person('old', 'OldTimer', '2025-01-01'),
+    stranger: person('stranger', null, null),
+  } };
+  const s = LAB.splitTeam(roster, pub, '2026-10-15');
+  const names = (list) => list.map((x) => x.person.name);
+  assert.deepEqual(names(s.team), ['Day29', 'Day30', 'PinnedQuiet', 'UnlinkedNow', 'Returned']);
+  assert.deepEqual(names(s.alumni), ['Day31', 'NeverWorked', 'OldTimer', 'UnlinkedPast']);
+  const by = (n) => [...s.team, ...s.alumni].find((x) => x.person.name === n);
+  assert.deepEqual([by('Day30').linked, by('Day30').active, by('Day30').pinned], [true, true, false]);
+  assert.deepEqual([by('PinnedQuiet').active, by('PinnedQuiet').pinned], [false, true]);
+  assert.equal(by('UnlinkedNow').linked, false);
+  assert.equal(by('UnlinkedNow').from, 'active');
+  assert.equal(by('Returned').from, 'alumni');
+  // a two-login person: the newest day wins
+  pub.people.d31b = person('d31b', 'Day31', '2026-10-01');
+  assert.ok(names(LAB.splitTeam(roster, pub, '2026-10-15').team).includes('Day31'));
+  // no GitHub layer: everyone stays where an admin put them
+  const none = LAB.splitTeam(roster, null, '2026-10-15');
+  assert.deepEqual(names(none.team), roster.groups[0].people.map((x) => x.name));
+  assert.deepEqual(names(none.alumni), roster.groups[1].people.map((x) => x.name));
+  // a string "true" is not a pin
+  const r2 = { groups: [{ id: 'active', people: [p('NeverWorked', { pinned: 'true' })] }] };
+  assert.deepEqual(names(LAB.splitTeam(r2, pub, '2026-10-15').alumni), ['NeverWorked']);
+});

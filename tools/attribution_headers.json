@@ -248,7 +248,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Project public GitHub org activity, repo cards, page authorship and people into privacy-filtered site data."
       },
@@ -382,7 +382,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Hold the one copy of the text-safety patterns and the GitHub-layer rules the gate and builder share."
       },
@@ -830,7 +830,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "15 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this."
       },

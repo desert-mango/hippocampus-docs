@@ -91,9 +91,10 @@ def valid_docs():
             "people": {"NBauschmann": {"login": "NBauschmann", "name": "Nathalie Bauschmann",
                                        "avatar": "data/graph/avatars/NBauschmann.png",
                                        "html_url": "https://github.com/NBauschmann",
-                                       "roster": "Nathalie Bauschmann"},
+                                       "roster": "Nathalie Bauschmann", "last_active": "2026-09-20"},
                        "someone": {"login": "someone", "name": "Some One", "avatar": None,
-                                   "html_url": "https://github.com/someone", "roster": None}},
+                                   "html_url": "https://github.com/someone", "roster": None,
+                                   "last_active": None}},
         },
     }
 
@@ -526,12 +527,31 @@ class EndToEnd(unittest.TestCase):
     def test_members_only_key_smuggled_into_a_public_file_is_red(self):
         def smuggle(doc):
             login = sorted(doc["people"])[0]
-            doc["people"][login]["last_active"] = "2026-09-01"
+            # round 2 (R4): last_active is public now (roster-linked logins only); a count still is not
+            doc["people"][login]["commits_365d"] = 12
         edit_json(self.dst / "data" / "graph" / "people-public.json", smuggle)
         run = run_gate(self.dst)
         self.assertEqual(run.returncode, 1, run.stdout)
-        self.assertIn("last_active", run.stdout)
+        self.assertIn("commits_365d", run.stdout)
         self.assertIn("not public", run.stdout)
+
+    def test_people_flags_pinned_and_highlight_are_booleans(self):
+        # round 2 (R4): an admin's pin and the highlighted title are optional true/false flags
+        def flag(value):
+            def fn(doc):
+                doc["groups"][0]["people"][0]["pinned"] = value
+                doc["groups"][0]["people"][0]["highlight"] = True
+            return fn
+        people = self.dst / "data" / "people.json"
+        keep = people.read_text(encoding="utf-8")
+        edit_json(people, flag(True))
+        run = run_gate(self.dst)
+        self.assertEqual(run.returncode, 0, run.stdout)
+        people.write_text(keep, encoding="utf-8")
+        edit_json(people, flag("false"))
+        run = run_gate(self.dst)
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("'pinned' must be true or false", run.stdout)
 
     def test_pr_shaped_tree_with_stale_github_files_is_green(self):
         graph = self.dst / "data" / "graph"
