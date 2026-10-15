@@ -436,11 +436,10 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("branches: [main]", d)
         self.assertIn("concurrency: derive-main", d)
         # A push made with the App token starts workflows (GITHUB_TOKEN's did not),
-        # so the loop guard is load-bearing: no bot push and no derive commit
-        # ever runs derive again.
-        self.assertIn("!endsWith(github.actor, '[bot]')", d)
-        self.assertIn("!startsWith(github.event.head_commit.message, "
-                      "'derive: regenerate derived data after ')", d)
+        # so the loop guard is load-bearing: no bot push ever runs derive again. Never a skip by message: a human commit with
+        # derive's subject must still be rebuilt (codex r1).
+        self.assertIn("    if: ${{ !endsWith(github.actor, '[bot]') }}\n", d)
+        self.assertNotIn("head_commit.message", d)
         self.assertIn("fetch-depth: 2", d)
         self.assertIn("--contributors-if-changed", d)
         self.assertIn("derive: regenerate derived data after", d)

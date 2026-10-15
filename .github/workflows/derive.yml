@@ -21,9 +21,11 @@
 # only through the push's own environment.
 #
 # The loop guard: unlike GITHUB_TOKEN's, a push made with an App token starts
-# workflows, so this job skips every bot push and every derive commit (two locks
-# on one door). CI's `check` does run on the derive commit — the gate judges it
-# on main like any other commit.
+# workflows, so this job skips every push made by a bot (the App is
+# `<slug>[bot]`). It does not skip by commit message: a human commit that
+# happens to start with derive's subject still gets its data rebuilt. CI's
+# `check` does run on the derive commit — the gate judges it on main like any
+# other commit.
 #
 # The job runs the offline gate before pushing and pushes nothing when it is
 # red: a red gate is content to fix, never something to push past.
@@ -42,9 +44,7 @@ permissions:
 jobs:
   derive:
     name: derive
-    if: >-
-      !endsWith(github.actor, '[bot]') &&
-      !startsWith(github.event.head_commit.message, 'derive: regenerate derived data after ')
+    if: ${{ !endsWith(github.actor, '[bot]') }}
     runs-on: ubuntu-24.04
     environment: derive
     permissions:
