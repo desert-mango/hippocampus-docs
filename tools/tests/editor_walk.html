@@ -361,9 +361,10 @@
     if (!SD.body.classList.contains('hc-tray-open')) handle.click();
     await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
     if (tab) {
-      const t = await until(() => $(`#hc-tray [role="tab"][data-tab="${tab}"]`), `the ${tab} tab`);
-      t.click();
-      await until(() => t.getAttribute('aria-selected') === 'true', `the ${tab} tab selected`);
+      // round 2 (R3): no tabs; the old tab's view opens through HCEditor.openView
+      SW.HCEditor.openView(tab);
+      const title = { proposals: 'Proposals', changes: 'Edit as Markdown', view: 'View settings', guide: 'Guide' }[tab];
+      await until(() => { const t = $('#hc-tray .hc-tray-title'); return t && t.textContent === title; }, `the ${tab} view`);
     }
   }
 

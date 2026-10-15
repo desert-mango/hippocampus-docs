@@ -82,8 +82,8 @@
   let switchBtn = null;
   let who = null;
   let frameHost = null;    // #hc-frame-host (index.html)
-  let tabButtons = [];     // the tray's five tabs
-  let countEl = null;      // the open proposals' count on the Proposals tab
+  let trayTitle = null;    // the editor page's heading (round 2, R3: the tabs are gone)
+  let trayCrumb = null;    // "← Proposals", on every view but the list
   let handle = null;       // the tray's handle while it is closed
   let showBar = null;      // "Showing proposal #n on the page", while it is
   let pageBar = null;      // the bar above the frame: who proposes changes to this page (U7)
@@ -657,6 +657,84 @@
     return { card, detail };
   }
 
+  /* Round 2 (R3, Kyle 2026-10-15): the editor page is ONE plain list — who, which page, when, status — open
+     proposals newest first, then the recently merged (HCCore.proposalRows). A row opens its page with THAT
+     proposal drawn over it (ed.focusPr) and its review cards beside it; a proposal with no page on the site
+     (code only) opens on GitHub. Each proposer has their own colour (the dot; the same slot colours their marks).
+     The foot keeps View settings and the Guide; data files are edited in place or on GitHub. The old card page
+     (#/review/<n>) stays only as the page bar's "Review" details. */
+  const dateFmt = (() => { try { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }); } catch (e) { return null; } })();
+  const shortDay = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? (dateFmt ? dateFmt.format(new Date(t)) : day(iso)) : ''; };
+  const LIST_CHECK = Object.freeze({ pass: "checks pass", fail: "checks failing", checking: "checks running" });
+
+  async function viewProposalList(r, epoch) {
+    paint(epoch, h('p', { class: 'cms-muted', text: 'Loading proposals…' }));
+    const login = state.session && state.session.login;
+    const [pulls, merged] = await Promise.all([openPulls(), C.loadRecentMerges(api, 5)]);
+    const open = C.orderOpenPulls(pulls, null);
+    setCount(open.length);
+    const files = new Map();
+    await Promise.all(open.map(async (p) => { files.set(p.number, await filesOrNull(p.number)); }));
+    if (epoch !== routeEpoch) return;
+    const rows = C.proposalRows(open, merged, (n) => files.get(n) || null, state.regs, login);
+    // the gate's status is read for the first LIST_CHECKS open rows only (memoized per head sha); the rest say "Open"
+    const list = h('ul', { class: 'hc-plist' }, ...rows.map((row, i) => proposalRow(row, login, i < LIST_CHECKS)));
+    paint(epoch, [
+      rows.length ? list : h('p', { class: 'hc-plist-empty', text: 'No proposals yet. Turn Editor on and change a page: Send for review starts one.' }),
+      h('p', { class: 'hc-plist-foot' },
+        h('button', { type: 'button', class: 'hc-foot-link', 'data-action': 'foot-view', 'data-tab': 'view' }, 'View settings'),
+        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }),
+        h('button', { type: 'button', class: 'hc-foot-link', 'data-action': 'foot-guide', 'data-tab': 'guide' }, 'Guide'),
+        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }),
+        link(`${C.GITHUB_WEB}/tree/main/data`, 'Data files on GitHub', 'hc-foot-link')),
+    ]);
+    for (const b of main.querySelectorAll ? Array.from(main.querySelectorAll('[data-action^="foot-"]')) : []) {
+      b.addEventListener('click', () => trayGo(b.getAttribute('data-tab') === 'view' ? VIEW_HASH : '#/help'));
+    }
+  }
+
+  const LIST_CHECKS = 10;
+  function proposalRow(row, login, withCheck) {
+    const mine = Boolean(login) && row.who.toLowerCase() === String(login).toLowerCase();
+    const age = row.state === 'open' ? C.ageText(row.when, Date.now()) : '';
+    const when = row.state === 'open' ? (age ? `opened ${age}` : '') : `merged ${shortDay(row.when)}`;
+    const where = row.pages.length ? row.pages.map((x) => x.label).slice(0, 2).join(', ')
+      + (row.pages.length > 2 ? ` +${row.pages.length - 2} more` : '') : (row.filesKnown ? 'code and data only' : 'files unknown');
+    const status = h('span', { class: `hc-prow-status is-${row.state}`, text: row.state === 'open' ? 'Open' : 'Live' });
+    if (withCheck && row.state === 'open' && row.head && /^[0-9a-f]{40}$/.test(row.head)) {
+      checkOf(row.head).then((c) => { if (c && LIST_CHECK[c.state]) status.textContent = `Open · ${LIST_CHECK[c.state]}`; }).catch(() => {});
+    }
+    const open = h('button', { type: 'button', class: 'hc-prow-open', 'data-action': 'open-proposal', 'data-pr': String(row.number),
+      'aria-label': `${row.title}, by ${row.who}${mine ? ' (yours)' : ''}, ${where}` },
+    h('span', { class: 'hc-prow-dot', 'aria-hidden': 'true' }),
+    avatarFace(row.who, row.who),
+    h('span', { class: 'hc-prow-main' },
+      h('span', { class: 'hc-prow-title', text: row.title }),
+      h('span', { class: 'hc-prow-meta' }, h('span', { class: 'hc-prow-who', text: mine ? `${row.who} (you)` : row.who }),
+        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }), h('span', { class: 'hc-prow-where', text: where }))),
+    h('span', { class: 'hc-prow-side' }, status, h('span', { class: 'hc-prow-when', text: when })));
+    open.addEventListener('click', () => openFromList(row));
+    return h('li', { class: 'hc-prow', 'data-pr': String(row.number), 'data-state': row.state, 'data-slot': String(row.slot) }, open);
+  }
+
+  /* A row: its first page, with that proposal drawn (an open one); a merged one shows the page as it is now;
+     nothing on the site to show: the proposal on GitHub, beside the site. */
+  function openFromList(row) {
+    // the page on screen when the proposal touches it, else its first content page, else its first page
+    const target = row.pages.find((x) => x.route === currentRoute())
+      || row.pages.find((x) => x.file.indexOf('content/') === 0) || row.pages[0] || null;
+    if (!target || !ROUTE_RE.test(target.route)) {
+      if (typeof window.open === 'function') window.open(prLink(row.number), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    ed.focusPr = row.state === 'open' ? row.number : null;
+    ed.show = null;
+    clearSelection();
+    closeTray();
+    if (target.route !== currentRoute()) { window.location.hash = `#${target.route}`; return; }   // onHashChange loads it
+    frameTo(currentRoute(), false);
+  }
+
   async function viewProposals(r, epoch) {
     const want = r.name === 'review-pr' ? r.params.number : null;
     paint(epoch, [h('h2', { text: 'Open proposals' }), h('p', { class: 'cms-muted', text: 'Loading proposals…' })]);
@@ -673,6 +751,7 @@
     const at = open.findIndex((p) => p.number === want);
     const lone = want !== null && at < 0 ? h('article', { class: 'hc-card is-open', 'data-pr': String(want) }) : null;
     if (!paint(epoch, [
+      link('#/', '← All proposals', 'hc-back-link'),
       lone,
       h('h2', { text: 'Open proposals' }),
       cards.length ? h('div', { class: 'hc-cards' }, ...cards.map((c) => c.card))
@@ -2124,8 +2203,8 @@
   }
 
   const VIEWS = {
-    home: viewProposals,
-    review: viewProposals,
+    home: viewProposalList,
+    review: viewProposalList,
     'review-pr': viewProposals,
     help: viewHelp,
     private: viewHelp,
@@ -2316,6 +2395,7 @@
     props: null,          // Promise of the open proposals with their files, once per refresh
     bases: new Map(),     // 'main...head' -> Promise of the merge base sha
     checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
+    focusPr: null,        // round 2 (R3): the proposal opened from the list, drawn on its page instead of the newest
   };
   let frameTimer = null;
   let inPageLine = null;    // the draft-state line under "Typing in the page" (blockTyped updates it)
@@ -2397,7 +2477,7 @@
       return;
     }
     ed.on = on;
-    if (!on) ed.show = null;
+    if (!on) { ed.show = null; ed.focusPr = null; }
     document.body.classList.toggle('hc-editor-on', on);
     // the title: "HippoCampus Editor" while Editor mode is on (css/site.css slides the word); the reader hears the visible word
     const [robotics, editorWord] = [document.querySelector('.brand-robotics'), document.querySelector('.brand-editor')];
@@ -2444,18 +2524,19 @@
     applyTray();
   }
 
+  /* The editor page's heading (round 2, R3: no tabs): "Proposals" on the list; elsewhere the view's name with a
+     way back to the list. */
+  const VIEW_TITLE = Object.freeze({ proposals: 'Proposals', changes: 'Edit as Markdown', view: 'View settings', guide: 'Guide' });
   function drawTabs() {
-    for (const b of tabButtons) {
-      const on = b.getAttribute('data-tab') === ed.tab;
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-      b.classList.toggle('is-on', on);
-    }
+    if (!trayTitle) return;
+    const onList = ed.tab === 'proposals' && (trayHash === '#/' || C.parseRoute(trayHash).name !== 'review-pr');
+    trayTitle.textContent = ed.tab === 'proposals' && !onList ? 'Proposal' : VIEW_TITLE[ed.tab] || 'Proposals';
+    trayCrumb.hidden = onList;
   }
 
   /* The open proposals' count: on the Proposals tab and the handle. */
   function setCount(n) {
     ed.count = n;
-    countEl.textContent = n > 0 ? String(n) : '';
     handle.replaceChildren(document.createTextNode('Proposals'),
       h('span', { class: 'n', 'aria-label': `${n} open`, text: n > 0 ? String(n) : '' }));
   }
@@ -2533,7 +2614,8 @@
      on that tab, at that proposal's card or that form. */
   function applyParam(param) {
     ed.tab = param.tab;
-    ed.trayOpen = true;
+    // round 2 (R3): "Edit this page" (?editor=changes with nothing named) is Editor mode on the page itself
+    ed.trayOpen = !(param.tab === 'changes' && !param.data && !param.new && !param.media);
     let hash = TAB_HASH[param.tab];
     if (param.tab === 'proposals' && param.pr) hash = `#/review/${param.pr}`;
     else if (param.tab === 'changes' && C.RAW_REGISTRIES.indexOf(`data/${param.data}.json`) >= 0) hash = `#/edit/data/${param.data}`;
@@ -2855,8 +2937,14 @@
     }
     pv.touching = all.filter((t) => fileRow(t.files, page.file)).sort(newestFirst);
     let t = null;
+    const focus = ed.focusPr !== null ? pv.touching.find((x) => x.pull.number === ed.focusPr) || null : null;
     if (ed.show) {
       t = pv.touching.find((x) => x.pull.number === ed.show.number) || null;
+    } else if (focus) {
+      // round 2 (R3): opened from the proposals list: that proposal, over main, with its review cards
+      pv.mode = 'overlay';
+      t = focus;
+      pv.others = pv.touching.filter((x) => x !== focus);
     } else if (ed.draft) {
       pv.mode = 'draft';
     } else if (pv.touching.length) {
@@ -4180,13 +4268,10 @@
     mountDock();
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
-    countEl = h('span', { class: 'n' });
-    tabButtons = TABS.map((id) => {
-      const b = h('button', { type: 'button', role: 'tab', class: 'hc-tab', 'data-tab': id, 'aria-selected': 'false' },
-        TAB_LABEL[id], id === 'proposals' ? countEl : null);
-      b.addEventListener('click', () => { ed.tab = id; saveEditorState(); renderTray(); });
-      return b;
-    });
+    // round 2 (R3): no tabs; a title says which view this is, and the views other than the list link back to it
+    trayTitle = h('h2', { class: 'hc-tray-title', text: 'Proposals' });
+    trayCrumb = h('a', { href: '#/', class: 'hc-tray-crumb', 'data-tab': 'proposals' }, '← Proposals');
+    trayCrumb.addEventListener('click', (e) => { e.preventDefault(); trayGo('#/'); });
     const close = h('button', { type: 'button', class: 'hc-tray-close', 'data-action': 'tray-close',
       title: 'Back to the page (Escape)' }, 'Back to the page');
     close.addEventListener('click', closeTray);
@@ -4196,8 +4281,7 @@
     trayBody = h('div', { class: 'hc-tray-body', role: 'tabpanel' }, main);
     trayBody.addEventListener('click', onTrayClick);
     tray = h('section', { id: 'hc-tray', class: 'hc-tray', 'aria-label': 'Editor: proposals and data' },
-      h('div', { class: 'hc-tray-head' }, close,
-        h('div', { class: 'hc-tray-tabs', role: 'tablist', 'aria-label': 'Editor' }, ...tabButtons)),
+      h('div', { class: 'hc-tray-head' }, close, h('div', { class: 'hc-tray-heading' }, trayCrumb, trayTitle)),
       trayBody);
     // the editor's one status line lives in the bubble, which is on screen over the page and the editor page alike
     dock.appendChild(notice);
@@ -4898,5 +4982,16 @@
     return true;
   }
 
-  window.HCEditor = Object.freeze({ start, mountPreview, refresh });
+  /* round 2 (R3): the editor page has no tabs; its other views (View settings, Guide, the Markdown fallback and
+     its forms) open from the list's foot or when the page needs them. openView(tab) opens one by its old tab
+     name — the node tests' way in. -> true when it opened */
+  function openView(tab) {
+    const hash = /^#\//.test(String(tab)) ? String(tab) : null;     // or a view's own address, e.g. '#/review/3'
+    if (!ed.on || (!hash && TABS.indexOf(tab) < 0)) return false;
+    ed.trayOpen = true;
+    applyTray();
+    trayGo(hash || ed.tabHash[tab] || TAB_HASH[tab]);
+    return true;
+  }
+  window.HCEditor = Object.freeze({ start, mountPreview, refresh, openView });
 }());

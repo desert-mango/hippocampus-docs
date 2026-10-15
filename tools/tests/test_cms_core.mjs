@@ -1541,3 +1541,28 @@ test('proposerSlots: the viewer is 0; others get 1..5 by their oldest open propo
   const s2 = C.proposerSlots([pr(3, 'amy')], 'kyle', [{ number: 1, user: { login: 'old' } }]);
   assert.equal(s2.old, 2);
 });
+
+// ---- round 2, R3: the proposals list (Kyle 2026-10-15, item 4) ----
+test('proposalRows: who, which pages, when, status; open newest first then merged; colours from proposerSlots', () => {
+  const regs = { setup: { sections: [{ pages: [{ id: 'lab-gantry/usage', title: 'Usage', file: 'content/setup/lab-gantry/usage.md' }] }] },
+    projects: { projects: [] }, tools: { tools: [] } };
+  const open = [
+    { number: 7, title: 'Fix usage', state: 'open', created_at: '2026-10-10T10:00:00Z', user: { login: 'amy' }, head: { sha: 'b'.repeat(40) } },
+    { number: 9, title: 'Mine', state: 'open', created_at: '2026-10-12T10:00:00Z', user: { login: 'Kyle' }, head: { sha: 'c'.repeat(40) } },
+  ];
+  const merged = [{ number: 5, title: 'Old', merged_at: '2026-10-01T10:00:00Z', user: { login: 'bob' } }];
+  const files = { 7: [{ filename: 'content/setup/lab-gantry/usage.md', status: 'modified' }, { filename: 'tools/x.py', status: 'modified' }],
+    9: [{ filename: 'data/people.json', status: 'modified' }] };
+  const rows = C.proposalRows(open, merged, (n) => files[n] || null, regs, 'kyle');
+  assert.deepEqual(rows.map((r) => [r.number, r.state, r.who, r.slot]), [[9, 'open', 'Kyle', 0], [7, 'open', 'amy', 1], [5, 'merged', 'bob', 2]]);
+  assert.deepEqual(rows[1].pages, [{ route: '/setup/lab-gantry/usage', label: 'Usage', file: 'content/setup/lab-gantry/usage.md' }]);
+  assert.equal(rows[1].other, 1, 'files with no page (code) are counted, not listed');
+  assert.equal(rows[0].pages[0].file, 'data/people.json');
+  assert.equal(rows[1].when, '2026-10-10T10:00:00Z');
+  assert.equal(rows[2].when, '2026-10-01T10:00:00Z');
+  assert.equal(rows[1].head, 'b'.repeat(40));
+  // files GitHub would not list: no pages, said as unknown
+  const r2 = C.proposalRows([open[0]], [], () => null, regs, 'kyle');
+  assert.equal(r2[0].filesKnown, false);
+  assert.deepEqual(r2[0].pages, []);
+});

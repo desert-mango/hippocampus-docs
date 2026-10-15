@@ -1284,6 +1284,29 @@
     return out;
   }
 
+  /* Round 2 (R3, Kyle 2026-10-15): the proposals list's rows — who, which pages, when, status — open proposals
+     newest first, then the recently merged. filesOf(number) -> the PR's file rows, or null when GitHub would not
+     list them. pages = previewPages (routes the site shows them on); other = changed files with no page (code).
+     slot = the proposer's colour (proposerSlots; merged-only proposers after the open ones). */
+  function proposalRows(open, merged, filesOf, regs, viewer) {
+    const opens = listOf(open).filter(isPull).slice().sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
+      || (b.number - a.number));
+    const merges = listOf(merged).filter(isPull);
+    const slots = proposerSlots(opens, viewer, merges);
+    const row = (p, st) => {
+      const files = typeof filesOf === 'function' ? filesOf(p.number) : null;
+      const known = Array.isArray(files);
+      const pages = known ? previewPages(files, regs) : [];
+      const other = known ? files.filter((f) => isFileRow(f) && f.status !== 'removed' && !pages.some((x) => x.file === f.filename)
+        && !pageForFile(f.filename, regs)).length : 0;
+      const login = String((p.user && p.user.login) || 'unknown');
+      return { number: p.number, title: textOr(p.title, '(no title)'), who: login, slot: slotOf(slots, login), state: st,
+        when: st === 'merged' ? p.merged_at : p.created_at, pages, other, filesKnown: known,
+        head: p.head && typeof p.head.sha === 'string' ? p.head.sha : null };
+    };
+    return [...opens.map((p) => row(p, 'open')), ...merges.map((p) => row(p, 'merged'))];
+  }
+
   /* The registries previewPages needs for these files, read at the PR head
      through `fetcher` (refFetcher(token, sha)): only the ones a changed
      content file needs; a missing or broken one is null. */
@@ -3488,7 +3511,7 @@
     CALLBACK_PATH, SESSION_KEY, NO_ACCESS_TEXT, PLACEHOLDER_TEXT, PROTOCOLS_URL,
     POPUP_CLOSE_GRACE_MS,
     ROUTES, BRIDGE_PATH_RE,
-    roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges, proposerSlots, slotOf, PROPOSER_SLOTS,
+    roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges, proposerSlots, slotOf, PROPOSER_SLOTS, proposalRows,
     createGeneration, randomHex, authorizeUrl, createSignIn,
     makeSession, readSession, writeSession, clearSession,
     assertRepoPath, createGitHubClient, READ_METHODS, WRITE_METHODS, isAllowedWrite,

@@ -842,9 +842,12 @@ test('V2 walk: the editor page from the bubble, an image click opens the file di
     const cover = await S("(() => { const t = document.querySelector('#hc-tray').getBoundingClientRect(); return { left: t.left, right: innerWidth - t.right }; })()");
     assert.ok(cover.left <= 1 && cover.right <= 1, `a full page, not a side panel (${JSON.stringify(cover)})`);
     await shot('v2-editor-page');
-    await S("document.querySelector('#hc-tray .hc-tab[data-tab=changes]').click()");
-    await sleep(400);
-    await shot('v2-editor-page-data');
+    // round 2 (R3): the editor page is the proposals list: no tabs; its foot opens View settings
+    assert.equal(await S("document.querySelectorAll('#hc-tray [role=tab]').length"), 0, 'no tabs');
+    await until(() => S("!!document.querySelector('#hc-tray [data-action=foot-view]')"), 'the list foot');
+    await S("document.querySelector('#hc-tray [data-action=foot-view]').click()");
+    await until(() => S("document.querySelector('#hc-tray .hc-tray-title').textContent === 'View settings'"), 'View settings');
+    await shot('v2-editor-page-view');
     await S("document.querySelector('#hc-tray').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
     await until(() => S("document.querySelector('#hc-tray').hidden"), 'Escape goes back to the page');
     // a trusted click on the first image block opens the file dialog
@@ -925,10 +928,22 @@ test('U5b walk: the review rail beside the page, cards on their lines, Approve w
     assert.deepEqual(w.body, { body: `hc-approved ${key}` });
     await until(() => S(`/Going live/.test(document.querySelector('.hc-rcard[data-key="${key}"]').textContent)`), 'the card says it is going live');
     await shot('u5b-going-live-dark-1280');
+    // round 2 (R3): the proposals list, a row per proposal in its proposer's colour (dark, then light)
+    const listShot = async (name) => {
+      await S("document.querySelector('.hc-dock-pages').click()");
+      await until(() => S("document.querySelectorAll('#hc-tray .hc-prow').length > 0"), 'the proposals list');
+      assert.equal(await S("document.querySelectorAll('#hc-tray [role=tab]').length"), 0, 'no tabs');
+      await sleep(300);
+      await shot(name);
+      await S("document.querySelector('#hc-tray .hc-tray-close').click()");
+      await until(() => S("document.querySelector('#hc-tray').hidden"), 'back to the page');
+    };
+    await listShot('r3-list-dark-1280');
     // light theme
     await S("document.getElementById('theme-toggle').click()");
     await sleep(500);
     await shot('u5b-rail-light-1280');
+    await listShot('r3-list-light-1280');
     // narrow: markers; a click opens the card beside the marker
     await send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 900, deviceScaleFactor: 1, mobile: false });
     await until(() => S("document.querySelector('.hc-rail').classList.contains('is-markers')"), 'markers when narrow');

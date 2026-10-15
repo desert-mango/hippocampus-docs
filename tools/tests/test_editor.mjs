@@ -279,13 +279,18 @@ function openSite(opts) {
     },
     async showData() {
       if (page.tray().hidden) { page.handle().click(); await settle(); }
-      if (page.tab('changes').getAttribute('aria-selected') !== 'true') { page.tab('changes').click(); await settle(); }
+      if (page.trayTitle() !== 'Edit as Markdown') { page.tab('changes').click(); await settle(); }
     },
     editorMessages: () => page.frame().posted.filter((x) => x.m.type === 'hc-editor').map((x) => x.m),
     async type(el, text) { el.value = text; el.fire('input'); await settle(); },
     github: () => calls.filter((c) => c.url.indexOf('https://api.github.com/') === 0),
     tray: () => findAll(body, (e) => e.attrs.id === 'hc-tray')[0],
-    tab: (id) => findAll(body, (e) => e.attrs.role === 'tab' && e.attrs['data-tab'] === id)[0],
+    // round 2 (R3): no tab buttons; a "tab" is HCEditor.openView(id), the view the old tab showed
+    async review(n) { win.HCEditor.openView(`#/review/${n}`); await settle(); },
+    tab: (id) => ({ click: () => win.HCEditor.openView(id), get textContent() { return page.trayTitle(); },
+      getAttribute: (k) => (k === 'aria-selected' ? String(page.trayTab() === id) : null) }),
+    trayTitle: () => { const t = findAll(body, (e) => e.classList.contains('hc-tray-title'))[0]; return t ? t.textContent : null; },
+    trayTab: () => ({ Proposals: 'proposals', Proposal: 'proposals', 'Edit as Markdown': 'changes', 'View settings': 'view', Guide: 'guide' })[page.trayTitle()],
     handle: () => findAll(body, (e) => e.attrs['data-action'] === 'tray-open')[0],
     action: (name) => findAll(body, (e) => e.attrs['data-action'] === name)[0],
     // a click on a tray link: the tray body's listener sees it (event delegation)
@@ -770,7 +775,8 @@ test('?editor=<tab> turns Editor mode on and is stripped from the address', asyn
   assert.equal(page.location.hash, '#/about');
   assert.deepEqual(page.replaced, ['/#/about']);
   assert.match(page.frame().srcs[0], /&route=%2Fabout$/);
-  assert.deepEqual(JSON.parse(page.storage.getItem('hc-editor')), { on: true, tab: 'changes', tray: true });
+  // round 2 (R3): "Edit this page" is Editor mode on the page itself; no editor page opens
+  assert.deepEqual(JSON.parse(page.storage.getItem('hc-editor')), { on: true, tab: 'changes', tray: false });
 });
 
 test('Editor on survives a reload of the tab (sessionStorage hc-editor); Editor off takes the frame away', async () => {
@@ -802,7 +808,6 @@ const TAB_LABELS = ['Proposals', 'Data', 'View', 'Guide'];
 const selectedTab = (page) => TAB_IDS.find((id) => page.tab(id).getAttribute('aria-selected') === 'true');
 
 async function openTab(page, id) {
-  if (page.tray().hidden) { page.handle().click(); await settle(); }   // the tabs live on the editor page
   if (id === 'media') {                                                // V2: no Media tab; the library is linked from Data
     await page.showData();
     await page.follow(page.linkTo('#/media'));
@@ -811,24 +816,6 @@ async function openTab(page, id) {
   page.tab(id).click();
   await settle();
 }
-
-test('editor page (V2): four tabs in order; closed by default; the bubble\'s "Proposals 1" opens it; no right tray, no edge handle', async () => {
-  const page = await editorOn();
-  const tray = page.tray();
-  assert.ok(tray, 'the editor page is mounted');
-  const tabs = page.all((e) => e.attrs.role === 'tab');
-  assert.deepEqual(tabs.map((t) => t.attrs['data-tab']), TAB_IDS);
-  tabs.forEach((t, i) => assert.ok(t.textContent.indexOf(TAB_LABELS[i]) === 0, t.textContent));
-  assert.equal(tray.hidden, true, 'closed until asked');
-  assert.equal(page.body.classList.contains('hc-tray-open'), false);
-  const btn = page.handle();
-  assert.ok(btn && btn.hidden === false, 'the Proposals button shows while Editor mode is on');
-  assert.ok(btn.classList.contains('hc-dock-pages'), 'in the bubble');
-  assert.equal(findAll(page.body, (e) => e.classList.contains('hc-dock')).some((d) => findAll(d, (x) => x === btn).length), true);
-  assert.equal(btn.textContent, 'Proposals1');
-  assert.equal(page.all((e) => e.classList.contains('hc-handle')).length, 0, 'no edge handle');
-  assert.equal(page.tab('proposals').textContent, 'Proposals1', 'the Proposals tab carries the count');
-});
 
 test('editor page (V2): the bubble button opens it (Proposals first); Back to the page and Escape close it; kept for the tab', async () => {
   const page = await editorOn();
@@ -869,16 +856,9 @@ test('editor page (V2): picking a block opens nothing (it is typed in the page);
   assert.ok(page.textarea());
 });
 
-test('Proposals: a card per open proposal, "touches this page"; the card expands in place', async () => {
+test('Proposals: the details page (#/review/1, the bar\'s Review) expands that proposal\'s card', async () => {
   const page = await editorOn({ hash: `#${UBUNTU_ROUTE}` });
-  page.handle().click();
-  await settle();
-  const card = page.one((e) => e.attrs['data-pr'] === '1');
-  assert.ok(card, 'PR #1 has a card');
-  assert.match(card.textContent, /#1/);
-  assert.match(card.textContent, /touches this page/);
-  assert.equal(card.classList.contains('is-open'), false);
-  await page.follow(page.linkTo('#/review/1'));
+  await page.review(1);
   const open = page.one((e) => e.attrs['data-pr'] === '1');
   assert.ok(open.classList.contains('is-open'), 'expanded in place');
   assert.equal(selectedTab(page), 'proposals');
@@ -896,16 +876,14 @@ test('Proposals: a card per open proposal, "touches this page"; the card expands
   assert.ok(findAll(open, (e) => e.attrs['data-approve-note'] !== undefined).length, 'with the reason');
   // the old full-width preview frame is not drawn in the tray: "Show on page" replaces it
   assert.equal(page.all((e) => e.tagName === 'IFRAME' && e.classList.contains('cms-preview-frame')).length, 0);
-  // a second click on the open card's title folds it
+  // its title leads back to the list (round 2, R3)
   await page.follow(findAll(open, (e) => e.tagName === 'A' && e.classList.contains('cms-title'))[0]);
-  assert.equal(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'), false);
+  assert.equal(page.trayTitle(), 'Proposals');
 });
 
 test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-only, its changes marked; Back returns', async () => {
   const page = await editorOn({ hash: `#${UBUNTU_ROUTE}` });
-  page.handle().click();
-  await settle();
-  await page.follow(page.linkTo('#/review/1'));
+  await page.review(1);
   const srcs = page.frame().srcs.length;
   page.action('show-on-page').click();
   await settle();
@@ -1128,8 +1106,7 @@ const basePick = (page) => page.one((e) => e.tagName === 'SELECT' && e.attrs['da
 test('Start from while "Show on page" is on: the shown proposal goes, the draft on the picked base is on the page and editable', async () => {
   const onBranch = `${PAGE_TEXT}More.\n`;
   const page = await editorOn({ extra: ownSeven(onBranch, [{ filename: PAGE_FILE, status: 'modified' }]) });
-  await openTab(page, 'proposals');
-  await page.follow(page.linkTo('#/review/7'));
+  await page.review(7);
   page.action('show-on-page').click();
   await settle();
   assert.match(page.host.textContent, /Showing proposal #7/);
@@ -3449,32 +3426,31 @@ const actionButton = (page, key) => actionButtons(page).find((e) => e.attrs['dat
 const ghWrites = (page) => page.github().filter((c) => c.method !== 'GET');
 const trayText = (page) => page.tray().textContent;
 
-test('js/editor.js: "Recently merged" finds a merge on the second page of closed PRs', async () => {
+test('js/editor.js: the list finds a merge on the second page of closed PRs', async () => {
   const closedPages = [closedRows(0, 100), closedRows(100, 120, (k) => (k === 110 ? 110 : null))];
   closedPages[1][10].title = 'Fix the wiring diagram';
   const page = await reviewSite('bob', { perms: { push: true }, pulls: {}, closedPages });
-  assert.match(trayText(page), /Recently merged/);
-  assert.match(trayText(page), /#111Fix the wiring diagram/);
-  assert.doesNotMatch(trayText(page), /Nothing merged recently/);
+  // round 2 (R3): the list's merged rows say Live
+  const row = page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === '111');
+  assert.ok(row && /Fix the wiring diagram/.test(row.textContent) && /Live/.test(row.textContent), trayText(page));
   assert.deepEqual(page.calls.filter((c) => c.url.includes('state=closed')).map((c) => c.url),
     pagePaths(2).map((p) => `https://api.github.com${p}`));
 });
 
-test('js/editor.js Review list: mine first, author, age, files count, both badges; a title stays text', async () => {
+test('js/editor.js the proposals list: newest first, who, which page, when, status; a title stays text', async () => {
   const pulls = {
     5: { pull: openPull(5, 'alice', 'c'.repeat(40), { title: '<script>alert(1)</script> fix the nav' }),
       files: [fileRow('js/app.js')] },
     6: { pull: openPull(6, 'bob', 'd'.repeat(40)), files: [fileRow('content/about.md'), fileRow('search/site.json')] },
   };
   const page = await reviewSite('bob', { perms: { push: true }, pulls });
-  const card = (n) => page.one((e) => e.attrs['data-pr'] === String(n));
-  const text = trayText(page);
-  assert.ok(text.indexOf('#6') < text.indexOf('#5'), 'my proposal first');
-  assert.match(card(6).textContent, /^#6Proposal 6yours(touches this page)?by bob, opened 3 days ago2 filesderived files/);
-  assert.match(card(5).textContent, /^#5<script>alert\(1\)<\/script> fix the nav(touches this page)?by alice, opened 3 days ago1 filemachinery/);
-  const badges = page.all((e) => /cms-badge-/.test(e.className));
-  assert.deepEqual(badges.map((e) => [e.textContent, e.attrs.title]), [
-    ['derived files', C.DERIVED_TEXT], ['machinery', 'needs a code review by Desert Mango']]);
+  // round 2 (R3): the list — newest first (same day: the higher number), who, where, when, status
+  const row = (n) => page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === String(n));
+  const rows = page.all((e) => e.classList.contains('hc-prow')).map((e) => e.attrs['data-pr']);
+  assert.ok(rows.indexOf('6') < rows.indexOf('5'), 'newest first');
+  assert.match(row(6).textContent, /^BProposal 6bob \(you\)·(About|Team)Open.*opened 3 days ago$/);
+  assert.match(row(5).textContent, /^A<script>alert\(1\)<\/script> fix the navalice·code and data only.*opened 3 days ago$/);
+  assert.equal(row(6).attrs['data-slot'], '0', 'mine: magenta');
   assert.equal(page.all((e) => e.tagName === 'SCRIPT').length, 0, 'the title is text');
   assert.deepEqual(ghWrites(page), []);
   assert.ok(page.calls.some((c) => c.url === `${REPO_API}/pulls/5/files?per_page=100&page=1`));
@@ -3675,15 +3651,16 @@ test('js/editor.js Review PR: a merged proposal offers one button, Undo on GitHu
   assert.deepEqual(ghWrites(page), []);
 });
 
-test('js/editor.js home: each recently merged proposal links to its Review page (where Undo is)', async () => {
+test('js/editor.js the proposals list: a merged proposal says Live and opens on GitHub (where Undo is)', async () => {
   const closed = [openPull(3, 'alice', 'e'.repeat(40), { state: 'closed', merged: true,
     merged_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-20T10:00:00Z', title: 'Fix the nav' })];
   const page = await reviewSite('nathalie', { perms: { push: true }, pulls: {}, closed });
-  assert.match(trayText(page), /Recently merged#3Fix the nav/);
-  const links = page.all((e) => e.tagName === 'A' && e.attrs.href === '#/review/3');
-  assert.equal(links.length, 1);
-  await page.follow(links[0]);
-  assert.ok(cardOpen(page, 3), 'its card opens in place');
+  // round 2 (R3): a merged row says Live; with nothing to show on the site it opens on GitHub (where Undo is)
+  const row = page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === '3');
+  assert.match(row.textContent, /Fix the nav.*Live/);
+  findAll(row, (e) => e.attrs['data-action'] === 'open-proposal')[0].click();
+  await settle();
+  assert.deepEqual(page.opens.map((o) => o[0]), ['https://github.com/desert-mango/hippocampus-docs/pull/3']);
 });
 
 // ----------------------------------------- /cms/ rows, re-homed: Media ---
@@ -3768,7 +3745,7 @@ test('js/editor.js #/media: the images with c_limit,w_240 thumbnails, "on the si
   };
   const w = mediaWorld({ pages });
   const page = await editorOn({ intercept: w.intercept });
-  assert.equal(page.tab('media'), undefined, 'V2: no Media tab; the library is linked from Data');
+  assert.equal(page.all((e) => e.attrs.role === 'tab').length, 0, 'R3: no tabs at all');
   await openTab(page, 'media');
   const tiles = () => page.all((e) => e.attrs['data-asset'] !== undefined);
   assert.deepEqual(tiles().map((t) => t.attrs['data-asset']), [USED.public_id, FREE_ID]);
@@ -4328,4 +4305,65 @@ test('edit palette: magenta and the five proposer colours reach 4.5:1 on every p
   // Editor chrome no longer paints with the site's blue
   assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)|var\(--hc-accent-ink\)/g) || []).length, 0,
     'every Editor accent is an edit token');
+});
+
+// ---- round 2, R3: the editor page is one plain list of proposals (Kyle 2026-10-15, item 4) ----
+test('R3: the editor page is a plain list — who, which page, when, status — no tabs; View settings and Guide in its foot', async () => {
+  const two = secondProposal(readRepo(UBUNTU_FILE));
+  const page = await ubuntuOn({ extra: two.extra });
+  page.handle().click();
+  await settle();
+  assert.equal(page.tray().hidden, false);
+  assert.equal(page.all((e) => e.attrs.role === 'tab' || e.attrs.role === 'tablist').length, 0, 'no tabs');
+  assert.equal(page.one((e) => e.classList.contains('hc-tray-title')).textContent, 'Proposals');
+  const rows = page.all((e) => e.classList.contains('hc-prow'));
+  assert.deepEqual(rows.map((r) => r.attrs['data-pr']), ['2', '1', '3', '2'].slice(0, rows.length));
+  const r2 = rows[0];
+  assert.equal(r2.attrs['data-state'], 'open');
+  assert.equal(r2.attrs['data-slot'], '2', 'second-author: PR #1\'s author (bob is the viewer) is slot 1, then slot 2');
+  const text = r2.textContent;
+  assert.ok(text.includes('second-author'), 'who');
+  assert.ok(text.includes('Ubuntu 24.04 Server'), `which page (${text})`);
+  assert.ok(/opened|ago|Sep|Oct/.test(text), 'when');
+  assert.ok(/Open/.test(text), 'status');
+  const merged = rows.filter((r) => r.attrs['data-state'] === 'merged');
+  assert.ok(merged.length >= 1 && merged.every((r) => /Live/.test(r.textContent)), 'merged rows say Live');
+  assert.ok(page.one((e) => e.attrs['data-action'] === 'foot-view'), 'View settings in the foot');
+  assert.ok(page.one((e) => e.attrs['data-action'] === 'foot-guide'), 'Guide in the foot');
+  assert.ok(page.one((e) => e.tagName === 'A' && /github\.com\/desert-mango\/hippocampus-docs\/tree\/main\/data/.test(e.attrs.href || '')),
+    'data files: on GitHub');
+});
+
+test('R3: a row opens its page with THAT proposal drawn, in its proposer\'s colour; the list closes', async () => {
+  const two = secondProposal(readRepo(UBUNTU_FILE));
+  const page = await ubuntuOn({ extra: two.extra });
+  assert.equal(page.editorMessages().at(-1).tint, 2, 'the newest (#2, second-author) is drawn first, in slot 2');
+  page.handle().click();
+  await settle();
+  const r1 = page.all((e) => e.classList.contains('hc-prow')).find((r) => r.attrs['data-pr'] === '1' && r.attrs['data-state'] === 'open');
+  findAll(r1, (e) => e.attrs['data-action'] === 'open-proposal')[0].click();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  await settle();
+  assert.equal(page.tray().hidden, true, 'the list steps aside');
+  const m = page.editorMessages().at(-1);
+  assert.equal(m.tint, 1, 'PR #1 (kyle-nelson-berkeley, the oldest other proposer): slot 1');
+  assert.ok(m.overlay.length > 0, 'its marks');
+  assert.ok(/#1/.test(pageBar(page).textContent), `the bar names PR #1 (${pageBar(page).textContent})`);
+});
+
+test('R3: "Edit this page" (?editor=changes) turns Editor mode on in place; no editor page opens', async () => {
+  const page = openSite({ hash: `#${PAGE_ROUTE}?editor=changes` });
+  await settle();
+  await settle();
+  assert.equal(page.body.classList.contains('hc-editor-on'), true);
+  assert.equal(page.tray().hidden, true);
+});
+
+test('R3: the list reads the gate\'s status for at most 10 open proposals (codex r1)', async () => {
+  const pulls = {};
+  for (let n = 20; n < 34; n += 1) pulls[n] = { pull: openPull(n, `p${n}`, n.toString(16).padStart(40, '0')), files: [fileRow('js/app.js')] };
+  const page = await reviewSite('bob', { perms: { push: true }, pulls });
+  assert.equal(page.all((e) => e.classList.contains('hc-prow')).length, 14);
+  assert.equal(page.calls.filter((c) => /\/check-runs/.test(c.url)).length, 10);
 });

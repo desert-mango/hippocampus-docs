@@ -206,7 +206,20 @@ const RETIRED = [
 const SHELL_OLD = 'cms/index.html: local scripts in order, noindex, and a way back to the site';
 const SHELL_NEW = 'cms/index.html: the redirect page loads only js/cms-redirect.js — no cms.js, no cms-core.js, '
   + 'no cms.css — noindex, and a way back to the site';
-const rehomed = (old) => (old === SHELL_OLD ? SHELL_NEW : old.replace(/^js\/cms\.js/, 'js/editor.js'));
+// round 2 (R3, 2026-10-15): the editor page became one plain list; three re-homed rows were renamed for what they
+// now test (the list's rows instead of the old cards). Recorded here by name, old -> new.
+const RENAMED_R3 = Object.freeze({
+  'js/editor.js: "Recently merged" finds a merge on the second page of closed PRs':
+    'js/editor.js: the list finds a merge on the second page of closed PRs',
+  'js/editor.js Review list: mine first, author, age, files count, both badges; a title stays text':
+    'js/editor.js the proposals list: newest first, who, which page, when, status; a title stays text',
+  'js/editor.js home: each recently merged proposal links to its Review page (where Undo is)':
+    'js/editor.js the proposals list: a merged proposal says Live and opens on GitHub (where Undo is)',
+});
+const rehomed = (old) => {
+  const name = old === SHELL_OLD ? SHELL_NEW : old.replace(/^js\/cms\.js/, 'js/editor.js');
+  return RENAMED_R3[name] || name;
+};
 
 test('every row of the retired test files is re-homed by name in test_editor.mjs, and green', () => {
   assert.equal(RETIRED.length, 59, '32 + 18 + 9 rows');

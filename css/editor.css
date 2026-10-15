@@ -349,15 +349,56 @@ body.hc-editor-on #content { display: none; }
 .hc-tray[hidden] { display: none; }
 .hc-tray-head { flex: none; display: flex; align-items: center; gap: 1rem; padding: .55rem max(1.25rem, calc((100% - 56rem) / 2)) 0;
   border-bottom: 1px solid var(--edge-soft); }
-.hc-tray-tabs { display: flex; gap: .25rem; overflow-x: auto; }
-.hc-tab { font: inherit; font-size: .88rem; font-weight: 600; padding: .65rem .7rem .7rem; background: none; border: 0;
-  border-bottom: 2px solid transparent; color: var(--body-soft); cursor: pointer; white-space: nowrap;
-  transition: color .12s ease-out, border-color .12s ease-out; }
-.hc-tab:hover { color: var(--heading); }
-.hc-tab[aria-selected="true"] { color: var(--hc-edit-ink); border-bottom-color: var(--hc-edit); }
-.hc-tab:focus-visible, .hc-tray-close:focus-visible, .hc-dock-pages:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
-.hc-tab .n { font-size: .7rem; font-family: var(--mono); color: var(--hc-edit-ink); margin-left: .3rem; font-variant-numeric: tabular-nums; }
-.hc-tab .n:empty { display: none; }
+.hc-tray-close:focus-visible, .hc-dock-pages:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
+/* round 2 (R3): no tabs; the page says what it is, and the other views lead back to the list */
+.hc-tray-heading { display: flex; align-items: baseline; gap: .9rem; min-width: 0; padding: .55rem 0 .7rem; }
+.hc-tray-heading .hc-tray-title { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: -.01em; text-transform: none;
+  color: var(--heading); }
+.hc-tray-crumb { font-size: .84rem; color: var(--body-soft); text-decoration: none; border-radius: 4px; }
+.hc-tray-crumb:hover { color: var(--hc-edit-ink); text-decoration: underline; text-underline-offset: 3px; }
+.hc-tray-crumb:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
+.hc-tray-crumb[hidden] { display: none; }
+
+/* round 2 (R3): the proposals list — one row per proposal, hairlines between, no cards. A row is one button:
+   the proposer's colour dot, the avatar, the title over "who · which page", the status over "when". */
+.hc-plist { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--edge-soft); }
+.hc-prow { border-bottom: 1px solid var(--edge-soft); }
+.hc-prow { --hc-dot: var(--hc-edit); }
+.hc-prow[data-slot="1"] { --hc-dot: var(--hc-p1); }
+.hc-prow[data-slot="2"] { --hc-dot: var(--hc-p2); }
+.hc-prow[data-slot="3"] { --hc-dot: var(--hc-p3); }
+.hc-prow[data-slot="4"] { --hc-dot: var(--hc-p4); }
+.hc-prow[data-slot="5"] { --hc-dot: var(--hc-p5); }
+.hc-prow-open { display: grid; grid-template-columns: 8px 28px minmax(0, 1fr) auto; align-items: center; gap: .85rem; width: 100%;
+  padding: .85rem .6rem; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; transition: background-color .12s ease-out; }
+.hc-prow-open:hover { background: var(--surface-2); }
+.hc-prow-open:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
+.hc-prow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hc-dot); }
+.hc-prow-open > .hc-avatar-img, .hc-prow-open > .hc-initials { width: 28px; height: 28px; border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--hc-dot); }
+.hc-prow-open > .hc-initials { display: grid; place-items: center; background: var(--surface-2); color: var(--heading); font-size: .75rem; font-weight: 600; }
+.hc-prow-main { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.hc-prow-title { color: var(--heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-prow-meta { display: flex; gap: .4rem; min-width: 0; color: var(--body-soft); font-size: .82rem; }
+.hc-prow-who { flex: none; color: var(--body); }
+.hc-prow-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-prow-side { display: flex; flex-direction: column; align-items: flex-end; gap: .2rem; font-size: .8rem; white-space: nowrap; }
+.hc-prow-status { color: var(--body); font-weight: 500; }
+.hc-prow-status.is-merged { color: var(--body-soft); }
+.hc-prow-when { color: var(--body-soft); font-variant-numeric: tabular-nums; }
+.hc-prow[data-state="merged"] .hc-prow-title { color: var(--body); font-weight: 500; }
+.hc-plist-empty { color: var(--body-soft); }
+.hc-plist-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: 1.4rem !important; font-size: .82rem; color: var(--body-soft); }
+.hc-foot-link { padding: .1rem 0; border: 0; background: none; font: inherit; color: var(--body-soft); cursor: pointer; text-decoration: none; border-radius: 4px; }
+.hc-foot-link:hover { color: var(--hc-edit-ink); text-decoration: underline; text-underline-offset: 3px; }
+.hc-foot-link:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
+.hc-sep { color: var(--muted); }
+.hc-back-link { display: inline-block; margin-bottom: .6rem; font-size: .84rem; color: var(--body-soft); }
+@media (max-width: 767px) {
+  .hc-prow-open { grid-template-columns: 8px 24px minmax(0, 1fr); padding: .75rem .4rem; }
+  .hc-prow-side { grid-column: 3; flex-direction: row; gap: .6rem; align-items: baseline; }
+}
 .hc-tray-close { flex: none; display: inline-flex; align-items: center; gap: .4rem; min-height: 36px; margin-bottom: .2rem; padding: 0 .75rem 0 .55rem;
   font: 600 .84rem var(--sans); background: none; border: 1px solid var(--edge); border-radius: 8px; color: var(--heading); cursor: pointer;
   transition: background-color .12s ease-out, border-color .12s ease-out; }
