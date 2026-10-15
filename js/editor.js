@@ -3163,10 +3163,26 @@
         if (l && l !== 'web-flow') committers.add(l);
       }
     }
+    // only a record of an edit in the proposal's CURRENT diff counts (an old head's key is stale to go-live too)
+    const head = headShaOf(pull);
+    const keysOf = new Map();                          // path -> Set of current edit keys
+    try {
+      const main = await mainSha();
+      const base = await mergeBaseOf(main, head);
+      for (const f of files) {
+        const edits = await C.proposalEdits(f.filename, await textAt(base, f.filename, true),
+          await textAt(head, f.filename, true), await textAt(main, f.filename, false));
+        keysOf.set(f.filename, new Set((edits || []).map((e) => e.key)));
+      }
+    } catch (e) {
+      if (quiet(e)) throw e;
+      return false;                                    // unknown: keep Merge (GitHub's own rules still apply)
+    }
     for (const r of recs) {
       if (committers.has(r.login)) continue;
       const role = await roleNameOf(r.login).catch(() => 'none');
-      if (files.some((f) => C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, projects, author }))) return true;
+      if (files.some((f) => r.keys.some((k) => keysOf.get(f.filename).has(k))
+        && C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, projects, author }))) return true;
     }
     return false;
   }

@@ -526,6 +526,13 @@ test('reviewCards: one card per edit at its overlay entry; states from records, 
   const c6 = C.reviewCards({ edits, overlay: ov.overlay, comments: [rec(3, 'desert-mango-robotics', `hc-declined ${kc}`)],
     author: 'someone', headSha: S, trusted: () => true, may: () => true, eligible: true, pending: new Set() });
   assert.deepEqual([c6[0].state, c6[0].acts], ['declined', ['approve']], 'a Reject can be undone by approving');
+  // this tab's own reversal shows before GitHub lists it (codex U5b r2)
+  const c7 = C.reviewCards({ edits, overlay: ov.overlay, comments: [rec(3, 'desert-mango-robotics', `hc-declined ${kc}`)],
+    author: 'someone', headSha: S, trusted: () => true, may: () => true, eligible: true, pending: new Map([[kc, 'approved']]) });
+  assert.equal(c7[0].state, 'going');
+  const c8 = C.reviewCards({ edits, overlay: ov.overlay, comments: [rec(3, 'desert-mango-robotics', `hc-approved ${kc}`)],
+    author: 'someone', headSha: S, trusted: () => true, may: () => true, eligible: true, pending: new Map([[kc, 'declined']]) });
+  assert.equal(c8[0].state, 'declined');
 });
 
 test('cardText: the change in words, clipped, plain text', () => {

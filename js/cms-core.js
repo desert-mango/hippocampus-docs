@@ -3022,11 +3022,12 @@
       else if (c.eligible !== true) state = 'whole';
       else if (e.state === 'conflict' || e.state === 'anchor-gone') state = 'conflict';
       else if (e.state === 'ambiguous') state = 'ambiguous';
+      // this tab's own fresh record wins over what GitHub listed before it (a reversal shows at once)
+      else if (p === 'declined') state = 'declined';
+      else if (p === 'approved' && !fail) state = 'going';
       else if (dec && dec.kind === 'declined') { state = 'declined'; by = dec.login; }
       else if (fail) { state = 'failed'; reason = fail.reason; }
       else if (dec) { state = 'going'; by = dec.login; }
-      else if (p === 'declined') state = 'declined';
-      else if (p) state = 'going';
       // a Reject is undone by approving it after all (the latest trusted record wins)
       const acts = !mayAct ? [] : state === 'waiting' ? ['approve', 'decline'] : state === 'failed' ? ['decline']
         : state === 'declined' ? ['approve'] : [];
