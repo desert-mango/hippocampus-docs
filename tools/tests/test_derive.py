@@ -571,6 +571,11 @@ class TestGoLiveWorkflow(unittest.TestCase):
         self.assertIn('if [ "$ATTEMPT" -ge 3 ]; then', push)
         self.assertIn('gh workflow run go-live.yml --ref main -f attempt="$((ATTEMPT + 1))"', push)
         self.assertIn("node tools/go_live.mjs --close-done", g)
+        close = g[g.index("- name: Close proposals with nothing left open"):]
+        self.assertIn("if: steps.push.outputs.main_is_local == 'yes'", close)
+        self.assertEqual(push.count('echo "main_is_local=yes" >> "$GITHUB_OUTPUT"'), 2)
+        restart = push[push.index('if [ "$ATTEMPT" -ge 3 ]'):push.index("- name: Close proposals")]
+        self.assertNotIn("main_is_local", restart)
 
 
 class TestHygiene(unittest.TestCase):

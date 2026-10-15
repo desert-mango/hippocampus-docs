@@ -70,6 +70,7 @@ jobs:
           node tools/go_live.mjs --plan "$RUNNER_TEMP/go-live-plan.json"
 
       - name: Commit and push as the derive App
+        id: push
         env:
           GH_TOKEN: ${{ github.token }}
           ATTEMPT: ${{ inputs.attempt || '1' }}
@@ -82,6 +83,7 @@ jobs:
           if [ "$count" = "0" ]; then
             unset DERIVE_APP_PRIVATE_KEY
             echo "go-live: nothing to push"
+            echo "main_is_local=yes" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           APP_TOKEN=""
@@ -104,6 +106,7 @@ jobs:
           if out=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
                    GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header" git push origin HEAD:main 2>&1); then
             echo "$out"
+            echo "main_is_local=yes" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "$out"
@@ -118,7 +121,10 @@ jobs:
           echo "main moved; starting go-live again (attempt $((ATTEMPT + 1)))"
           gh workflow run go-live.yml --ref main -f attempt="$((ATTEMPT + 1))"
 
+      # Only when the local tree IS main (pushed, or nothing to push): never after a moved-main restart,
+      # whose commits did not land (codex U5a r1).
       - name: Close proposals with nothing left open
+        if: steps.push.outputs.main_is_local == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/go_live.mjs --close-done

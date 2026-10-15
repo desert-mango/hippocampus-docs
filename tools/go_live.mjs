@@ -165,7 +165,7 @@ export async function sweep(o) {
       if (x.reason !== 'stale') failed.push({ pr: w.prop.n, key: x.key, sha, reason: FAIL_WORDS[x.reason] || x.reason });
     }
     if (!r.applied.length) continue;
-    const group = { pr: w.prop.n, path: w.path, applied: r.applied,
+    const group = { pr: w.prop.n, path: w.path, applied: r.applied, text: r.text,
       approvers: [...new Set(r.applied.map((k) => w.d.get(k).login))],
       author: { login: w.prop.pull.user.login, id: w.prop.pull.user.id } };
     if (o.dryRun) { memo.set(w.path, r.text); groups.push(group); log(`would apply ${r.applied.length} edit(s) of #${group.pr} to ${w.path}`); continue; }
@@ -215,7 +215,8 @@ export async function closeDone(o) {
   return closed;
 }
 
-/* One commit per kept group, in order, then the derived data. */
+/* One commit per kept group, in order, then the derived data. Each entry carries its page's text as
+   that group left it, so two proposals' groups on one page still make two commits (codex U5a r1). */
 export function commitPlan(groups) {
   return groups.map((g) => {
     const n = g.applied.length;
@@ -223,6 +224,7 @@ export function commitPlan(groups) {
       author_name: g.author.login,
       author_email: `${g.author.id}+${g.author.login}@users.noreply.github.com`,
       files: [g.path],
+      texts: { [g.path]: g.text },
       message: `go-live: ${g.path} (${n} change${n === 1 ? '' : 's'} from #${g.pr}, approved by ${g.approvers.join(', ')})`,
     };
   });
@@ -287,6 +289,10 @@ async function main(argv) {
     const stray = strayPaths(changed, plan);
     if (stray.length) throw new Error(`refusing to commit files outside the plan: ${stray.slice(0, 5).join(', ')}`);
     for (const c of plan) {
+      for (const f of c.files) {
+        if (!CONTENT_RE.test(f) || typeof (c.texts || {})[f] !== 'string') throw new Error(`the plan's entry for ${f} is not a page text`);
+        await treeFs.write(f, c.texts[f]);
+      }
       git(['add', '--', ...c.files]);
       git(['commit', '-q', '--author', `${c.author_name} <${c.author_email}>`, '-m', c.message]);
     }

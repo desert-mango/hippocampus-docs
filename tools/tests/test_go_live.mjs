@@ -451,3 +451,21 @@ test('keys do not move when main moves: edit 1 goes live, edit 2 keeps its key (
   assert.deepEqual(after.map((e) => e.key), before.map((e) => e.key));
   assert.deepEqual(after.map((e) => e.state), ['open', 'live', 'open']);
 });
+
+test('engine: two proposals on one page make two commits, each with the page as its group left it', async () => {
+  const headA = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const headB = '# Title\n\nFirst para.\n\nSecond para.\n\nThird para, too.\n';
+  const kA = (await C.proposalEdits(P, BASE, headA, BASE))[0].key;
+  const kB = (await C.proposalEdits(P, BASE, headB, BASE))[0].key;
+  const H2 = '2'.repeat(40);
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'desert-mango-robotics', `hc-approved ${kA}`)] }),
+      pr(8, { files: [P], head: H2, author: 'other', comments: [rec(2, 'desert-mango-robotics', `hc-approved ${kB}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: headA }, [H2]: { [P]: headB } }, main: { [P]: BASE },
+  });
+  const out = await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: greenGate });
+  const both = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para, too.\n';
+  assert.equal(w.files[P], both);
+  const plan = ENGINE.commitPlan(out.groups);
+  assert.deepEqual(plan.map((c) => [c.author_name, c.texts[P]]), [['someone', headA], ['other', both]]);
+});
