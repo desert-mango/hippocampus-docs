@@ -37,3 +37,5 @@ The axes are driven by Faulhaber motors. For the x- and z-axis the motor model i
 
 
 <p class="provenance">Migrated from the previous docs site: <a href="https://hippocampusrobotics.github.io/docs/contents/gantry/general_information.html">contents/gantry/general_information</a>.</p>
+
+Go-live check (15 October 2026): an approved change went live on its own; this line is removed again right after.
