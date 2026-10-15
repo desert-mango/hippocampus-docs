@@ -14,7 +14,8 @@
 # main, and GitHub refuses the GitHub Actions app as a ruleset bypass actor here;
 # the App is one. tools/github_app_token.py mints its installation token (this
 # repository only, contents: write only, about an hour, revoked on exit) from
-# the environment's secret DERIVE_APP_PRIVATE_KEY and variable DERIVE_APP_ID.
+# the environment's secret DERIVE_APP_PRIVATE_KEY and its App id DERIVE_APP_ID (kept as a
+# secret there; a variable of that name is read first if one is ever added).
 # The `derive` environment admits the main branch only, so no other branch's
 # workflow can read the key. The GITHUB_TOKEN stays read-only and is never
 # stored in .git/config (persist-credentials: false); the App token reaches git
@@ -63,7 +64,7 @@ jobs:
           # history, pull requests, profiles' display names).
           GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
-          DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID }}
+          DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID || secrets.DERIVE_APP_ID }}
           DERIVE_APP_PRIVATE_KEY: ${{ secrets.DERIVE_APP_PRIVATE_KEY }}
         # derive.py resolves BEFORE itself: a multi-commit push or a new branch
         # (all-zeros sha) may leave it outside this shallow checkout, and then it

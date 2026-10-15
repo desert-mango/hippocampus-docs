@@ -450,8 +450,9 @@ class TestWorkflows(unittest.TestCase):
         # The secret lives in the `derive` environment (main only); the job names it.
         self.assertIn("    environment: derive\n", d)
         secrets = sorted(set(re.findall(r"secrets\.([A-Z_]+)", d)))
-        self.assertEqual(secrets, ["DERIVE_APP_PRIVATE_KEY"])
-        self.assertIn("vars.DERIVE_APP_ID", d)
+        self.assertEqual(secrets, ["DERIVE_APP_ID", "DERIVE_APP_PRIVATE_KEY"])
+        # Kyle stored the App id as a secret (2026-10-15); a variable of that name wins if one is added
+        self.assertIn("DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID || secrets.DERIVE_APP_ID }}", d)
         self.assertIn("python3 tools/github_app_token.py", d)
         # The token is masked before anything else and revoked on exit.
         mint = d.index("python3 tools/github_app_token.py)")
