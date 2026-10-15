@@ -953,9 +953,10 @@
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
     // plan-u5: a proposal with a TRUSTED edit-by-edit record (the go-live engine's rule: may approve one of its
     // pages, not the author, no commit on it) is not merged whole: no Merge
+    const partial = (list) => Object.assign(list.slice(), { partial: true });
     const everyComment = comments && comments.ok && Array.isArray(comments.data) && comments.data.length >= 100
-      ? await allComments(n).catch((e) => { if (quiet(e)) throw e; return comments.data; })
-      : (comments && comments.ok && Array.isArray(comments.data) ? comments.data : []);
+      ? await allComments(n).catch((e) => { if (quiet(e)) throw e; return partial(comments.data); })
+      : (comments && comments.ok && Array.isArray(comments.data) ? comments.data : partial([]));
     const hasRecords = await trustedRecordExists(p, files, everyComment, owners);
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
@@ -3148,15 +3149,23 @@
     renderRail();
   }
 
-  /* Every issue comment of proposal n (the approval records may be past the first page), up to 10 pages,
-     as the go-live engine reads them. -> array (what could be read). */
+  /* Every issue comment of proposal n (the approval records may be past the first page), up to the go-live
+     engine's own 30 pages. -> array; .partial = true when a later page could not be read or there may be
+     more (callers treat that as unknown, never as "no records"). */
+  const COMMENT_PAGES = 30;
   async function allComments(n) {
     const out = [];
-    for (let page = 1; page <= 10; page += 1) {
+    out.partial = false;
+    for (let page = 1; page <= COMMENT_PAGES; page += 1) {
       const res = await apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100&page=${page}`);
-      if (!res.ok || !Array.isArray(res.data)) { if (page === 1) throw new Error(`GitHub answered HTTP ${res.status}`); break; }
+      if (!res.ok || !Array.isArray(res.data)) {
+        if (page === 1) throw new Error(`GitHub answered HTTP ${res.status}`);
+        out.partial = true;
+        break;
+      }
       out.push(...res.data);
       if (res.data.length < 100) break;
+      if (page === COMMENT_PAGES) out.partial = true;
     }
     return out;
   }
@@ -3181,6 +3190,7 @@
 
   async function trustedRecordExists(pull, files, comments, projects) {
     const author = loginOf(pull).toLowerCase();
+    if (comments && comments.partial === true && C.proposalEligible(pull, files)) return true;   // unknown: no Merge here
     const recs = C.parseRecords(comments, { author }).list;
     if (!recs.length || !C.proposalEligible(pull, files)) return false;
     const committers = await committersOf(pull.number).catch((e) => { if (quiet(e)) throw e; return null; });
