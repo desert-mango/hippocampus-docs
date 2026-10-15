@@ -432,7 +432,7 @@
     /* U5b: where the MARKED blocks are, for the parent's review rail (numbers only; js/source.js rounds
        and checks them). Sent after each apply, scroll and resize, once per animation frame, and only when
        something moved; when the marks go, one empty report clears the rail. */
-    let lastRects = '[]';
+    let lastRects = '[[],0]';
     let rectsQueued = false;
     function reportRects() {
       const s = state;
@@ -450,10 +450,11 @@
           }
         }
       }
-      const key = JSON.stringify(rects);
+      const view = Number(win.innerHeight) || 0;
+      const key = JSON.stringify([rects, rects.length ? view : 0]);      // a height-only resize is news too
       if (key === lastRects) return;
       lastRects = key;
-      HC.post('hc-block-rects', { rects, view: Number(win.innerHeight) || 0 });
+      HC.post('hc-block-rects', { rects, view });
     }
     function queueRects() {
       if (rectsQueued) return;

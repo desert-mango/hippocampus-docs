@@ -270,6 +270,9 @@ test('editor-frame (U5b): the marked blocks\' rectangles go to the parent (numbe
   assert.deepEqual(HC.posts.slice(before).map((p) => p.type), ['hc-block-rects']);
   for (const fn of win.listeners.scroll || []) fn({});
   assert.equal(HC.posts.length, before + 1, 'unchanged: not sent again');
+  win.innerHeight = 600;                                   // a height-only resize is reported (codex U5b r3)
+  for (const fn of win.listeners.resize || []) fn({});
+  assert.equal(HC.posts[HC.posts.length - 1].view, 600);
   // the marks go: one empty report clears the rail, then silence
   HC.send({ on: true, overlay: [] });
   const last = HC.posts.filter((p) => p.type === 'hc-block-rects').pop();

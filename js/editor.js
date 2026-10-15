@@ -953,7 +953,10 @@
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
     // plan-u5: a proposal with a TRUSTED edit-by-edit record (the go-live engine's rule: may approve one of its
     // pages, not the author, no commit on it) is not merged whole: no Merge
-    const hasRecords = await trustedRecordExists(p, files, comments && comments.ok ? comments.data : [], owners);
+    const everyComment = comments && comments.ok && Array.isArray(comments.data) && comments.data.length >= 100
+      ? await allComments(n).catch((e) => { if (quiet(e)) throw e; return comments.data; })
+      : (comments && comments.ok && Array.isArray(comments.data) ? comments.data : []);
+    const hasRecords = await trustedRecordExists(p, files, everyComment, owners);
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
       ...statusBlock(status, notes),
@@ -3090,13 +3093,13 @@
   const GO_LIVE_RUNS = `${C.GITHUB_WEB}/actions/workflows/go-live.yml`;
   const ROLE_NAME = { admin: 'admin', maintain: 'maintain', push: 'write' };
   const rail = { el: null, data: null, cards: [], rects: new Map(), view: 0, active: null, hover: null,
-    pending: new Map(), pollUntil: 0, timer: null, nodes: new Map(), sheet: null, pop: null, stale: false };
+    pending: new Map(), pollUntil: 0, timer: null, nodes: new Map(), sheet: null, pop: null, stale: false, busy: false };
   const collabRoles = new Map();           // login -> role_name, for this session
 
   function railReset() {
     if (rail.timer) clearTimeout(rail.timer);
     Object.assign(rail, { data: null, cards: [], rects: new Map(), view: 0, active: null, hover: null, pending: new Map(),
-      pollUntil: 0, timer: null, nodes: new Map(), stale: false });
+      pollUntil: 0, timer: null, nodes: new Map(), stale: false, busy: false });
     closeSheet();
     if (rail.el) { rail.el.replaceChildren(); rail.el.hidden = true; }
     document.body.classList.remove('hc-has-rail');
@@ -3121,9 +3124,9 @@
     const head = headShaOf(pull);
     if (!head) return;
     const base = await mergeBaseOf(main, head);
-    const [baseText, headText, mainText, comments, commits, projects] = await Promise.all([
+    const [baseText, headText, mainText, list, commits, projects] = await Promise.all([
       textAt(base, page.file, true), textAt(head, page.file, true), textAt(main, page.file, false),
-      apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100`),
+      allComments(n).catch((e) => { if (quiet(e)) throw e; return []; }),
       apiResponse(`${C.REPO_API_PATH}/pulls/${n}/commits?per_page=100`),
       ownersRegistry()]);
     const edits = await C.proposalEdits(page.file, baseText, headText, mainText);
@@ -3136,7 +3139,6 @@
         if (l && l !== 'web-flow') committers.add(l);
       }
     }
-    const list = comments.ok && Array.isArray(comments.data) ? comments.data : [];
     const roles = new Map();
     for (const r of C.parseRecords(list, { author }).list) {
       if (!roles.has(r.login)) roles.set(r.login, await roleNameOf(r.login).catch(() => 'none'));
@@ -3149,6 +3151,19 @@
       eligible: C.proposalEligible(pull, pv.files), trusted: (login) => rule(login, roles.get(login)),
       may: () => Boolean(me) && rule(me, myRole), main };
     renderRail();
+  }
+
+  /* Every issue comment of proposal n (the approval records may be past the first page), up to 10 pages,
+     as the go-live engine reads them. -> array (what could be read). */
+  async function allComments(n) {
+    const out = [];
+    for (let page = 1; page <= 10; page += 1) {
+      const res = await apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100&page=${page}`);
+      if (!res.ok || !Array.isArray(res.data)) { if (page === 1) throw new Error(`GitHub answered HTTP ${res.status}`); break; }
+      out.push(...res.data);
+      if (res.data.length < 100) break;
+    }
+    return out;
   }
 
   async function trustedRecordExists(pull, files, comments, projects) {
@@ -3263,7 +3278,7 @@
     const when = cardWhen(d.pull.updated_at || d.pull.created_at);
     const acts = h('div', { class: 'hc-rcard-acts' });
     for (const a of c.acts) {
-      const b = h('button', { type: 'button', class: `hc-rcard-btn is-${a}`, 'data-act': a,
+      const b = h('button', { type: 'button', class: `hc-rcard-btn is-${a}`, 'data-act': a, disabled: rail.busy === true,
         'aria-label': a === 'approve' ? 'Approve this change' : 'Reject this change',
         title: a === 'approve' ? 'Approve (goes live)' : 'Reject' }, icon(a));
       b.addEventListener('click', (e) => {
@@ -3420,11 +3435,18 @@
   /* Approve or Reject: the record goes to the proposal; approved keys are then watched on main. */
   async function decide(kind, keys) {
     const d = rail.data;
-    if (!d || !keys.length || !state.client) return;
-    const out = await C.runRecord(state.client, d.n, kind, keys);
+    if (!d || !keys.length || !state.client || rail.busy) return;    // one decision at a time: no duplicate records
+    rail.busy = true;
+    renderRail();                                                     // its buttons are disabled meanwhile
+    let out;
+    try {
+      out = await C.runRecord(state.client, d.n, kind, keys);
+    } finally {
+      rail.busy = false;
+    }
     say(out.message, out.ok ? null : 'error');
     const done = Array.isArray(out.done) ? out.done : [];     // a partial write still counts for what it recorded
-    if (!done.length) return;
+    if (!done.length) { renderRail(); return; }
     for (const k of done) rail.pending.set(k, kind);
     renderRail();
     if (kind === 'approved') watchMain();
@@ -3445,9 +3467,9 @@
       try { sha = await C.resolveRef(state.client, 'main'); } catch (e) { sha = null; }
       if (sha && sha !== d.main) {
         const [text, comments] = await Promise.all([textAt(sha, d.file, false).catch(() => null),
-          apiResponse(`${C.REPO_API_PATH}/issues/${d.n}/comments?per_page=100`).catch(() => null)]);
+          allComments(d.n).catch(() => null)]);
         if (mine !== ed.loads || rail.data !== d) return;
-        if (comments && comments.ok && Array.isArray(comments.data)) d.comments = comments.data;
+        if (comments) d.comments = comments;
         const edits = text === null ? null : await C.proposalEdits(d.file, d.baseText, d.headText, text);
         const waiting = [...rail.pending].filter(([, k]) => k === 'approved').map(([key]) => key);
         if (edits && waiting.every((k) => { const e = edits.find((x) => x.key === k); return !e || e.state === 'live'; })) {
@@ -3458,8 +3480,8 @@
           return;
         }
       } else {
-        const comments = await apiResponse(`${C.REPO_API_PATH}/issues/${d.n}/comments?per_page=100`).catch(() => null);
-        if (comments && comments.ok && Array.isArray(comments.data) && rail.data === d) d.comments = comments.data;
+        const comments = await allComments(d.n).catch(() => null);
+        if (comments && rail.data === d) d.comments = comments;
       }
       if (rail.data !== d) return;
       if (Date.now() > rail.pollUntil) { rail.stale = true; renderRail(); return; }
