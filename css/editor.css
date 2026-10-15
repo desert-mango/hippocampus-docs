@@ -315,6 +315,18 @@ body.hc-compact .page-body pre { font-size: .8em; }
   margin-top: .45rem; padding-top: .5rem; border-top: 1px solid var(--edge-soft); }
 .hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
 .hc-dock-count { color: var(--body-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* round 2 (R2b): Undo / Redo, two quiet icon buttons between the count and Send */
+.hc-dock-histwrap { display: inline-flex; gap: .15rem; margin-left: auto; }
+.hc-dock-histwrap:not(:has(.hc-dock-hist:not([hidden]))) { display: none; }
+.hc-dock-hist { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  background: none; color: var(--body); cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
+.hc-dock-hist svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hc-dock-hist:hover:not(:disabled) { background: var(--surface-2); color: var(--hc-edit-ink); }
+.hc-dock-hist:active:not(:disabled) { transform: scale(.94); }
+.hc-dock-hist:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-dock-hist:disabled { color: var(--muted); opacity: .55; cursor: default; }
+.hc-dock-hist[hidden] { display: none; }
+@media (pointer: coarse) { .hc-dock-hist { width: 44px; height: 44px; } }
 .hc-dock-send[hidden] { display: none; }
 .hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1;
   transition: background-color .12s ease-out, color .12s ease-out; }

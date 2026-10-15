@@ -254,3 +254,20 @@ test('code blocks: the fence lines are kept verbatim, only the inside changes', 
   code.childNodes[0].data = '```\n$ ros2 launch\n';
   assert.throws(() => M.serialize(root, md, 'code'), (e) => e.name === 'Unsupported' && /fence/.test(e.message));
 });
+
+// ---- round 2, R2b: the Edit menu's Undo/Redo go to the Editor's history, also in a code block (codex r1) ----
+test('HCEditorType: historyUndo / historyRedo are refused and handed to onHistory, rich and plain alike', async () => {
+  const T = (await import('node:module')).createRequire(import.meta.url)('../../js/editor-type.js');
+  for (const plain of [false, true]) {
+    const listeners = {};
+    const root = { addEventListener: (t, fn) => { listeners[t] = fn; }, removeEventListener() {}, ownerDocument: {} };
+    const told = [];
+    T.attach(root, { plain, onHistory: (op) => told.push(op), onBefore: () => told.push('before') });
+    for (const inputType of ['historyUndo', 'historyRedo']) {
+      let prevented = false;
+      listeners.beforeinput({ inputType, preventDefault() { prevented = true; } });
+      assert.equal(prevented, true, `${inputType} (plain ${plain}) is not the browser's`);
+    }
+    assert.deepEqual(told, ['undo', 'redo'], 'no restore point for an undo');
+  }
+});

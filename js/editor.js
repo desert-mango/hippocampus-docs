@@ -77,6 +77,8 @@
   let dockTag = null;      // the small tag on the right edge that brings a collapsed dock back
   let dockCount = null;    // "N changes" in the dock
   let dockSend = null;     // "Send for review" in the dock
+  let dockUndo = null;     // round 2 (R2b): Undo / Redo in the dock
+  let dockRedo = null;
   let sendBox = null;      // the box above the dock that Send opens (the propose form)
   let sendKey = null;      // the draft that box was opened for
   let switchBtn = null;
@@ -400,6 +402,101 @@
      avatar (its menu holds Sign out), the first name, the role. The switch
      works once GitHub has confirmed access. js/app.js hears every change
      between signed in and signed out (its footer link follows). */
+  /* ---- Undo / Redo (round 2, R2b; Kyle 2026-10-15) ----
+     ONE ordered history per page draft, kept here. Every change to the draft of the page on screen passes
+     histNote (drafts.put) and pushes the text it replaces — except typing, which pushes once per burst: the
+     frame marks a burst's start with a restore point of the block (hc-history {index, snap}). Undo puts the
+     text back; when the step is typing in THIS frame load, the frame is told to show its restore point again
+     (hc-editor.cmd {restore}: the suggestion marks come back too, no reload), else the frame is drawn again.
+     Redo walks forward the same way; any new change clears it. The history ends with the draft (sent,
+     discarded), on another page, and when Editor mode goes off. */
+  const HIST_MAX = 200;
+  const HIST_BURST_MS = 1500;
+  const hist = { key: null, file: null, last: null, undo: [], redo: [], pending: null, typed: null, applying: false, seq: 0, typing: false };
+  function histReset(page) {
+    const d = page && ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
+    Object.assign(hist, { key: page ? page.pageId : null, file: page ? page.file : null,
+      last: d && typeof d.files[page.file] === 'string' ? d.files[page.file] : null, undo: [], redo: [], pending: null, typed: null });
+  }
+  function histNote(d) {
+    if (!d || !hist.key || d.key !== hist.key || !d.files || typeof d.files[hist.file] !== 'string') return;
+    const text = d.files[hist.file];
+    const prev = hist.last !== null ? hist.last : (d.originals && typeof d.originals[hist.file] === 'string' ? d.originals[hist.file] : null);
+    hist.last = text;
+    if (hist.applying || prev === null || text === prev) return;
+    const t = Date.now();
+    if (hist.typing) {
+      const same = hist.typed && hist.typed.index === ed.selected && t - hist.typed.at < HIST_BURST_MS;
+      hist.typed = { index: ed.selected, at: t };
+      if (!hist.pending && same) return;                  // the same burst: one step
+    } else hist.typed = null;
+    const snap = hist.typing && hist.pending ? hist.pending : null;
+    hist.undo.push({ text: prev, snap: snap ? snap.snap : null, index: snap ? snap.index : null, load: ed.loads,
+      span: hist.typing && hist.spanBefore ? hist.spanBefore : null });
+    if (hist.undo.length > HIST_MAX) hist.undo.shift();
+    hist.redo = [];
+    hist.pending = null;
+  }
+  function histRemoved(key) {
+    if (hist.applying || !hist.key || key !== hist.key) return;
+    if (hist.typing) { const d = ed.draft; if (d && d.key === key) histNote(d); return; }   // typed back to the original
+    Object.assign(hist, { last: null, undo: [], redo: [], pending: null, typed: null });
+  }
+  function histText(page, text, span) {
+    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : drafts.get(page.pageId);
+    if (!d) return false;
+    hist.applying = true;
+    try {
+      d.files[page.file] = typeof text === 'string' ? text : d.originals[page.file];
+      if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
+    } finally { hist.applying = false; }
+    ed.draft = d;
+    hist.last = d.files[page.file];
+    if (ed.sel && ed.sel.key === d.key && !ed.sel.whole && Number.isInteger(ed.selected)) {
+      // the open block's span as it was at that step (its blank lines included), else found again
+      const sp = span && span.end <= d.files[page.file].length ? span : C.spanOf(d.files[page.file], ed.selected);
+      if (sp) ed.sel.span = { start: sp.start, end: sp.end };
+    }
+    return true;
+  }
+  function undoRedo(op) {
+    const page = ed.page;
+    if (!ed.on || !page || hist.key !== page.pageId || !canEdit() || ed.show) return;
+    const from = op === 'undo' ? hist.undo : hist.redo;
+    const to = op === 'undo' ? hist.redo : hist.undo;
+    const e = from.pop();
+    if (!e) return;
+    const inPlace = Boolean(e.snap) && e.load === ed.loads && Number.isInteger(e.index);
+    hist.seq += 1;
+    const save = inPlace ? `u${hist.seq}` : null;
+    const spanNow = ed.sel && !ed.sel.whole && ed.selected === e.index ? { start: ed.sel.span.start, end: ed.sel.span.end } : null;
+    to.push({ text: hist.last, snap: save, index: e.index, load: ed.loads, span: spanNow });
+    Object.assign(hist, { pending: null, typed: null });
+    if (!histText(page, e.text, ed.selected === e.index ? e.span : null)) return;
+    say('');
+    if (inPlace) {
+      ed.cmdN = (ed.cmdN || 0) + 1;
+      ed.cmdOut = { n: ed.cmdN, op: 'restore', index: e.index, snap: e.snap, save };
+      postEditor();
+    } else frameTo(ed.route, true);
+    if (inPageLine && ed.draft) inPageLine.textContent = draftStateText(ed.draft);
+    drawDraftList(false);
+    refreshDock();
+  }
+  // the undo / redo arrows (Lucide-style strokes, drawn here: no icon font)
+  function histIcon(op) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS ? document.createElementNS(ns, 'svg') : h('span');
+    if (!svg.setAttribute) return svg;
+    for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '16'], ['height', '16'], ['aria-hidden', 'true'], ['focusable', 'false']]) svg.setAttribute(k, v);
+    const path = document.createElementNS ? document.createElementNS(ns, 'path') : null;
+    if (path) {
+      path.setAttribute('d', op === 'undo' ? 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11' : 'm15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13');
+      svg.appendChild(path);
+    }
+    return svg;
+  }
+
   /* The dock (editor redesign U4a, Kyle's D1 change 3): the Editor switch and the avatar leave the
      header and sit in a bubble at the bottom right with the page's change count and "Send for
      review"; its x tucks it into a small tag on the right edge (remembered in this browser). */
@@ -411,7 +508,15 @@
     const x = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'dock-collapse', 'aria-label': 'Hide the editor controls',
       title: 'Hide (the tag on the right edge brings it back)' }, '×');
     x.addEventListener('click', () => collapseDock(true));
-    const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount, dockSend);
+    // round 2 (R2b): Undo and Redo sit between the count and Send for review
+    const mac = /Mac|iPhone|iPad/.test(String((window.navigator && window.navigator.platform) || ''));
+    const keyName = mac ? '⌘' : 'Ctrl+';
+    dockUndo = h('button', { type: 'button', class: 'hc-dock-hist', 'data-action': 'undo', 'aria-label': 'Undo', title: `Undo (${keyName}Z)` }, histIcon('undo'));
+    dockRedo = h('button', { type: 'button', class: 'hc-dock-hist', 'data-action': 'redo', 'aria-label': 'Redo', title: `Redo (${mac ? '⇧⌘Z' : 'Ctrl+Y'})` }, histIcon('redo'));
+    dockUndo.addEventListener('click', () => undoRedo('undo'));
+    dockRedo.addEventListener('click', () => undoRedo('redo'));
+    const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount,
+      h('span', { class: 'hc-dock-histwrap', role: 'group', 'aria-label': 'Undo and redo' }, dockUndo, dockRedo), dockSend);
     // the proposals list opens from here: a small text link with the open count, under the name (round 2, R2a)
     handle = h('button', { type: 'button', class: 'hc-dock-pages hc-dock-link', 'data-action': 'tray-open', 'aria-expanded': 'false',
       title: 'Open proposals' }, 'Proposals');
@@ -458,6 +563,11 @@
     dockCount.textContent = !editing ? '' : (n === 0 ? 'No changes yet' : `${n} ${n === 1 ? 'change' : 'changes'}`);
     dockSend.hidden = !editing;
     dockSend.disabled = n === 0;
+    const ours = editing && hist.key === ed.page.pageId;
+    dockUndo.hidden = !editing;
+    dockRedo.hidden = !editing;
+    dockUndo.disabled = !(ours && hist.undo.length);
+    dockRedo.disabled = !(ours && hist.redo.length);
     // the page bar keeps its buttons clear of the bubble above it (css/editor.css reads the width)
     const bs = document.body.style;
     if (bs && typeof bs.setProperty === 'function') {
@@ -1073,18 +1183,22 @@
           + 'a draft in this browser (even when you close the tab) until you send them for review; signing out deletes them.'),
         step('Click a block', ' and type right in the page: new text is underlined, removed text struck through. '
           + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
+        step('Undo and Redo', ': Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, or the two arrows in the bubble, step back and forward '
+          + 'through your changes, one burst of typing at a time; the marks come back with the text. Typing done before the '
+          + 'page is drawn again (after a block is added or moved) undoes as one step.'),
         step('Images', ': click an image to replace it with a new file (it is uploaded for you), or drag it to another '
           + 'place; with the image focused, Alt+Up and Alt+Down move it too.'),
-        step('The whole page as Markdown', ', the data files and the image library are on the ', link('#/pages', 'Data tab'),
-          '. "Proposals" in the bubble opens this page; "Back to the page" or Escape closes it.'),
+        step('People and data', ': the Team page\u2019s people are changed on the Team page itself (drag a card, click it for '
+          + 'its menu, or the "+" card); other data files on GitHub. "Proposals" in the bubble opens the list of proposals; '
+          + '"Back to the page" or Escape closes it.'),
         step('Press + between two blocks', ' to add a new block there.'),
         step('Send for review', ' (in the bubble) turns your changes into a proposal: a pull request on GitHub, checked by '
           + 'the site\'s gate.'),
-        step('Nothing is live', ' until someone with write access merges it, in the ', link('#/', 'Proposals tab'),
-          '. "Show on page" shows a proposal on its page; a merge can be undone on GitHub.'),
-        step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"): green is added or '
-          + 'new, red is removed or old, a dashed mark means main changed that block since the proposal (Update '
-          + 'from main). Click a marked block to open its proposal; the bar above the page links to it.'),
+        step('Nothing is live', ' until someone with write access approves it. The ', link('#/', 'Proposals list'),
+          ' shows who proposed what, where, when; click one to see its page with its changes; a merge can be undone on GitHub.'),
+        step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"), each person in their own '
+          + 'colour (yours in magenta); removed text is struck on red, a dashed mark means main changed that block since '
+          + 'the proposal (Update from main). Click a marked block to open its card beside the page.'),
         step('View', ' holds your own settings for the page. They stay in this browser.')),
       h('p', { class: 'cms-muted', text: 'Per-line diff inside code blocks is out of v1: a changed code block is shown '
         + 'whole, the old one and then the new one.' }),
@@ -1177,7 +1291,11 @@
     return draftBound.store;
   }
   const drafts = Object.freeze({
-    get: (k) => draftStore().get(k), put: (d) => draftStore().put(d), remove: (k) => draftStore().remove(k),
+    get: (k) => draftStore().get(k),
+    // round 2 (R2b): every change to the page's draft passes the undo history (histNote); a draft removed for any
+    // other reason (sent for review, discarded) ends its history
+    put: (d) => { histNote(d); return draftStore().put(d); },
+    remove: (k) => { histRemoved(k); return draftStore().remove(k); },
     list: () => draftStore().list(), dirty: () => draftStore().dirty(), sync: (keep) => draftStore().sync(keep),
     clear: () => draftStore().clear(),
   });
@@ -2493,7 +2611,7 @@
       return;
     }
     ed.on = on;
-    if (!on) { ed.show = null; ed.focusPr = null; }
+    if (!on) { ed.show = null; ed.focusPr = null; histReset(null); }
     document.body.classList.toggle('hc-editor-on', on);
     // the title: "HippoCampus Editor" while Editor mode is on (css/site.css slides the word); the reader hears the visible word
     const [robotics, editorWord] = [document.querySelector('.brand-robotics'), document.querySelector('.brand-editor')];
@@ -2765,6 +2883,9 @@
         if (!ed.draft && samePage(page, ed.page)) ed.draft = d;
       }
     }
+    // R2b: the undo history belongs to this page's draft; another page starts its own
+    if (!page || hist.key !== page.pageId) histReset(page);
+    else if (ed.draft && ed.draft.key === page.pageId) hist.last = ed.draft.files[page.file];
     // what this load shows (D-G): the reads are memoized, so a reload after an edit asks nothing
     let pv;
     try {
@@ -3799,7 +3920,9 @@
     const people = { edit: onTeam && canEdit() && !ed.show && !(ed.pv && ed.pv.pr), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
       focus: onTeam ? ed.peopleFocus || null : null };
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people }, '*');
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people,
+      cmd: ed.cmdOut || null }, '*');
+    ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
 
   /* The block the frame may open for typing in the page (U2): the selected block of MY draft, its
@@ -3829,10 +3952,13 @@
     const d = ed.draft;
     if (!ed.inPage || ed.inPage.index !== index || ed.selected !== index || !sel || sel.whole || !d || d.key !== sel.key
       || !canEdit() || showing() || typeof md !== 'string' || md.length > MAX_BLOCK_MD) return;
+    hist.spanBefore = { start: sel.span.start, end: sel.span.end };   // R2b: the span an undo of this step comes back to
     const out = C.replaceSpan(d.files[sel.file], sel.span, md);
     d.files[sel.file] = out.text;
     sel.span = out.span;
-    if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
+    // typing: one undo step per burst (histNote); a note box's Remove (md '') is a step of its own
+    hist.typing = md !== '';
+    try { if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key); } finally { hist.typing = false; }
     if (inPageLine) inPageLine.textContent = draftStateText(d);
     drawDraftList(false);
     refreshDock();
@@ -3879,6 +4005,10 @@
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
     else if (m.type === 'hc-people' && (m.op === 'order' || m.op === 'add')) peopleEdit(m).catch(shown);
+    else if (m.type === 'hc-history' && index !== null && typeof m.snap === 'string') {
+      if (ed.page && hist.key === ed.page.pageId) hist.pending = { index, snap: m.snap };   // the next typed change's restore point
+    } else if (m.type === 'hc-key' && (m.op === 'undo' || m.op === 'redo')) undoRedo(m.op);
+    else if (m.type === 'hc-key' && m.op === 'redraw' && ed.on) frameTo(ed.route, true);   // the text is right; the page is drawn from it
     return true;
   }
   const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };

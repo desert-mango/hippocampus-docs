@@ -1274,15 +1274,16 @@ test('View: the settings form saves to localStorage (hc-editor-view) and tells t
   assert.equal(page.storage.getItem(C.viewSettings.KEY), null, 'never in sessionStorage');
 });
 
-test('Guide: the new steps, the private line, per-line code diffs out of v1; its links move between tabs', async () => {
+test('Guide: the new steps, the private line, per-line code diffs out of v1; its link opens the proposals list', async () => {
   const page = await editorOn();
   await openTab(page, 'guide');
   const text = page.tray().textContent;
   assert.match(text, /Per-line diff inside code blocks is out of v1/);
   assert.match(text, /[Pp]rivate/);
   assert.match(text, /\+/);
-  await page.follow(page.linkTo('#/pages'));
-  assert.equal(selectedTab(page), 'changes');
+  assert.match(text, /Undo and Redo/, 'round 2 (R2b): the keys and the bubble arrows');
+  await page.follow(page.linkTo('#/'));
+  assert.equal(page.trayTitle(), 'Proposals', 'its link leads to the proposals list');
 });
 
 test('?editor=proposals&pr=1 opens the tray on that card; ?editor=changes&data= / &new= open those forms', async () => {
@@ -4400,4 +4401,90 @@ test('R5: on the Team page the card tools are on, no blocks; an order from the f
   await settle();
   assert.equal(page.tray().hidden, false);
   assert.equal(page.one((e) => e.tagName === 'SELECT' && e.attrs['data-field'] === 'group').value, 'alumni');
+});
+
+// ---- round 2, R2b: Undo / Redo (Kyle 2026-10-15, item 1) ----
+async function typedPage() {
+  const page = await editorOn();
+  await page.asks(PAGE_FILE);
+  await page.send({ type: 'hc-ready' });
+  const i = firstParagraph(PAGE_TEXT);
+  await page.pick(i);
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
+  return { page, i, b: blocksOf(PAGE_TEXT)[i] };
+}
+const KEY_FCU = 'setup/hippocampus-bringup/fcu-firmware';
+const fileNow = (page) => { const d = draftsOf(page).get(KEY_FCU); return d ? d.files[PAGE_FILE] : PAGE_TEXT; };
+const undoBtn = (page) => page.action('undo');
+const redoBtn = (page) => page.action('redo');
+
+test('R2b: a typing step is undone in place — the frame restores its restore point, no reload — and redone', async () => {
+  const { page, i, b } = await typedPage();
+  assert.ok(undoBtn(page) && redoBtn(page), 'Undo and Redo in the bubble');
+  assert.equal(undoBtn(page).disabled, true, 'nothing to undo yet');
+  const srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-history', index: i, snap: 'fabc-1' });
+  const one = 'First words.\n\n';
+  await page.send({ type: 'hc-block-md', index: i, md: one });
+  await page.send({ type: 'hc-block-md', index: i, md: 'First words, more.\n\n' });   // the same burst: no new restore point
+  await page.send({ type: 'hc-history', index: i, snap: 'fabc-2' });
+  const two = 'First words, more. Second burst.\n\n';
+  await page.send({ type: 'hc-block-md', index: i, md: two });
+  assert.equal(undoBtn(page).disabled, false);
+  undoBtn(page).click();
+  await settle();
+  let m = page.editorMessages().at(-1);
+  assert.deepEqual({ ...m.cmd }, { n: 1, op: 'restore', index: i, snap: 'fabc-2', save: m.cmd.save });
+  assert.equal(fileNow(page), PAGE_TEXT.slice(0, b.start) + 'First words, more.\n\n' + PAGE_TEXT.slice(b.end), 'back one burst');
+  undoBtn(page).click();
+  await settle();
+  m = page.editorMessages().at(-1);
+  assert.equal(m.cmd.snap, 'fabc-1');
+  assert.equal(fileNow(page), PAGE_TEXT, 'back to the page as it was');
+  assert.equal(undoBtn(page).disabled, true);
+  assert.equal(page.frame().srcs.length, srcs, 'typing is undone in place: no reload');
+  // Redo walks forward again, restoring what each Undo kept
+  redoBtn(page).click();
+  await settle();
+  const r = page.editorMessages().at(-1).cmd;
+  assert.equal(r.op, 'restore');
+  assert.match(r.snap, /^u\d+$/);
+  assert.equal(fileNow(page), PAGE_TEXT.slice(0, b.start) + 'First words, more.\n\n' + PAGE_TEXT.slice(b.end));
+  // a new edit after an undo clears Redo
+  await page.send({ type: 'hc-history', index: i, snap: 'fabc-3' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'Another way.\n\n' });
+  assert.equal(redoBtn(page).disabled, true);
+  // the keys pressed in the frame do the same as the buttons
+  await page.send({ type: 'hc-key', op: 'undo' });
+  await settle();
+  assert.equal(page.editorMessages().at(-1).cmd.snap, 'fabc-3');
+  // typing after an undo keeps writing into the right span
+  await page.send({ type: 'hc-history', index: i, snap: 'fabc-4' });
+  await page.send({ type: 'hc-block-md', index: i, md: 'Typed after undo.\n\n' });
+  assert.equal(fileNow(page), PAGE_TEXT.slice(0, b.start) + 'Typed after undo.\n\n' + PAGE_TEXT.slice(b.end));
+});
+
+test('R2b: a step that reloaded the page (an inserted block) is undone with a reload; Discard clears the history', async () => {
+  const page = await editorOn();
+  await page.asks(PAGE_FILE);
+  await page.send({ type: 'hc-ready' });
+  const srcs = page.frame().srcs.length;
+  await page.send({ type: 'hc-block-insert', index: 1, kind: 'note' });
+  await settle();
+  assert.notEqual(fileNow(page), PAGE_TEXT, 'a note was inserted');
+  assert.ok(page.frame().srcs.length > srcs);
+  const before = page.frame().srcs.length;
+  undoBtn(page).click();
+  await settle();
+  assert.equal(fileNow(page), PAGE_TEXT, 'undone');
+  assert.ok(page.frame().srcs.length > before, 'the page was drawn again');
+  redoBtn(page).click();
+  await settle();
+  assert.notEqual(fileNow(page), PAGE_TEXT, 'redone');
+  assert.equal(undoBtn(page).disabled, false);
+  // a restore point the frame no longer has: it asks for a redraw, and the page is drawn from the text (codex r1)
+  const n = page.frame().srcs.length;
+  await page.send({ type: 'hc-key', op: 'redraw' });
+  await settle();
+  assert.ok(page.frame().srcs.length > n);
 });

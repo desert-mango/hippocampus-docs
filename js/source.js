@@ -133,6 +133,10 @@
                                              one block it marked open, in
                                              author mode, and shows the changed
                                              text itself before any write.
+        hc-history       {index, snap}       the frame took restore point `snap` of block
+                                             `index` before the edit that follows (R2b)
+        hc-key           {op}                'undo' | 'redo': the keys, pressed in the frame;
+                                             'redraw': a restore point was missing
         hc-people        {op: 'order', team,  the Team page's lists as shown after a drag
                           alumni} |           or a card-menu move or pin: [{name, pinned}]
                          {op: 'add', group}  (names only, at most 500), or "+" on the
@@ -166,6 +170,8 @@
                   [{name, mark: add|del|move|pin|unpin|edit, group, title}] for the people a draft or a
                   proposal changes (names at most 200 characters, at most 500 marks); focus = the
                   person to scroll back to after a reload (a name, or null)
+        cmd       {n, op: 'restore', index, snap, save} | null (round 2, R2b): put block `index` back to restore
+                  point `snap`, keeping what it shows now as `save`; acted on once per n
         open      {index, md, kind, as} | null: the block to type in, its Markdown
                   (a string of at most MAX_BLOCK_MD characters), its
                   HCCore.splitBlocks kind (OPEN_KINDS), and as: 'markdown' when
@@ -199,6 +205,8 @@
   const MAX_PEOPLE = 500;
   const PEOPLE_MARKS = Object.freeze(['add', 'del', 'move', 'pin', 'unpin', 'edit']);
   const PEOPLE_LISTS = Object.freeze(['team', 'alumni']);
+  // round 2 (R2b): undo restore points — the frame's DOM snapshot ids ('f<load>-<n>') and the parent's ('u<n>')
+  const SNAP_RE = /^[a-z][a-z0-9-]{0,39}$/;
   const personName = (v) => (typeof v === 'string' && v.trim() && v.length <= 200 ? v : null);              // css/editor.css --hc-p1..--hc-p5 (HCCore.PROPOSER_SLOTS)
   const MAX_PX = 1e7;                // a block rectangle's coordinates (hc-block-rects), in CSS pixels
   const DIFF_STYLES = Object.freeze(['inline', 'side']);
@@ -306,6 +314,12 @@
       return (isIndex(d.index) && typeof d.md === 'string' && d.md.length <= MAX_BLOCK_MD)
         ? { type, index: d.index, md: d.md } : null;
     }
+    if (type === 'hc-history') {
+      // round 2 (R2b): the frame took a restore point of block `index` (as it was before the edit that follows)
+      return isIndex(d.index) && typeof d.snap === 'string' && SNAP_RE.test(d.snap) ? { type, index: d.index, snap: d.snap } : null;
+    }
+    // Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z; 'redraw': a restore point is gone, the parent draws the page from its text
+    if (type === 'hc-key') return d.op === 'undo' || d.op === 'redo' || d.op === 'redraw' ? { type, op: d.op } : null;
     if (type === 'hc-people') {
       // round 2 (R5): the Team page in Editor mode — the lists as shown after a drag or a card-menu move or pin
       // (names and pins only; the parent checks the names are exactly the draft's), or "+" on a list
@@ -384,6 +398,13 @@
             title: typeof x.title === 'string' ? x.title.slice(0, 300) : '' });
         }
         return { edit: p.edit === true, marks, focus: personName(p.focus) };
+      })(),
+      // round 2 (R2b): put block `index` back to restore point `snap`, first keeping what it shows now as `save`
+      cmd: (() => {
+        const c = m.cmd && typeof m.cmd === 'object' ? m.cmd : null;
+        if (!c || !Number.isInteger(c.n) || c.n < 1 || c.op !== 'restore' || !isIndex(c.index)) return null;
+        if (typeof c.snap !== 'string' || !SNAP_RE.test(c.snap) || typeof c.save !== 'string' || !SNAP_RE.test(c.save)) return null;
+        return { n: c.n, op: 'restore', index: c.index, snap: c.snap, save: c.save };
       })(),
     };
   }

@@ -1180,3 +1180,67 @@ test('R5 walk: the Team page in Editor mode — card tools (no block line), the 
     rmSync(scratch, { recursive: true, force: true });
   }
 });
+
+test('R2b walk: Undo / Redo in a real Chrome — Ctrl+Z, Shift+Ctrl+Z and the bubble buttons; the marks come back; typing goes on', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-r2b-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&theme=light');
+    const { send, ev, F, site, until, sleep, draft, clickBlock, shot } = W;
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    const KEY = 'setup/lab-gantry/usage';
+    const FILE = 'content/setup/lab-gantry/usage.md';
+    const key = async (k, mods) => {
+      const code = `Key${k.toUpperCase()}`;
+      const vk = k.toUpperCase().charCodeAt(0);
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods });
+    };
+    const CTRL = 2;
+    const SHIFT = 8;
+    const ins = () => ev("[...document.querySelectorAll('.hc-open .hc-sug-ins')].map((x) => x.textContent).join('|')", F);
+    assert.ok(await clickBlock('As a physical check'));
+    await until(() => ev("(HCEditorFrame.runtime.open() || {}).editor === 'visual'", F), 'the block opens');
+    await send('Input.insertText', { text: ' First' });
+    await until(() => draft(KEY, FILE).then((t) => t && /First/.test(t)), 'the first burst in the draft');
+    await sleep(1300);                                           // a pause: the next typing is a new step
+    await send('Input.insertText', { text: ' Second' });
+    await until(() => draft(KEY, FILE).then((t) => t && /Second/.test(t)), 'the second burst in the draft');
+    assert.match(await ins(), /First.*Second|First Second/);
+    await shot('r2b-typed-light-1280');
+    // Ctrl+Z in the page: the second burst goes, the first stays marked as a suggestion
+    await key('z', CTRL);
+    await until(() => draft(KEY, FILE).then((t) => t && /First/.test(t) && !/Second/.test(t)), 'one step undone');
+    assert.match(await ins(), /First/);
+    assert.doesNotMatch(await ins(), /Second/);
+    // the bubble's Undo: the page as it was
+    await S("document.querySelector('[data-action=undo]').click()");
+    await until(() => draft(KEY, FILE).then((t) => !t || !/First/.test(t)), 'both steps undone');
+    assert.equal(await ins(), '', 'no suggestion left in the block');
+    assert.equal(await S("document.querySelector('[data-action=undo]').disabled"), true);
+    await shot('r2b-undone-light-1280');
+    // the bubble's Redo, then Shift+Ctrl+Z in the page
+    await S("document.querySelector('[data-action=redo]').click()");
+    await until(() => draft(KEY, FILE).then((t) => t && /First/.test(t) && !/Second/.test(t)), 'one step redone');
+    assert.ok(await clickBlock('As a physical check'));       // the focus back in the page
+    await sleep(300);
+    await key('z', CTRL | SHIFT);
+    await until(() => draft(KEY, FILE).then((t) => t && /First/.test(t) && /Second/.test(t)), 'both steps redone');
+    assert.match(await ins(), /Second/, 'the marks came back with the text');
+    // typing goes on after an undo: still a suggestion
+    await key('z', CTRL);
+    await until(() => draft(KEY, FILE).then((t) => t && !/Second/.test(t)), 'undone again');
+    await send('Input.insertText', { text: ' Third' });
+    await until(() => draft(KEY, FILE).then((t) => t && /Third/.test(t)), 'typed after the undo');
+    assert.match(await ins(), /Third/, 'still marked as a suggestion');
+    assert.equal(await S("document.querySelector('[data-action=redo]').disabled"), true, 'a new edit clears Redo');
+    await shot('r2b-after-light-1280');
+    await S("document.getElementById('theme-toggle').click()");
+    await sleep(600);
+    await shot('r2b-after-dark-1280');
+    console.log('R2b walk: Ctrl+Z, the bubble Undo/Redo and Shift+Ctrl+Z step through the suggestions; marks restored; typing continues');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});

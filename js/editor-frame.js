@@ -635,30 +635,18 @@
         w.appendChild(fresh);
         root = fresh;
       }
-      const plain = editor === 'code';
-      const targets = editor === 'code' ? Array.from(root.querySelectorAll('pre > code')).slice(0, 1)
-        : editor === 'box' ? Array.from(root.querySelectorAll('.adm > *')).filter((n) => classesOf(n).indexOf('adm-title') < 0)
-          : Array.from(root.children);
-      if (!targets.length) { report(o.index, 'markdown', 'nothing in this part can be typed into'); return; }
-      const now = { index: o.index, w, root, md: o.md, kind: o.kind === 'wrapper' ? 'wrapper' : o.kind, editor, handles: [], sent: o.md };
+      if (!targetsOf(root, editor).length) { report(o.index, 'markdown', 'nothing in this part can be typed into'); return; }
+      const now = { index: o.index, w, root, md: o.md, kind: o.kind === 'wrapper' ? 'wrapper' : o.kind, editor, handles: [], sent: o.md, typing: [] };
       openNow = now;
       root.setAttribute('data-hc-md-sent', o.md);
-      for (const t of targets) {
-        t.setAttribute('contenteditable', plain ? 'plaintext-only' : 'true');
-        t.setAttribute('spellcheck', plain ? 'false' : 'true');
-        now.handles.push(win.HCEditorType.attach(t, { plain, onChange: () => schedule(now) }));
-        if (plain) {
-          const onInput = () => schedule(now);
-          t.addEventListener('input', onInput);
-          now.handles.push({ detach() { t.removeEventListener('input', onInput); } });
-        }
-      }
+      const targets = attachTargets(now);
       w.classList.add('hc-open');
       const B = win.HCEditorBlocks;
       if (editor === 'box') {
         const adm = root.querySelector('.adm');
         const bar = B.boxBar(doc, adm, {
           onType: (k, l) => {
+            noteBefore(now, true);
             for (const [kk] of B.BOX_TYPES) adm.classList.remove(`adm-${kk}`);
             adm.classList.add(`adm-${k}`);
             const title = adm.querySelector('.adm-title');
@@ -673,13 +661,91 @@
       if (editor === 'code') {
         const pre = root.querySelector('pre');
         const cur = (/(?:^|\s)language-(\S+)/.exec(targets[0].className || '') || [])[1] || '';
-        const bar = B.codeBar(doc, pre, { current: cur, onChange: (l) => { pre.setAttribute('data-hc-lang', l); schedule(now); } });
+        const bar = B.codeBar(doc, pre, { current: cur, onChange: (l) => { noteBefore(now, true); pre.setAttribute('data-hc-lang', l); schedule(now); } });
         w.insertBefore(bar, root);                // beside the typed DOM, never inside what is serialized
         now.handles.push({ detach() { bar.remove(); } });
       }
       if (editor !== 'code') now.targets = targets;
       placeCaret(targets);
       report(o.index, editor, '');
+    }
+
+    /* The typed parts of an open block, and the typing engine on each (also after an undo restored the block). */
+    function targetsOf(root, editor) {
+      return editor === 'code' ? Array.from(root.querySelectorAll('pre > code')).slice(0, 1)
+        : editor === 'box' ? Array.from(root.querySelectorAll('.adm > *')).filter((n) => classesOf(n).indexOf('adm-title') < 0)
+          : Array.from(root.children);
+    }
+    function attachTargets(now) {
+      const plain = now.editor === 'code';
+      for (const h of now.typing) h.detach();
+      now.typing = [];
+      const targets = targetsOf(now.root, now.editor);
+      for (const t of targets) {
+        t.setAttribute('contenteditable', plain ? 'plaintext-only' : 'true');
+        t.setAttribute('spellcheck', plain ? 'false' : 'true');
+        // round 2 (R2b): a restore point before every edit; the Edit menu's Undo/Redo go to the parent's history
+        now.typing.push(win.HCEditorType.attach(t, { plain, onChange: () => schedule(now), onBefore: () => noteBefore(now),
+          onHistory: (op) => HC.post('hc-key', { op }) }));
+        if (plain) {
+          const onInput = () => schedule(now);
+          const onBeforePlain = (ev) => { if (!/^history/.test(String(ev && ev.inputType))) noteBefore(now); };
+          t.addEventListener('beforeinput', onBeforePlain);
+          t.addEventListener('input', onInput);
+          now.typing.push({ detach() { t.removeEventListener('input', onInput); t.removeEventListener('beforeinput', onBeforePlain); } });
+        }
+      }
+      if (now.editor !== 'code') now.targets = targets;
+      return targets;
+    }
+
+    /* ---- Undo / Redo restore points (round 2, R2b) ----
+       Before an edit to an open block, the frame keeps what the block shows (its edit root's HTML, with the
+       suggestion marks, and the Markdown last sent) as a restore point, and tells the parent its id
+       (hc-history). One restore point per burst: typing in the same block within BURST_MS is one step; a
+       format, a note-box type or a code language is always its own. The parent keeps the one ordered history
+       (js/editor.js) and, to undo a typing step, sends hc-editor.cmd {restore}: the block shows the restore point
+       again (the engine re-attached when it is open), and what it showed before is kept as `save` for Redo. The
+       restore points live for one frame load. */
+    const BURST_MS = 1000;
+    const SNAP_MAX = 1000;             // the parent keeps at most 200 steps each way; a missing point redraws (below)
+    const snaps = new Map();
+    let snapSeq = 0;
+    let burst = null;
+    let lastCmd = 0;
+    const loadTag = Math.random().toString(36).slice(2, 7).replace(/[^a-z0-9]/g, 'x');
+    function keepSnap(id, index, root) {
+      snaps.set(id, { index, html: root.innerHTML, md: root.getAttribute('data-hc-md-sent') });
+      if (snaps.size > SNAP_MAX) snaps.delete(snaps.keys().next().value);
+    }
+    function noteBefore(now, own) {
+      if (!now || !now.root || openNow !== now) return;
+      const t = Date.now();
+      if (!own && burst && burst.index === now.index && t - burst.at < BURST_MS) { burst.at = t; return; }
+      snapSeq += 1;
+      const id = `f${loadTag}-${snapSeq}`;
+      keepSnap(id, now.index, now.root);
+      burst = own ? null : { index: now.index, at: t };
+      HC.post('hc-history', { index: now.index, snap: id });
+    }
+    function restoreSnap(c) {
+      const w = wrapperFor(c.index);
+      const root = w ? Array.from(w.childNodes).find((n) => n.nodeType === ELEMENT && classesOf(n).indexOf('hc-edit-root') >= 0) : null;
+      const back = snaps.get(c.snap);
+      if (!root || !back || back.index !== c.index) { HC.post('hc-key', { op: 'redraw' }); return; }   // the parent draws the page again
+      keepSnap(c.save, c.index, root);
+      burst = null;
+      root.innerHTML = back.html;
+      if (typeof back.md === 'string') root.setAttribute('data-hc-md-sent', back.md);
+      const now = openNow && openNow.index === c.index ? openNow : null;
+      if (now) {
+        now.root = root;
+        if (typeof back.md === 'string') now.sent = back.md;      // the parent already holds this text: nothing to send
+        const targets = attachTargets(now);
+        placeCaret(targets);
+      } else {
+        for (const t of Array.from(root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
+      }
     }
 
     /* The in-place Markdown box (U3): the block's own DOM is set aside, the box takes its place; every
@@ -747,6 +813,7 @@
           if (!sel.rangeCount) return;
           const host = now.targets.find((t) => t.contains(sel.anchorNode));
           if (!host) return;
+          noteBefore(now, true);
           win.HCEditorType.format(host, what, href);
           schedule(now);
           fbar.hide();
@@ -823,6 +890,7 @@
       flush(now);                                 // anything not yet sent (a composition that just ended)
       openNow = null;
       for (const hd of now.handles) hd.detach();
+      for (const hd of now.typing || []) hd.detach();
       if (now.root) for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
       if (fbar) fbar.close();
       now.w.classList.remove('hc-open', 'hc-open-md');
@@ -1057,6 +1125,7 @@
       if (!state || state.selected !== s.selected) scrolledTo = null;
       state = s;
       apply();
+      if (s.cmd && s.cmd.n !== lastCmd) { lastCmd = s.cmd.n; restoreSnap(s.cmd); }
     });
 
     let pending = false;
@@ -1090,10 +1159,23 @@
         e.preventDefault();
         if (k === 'e') {
           const host = openNow.targets.find((t) => t.contains(sel.anchorNode));
+          noteBefore(openNow, true);
           win.HCEditorType.format(host, 'code');
           schedule(openNow);
           fb.hide();
         } else fb.openLink(sel.getRangeAt(0).getBoundingClientRect());
+      });
+      // round 2 (R2b): Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y) go to the parent's one history; a text field
+      // (the Markdown box, the link address) keeps its own
+      doc.addEventListener('keydown', (e) => {
+        if (!e || !state || !state.on || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+        const k = String(e.key || '').toLowerCase();
+        const op = k === 'z' ? (e.shiftKey ? 'redo' : 'undo') : (k === 'y' && e.ctrlKey && !e.metaKey ? 'redo' : null);
+        if (!op) return;
+        const t = e.target;
+        if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return;
+        e.preventDefault();
+        HC.post('hc-key', { op });
       });
       doc.addEventListener('keydown', (e) => {
         if (!e || e.key !== 'Escape') return;

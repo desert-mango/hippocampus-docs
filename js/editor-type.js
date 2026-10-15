@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 15 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Make typing in an open block a Google Docs-style suggestion: inserted text marked, deleted text struck, kept.
 /* HCEditorType: the Editor mode's typing engine (editor redesign U2, Kyle's D1 change 5).
@@ -25,8 +25,9 @@
 
    A composition (dead keys, IMEs) is left to the browser while it runs, then turned into the same
    kind of suggestion. Not handled here (the browser's default is refused, so the DOM never leaves
-   the model): Enter (a new block is the "+" line, U3), undo/redo, drag and drop. Paste is inserted as
-   plain text. */
+   the model): Enter (a new block is the "+" line, U3), drag and drop. Undo/redo are the Editor's own
+   (round 2, R2b): opts.onBefore() runs before every edit (the frame keeps a restore point), and the Edit
+   menu's Undo/Redo call opts.onHistory('undo'|'redo'). Paste is inserted as plain text. */
 (function () {
   'use strict';
 
@@ -266,8 +267,16 @@
   function attach(root, opts) {
     const o = opts || {};
     const changed = () => { if (typeof o.onChange === 'function') o.onChange(); };
+    // round 2 (R2b): told before every edit this engine makes (the frame keeps an undo restore point)
+    const before = () => { if (typeof o.onBefore === 'function') o.onBefore(); };
     function onBeforeInput(ev) {
       const t = ev.inputType;
+      if (t === 'historyUndo' || t === 'historyRedo') {
+        // the Edit menu's Undo / Redo (also in a code block): the Editor's own history (js/editor.js), never the browser's
+        ev.preventDefault();
+        if (typeof o.onHistory === 'function') o.onHistory(t === 'historyUndo' ? 'undo' : 'redo');
+        return;
+      }
       if (o.plain) {
         if (/^(insertText|insertReplacementText|insertLineBreak|insertParagraph|deleteContent(Backward|Forward)|deleteWord(Backward|Forward)|insertFromPaste)$/.test(t)) {
           if (t === 'insertFromPaste') { ev.preventDefault(); const text = ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : ''; root.ownerDocument.execCommand('insertText', false, text); }
@@ -277,6 +286,7 @@
         return;
       }
       if (ev.isComposing || t === 'insertCompositionText') return;
+      if (/^(insert(Text|ReplacementText|FromPaste|FromDrop|LineBreak)|delete(Word|SoftLine|HardLine)(Backward|Forward)|deleteContent(Backward|Forward)?|deleteByCut|format(Bold|Italic))$/.test(t)) before();
       if (/^insert(Text|ReplacementText|FromPaste|FromDrop)$/.test(t)) {
         ev.preventDefault();
         const text = ev.data != null ? ev.data : (ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : '');
@@ -316,9 +326,13 @@
         changed();
       }, 0);
     }
+    // a composition's restore point is taken when it STARTS (before the browser types into the block)
+    const onCompositionStart = () => { if (!o.plain) before(); };
     root.addEventListener('beforeinput', onBeforeInput);
+    root.addEventListener('compositionstart', onCompositionStart);
     root.addEventListener('compositionend', onCompositionEnd);
-    return { detach() { root.removeEventListener('beforeinput', onBeforeInput); root.removeEventListener('compositionend', onCompositionEnd); } };
+    return { detach() { root.removeEventListener('beforeinput', onBeforeInput); root.removeEventListener('compositionstart', onCompositionStart);
+      root.removeEventListener('compositionend', onCompositionEnd); } };
   }
 
   const API = { attach, insert, erase, format };

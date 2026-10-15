@@ -503,14 +503,14 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.equal(got.length, 1);
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
-    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null } });
+    overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null });
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
   assert.deepEqual(late, got);
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
-    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null } });
+    { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null });
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
   // round 2, R1: the proposer's colour slot, a whole number 0..5, else 0
   for (const [v, want] of [[3, 3], [5, 5], [0, 0], [6, 0], [-1, 0], [2.5, 0], ['2', 0], [null, 0]]) {
@@ -672,4 +672,21 @@ test('hc-editor.people (parent -> frame): edit on/off and the marks, cleaned', (
     { name: 'Dot', mark: 'del', group: 'alumni', title: 'D' }], focus: null });
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: true }).people, { edit: false, marks: [], focus: null });
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: true, people: { edit: 'yes', focus: 'Ann' } }).people, { edit: false, marks: [], focus: 'Ann' });
+});
+
+// ---- round 2, R2b: Undo / Redo ----
+test('hc-history and hc-key (frame -> parent); hc-editor.cmd (parent -> frame): checked field by field', () => {
+  assert.deepEqual(SRC.frameMessage('hc-history', { index: 4, snap: 'f2-7', x: 1 }), { type: 'hc-history', index: 4, snap: 'f2-7' });
+  assert.equal(SRC.frameMessage('hc-history', { index: 4, snap: '<b>' }), null);
+  assert.equal(SRC.frameMessage('hc-history', { index: -1, snap: 'f1-1' }), null);
+  assert.deepEqual(SRC.frameMessage('hc-key', { op: 'undo' }), { type: 'hc-key', op: 'undo' });
+  assert.deepEqual(SRC.frameMessage('hc-key', { op: 'redo' }), { type: 'hc-key', op: 'redo' });
+  assert.deepEqual(SRC.frameMessage('hc-key', { op: 'redraw' }), { type: 'hc-key', op: 'redraw' });
+  assert.equal(SRC.frameMessage('hc-key', { op: 'save' }), null);
+  const m = (cmd) => SRC.editorMessage({ type: 'hc-editor', on: true, cmd }).cmd;
+  assert.deepEqual(m({ n: 3, op: 'restore', index: 2, snap: 'f1-1', save: 'u4' }), { n: 3, op: 'restore', index: 2, snap: 'f1-1', save: 'u4' });
+  assert.equal(m({ n: 3, op: 'restore', index: 2, snap: 'f1-1' }), null, 'save is required');
+  assert.equal(m({ n: 0, op: 'restore', index: 2, snap: 'f1-1', save: 'u1' }), null, 'n counts from 1');
+  assert.equal(m({ n: 3, op: 'erase', index: 2, snap: 'f1-1', save: 'u1' }), null);
+  assert.equal(m(undefined), null);
 });
