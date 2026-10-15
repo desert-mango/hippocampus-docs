@@ -1009,24 +1009,28 @@
       return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
     }
     let res = null;
+    const done = [];                                       // keys whose record GitHub took (a chunk at a time)
     for (const r of reqs) {
       try {
         res = await client.send(r.method, r.path, { body: r.body });
       } catch (e) {
-        return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false };
+        if (!done.length) return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.`, sent: false, done };
+        res = { ok: false, status: 0, data: null };
       }
       if (!res || res.ok !== true) break;
+      done.push(...r.body.body.split(' ').slice(1));
     }
     if (res && res.ok === true) {
-      return { ok: true, status: res.status, message: kind === 'approved' ? 'Approved. Going live in about a minute.' : 'Declined.', sent: true };
+      return { ok: true, status: res.status, message: kind === 'approved' ? 'Approved. Going live in about a minute.' : 'Declined.', sent: true, done };
     }
     const status = res && Number.isInteger(res.status) ? res.status : 0;
     const words = githubWords(res && res.data);
     const said = words ? `: ${words}` : '';
-    if (status === 401) return { ok: false, status, message: 'Your sign-in has ended. Please sign in again.', sent: true };
-    if (status === 403) return { ok: false, status, message: `GitHub says you may not do this${said}`, sent: true };
-    if (status === 0) return { ok: false, status, message: 'GitHub could not be reached. Reload to see whether it happened.', sent: true };
-    return { ok: false, status, message: `GitHub refused (HTTP ${status})${said}`, sent: true };
+    const part = done.length ? ` ${done.length} of ${listOf(keys).length} were recorded before that.` : '';
+    if (status === 401) return { ok: false, status, message: `Your sign-in has ended. Please sign in again.${part}`, sent: true, done };
+    if (status === 403) return { ok: false, status, message: `GitHub says you may not do this${said}.${part}`, sent: true, done };
+    if (status === 0) return { ok: false, status, message: `GitHub could not be reached. Reload to see whether it happened.${part}`, sent: true, done };
+    return { ok: false, status, message: `GitHub refused (HTTP ${status})${said}.${part}`, sent: true, done };
   }
 
   const DONE_TEXT = Object.freeze({

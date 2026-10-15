@@ -951,10 +951,9 @@
     const pages = sha && files ? C.previewPages(files, await headRegistries(sha, files)) : [];
     const owners = await ownersRegistry();                 // main's data/projects.json: the project owners for Approve
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
-    // plan-u5: a proposal with edit-by-edit records (by people with access) is not merged whole: no Merge
-    const recs = comments && comments.ok ? C.parseRecords(comments.data, { author: loginOf(p).toLowerCase() }).list : [];
-    const recRoles = await Promise.all(recs.map((r) => roleNameOf(r.login).catch(() => 'none')));
-    const hasRecords = recRoles.some((r) => r === 'admin' || r === 'maintain' || r === 'write');
+    // plan-u5: a proposal with a TRUSTED edit-by-edit record (the go-live engine's rule: may approve one of its
+    // pages, not the author, no commit on it) is not merged whole: no Merge
+    const hasRecords = await trustedRecordExists(p, files, comments && comments.ok ? comments.data : [], owners);
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
       ...statusBlock(status, notes),
@@ -3152,6 +3151,26 @@
     renderRail();
   }
 
+  async function trustedRecordExists(pull, files, comments, projects) {
+    const author = loginOf(pull).toLowerCase();
+    const recs = C.parseRecords(comments, { author }).list;
+    if (!recs.length || !C.proposalEligible(pull, files)) return false;
+    const commits = await apiResponse(`${C.REPO_API_PATH}/pulls/${pull.number}/commits?per_page=100`).catch(() => null);
+    const committers = new Set();
+    for (const c of (commits && commits.ok && Array.isArray(commits.data) ? commits.data : [])) {
+      for (const who of [c && c.author, c && c.committer]) {
+        const l = who && typeof who.login === 'string' ? who.login.toLowerCase() : '';
+        if (l && l !== 'web-flow') committers.add(l);
+      }
+    }
+    for (const r of recs) {
+      if (committers.has(r.login)) continue;
+      const role = await roleNameOf(r.login).catch(() => 'none');
+      if (files.some((f) => C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, projects, author }))) return true;
+    }
+    return false;
+  }
+
   function railCards() {
     const d = rail.data;
     if (!d) return [];
@@ -3388,8 +3407,9 @@
     if (!d || !keys.length || !state.client) return;
     const out = await C.runRecord(state.client, d.n, kind, keys);
     say(out.message, out.ok ? null : 'error');
-    if (!out.ok) return;
-    for (const k of keys) rail.pending.set(k, kind);
+    const done = Array.isArray(out.done) ? out.done : [];     // a partial write still counts for what it recorded
+    if (!done.length) return;
+    for (const k of done) rail.pending.set(k, kind);
     renderRail();
     if (kind === 'approved') watchMain();
   }
@@ -4028,7 +4048,10 @@
     if (typeof window.addEventListener === 'function') window.addEventListener('resize', () => layoutRail());
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia(PHONE_QUERY) : null;
     if (mq) {
-      const apply = () => document.body.classList.toggle('hc-phone', Boolean(mq.matches));
+      const apply = () => {
+        document.body.classList.toggle('hc-phone', Boolean(mq.matches));
+        if (rail.data) { closeSheet(); drawPageBar(); layoutRail(); }   // the phone's "Review N changes" comes and goes
+      };
       apply();
       if (typeof mq.addEventListener === 'function') mq.addEventListener('change', apply);
     }

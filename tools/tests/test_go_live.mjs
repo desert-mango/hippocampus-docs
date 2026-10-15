@@ -565,7 +565,13 @@ test('runRecord: sends each chunk through the one-repo client and says what came
   const client = { send: async (m, p, o) => { sent.push([m, p, o.body.body.split(' ').length - 1]); return { ok: true, status: 201, data: {} }; } };
   const keys = Array.from({ length: 60 }, (_, i) => sha(`k${i}`));
   const out = await C.runRecord(client, 7, 'approved', keys);
-  assert.deepEqual(out, { ok: true, status: 201, message: 'Approved. Going live in about a minute.', sent: true });
+  assert.deepEqual(out, { ok: true, status: 201, message: 'Approved. Going live in about a minute.', sent: true, done: keys });
+  // the second chunk fails: the first 50 are recorded, and the answer says so (codex U5b r1)
+  let calls = 0;
+  const half = await C.runRecord({ send: async () => { calls += 1; if (calls > 1) throw new Error('offline'); return { ok: true, status: 201, data: {} }; } }, 7, 'approved', keys);
+  assert.equal(half.ok, false);
+  assert.deepEqual(half.done, keys.slice(0, 50));
+  assert.match(half.message, /50 of 60 were recorded before that/);
   assert.deepEqual(sent.map((x) => x[2]), [50, 10]);
   const no = await C.runRecord({ send: async () => ({ ok: false, status: 403, data: { message: 'Resource not accessible' } }) }, 7, 'declined', [K1]);
   assert.equal(no.ok, false);
