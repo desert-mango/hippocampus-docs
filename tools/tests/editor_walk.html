@@ -179,6 +179,7 @@
       compare: { [sha('b2')]: sha('ba5e') },
       checks: { [sha('b2')]: checks },
       comments: { 2: [] },                     // U5b: the approval records the walk's Approve writes land here
+      reviewComments: { 2: [] },               // U6: the conversations the walk's Comment and Reply write land here
       roles: { 'walk-proposer': 'write', 'kyle-nelson-berkeley': variant === 'readonly' ? 'read' : (variant || 'write') },
     };
     if (step === 'two-prs') {
@@ -226,6 +227,29 @@
       (extra.comments[m[1]] = extra.comments[m[1]] || []).push({ id: Date.now(), user: { login: 'kyle-nelson-berkeley', type: 'User' },
         body: body.body, created_at: t, updated_at: t });
       return { status: 201, body: {} };
+    }
+    // U6: review comments on proposal #2 (a conversation and its replies), and the GraphQL door's three operations
+    const rc = /\/pulls\/([0-9]+)\/comments(?:\/([0-9]+)\/replies)?$/.exec(url);
+    if (method === 'POST' && rc && extra && body && typeof body.body === 'string') {
+      const t = new Date().toISOString();
+      const list = (extra.reviewComments[rc[1]] = extra.reviewComments[rc[1]] || []);
+      const root = rc[2] ? list.find((c) => String(c.id) === rc[2]) : null;
+      const c = { id: list.length + 1000, user: { login: 'kyle-nelson-berkeley' }, body: body.body, created_at: t,
+        path: root ? root.path : body.path, line: root ? root.line : body.line, side: root ? root.side : body.side,
+        in_reply_to_id: root ? root.id : undefined };
+      list.push(c);
+      return { status: 201, body: c };
+    }
+    if (method === 'POST' && /\/graphql$/.test(url) && body && typeof body.query === 'string') {
+      window.walkResolved = window.walkResolved || {};
+      const id = body.variables && body.variables.id;
+      if (/^mutation/.test(body.query)) {
+        window.walkResolved[id] = /resolveReviewThread/.test(body.query) && !/unresolve/.test(body.query);
+        return { status: 200, body: { data: {} } };
+      }
+      const roots = (extra.reviewComments[String(body.variables.n)] || []).filter((c) => c.in_reply_to_id === undefined);
+      return { status: 200, body: { data: { repository: { pullRequest: { reviewThreads: { nodes: roots.map((c) => ({
+        id: `PRRT_walk${c.id}`, isResolved: Boolean(window.walkResolved[`PRRT_walk${c.id}`]), comments: { nodes: [{ databaseId: c.id }] } })) } } } } } };
     }
     return { status: 405, body: { message: 'the walk takes no other writes' } };
   };

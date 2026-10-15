@@ -27,7 +27,8 @@
                             updates: {<n>: <new head sha>},
                             trees: {<commit sha>: <tree sha>},
                             orgCommits, repoCommits, orgDeny (U4, below),
-                            comments: {<n>: [issue comments]}, roles: {<login>: role_name} (U5b)}
+                            comments: {<n>: [issue comments]}, roles: {<login>: role_name} (U5b),
+                            reviewComments: {<n>: [review comments]} (U6)}
                          They join pulls?state=…, answer pulls/<n>,
                          pulls/<n>/files, contents at their head sha,
                          compare/<x>...<head>, commits/<head>/check-runs and
@@ -229,6 +230,8 @@
         const who = { login: xc.user && xc.user.login };
         return answer(200, Number(q.page || 1) > 1 ? [] : [{ sha: xc.head.sha, author: who, committer: { login: 'web-flow' } }]);
       }
+      n = /^\/pulls\/([0-9]+)\/comments$/.exec(rest);
+      if (n && x.reviewComments && own(x.reviewComments, n[1])) return answer(200, Number(q.page || 1) > 1 ? [] : x.reviewComments[n[1]]);
       n = /^\/issues\/([0-9]+)\/comments$/.exec(rest);
       if (n && x.comments && own(x.comments, n[1])) return answer(200, Number(q.page || 1) > 1 ? [] : x.comments[n[1]]);
       n = /^\/collaborators\/([^/]+)\/permission$/.exec(rest);

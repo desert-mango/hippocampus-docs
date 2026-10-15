@@ -909,15 +909,16 @@ test('U5b walk: the review rail beside the page, cards on their lines, Approve w
     const key = geo.cards.find((c) => c.acts.includes('approve')).key;
     await S(`(() => { const c = document.querySelector('.hc-rcard[data-key="${key}"]'); c.dataset.armedAt = String(Date.now() + 400); c.querySelector('[data-act=approve]').click(); })()`);
     await sleep(150);
-    assert.equal(await ev('window.walkWrites.length'), 0, 'no write inside the 400 ms guard');
+    const records = "window.walkWrites.filter((w) => /\\/issues\\//.test(w.url))";   // (the GraphQL thread list is a read sent as POST)
+    assert.equal(await ev(`${records}.length`), 0, 'no record inside the 400 ms guard');
     // keyboard: focus Approve, press Enter (after the guard)
     await sleep(450);
     await S(`document.querySelector('.hc-rcard[data-key="${key}"] [data-act=approve]').focus()`);
     assert.equal(await S("document.activeElement && document.activeElement.dataset.act"), 'approve', 'Approve has the focus');
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    await until(() => ev('window.walkWrites.length === 1'), 'one write');
-    const w = await ev('window.walkWrites[0]');
+    await until(() => ev(`${records}.length === 1`), 'one record');
+    const w = await ev(`${records}[0]`);
     assert.equal(w.method, 'POST');
     assert.match(w.url, /\/repos\/desert-mango\/hippocampus-docs\/issues\/2\/comments$/);
     assert.deepEqual(w.body, { body: `hc-approved ${key}` });
@@ -952,6 +953,46 @@ test('U5b walk: the review rail beside the page, cards on their lines, Approve w
     await P("document.querySelector('.hc-rsheet').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
     await W.until(() => P("!document.querySelector('.hc-rsheet')"), 'Escape closes the sheet');
     console.log('U5b walk: rail beside the frame, cards on their lines without overlap, hover lights the block, guard holds, Enter approves with one record, markers at 1024, a bottom sheet at 390');
+  } finally {
+    if (W) W.close();
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+/* U6 in a real Chrome: a card opens its conversation; Comment starts one on the change's first line (a review
+   comment, the exact body), Reply answers in it, Resolve goes through the GraphQL door; the text is shown as text. */
+test('U6 walk: a conversation on a change: comment, reply, resolve, all from the card', { timeout: 150000 }, async () => {
+  const scratch = mkdtempSync(path.join(tmpdir(), 'hc-u6-walk-'));
+  let W = null;
+  try {
+    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&variant=admin&theme=light', 'overlay-inline');
+    const { ev, site, until, sleep, shot } = W;
+    const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
+    await until(() => S("document.querySelectorAll('.hc-rslot:not([hidden]) .hc-rcard').length >= 2"), 'the cards');
+    const key = await S("[...document.querySelectorAll('.hc-rslot:not([hidden]) .hc-rcard')].find((c) => c.querySelector('[data-act=approve]')).dataset.key");
+    await S(`document.querySelector('.hc-rcard[data-key="${key}"]').click()`);
+    await until(() => S(`!!document.querySelector('.hc-rcard[data-key="${key}"] [data-action=talk-new]')`), 'the active card offers Comment');
+    await S(`(() => { const c = document.querySelector('.hc-rcard[data-key="${key}"]'); c.querySelector('.hc-talk-input').value = 'Is <b>this</b> right?'; c.querySelector('[data-action=talk-new]').click(); })()`);
+    await until(() => ev("window.walkWrites.some((w) => /\\/pulls\\/2\\/comments$/.test(w.url))"), 'the comment write');
+    const w = await ev("window.walkWrites.find((w) => /\\/pulls\\/2\\/comments$/.test(w.url))");
+    assert.deepEqual(Object.keys(w.body).sort(), ['body', 'commit_id', 'line', 'path', 'side']);
+    assert.equal(w.body.body, 'Is <b>this</b> right?');
+    assert.equal(w.body.path, 'content/setup/lab-gantry/usage.md');
+    assert.equal(w.body.side, 'RIGHT');
+    await until(() => S(`/Is <b>this<\\/b> right\\?/.test(document.querySelector('.hc-rcard[data-key="${key}"] .hc-talk-text').textContent)`), 'the comment shows, as text');
+    assert.equal(await S(`document.querySelector('.hc-rcard[data-key="${key}"] .hc-talk-text b')`), null, 'no markup from a comment');
+    await S(`(() => { const t = document.querySelector('.hc-rcard[data-key="${key}"] .hc-talk-thread'); t.querySelector('.hc-talk-input').value = 'Yes.'; t.querySelector('[data-action=talk-reply]').click(); })()`);
+    await until(() => ev("window.walkWrites.some((w) => /\\/comments\\/1000\\/replies$/.test(w.url))"), 'the reply write');
+    await until(() => S(`document.querySelectorAll('.hc-rcard[data-key="${key}"] .hc-talk-msg').length === 2`), 'two messages');
+    await S(`document.querySelector('.hc-rcard[data-key="${key}"] [data-action=talk-resolve]').click()`);
+    await until(() => ev("window.walkWrites.some((w) => /\\/graphql$/.test(w.url) && /^mutation/.test(w.body.query) && w.body.variables.id === 'PRRT_walk1000')"), 'resolve through the door');
+    await until(() => S(`!!document.querySelector('.hc-rcard[data-key="${key}"] .hc-talk-thread.is-resolved')`), 'shown resolved');
+    await sleep(300);
+    await shot('u6-conversation-light-1280');
+    // another card: inactive cards say how many comments a change has
+    await S("[...document.querySelectorAll('.hc-rslot:not([hidden]) .hc-rcard')].find((c) => c.dataset.key !== " + JSON.stringify(key) + ").click()");
+    await until(() => S(`/2 comments/.test(document.querySelector('.hc-rcard[data-key="${key}"]').textContent)`), 'the count on the closed card');
+    console.log('U6 walk: comment on the change line, reply, resolve via the GraphQL door; text stays text; the count on a closed card');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });

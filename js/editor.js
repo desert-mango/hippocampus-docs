@@ -3132,6 +3132,8 @@
       ownersRegistry()]);
     const edits = await C.proposalEdits(page.file, baseText, headText, mainText);
     if (mine !== ed.loads || ed.pv !== pv || !edits) return;
+    const talk = await loadTalk(n).catch((e) => { if (quiet(e)) throw e; return { comments: [], resolved: new Map(), ok: false }; });
+    if (mine !== ed.loads || ed.pv !== pv) return;
     const author = loginOf(pull).toLowerCase();
     // committers unknown: nobody's record is trusted and nobody gets Approve (the engine would refuse them)
     const committers = commits || { has: () => true };
@@ -3143,7 +3145,7 @@
     const myRole = ROLE_NAME[state.role && state.role.key] || 'read';
     const rule = (login, permission) => !committers.has(login)
       && C.mayApproveEdit({ login, permission, path: page.file, projects, author });
-    rail.data = { n, pull, file: page.file, head, base, baseText, headText, edits, comments: list, author,
+    rail.data = { n, pull, file: page.file, head, base, baseText, headText, edits, comments: list, author, talk,
       eligible: C.proposalEligible(pull, pv.files), trusted: (login) => rule(login, roles.get(login)),
       may: () => Boolean(me) && rule(me, myRole), main };
     renderRail();
@@ -3217,6 +3219,110 @@
         && C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, projects, author }))) return true;
     }
     return false;
+  }
+
+  // ---- U6: conversations on a change (review comments on the proposal; resolve through the GraphQL door)
+  async function loadTalk(n) {
+    const comments = [];
+    for (let page = 1; page <= 10; page += 1) {
+      const res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}/comments?per_page=100&page=${page}`);
+      if (!res.ok || !Array.isArray(res.data)) break;
+      comments.push(...res.data);
+      if (res.data.length < 100) break;
+    }
+    const resolved = new Map();                        // root comment id -> {threadId, isResolved}
+    const g = state.client && typeof state.client.graphql === 'function' ? await state.client.graphql('threads', { n }) : null;
+    const nodes = g && g.ok && g.data && g.data.data && g.data.data.repository && g.data.data.repository.pullRequest
+      ? g.data.data.repository.pullRequest.reviewThreads.nodes : [];
+    for (const t of Array.isArray(nodes) ? nodes : []) {
+      const first = t && t.comments && t.comments.nodes && t.comments.nodes[0];
+      if (first && Number.isInteger(first.databaseId) && typeof t.id === 'string') resolved.set(first.databaseId, { threadId: t.id, isResolved: t.isResolved === true });
+    }
+    return { comments, resolved, ok: true };
+  }
+  function talkOf(key) {
+    const d = rail.data;
+    if (!d || !d.talk) return [];
+    if (!d.threads) d.threads = C.threadsByEdit(d.talk.comments, d.edits, d.baseText, d.headText, d.file);
+    return d.threads.byKey.get(key) || [];
+  }
+  const canTalk = () => Boolean(state.role && state.role.canPush === true);
+
+  async function talkWrite(build, key) {
+    const d = rail.data;
+    if (!d || rail.busy) return;
+    let req;
+    try { req = build(); } catch (e) { say(`Nothing was sent: ${e.message}.`, 'error'); return; }
+    rail.busy = true;
+    let res;
+    try { res = await C.runThreadWrite(state.client, req); } finally { rail.busy = false; }
+    if (!res.ok) { say(res.message, 'error'); return; }
+    d.talk = await loadTalk(d.n).catch(() => d.talk);
+    d.threads = null;
+    rail.active = key;
+    renderRail();
+  }
+  async function resolveThread(t, key, on) {
+    const d = rail.data;
+    const info = d && d.talk ? d.talk.resolved.get(t.rootId) : null;
+    if (!info || rail.busy) return;
+    rail.busy = true;
+    let res;
+    try { res = await C.runResolve(state.client, info.threadId, on); } finally { rail.busy = false; }
+    if (!res.ok) { say(res.message, 'error'); return; }
+    d.talk = await loadTalk(d.n).catch(() => d.talk);
+    d.threads = null;
+    rail.active = key;
+    renderRail();
+  }
+
+  /* The conversation part of a card: inactive, "N replies"; active, every message, a reply box, Resolve. */
+  function talkNode(c) {
+    const threads = talkOf(c.key);
+    const d = rail.data;
+    const count = threads.reduce((k, t) => k + t.comments.length, 0);
+    if (rail.active !== c.key) {
+      return count ? h('p', { class: 'hc-rcard-replies', text: `${count} ${plural(count, 'comment', 'comments')}` }) : null;
+    }
+    const box = h('div', { class: 'hc-talk' });
+    for (const t of threads) {
+      const info = d.talk.resolved.get(t.rootId);
+      const done = Boolean(info && info.isResolved);
+      const thread = h('div', { class: `hc-talk-thread${done ? ' is-resolved' : ''}` });
+      for (const m of t.comments) {
+        const who = m.user && typeof m.user.login === 'string' ? m.user.login : 'someone';
+        thread.appendChild(h('div', { class: 'hc-talk-msg' },
+          h('div', { class: 'hc-talk-head' }, avatarFace(who, who), h('b', { text: who }), h('span', { class: 'hc-rcard-when', text: cardWhen(m.created_at) })),
+          h('p', { class: 'hc-talk-text', text: String(m.body || '') })));
+      }
+      if (canTalk()) {
+        const reply = h('textarea', { class: 'hc-talk-input', rows: '2', maxlength: '4000', 'aria-label': 'Reply', placeholder: 'Reply…' });
+        const send = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'talk-reply', disabled: rail.busy === true }, 'Reply');
+        send.addEventListener('click', (e) => { e.stopPropagation(); talkWrite(() => C.replyRequest(d.n, t.rootId, reply.value), c.key); });
+        const row = h('div', { class: 'hc-talk-row' }, send);
+        if (info) {
+          const rb = h('button', { type: 'button', class: 'cms-btn', 'data-action': done ? 'talk-reopen' : 'talk-resolve', disabled: rail.busy === true }, done ? 'Reopen' : 'Resolve');
+          rb.addEventListener('click', (e) => { e.stopPropagation(); resolveThread(t, c.key, !done); });
+          row.appendChild(rb);
+        }
+        thread.append(reply, row);
+      }
+      box.appendChild(thread);
+    }
+    if (canTalk() && c.anchor !== null) {
+      const input = h('textarea', { class: 'hc-talk-input', rows: '2', maxlength: '4000', 'aria-label': 'Comment on this change',
+        placeholder: threads.length ? 'Start another conversation…' : 'Comment on this change…' });
+      const send = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'talk-new', disabled: rail.busy === true }, 'Comment');
+      const edit = d.edits.find((e) => e.key === c.key);
+      send.addEventListener('click', (e) => { e.stopPropagation(); talkWrite(() => C.threadRequest(d.n, { headSha: d.head, path: d.file, edit,
+        baseText: d.baseText, headText: d.headText, text: input.value }), c.key); });
+      box.append(input, h('div', { class: 'hc-talk-row' }, send));
+    }
+    for (const el of box.querySelectorAll('textarea')) {
+      el.addEventListener('click', (e) => e.stopPropagation());
+      el.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+    return box;
   }
 
   function railCards() {
@@ -3314,7 +3420,7 @@
     h('div', { class: 'hc-rcard-head' }, avatarFace(login, login),
       h('div', { class: 'hc-rcard-id' }, h('span', { class: 'hc-rcard-who', text: login }),
         h('span', { class: 'hc-rcard-when', text: when })), acts),
-    body, stateLine(c));
+    body, stateLine(c), talkNode(c));
     card.dataset.armedAt = String(Date.now() + CLICK_GUARD_MS);
     card.addEventListener('mouseenter', () => { rail.hover = c.key; postEditor(); });
     card.addEventListener('mouseleave', () => { if (rail.hover === c.key) { rail.hover = null; postEditor(); } });
@@ -3413,11 +3519,12 @@
   }
 
   function railActivate(key) {
+    if (rail.active === key) return;
     rail.active = key;
+    renderRail();                                        // the active card opens its conversation (U6)
     const node = key ? rail.nodes.get(key) : null;
     if (node) node.dataset.armedAt = String(Date.now() + CLICK_GUARD_MS);
     layoutRail();
-    postEditor();
   }
 
   /* A click on a marked block in the frame: its card (a change is two entries, old then new). */

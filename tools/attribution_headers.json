@@ -1105,6 +1105,21 @@
         "purpose": "Test per-edit go-live: edit keys, the already-live rule, applying edits to main, and approval records."
       },
       "reason": "First-party test written for the editor redesign (per-edit go-live, plan-u5 U5a); the baseline is the file as introduced."
+    },
+    "tools/tests/test_threads.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "f65f42119dfbc29bf497032005692039a6c023c36b2b369b2c38cc8ce2bb3124",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "15 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test conversations on a suggested change: the comment and reply writes, the GraphQL door, thread mapping."
+      },
+      "reason": "First-party test written for the editor redesign (threads, plan-u5 U6); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

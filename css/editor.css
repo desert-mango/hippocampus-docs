@@ -655,6 +655,21 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
 .hc-spin { width: .7rem; height: .7rem; flex: none; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
   animation: hc-spin .8s linear infinite; }
 @keyframes hc-spin { to { transform: rotate(360deg); } }
+/* U6: a change's conversation, inside its active card */
+.hc-rcard-replies { margin: .45rem 0 0; font-size: .74rem; font-weight: 600; color: var(--accent); }
+.hc-talk { display: flex; flex-direction: column; gap: .5rem; margin-top: .55rem; padding-top: .55rem; border-top: 1px solid var(--edge-soft); cursor: auto; }
+.hc-talk-thread { display: flex; flex-direction: column; gap: .4rem; }
+.hc-talk-thread.is-resolved .hc-talk-msg { opacity: .65; }
+.hc-talk-head { display: flex; align-items: center; gap: .4rem; font-size: .74rem; color: var(--heading); }
+.hc-talk-head > .hc-avatar-img, .hc-talk-head > .hc-initials { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+.hc-talk-head > .hc-initials { display: grid; place-items: center; font-size: .62rem; background: var(--accent-soft); color: var(--accent); }
+.hc-talk-head > b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-talk-head > .hc-rcard-when { flex: none; white-space: nowrap; }
+.hc-talk-text { margin: .15rem 0 0 1.65rem; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--body); }
+.hc-talk-input { box-sizing: border-box; width: 100%; resize: vertical; min-height: 2.6rem; padding: .4rem .5rem; border-radius: 7px;
+  border: 1px solid var(--edge); background: var(--bg); color: var(--heading); font: inherit; font-size: .78rem; }
+.hc-talk-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hc-talk-row { display: flex; gap: .4rem; justify-content: flex-end; }
 /* narrow: an avatar marker per change; the active one opens its card beside the marker, over the page's edge */
 .hc-rail.is-markers { width: 3.25rem; overflow: visible; z-index: 30; }
 .hc-rail.is-markers .hc-rslot { left: .45rem; right: auto; }

@@ -424,6 +424,10 @@
      query string. <n> is a pull request number. */
   const PULL_N = '[1-9][0-9]{0,8}';
   const RECORD_BODY_RE = /^hc-(approved|declined)((?: [0-9a-f]{64}){1,50})$/;   // = RECORD_RE (U5)
+  const COMMENT_MAX = 4000;
+  // U6: a person's comment text: 1..COMMENT_MAX characters, and never a record or a go-live note (those are machine text)
+  const commentText = (t) => typeof t === 'string' && t.trim().length > 0 && t.length <= COMMENT_MAX
+    && !/^hc-(approved|declined|go-live-failed)\b/.test(t.trim());
   const WRITE_METHODS = Object.freeze([
     // U8: approve, or request changes (the review's `event` says which)
     { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/reviews$`), unit: 'U8' },
@@ -443,6 +447,14 @@
     { method: 'PATCH', path: /^\/git\/refs\/heads\/cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/, unit: 'U7b' },
     // U7b: open the proposal
     { method: 'POST', path: /^\/pulls$/, unit: 'U7b' },
+    // U6: a conversation on one suggested change (a review comment on a page line of the proposal's head or base)
+    { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/comments$`), unit: 'U6', body: (b) => isObj(b)
+      && Object.keys(b).sort().join() === 'body,commit_id,line,path,side' && commentText(b.body)
+      && FULL_SHA_RE.test(String(b.commit_id)) && GO_LIVE_PAGE_RE.test(String(b.path))
+      && Number.isInteger(b.line) && b.line >= 1 && (b.side === 'LEFT' || b.side === 'RIGHT') },
+    // U6: a reply in that conversation
+    { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/comments/[1-9][0-9]{0,14}/replies$`), unit: 'U6',
+      body: (b) => isObj(b) && Object.keys(b).length === 1 && commentText(b.body) },
     // U5: an approval record on a proposal: the body must be exactly ONE record (recordBody's text)
     { method: 'POST', path: new RegExp(`^/issues/${PULL_N}/comments$`), unit: 'U5',
       body: (b) => isObj(b) && Object.keys(b).length === 1 && typeof b.body === 'string' && RECORD_BODY_RE.test(b.body) },
@@ -501,9 +513,25 @@
       return { ok: res.ok, status: res.status, data: await readJson(res) };
     }
 
+    /* U6: the ONE GraphQL door (graphqlRequest builds it; isAllowedGraphql checks it again here). */
+    async function graphql(name, vars) {
+      const req = graphqlRequest(name, vars);
+      if (!isAllowedGraphql(req.body)) throw new Error('the CMS does not send that GraphQL');
+      let res;
+      try {
+        res = await d.fetch(API_ROOT + req.path, { method: req.method, cache: 'no-store',
+          headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${d.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body) });
+      } catch (e) {
+        return { ok: false, status: 0, data: null };
+      }
+      return { ok: res.ok, status: res.status, data: await readJson(res) };
+    }
+
     return Object.freeze({
       methods,
       send,
+      graphql,
       get: (p, opts) => send('GET', p, opts),
     });
   }
@@ -997,6 +1025,78 @@
     }
     if (!out.length) throw new Error('no edits to record');
     return out;
+  }
+
+  /* U6: the ONE GraphQL door (plan-final §7): exactly three operations, this repository written into their
+     text, their variables checked; isAllowedGraphql compares a body with them string for string. */
+  const GRAPHQL_OPS = Object.freeze({
+    threads: `query($n: Int!) { repository(owner: "${REPO_OWNER}", name: "${REPO_NAME}") { pullRequest(number: $n) { reviewThreads(first: 100) { nodes { id isResolved comments(first: 1) { nodes { databaseId } } } } } } }`,
+    resolve: 'mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }',
+    unresolve: 'mutation($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }',
+  });
+  const THREAD_ID_RE = /^PRRT_[A-Za-z0-9_-]{4,80}$/;
+  function graphqlVarsOk(name, v) {
+    if (!isObj(v)) return false;
+    const keys = Object.keys(v);
+    if (name === 'threads') return keys.length === 1 && Number.isInteger(v.n) && v.n >= 1 && v.n <= 999999999;
+    return keys.length === 1 && typeof v.id === 'string' && THREAD_ID_RE.test(v.id);
+  }
+  function graphqlRequest(name, vars) {
+    if (!Object.prototype.hasOwnProperty.call(GRAPHQL_OPS, name)) throw new Error('no such GraphQL operation');
+    if (!graphqlVarsOk(name, vars)) throw new Error('GraphQL variables of the wrong shape');
+    return { method: 'POST', path: '/graphql', body: { query: GRAPHQL_OPS[name], variables: Object.assign({}, vars) } };
+  }
+  function isAllowedGraphql(body) {
+    if (!isObj(body) || Object.keys(body).sort().join() !== 'query,variables') return false;
+    const name = Object.keys(GRAPHQL_OPS).find((k) => GRAPHQL_OPS[k] === body.query);
+    return Boolean(name) && graphqlVarsOk(name, body.variables);
+  }
+
+  /* U6: start a conversation on one edit (a review comment on its first line: the head's for a change or an add,
+     the merge base's for a delete), or reply in one. o: {headSha, path, edit, baseText, headText, text}. */
+  function threadRequest(n, o) {
+    if (!Number.isInteger(n) || n < 1 || n > 999999999) throw new Error('no proposal number');
+    const c = o || {};
+    const text = typeof c.text === 'string' ? c.text.trim() : '';
+    if (!commentText(text)) throw new Error('write a comment first');
+    if (!FULL_SHA_RE.test(String(c.headSha)) || !GO_LIVE_PAGE_RE.test(String(c.path))) throw new Error('this change cannot take a comment');
+    const at = editLines(c.edit, c.baseText, c.headText);
+    if (!at) throw new Error('this change cannot take a comment');
+    return { method: 'POST', path: `${REPO_API_PATH}/pulls/${n}/comments`,
+      body: { body: text, commit_id: c.headSha, path: c.path, line: at.line, side: at.side } };
+  }
+  function replyRequest(n, rootId, text) {
+    if (!Number.isInteger(n) || n < 1 || n > 999999999) throw new Error('no proposal number');
+    if (!Number.isInteger(rootId) || rootId < 1) throw new Error('no conversation to reply to');
+    const t = typeof text === 'string' ? text.trim() : '';
+    if (!commentText(t)) throw new Error('write a reply first');
+    return { method: 'POST', path: `${REPO_API_PATH}/pulls/${n}/comments/${rootId}/replies`, body: { body: t } };
+  }
+
+  /* U6: send one conversation write (threadRequest / replyRequest's answer) through the one-repo client.
+     -> {ok, status, message}. Nothing that is not one of those two shapes is sent. */
+  async function runThreadWrite(client, req) {
+    const r = req || {};
+    if (r.method !== 'POST' || !/\/pulls\/[0-9]+\/comments(\/[0-9]+\/replies)?$/.test(String(r.path))) {
+      return { ok: false, status: 0, message: 'Nothing was sent: not a comment.' };
+    }
+    let res;
+    try { res = await client.send(r.method, r.path, { body: r.body }); } catch (e) {
+      return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.` };
+    }
+    if (res && res.ok) return { ok: true, status: res.status, message: 'Comment sent.' };
+    const words = githubWords(res && res.data);
+    return { ok: false, status: (res && res.status) || 0, message: `GitHub refused the comment (HTTP ${(res && res.status) || 0})${words ? `: ${words}` : ''}.` };
+  }
+  /* U6: resolve (on) or reopen a conversation through the GraphQL door. -> {ok, status, message} */
+  async function runResolve(client, threadId, on) {
+    let res;
+    try { res = await client.graphql(on ? 'resolve' : 'unresolve', { id: threadId }); } catch (e) {
+      return { ok: false, status: 0, message: `Nothing was sent: ${e.message}.` };
+    }
+    const errs = res && res.data && Array.isArray(res.data.errors) ? res.data.errors : [];
+    if (res && res.ok && !errs.length) return { ok: true, status: res.status, message: on ? 'Resolved.' : 'Reopened.' };
+    return { ok: false, status: (res && res.status) || 0, message: `GitHub refused (HTTP ${(res && res.status) || 0}).` };
   }
 
   /* U5b: write the approval (or decline) records for keys on proposal n, chunk by chunk; stops at the
@@ -3037,6 +3137,41 @@
     });
   }
 
+  /* U6: the lines of one edit in the file GitHub's review comments name: {side, line, last} (1-based,
+     inclusive) — RIGHT, the proposal's head, for a change or an add; LEFT, its merge base, for a delete. */
+  function editLines(e, baseText, headText) {
+    if (!isObj(e)) return null;
+    const right = e.kind !== 'delete';
+    const text = right ? headText : baseText;
+    const at = right ? e.headIndex : e.baseIndex;
+    const sp = splitBlocks(text);
+    if (!sp.ok || !Number.isInteger(at) || !sp.blocks[at]) return null;
+    const b = sp.blocks[at];
+    const line = text.slice(0, b.start).split('\n').length;
+    return { side: right ? 'RIGHT' : 'LEFT', line, last: line + blockCore(b).split('\n').length - 1 };
+  }
+
+  /* U6: the proposal's review comments on `path` as conversations: a root comment and its replies (by
+     in_reply_to_id), placed on the edit whose lines hold the root's current line on its side. A root GitHub
+     marks outdated (line null) or on lines no edit holds goes to `other` (shown apart, never guessed onto a
+     card). -> {byKey: Map key -> [{rootId, comments}], other: [{rootId, comments}]} */
+  function threadsByEdit(comments, edits, baseText, headText, path) {
+    const list = listOf(comments).filter((c) => isObj(c) && Number.isInteger(c.id) && c.path === path);
+    const roots = list.filter((c) => !Number.isInteger(c.in_reply_to_id));
+    const spans = listOf(edits).map((e) => ({ key: e.key, at: editLines(e, baseText, headText) })).filter((x) => x.at);
+    const byKey = new Map();
+    const other = [];
+    for (const r of roots) {
+      const thread = { rootId: r.id, comments: [r, ...list.filter((c) => c.in_reply_to_id === r.id)]
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || a.id - b.id) };
+      const hit = Number.isInteger(r.line) ? spans.find((x) => x.at.side === (r.side || 'RIGHT') && r.line >= x.at.line && r.line <= x.at.last) : null;
+      if (!hit) { other.push(thread); continue; }
+      if (!byKey.has(hit.key)) byKey.set(hit.key, []);
+      byKey.get(hit.key).push(thread);
+    }
+    return { byKey, other };
+  }
+
   /* Card tops for the rail: cards = [{key, want (the block's top), height}] in page order. They keep
      their order and never overlap (gap between); with an active card, it sits exactly on its block's
      line, the cards above step up and the cards below step down. -> {key: top}. */
@@ -3353,7 +3488,8 @@
     PROJECT_FACTS_FILE_RE, projectFactsFile, mergeProjects,
     BLOCK_KINDS, imageParts, imageWith, splitBlocks, spanOf, replaceSpan, insertAt, moveBlock, deleteBlock, sentinelId, withSentinels,
     blockDiff, overlayOnMain, editKey, proposalEdits, applyEdits, recordBody, recordRequests, runRecord, parseRecords, decisions,
-    failureBody, parseFailures, mayApproveEdit, proposalEligible, cardText, reviewCards, railLayout, RECORD_MAX, cachedFetcher, resolveRef, viewSettings, membersOnly,
+    failureBody, parseFailures, mayApproveEdit, proposalEligible, cardText, reviewCards, railLayout, RECORD_MAX,
+    editLines, threadsByEdit, threadRequest, replyRequest, graphqlRequest, isAllowedGraphql, runThreadWrite, runResolve, cachedFetcher, resolveRef, viewSettings, membersOnly,
     ORG_OWNER, orgReadAllowed, orgCommitsPath, pageCommitsPath, comparePath, createOrgReader,
   });
 
