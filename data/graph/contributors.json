@@ -34,7 +34,7 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 57,
+     "contributions": 59,
      "roster": true
     },
     {
@@ -42,6 +42,11 @@
      "name": "Vincent Lenz",
      "contributions": 3,
      "roster": true
+    },
+    {
+     "login": "Latfoo",
+     "name": "Bennett Latosinszky",
+     "contributions": 2
     },
     {
      "login": "DanielDuecker",
@@ -285,13 +290,13 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 34,
+     "contributions": 37,
      "roster": true
     },
     {
      "login": "Latfoo",
      "name": "Bennett Latosinszky",
-     "contributions": 3
+     "contributions": 17
     }
    ]
   },

@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-15",
+ "read_at": "2026-10-16",
  "org": "HippoCampusRobotics",
  "note": "public GitHub data only: login, the display name GitHub publishes, a 64-px avatar copy, the profile link, the People-roster name it matches (tools/github_names.py) and, for a roster-linked login only, the day of its latest public commit, PR or review in the lab's repositories (the Team page's 30-day rule)",
  "people": {
@@ -58,7 +58,7 @@
    "avatar": "data/graph/avatars/NBauschmann.jpg",
    "html_url": "https://github.com/NBauschmann",
    "roster": "Nathalie Bauschmann",
-   "last_active": "2026-10-15"
+   "last_active": "2026-10-16"
   },
   "RHochdahl": {
    "login": "RHochdahl",

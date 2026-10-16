@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-15",
+ "read_at": "2026-10-16",
  "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository",
  "prs_read": [
   2,
@@ -585,6 +585,11 @@
      "pr": 1,
      "by": "kyle-nelson-berkeley",
      "state": "open"
+    },
+    {
+     "pr": 7,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
     }
    ]
   },
@@ -636,7 +641,13 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [
+    {
+     "pr": 7,
+     "by": "kyle-nelson-berkeley",
+     "state": "open"
+    }
+   ]
   },
   "setup/contributing/debian-packages": {
    "original": {
