@@ -42,20 +42,24 @@ We use ROS2 Jazzy. The following installations steps work for a Ubuntu 24.04 amd
     && sudo add-apt-repository universe
     ```
 
-3. Add the key
+3. Add the ROS 2 apt source
 
+    Install the official `ros2-apt-source` package. It brings both the ROS signing key and the apt source, and it keeps them up to date.
 
     ```console
     $ sudo apt update && sudo apt install curl -y \
-    && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+    && export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}') \
+    && curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $UBUNTU_CODENAME)_all.deb" \
+    && sudo dpkg -i /tmp/ros2-apt-source.deb
     ```
 
-4. Add sources
-
+4. Check the source
 
     ```console
-    $ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+    $ ls -l /etc/apt/sources.list.d/ros2.sources
     ```
+
+    It should be a symbolic link to `/usr/share/ros-apt-source/ros2.sources`. If an older guide left a `/etc/apt/sources.list.d/ros2.list` behind, remove that file so the repository is not configured twice.
 
 5. Update
 

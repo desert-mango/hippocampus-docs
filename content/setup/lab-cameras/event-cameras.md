@@ -48,6 +48,18 @@ Build
 $ build_underlay
 ```
 
+### udev Rule
+
+Without a udev rule only root can open the camera. The driver's [README](https://github.com/ros-event-camera/libcaer_driver/) asks you to copy iniVation's `65-inivation.rules` (it ships with the libcaer source that `vcs import` fetched) and to add your user to the `video` and `plugdev` groups:
+
+```console
+$ sudo cp $WS_DIR/libcaer/lib/udev/rules.d/65-inivation.rules /etc/udev/rules.d/ \
+&& sudo usermod -aG video,plugdev $USER \
+&& sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+If the file is not at that path, search for it with `find $WS_DIR -name 65-inivation.rules`. Log out and back in so the new groups apply.
+
 ### Repower USB
 
 
@@ -65,6 +77,16 @@ $ git clone https://github.com/mvp/uhubctl.git \
 && make \
 && sudo make install
 ```
+
+uhubctl needs root unless its udev rule is installed. The rule ships in the repository and allows members of the `dialout` group to switch ports:
+
+```console
+$ sudo cp udev/rules.d/52-usb.rules /etc/udev/rules.d/ \
+&& sudo usermod -aG dialout $USER \
+&& sudo udevadm trigger --attr-match=subsystem=usb
+```
+
+The rule's own header describes it as being for rootless operation, so with it in place the commands below should work without `sudo` (not yet re-checked in the lab).
 
 Off
 

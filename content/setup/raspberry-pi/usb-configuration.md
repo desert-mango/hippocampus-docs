@@ -59,7 +59,7 @@ And the result should show at least the marked line:
 
 ```console
 lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_debug -> ttyAMA1
-lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_tele -> ttyAMA2
+lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_data -> ttyAMA2
 lrwxrwxrwx 1 root root 7 Jun 16 08:13 /dev/fcu_usb -> ttyACM0
 ```
 
