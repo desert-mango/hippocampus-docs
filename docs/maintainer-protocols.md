@@ -206,22 +206,30 @@ proposed. The words, exactly as the editor shows them:
 
 The Team page (`#/team`) shows Lab activity, then the people: the **current team**, then the
 **alumni**. A person whose GitHub account is linked to their card is on the current team when they
-made a commit, a pull request or a review in the lab's repositories in the last 30 days, or when
-an admin **pinned** them. A person with no linked GitHub account stays in the list an admin put
-them in.
+made a commit, a pull request or a review in the lab's repositories in the last 30 days. An admin
+can **pin** a linked person to the list they are in: pinned to the team, they stay on the current
+team without recent GitHub work; pinned to the alumni, they stay in the alumni even while they
+work on GitHub. A person with no linked GitHub account stays in the list an admin put them in.
+
+In `data/people.json` a pin is `"pinned": true` on the person. Its meaning comes from the group
+the person is in: in the `active` group it pins them to the team, in the `alumni` group it pins
+them to the alumni.
 
 To change the lists, turn Editor on on the Team page:
 
 1. **Move someone:** drag their card, or click it (or press Enter on it) for **Move up**, **Move
-   down**, **Move to Alumni** / **Move to the current team** and **Pin to the team** / **Unpin**.
-   With the keyboard, Alt+Up and Alt+Down move the focused card.
-2. Moving a linked person who did no GitHub work lately onto the current team pins them; moving a
-   pinned person to the alumni unpins them. Someone who worked on GitHub in the last 30 days stays
-   on the current team: the page says "… is active on GitHub in the last 30 days, so they stay on
-   the current team."
-3. **Add someone:** the dashed **Add a person** card at the end of each list opens the New person
+   down**, **Move to Alumni** / **Move to the current team**, and **Pin to the team** / **Unpin
+   from the team** (on the current team) or **Pin to the alumni** / **Unpin from the alumni** (in
+   the alumni). With the keyboard, Alt+Up and Alt+Down move the focused card.
+2. A move pins a linked person only when the 30-day rule would send them back: moving someone who
+   did no GitHub work lately onto the current team pins them to the team; moving someone who worked
+   on GitHub in the last 30 days to the alumni pins them to the alumni. Any other move takes the
+   pin off. The card then shows the word **Pinned**.
+3. **Unpin** releases a person: the 30-day rule places them again. Unpinning someone in the alumni
+   who worked on GitHub lately brings them back to the current team.
+4. **Add someone:** the dashed **Add a person** card at the end of each list opens the New person
    form for that list.
-4. **Send for review** proposes the new `data/people.json`. An admin approves people changes.
+5. **Send for review** proposes the new `data/people.json`. An admin approves people changes.
 
 ## 2. Review, approve and merge (Nathalie and Maintainers)
 

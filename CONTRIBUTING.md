@@ -153,8 +153,9 @@ Content for B.
   project and names its owners. After that, the owners look after the project's two files.
 - **Updating the People roster**: on the Team page, turn Editor on: drag a card, or click it
   for Move up / Move down / Move to Alumni / Pin; the "+" card adds a person. Or edit
-  `data/people.json` using the person template above (`pinned: true` keeps someone on the current
-  team without recent GitHub work). New photos are a Desert Mango step (open an issue for that part).
+  `data/people.json` using the person template above (`pinned: true` keeps someone in the group
+  they are in: on the current team without recent GitHub work, or in the alumni despite it). New
+  photos are a Desert Mango step (open an issue for that part).
 - **Renaming or removing an existing id** (a project, a tool, a setup page, a people
   group) is a Desert Mango change: hand-made graph links point at those ids, and the
   check refuses the change with a line ending `renaming or removing an existing id needs

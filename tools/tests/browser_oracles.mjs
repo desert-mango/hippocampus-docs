@@ -1130,7 +1130,7 @@ test('R5: the Team page — #/about and #/lab land on #/team; Lab activity, then
   }
 });
 
-test('R5 walk: the Team page in Editor mode — card tools (no block line), the menu, Alt+Down, a refused move, "+"', { timeout: 150000 }, async () => {
+test('R5 walk: the Team page in Editor mode — card tools (no block line), the menu, Alt+Down, an alumni pin, "+"', { timeout: 150000 }, async () => {
   const scratch = mkdtempSync(path.join(tmpdir(), 'hc-r5-walk-'));
   let W = null;
   try {
@@ -1152,12 +1152,15 @@ test('R5 walk: the Team page in Editor mode — card tools (no block line), the 
     const items = await ev("[...document.querySelectorAll('.hc-pmenu [data-pact]')].map((b) => b.getAttribute('data-pact'))", F);
     assert.deepEqual(items.slice(0, 3), ['up', 'down', 'other']);
     await shot('r5-team-menu-light-1280');
-    // an active, linked, unpinned person cannot be sent to the alumni: the note says why, nothing is posted
-    const active = await ev("(document.querySelector('[data-hc-list=\"team\"] .person-card[data-active=\"1\"][data-pinned=\"0\"]') || {}).getAttribute?.('data-hc-name') || null", F);
-    if (active) {
-      await ev(`(() => { const c = [...document.querySelectorAll('.person-card[data-hc-name]')].find((x) => x.getAttribute('data-hc-name') === ${JSON.stringify(active)}); c.click(); document.querySelector('.hc-pmenu [data-pact="other"]').click(); })()`, F);
-      await until(() => ev("/active on GitHub in the last 30 days/.test((document.querySelector('.hc-pnote') || {}).textContent || '')", F), 'the refused-move note');
-    }
+    // a person pinned to the alumni (Kyle Nelson, data/people.json, 2026-10-16): in the alumni list, marked pinned,
+    // and their menu offers "Unpin from the alumni"; Escape closes it, nothing is posted
+    const away = await ev("(document.querySelector('[data-hc-list=\"alumni\"] .person-card[data-linked=\"1\"][data-pinned=\"1\"]') || {}).getAttribute?.('data-hc-name') || null", F);
+    assert.equal(away, 'Kyle Nelson', 'the first linked, pinned card in the alumni list');
+    await ev(`(() => { const c = [...document.querySelectorAll('[data-hc-list="alumni"] .person-card[data-hc-name]')].find((x) => x.getAttribute('data-hc-name') === ${JSON.stringify(away)}); c.click(); })()`, F);
+    await until(() => ev("(document.querySelector('.hc-pmenu [data-pact=\"pin\"]') || {}).textContent === 'Unpin from the alumni'", F), 'Unpin from the alumni');
+    assert.equal(await ev("document.querySelector('.hc-pmenu [data-pact=\"other\"]').textContent", F), 'Move to the current team');
+    await ev("document.querySelector('.hc-pmenu').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))", F);
+    await until(() => ev("!document.querySelector('.hc-pmenu')", F), 'the menu closed');
     // "+" on the alumni list opens the New person form with that list chosen; Escape comes back
     await ev("document.querySelector('.hc-padd[data-hc-padd=\"alumni\"]').click()", F);
     await until(() => S("!document.querySelector('#hc-tray').hidden && document.querySelector('#hc-tray select[data-field=group]') && document.querySelector('#hc-tray select[data-field=group]').value === 'alumni'"), 'New person for the alumni');
@@ -1174,7 +1177,7 @@ test('R5 walk: the Team page in Editor mode — card tools (no block line), the 
     await S("document.getElementById('theme-toggle').click()");
     await sleep(800);
     await shot('r5-team-moved-dark-1280');
-    console.log('R5 walk: Team page cards with tools, menu, refused move, Alt+Down into the draft');
+    console.log('R5 walk: Team page cards with tools, menu, an alumni pin, Alt+Down into the draft');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });

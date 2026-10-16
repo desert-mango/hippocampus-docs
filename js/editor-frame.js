@@ -174,11 +174,12 @@
 
   /* Round 2 (R5, Kyle 2026-10-15): the Team page's move rules, shared by the card menu, Alt+arrows and drag.
      lists = {team, alumni}: [{name, linked, active, pinned}] as shown. action = {op: 'up'|'down'|'other'|'pin',
-     name} or {op: 'drop', name, list, index}. To the team: a linked person who did no GitHub work lately is
-     pinned (else the 30-day rule sends them back); to the alumni: a pin comes off, and a person ACTIVE on GitHub
-     is refused (the rule would bring them back). Pins exist only for linked people.
-     -> {team, alumni} (new arrays) | {refused: text} | null (nothing to do) */
-  const ACTIVE_NOTE = 'is active on GitHub in the last 30 days, so they stay on the current team';
+     name} or {op: 'drop', name, list, index}. A pin holds a linked person in the list they are in (js/lab.js
+     splitTeam). Moved to the team: a linked person who did no GitHub work lately is pinned there (else the 30-day
+     rule sends them back); moved to the alumni: a linked person ACTIVE on GitHub is pinned there (Kyle 2026-10-16,
+     else the rule brings them back); any other move takes the pin off. 'pin' toggles the pin where they are;
+     an unpinned person is then placed by the rule. Pins exist only for linked people.
+     -> {team, alumni} (new arrays) | null (nothing to do) */
   function peopleMove(lists, action) {
     const a = action || {};
     const copy = (l) => (Array.isArray(l) ? l.map((x) => Object.assign({}, x)) : []);
@@ -201,11 +202,7 @@
     }
     const to = a.op === 'other' ? (from === 'team' ? 'alumni' : 'team') : (a.op === 'drop' && (a.list === 'team' || a.list === 'alumni') ? a.list : null);
     if (!to) return null;
-    if (to === 'alumni' && from === 'team' && who.linked && who.active) return { refused: `${who.name} ${ACTIVE_NOTE}.` };
-    if (to !== from) {
-      if (to === 'team' && who.linked && !who.active) who.pinned = true;
-      if (to === 'alumni') who.pinned = false;
-    }
+    if (to !== from) who.pinned = who.linked === true && (to === 'team' ? !who.active : who.active === true);
     list.splice(i, 1);
     // a drop lands where it was dropped; "Move to Alumni" puts them first there (the newest alumni lead), "Move to
     // the team" last on the team
@@ -904,13 +901,12 @@
        on a focused card, and drag and drop. Every move goes through peopleMove and is posted as hc-people {order}:
        the parent writes my draft and reloads. The marks of a draft or a proposal (hc-editor.people.marks) outline
        the changed cards in the proposer's colour with a word (New, Moved, Pinned, Unpinned, Changed); a removed
-       person is a faded, struck ghost at the end of their old list. A refused move is said in a note. */
+       person is a faded, struck ghost at the end of their old list. */
     const BADGE = Object.freeze({ add: 'New', move: 'Moved', pin: 'Pinned', unpin: 'Unpinned', edit: 'Changed', del: 'Removed' });
     let peopleKey = null;
     let focusedOnce = null;
     const FOCUS_MS = 2500;
     let pmenu = null;
-    let pnote = null;
     let dragName = null;
     const peopleRoot = () => doc.getElementById ? doc.getElementById('people-root') : null;
     // the people's own cards: never the "+" card or a removed person's ghost (a list with either would be refused)
@@ -926,18 +922,10 @@
         linked: c.getAttribute('data-linked') === '1', active: c.getAttribute('data-active') === '1', pinned: c.getAttribute('data-pinned') === '1' })) : []; };
       return { team: read('team'), alumni: read('alumni') };
     }
-    function say(text) {
-      if (!pnote) { pnote = doc.createElement('p'); pnote.className = 'hc-pnote'; pnote.setAttribute('role', 'status'); }
-      pnote.textContent = text;
-      const root = peopleRoot();
-      if (root && pnote.parentNode !== root) root.insertBefore(pnote, root.firstChild);
-    }
     function movePerson(action) {
       const out = peopleMove(shownLists(), action);
       closeMenu();
       if (!out) return;
-      if (out.refused) { say(out.refused); return; }
-      say('');
       const strip = (l) => l.map((x) => ({ name: x.name, pinned: x.pinned === true }));
       HC.post('hc-people', { op: 'order', team: strip(out.team), alumni: strip(out.alumni), focus: action.name });
     }
@@ -966,7 +954,8 @@
       item('Move up', () => movePerson({ op: 'up', name }), 'up');
       item('Move down', () => movePerson({ op: 'down', name }), 'down');
       item(list === 'team' ? 'Move to Alumni' : 'Move to the current team', () => movePerson({ op: 'other', name }), 'other');
-      if (linked) item(pinned ? 'Unpin from the team' : 'Pin to the team', () => movePerson({ op: 'pin', name }), 'pin');
+      const where = list === 'team' ? 'the team' : 'the alumni';     // a pin holds them in the list they are in
+      if (linked) item(pinned ? `Unpin from ${where}` : `Pin to ${where}`, () => movePerson({ op: 'pin', name }), 'pin');
       const href = card.getAttribute('href');
       if (href) item('Open their page', () => { closeMenu(); win.open(href, '_blank', 'noopener'); }, 'open');
       menu.addEventListener('keydown', (e) => {

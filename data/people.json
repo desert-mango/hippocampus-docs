@@ -5,13 +5,6 @@
       "title": "Team",
       "people": [
         {
-          "name": "Kyle Nelson",
-          "title": "Site creator",
-          "photo": "https://res.cloudinary.com/dr76gues0/image/upload/v1792071495/hippocampus-docs/people/kyle-nelson.jpg",
-          "link": "https://kyle-nelson-berkeley.vercel.app",
-          "highlight": true
-        },
-        {
           "name": "Nathalie Bauschmann",
           "title": "Research Associate",
           "photo": "https://res.cloudinary.com/dr76gues0/image/upload/v1788431429/hippocampus-docs/people/nathalie-bauschmann.jpg",
@@ -38,6 +31,14 @@
       "id": "alumni",
       "title": "Alumni",
       "people": [
+        {
+          "name": "Kyle Nelson",
+          "title": "Site creator",
+          "photo": "https://res.cloudinary.com/dr76gues0/image/upload/v1792071495/hippocampus-docs/people/kyle-nelson.jpg",
+          "link": "https://kyle-nelson-berkeley.vercel.app",
+          "highlight": true,
+          "pinned": true
+        },
         {
           "name": "Thies Lennart Alff",
           "title": "Research Associate",

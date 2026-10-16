@@ -558,7 +558,7 @@ test('an image block: draggable, dropped before or after a block, Alt+ArrowUp/Do
 });
 
 // ---- round 2, R5: the Team page's move rules (the card menu, Alt+arrows and drag share them) ----
-test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop; an active person cannot be sent to the alumni', () => {
+test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop; an active person sent to the alumni is pinned there', () => {
   const P = (name, linked, active, pinned) => ({ name, linked, active, pinned });
   const lists = () => ({ team: [P('Ann', true, true, false), P('Ben', true, false, true), P('Uli', false, false, false)],
     alumni: [P('Cid', true, false, false), P('Dot', false, false, false)] });
@@ -569,9 +569,19 @@ test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop
   // to the team: a linked, quiet person is pinned (or GitHub would send them back); an unlinked one just moves
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Cid' })).team, ['Ann', 'Ben*', 'Uli', 'Cid*']);
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Dot' })).team, ['Ann', 'Ben*', 'Uli', 'Dot']);
-  // to the alumni: a pin comes off; an ACTIVE person is refused, with the reason
+  // to the alumni: a quiet person's team pin comes off (the rule keeps them there); an ACTIVE person is pinned to
+  // the alumni (Kyle 2026-10-16), first there, never refused
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Ben' })).alumni, ['Ben', 'Cid', 'Dot']);
-  assert.match(EF.peopleMove(lists(), { op: 'other', name: 'Ann' }).refused, /active on GitHub in the last 30 days/);
+  const away = EF.peopleMove(lists(), { op: 'other', name: 'Ann' });
+  assert.equal(away.refused, undefined, 'never refused');
+  assert.deepEqual(names(away), { team: ['Ben*', 'Uli'], alumni: ['Ann*', 'Cid', 'Dot'] });
+  // back to the team: the alumni pin comes off (active, the rule keeps them there)
+  assert.deepEqual(names(EF.peopleMove(away, { op: 'other', name: 'Ann' })).team, ['Ben*', 'Uli', 'Ann']);
+  // Unpin in the alumni releases them (the 30-day rule then shows them on the team); Pin again pins
+  assert.deepEqual(names(EF.peopleMove(away, { op: 'pin', name: 'Ann' })).alumni, ['Ann', 'Cid', 'Dot']);
+  // a person pinned to the alumni but quiet, moved to the team: pinned to the team
+  const quietAway = { team: [], alumni: [P('Eve', true, false, true)] };
+  assert.deepEqual(names(EF.peopleMove(quietAway, { op: 'other', name: 'Eve' })), { team: ['Eve*'], alumni: [] });
   // pin / unpin (linked only)
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Cid' })).alumni, ['Cid*', 'Dot']);
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Ben' })).team, ['Ann', 'Ben', 'Uli']);
@@ -579,6 +589,6 @@ test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop
   // a drop: into a list at an index, the same rules
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Uli', list: 'team', index: 0 })).team, ['Uli', 'Ann', 'Ben*']);
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Cid', list: 'team', index: 1 })).team, ['Ann', 'Cid*', 'Ben*', 'Uli']);
-  assert.ok(EF.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 0 }).refused);
+  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 1 })).alumni, ['Cid', 'Ann*', 'Dot']);
   assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Nobody' }), null);
 });

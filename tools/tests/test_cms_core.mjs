@@ -1599,6 +1599,10 @@ test('peopleOrderText: the shown lists become the registry\'s groups, pins set o
   assert.equal(doc.groups[0].people[0].pinned, true);
   assert.equal('pinned' in doc.groups[1].people[0], false, 'an unpin removes the key');
   assert.equal(doc.groups[0].title, 'Team', 'everything else is kept');
+  // a pin in the alumni list is written in the alumni group: pinned to the alumni (Kyle 2026-10-16)
+  const away = JSON.parse(C.peopleOrderText(PEOPLE, [{ name: 'Ben', pinned: true }],
+    [{ name: 'Ann', pinned: true }, { name: 'Cid', pinned: false }, { name: 'Dot', pinned: false }]).text);
+  assert.deepEqual([away.groups[1].id, away.groups[1].people[0].name, away.groups[1].people[0].pinned], ['alumni', 'Ann', true]);
   assert.match(out.text, /^\{\n  "groups"/, 'the file keeps its formatting');
   assert.match(C.peopleOrderText(PEOPLE, [{ name: 'Ann' }], [{ name: 'Cid' }, { name: 'Dot' }]).problem, /Ben/);
   assert.match(C.peopleOrderText(PEOPLE, [{ name: 'Ann' }, { name: 'Ann' }, { name: 'Ben' }], [{ name: 'Cid' }, { name: 'Dot' }]).problem, /twice/);

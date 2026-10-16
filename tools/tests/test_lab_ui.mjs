@@ -760,3 +760,38 @@ test('splitTeam: GitHub work in the last 30 days or an admin pin keeps a linked 
   const r2 = { groups: [{ id: 'active', people: [p('NeverWorked', { pinned: 'true' })] }] };
   assert.deepEqual(names(LAB.splitTeam(r2, pub, '2026-10-15').alumni), ['NeverWorked']);
 });
+
+// Kyle 2026-10-16 ("you can put me in alumni"): a pin in the alumni group pins a person to the ALUMNI
+test('splitTeam: pinned: true in the alumni group keeps a person in the alumni whatever their GitHub work', () => {
+  const p = (name, extra) => Object.assign({ name, title: '', photo: null, link: null }, extra);
+  const roster = { groups: [
+    { id: 'active', title: 'Team', people: [p('TeamPinnedBusy', { pinned: true }), p('Busy')] },
+    { id: 'alumni', title: 'Alumni', people: [p('AwayBusy', { pinned: true }), p('Returned'), p('AwayQuiet', { pinned: true }),
+      p('UnlinkedPinned', { pinned: true }), p('StringPin', { pinned: 'true' })] },
+  ] };
+  const person = (login, name, day) => ({ login, name, avatar: null, html_url: `https://github.com/${login}`, roster: name, last_active: day });
+  const pub = { people: {
+    tpb: person('tpb', 'TeamPinnedBusy', '2026-10-14'), b: person('b', 'Busy', '2026-10-14'),
+    ab: person('ab', 'AwayBusy', '2026-10-15'), ret: person('ret', 'Returned', '2026-10-10'),
+    aq: person('aq', 'AwayQuiet', null), sp: person('sp', 'StringPin', '2026-10-12'),
+  } };
+  const s = LAB.splitTeam(roster, pub, '2026-10-15');
+  const names = (list) => list.map((x) => x.person.name);
+  // an alumni pin beats recent work; an unpinned alumnus who works again comes back; a string is not a pin
+  assert.deepEqual(names(s.team), ['TeamPinnedBusy', 'Busy', 'Returned', 'StringPin']);
+  assert.deepEqual(names(s.alumni), ['AwayBusy', 'AwayQuiet', 'UnlinkedPinned']);
+  const by = (n) => [...s.team, ...s.alumni].find((x) => x.person.name === n);
+  assert.deepEqual([by('AwayBusy').linked, by('AwayBusy').active, by('AwayBusy').pinned, by('AwayBusy').from],
+    [true, true, true, 'alumni']);
+  assert.deepEqual([by('TeamPinnedBusy').pinned, by('TeamPinnedBusy').from], [true, 'active']);
+  // the committed roster: Kyle Nelson is pinned first in the alumni, title, highlight, photo and link kept
+  const read = (f) => fs.readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
+  const real = JSON.parse(read('data/people.json'));
+  const alumni = real.groups.find((g) => g.id === 'alumni').people;
+  assert.equal(alumni[0].name, 'Kyle Nelson');
+  assert.deepEqual([alumni[0].title, alumni[0].highlight, alumni[0].pinned], ['Site creator', true, true]);
+  assert.ok(/kyle-nelson\.jpg$/.test(alumni[0].photo) && alumni[0].link === 'https://kyle-nelson-berkeley.vercel.app');
+  assert.ok(!real.groups.find((g) => g.id === 'active').people.some((x) => x.name === 'Kyle Nelson'));
+  const live = LAB.splitTeam(real, JSON.parse(read('data/graph/people-public.json')), '2026-10-16');
+  assert.equal(live.alumni[0].person.name, 'Kyle Nelson', 'pinned to the alumni even though he worked on GitHub today');
+});

@@ -313,10 +313,11 @@
   function authorLine(entry, idx) { return authorLines(entry, idx).join(' '); }
 
   /* Round 2 (R4, Kyle 2026-10-15): who is on the current team. A roster person linked to a GitHub login
-     (people-public.json `roster` == name) is current when pinned (an admin's `pinned: true`) or when one of
-     their logins did a commit, PR or review in the lab's repositories in the last ACTIVE_DAYS days (`last_active`,
-     a day, compared with today); else an alumnus. A person with no linked login stays in the group an admin put
-     them in. Order: the team = the 'active' group's current people, then the promoted; the alumni = the demoted,
+     (people-public.json `roster` == name) is current when one of their logins did a commit, PR or review in the
+     lab's repositories in the last ACTIVE_DAYS days (`last_active`, a day, compared with today); else an alumnus.
+     An admin's `pinned: true` (only the boolean true) holds a linked person in the group they are in: in the
+     'active' group, always current; in the alumni group (Kyle 2026-10-16), always an alumnus, whatever their
+     GitHub work. A person with no linked login stays in the group an admin put them in. Order: the team = the 'active' group's current people, then the promoted; the alumni = the demoted,
      then the rest. No GitHub layer: everyone stays where they are.
      -> {team: [entry], alumni: [entry]}, entry = {person, from: group id, linked, active, pinned, last} */
   const ACTIVE_DAYS = 30;
@@ -349,7 +350,7 @@
         const active = linked && last !== null && now !== null && now - last <= ACTIVE_DAYS;
         const pinned = person.pinned === true;
         const entry = { person, from: fromTeam ? 'active' : String((g && g.id) || ''), linked, active, pinned, last };
-        const current = linked ? (active || pinned) : fromTeam;
+        const current = linked ? (pinned ? fromTeam : active) : fromTeam;
         if (fromTeam) (current ? team : demoted).push(entry);
         else (current ? promoted : alumni).push(entry);
       }

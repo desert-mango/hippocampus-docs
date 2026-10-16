@@ -203,9 +203,6 @@ body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb
 .hc-pmenu-item { display: block; width: 100%; min-height: 34px; padding: .35rem .6rem; border: 0; border-radius: 6px; background: none;
   color: var(--body); font: .86rem var(--sans); text-align: left; cursor: pointer; }
 .hc-pmenu-item:hover, .hc-pmenu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
-.hc-pnote { margin: 0 0 .8rem; padding: .45rem .7rem; border-radius: 8px; font-size: .84rem; color: var(--heading);
-  background: var(--hc-edit-soft); }
-.hc-pnote:empty { display: none; }
 /* what my draft or an opened proposal changes, card by card, in the proposer's colour (--hc-tint) */
 .person-card[data-hc-badge] { position: relative; outline: 2px solid var(--hc-tint); outline-offset: 2px; }
 .person-card[data-hc-badge]::after { content: attr(data-hc-badge); position: absolute; top: -.55rem; left: 50%; transform: translateX(-50%);
