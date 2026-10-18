@@ -1,4 +1,4 @@
-# ROS2 Workspace
+# ROS Workspace2
 
 
 <div class="adm adm-attention"><p class="adm-title">Attention</p>
@@ -9,7 +9,7 @@ The following workspace structure is recommended in general, but is mandatory fo
 
 </div>
 
-We use `ros2` as depicted in [ROS2 Workspace](#/setup/concepts/ros2-workspace) as development workspace and `ros2_underlay` shown in [ROS2 Workspace](#/setup/concepts/ros2-workspace) for larger manually compiled non-development packages that take a lot of time to compile/recompile.
+We use `ros2` as depicted in [ROS2 Workspace](#/setup/concepts/ros2-workspace) as  workspace and `ros2_underlay` shown in [ROS2 Workspace](#/setup/concepts/ros2-workspace) for larger manually compiled non-development packages that take a lot of time to compile/recompile.
 
 
 ```bash

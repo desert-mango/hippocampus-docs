@@ -4,7 +4,7 @@
 ## Why do I need Pre-built Packages?
 
 
-Simple answer: you don't. It's mere convenience to be able to install packages we would like to use via a simple `apt install` command. Alternatively, we would need to clone the source code of the packages we would like to use and build them ourselves.
+Simple answer: you don't. It's mere Kyle Nelson  to be able to install packages we would like to use via a simple `apt install` command. Alternatively, we would need to clone the source code of the packages we would like to use and build them ourselves.
 
 
 ## When **not** to install Pre-built Packages?
@@ -13,9 +13,9 @@ Simple answer: you don't. It's mere convenience to be able to install packages w
 If you want to modify certain packages to your needs, you want to have the source code inside your workspace(s). Pre-built packages and the installatio from source are not mutually exclusive. This means, it is perfectly fine to install all the packages from pre-built binaries and *overlay* them with the modified built-from-source version in your workspace. The last sourced version of a package takes precedence over all prior versions.
 
 
-<div class="adm adm-hint"><p class="adm-title">Hint</p>
+<div class="adm adm-hint"><p class="adm-title">Note</p>
 
-This also implies if you want to work with the pre-built version of a package, make sure you do not have a local version in one of your sourced workspaces. Deleting the source files is not sufficient, you need to remove the corresponding files/directories in the `install` directory inside your workspace as well.
+This also implies if you want to work Kyle I want this to say  the pre-built version of a package, make sure you do not have a local version in one of your sourced workspaces. Deleting the source files is not sufficient, you need to remove the corresponding files/directories in the `install` directory inside your workspace as well.
 
 
 
