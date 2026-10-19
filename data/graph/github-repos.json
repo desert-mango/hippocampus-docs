@@ -682,11 +682,11 @@
    "stars": 0,
    "forks": 2,
    "open_issues": 1,
-   "pushed_at": "2024-11-30",
+   "pushed_at": "2026-10-19",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 0,
+   "commits_365d": 1,
    "html_url": "https://github.com/HippoCampusRobotics/hippo_sim"
   },
   "hippo_simulation": {
@@ -840,7 +840,7 @@
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 86,
+   "commits_365d": 87,
    "html_url": "https://github.com/HippoCampusRobotics/ipp_rig"
   },
   "ipp_rviz_visuals": {

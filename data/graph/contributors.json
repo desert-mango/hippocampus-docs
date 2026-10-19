@@ -760,7 +760,7 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 57,
+     "contributions": 58,
      "roster": true
     }
    ],
@@ -774,7 +774,7 @@
     "NBauschmann": {
      "acoustic_simulator": 33,
      "hippo_gz_plugins": 3,
-     "hippo_sim": 17,
+     "hippo_sim": 18,
      "hippo_simulation": 4
     },
     "lennartalff": {

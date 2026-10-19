@@ -5,9 +5,9 @@
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 192,
+  "commits_365d": 194,
   "authors_365d": 5,
-  "repos_touched_365d": 15,
+  "repos_touched_365d": 16,
   "stars": 32,
   "forks": 60,
   "open_issues": 4,
@@ -641,7 +641,7 @@
   {
    "week": "2026-10-19",
    "days": [
-    2,
+    4,
     null,
     null,
     null,
@@ -652,6 +652,18 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "hippo_sim",
+   "sha": "597eee8",
+   "date": "2026-10-19",
+   "msg": "fix(hippo_sim): correct shutdown action and skip vehicle removal on exit to speed up shutdown"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "295cdf0",
+   "date": "2026-10-19",
+   "msg": "fix(ipp): correct planner cancellation and recovery, bound ir buffer"
+  },
   {
    "repo": "ipp_rig",
    "sha": "f09e98c",
@@ -789,24 +801,12 @@
    "sha": "3734877",
    "date": "2026-08-26",
    "msg": "Improve file name"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "a20f5df",
-   "date": "2026-08-26",
-   "msg": "Improve file name"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "3e6f152",
-   "date": "2026-08-26",
-   "msg": "Parameter update"
   }
  ],
  "most_active_repos": [
   {
    "name": "ipp_rig",
-   "commits": 86,
+   "commits": 87,
    "language": "Python",
    "pushed_at": "2026-10-19"
   },
