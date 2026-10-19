@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 21 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Test graph parity and contributor validation in the site quality gate.
 """Unit tests for the graph half of the check gate (tools/check.py, checks 9-10).
@@ -158,7 +158,12 @@ def contributors_doc():
                 {"login": "aaa", "name": "A Person", "contributions": 9,
                  "roster": True},
                 {"login": "bbb", "name": "B Person", "contributions": 3},
-            ]}}}
+            ],
+                "repos": ["core-fw", "core-hw"],
+                "commits": {"aaa": {"core-fw": 4, "core-hw": 5},
+                            "bbb": {"core-hw": 3},
+                            # beyond the display list: commits are uncapped
+                            "ccc-9": {"core-fw": 1}}}}}
 
 
 class World:
@@ -553,9 +558,21 @@ class TestContributors(GraphTestCase):
         self.w.contributors["org"] = "SomeoneElse"
         self.assertRed(self.w.contribs(), "expected 'HippoCampusRobotics'")
 
-    def test_unknown_project_key_is_red(self):
+    def test_unknown_project_key_is_a_note_never_red(self):
+        # design D4 (2026-10-19): a pull request that removes a project cannot
+        # rebuild contributors.json (network) nor commit it (check.yml's guard),
+        # so its leftover bucket must not turn the gate red; derive drops it
+        self.w.contributors["projects"]["ghost"] = {"contributors": [],
+                                                    "repos": [], "commits": {}}
+        notes = []
+        self.assertEqual(check.check_contributors(self.w.contributors, self.w.projects, notes), [])
+        self.assertEqual(notes, ["data/graph/contributors.json: 'ghost' is not a project id of "
+                                 "data/projects.json (the next contributor build drops it)"])
+        self.assertEqual(self.w.contribs(), [], "no notes list: still never red")
+
+    def test_unknown_project_bucket_is_still_shape_checked(self):
         self.w.contributors["projects"]["ghost"] = {"contributors": []}
-        self.assertRed(self.w.contribs(), "'ghost' is not a project id")
+        self.assertRed(self.w.contribs(), "'ghost' is missing key(s)")
 
     def test_missing_project_bucket_is_green(self):
         # "never built yet": a PR that adds a project cannot have its bucket —
@@ -568,13 +585,13 @@ class TestContributors(GraphTestCase):
         self.w.projects["projects"].append({"id": "fresh"})
         self.assertEqual(self.w.contribs(), [])
 
-    def test_extra_bucket_still_red_after_rule_change(self):
+    def test_extra_bucket_without_the_real_one_is_green_with_a_note(self):
         del self.w.contributors["projects"]["core"]
-        self.w.contributors["projects"]["ghost"] = {"contributors": []}
-        msgs = self.w.contribs()
-        self.assertEqual(msgs, [
-            "data/graph/contributors.json: 'ghost' is not a project id of "
-            "data/projects.json — re-run tools/build_contributors.py"])
+        self.w.contributors["projects"]["ghost"] = {"contributors": [],
+                                                    "repos": [], "commits": {}}
+        notes = []
+        self.assertEqual(check.check_contributors(self.w.contributors, self.w.projects, notes), [])
+        self.assertEqual(len(notes), 1, notes)
 
     def test_malformed_bucket_still_red(self):
         self.w.contributors["projects"]["core"] = ["not", "an", "object"]
@@ -650,6 +667,282 @@ class TestContributors(GraphTestCase):
         self.w.contributors["projects"]["core"]["emails"] = []
         self.assertRed(self.w.contribs(), "unknown key(s)")
 
+    # ---- D2: the per-repo commit counts the edit-rights rule reads ----
+    def core(self):
+        return self.w.contributors["projects"]["core"]
+
+    def test_empty_bucket_new_shape_is_green(self):
+        self.w.contributors["projects"]["core"] = {"contributors": [],
+                                                   "repos": [], "commits": {}}
+        self.assertEqual(self.w.contribs(), [])
+
+    def test_missing_repos_is_red(self):
+        del self.core()["repos"]
+        self.assertRed(self.w.contribs(), "'core' is missing key(s) ['repos']")
+
+    def test_missing_commits_is_red(self):
+        del self.core()["commits"]
+        self.assertRed(self.w.contribs(), "'core' is missing key(s) ['commits']")
+
+    def test_old_shape_bucket_is_red(self):
+        self.w.contributors["projects"]["core"] = {"contributors": []}
+        self.assertRed(self.w.contribs(), "missing key(s) ['commits', 'repos']")
+
+    def test_repos_not_a_list_is_red(self):
+        self.core()["repos"] = "core-fw"
+        self.assertRed(self.w.contribs(), "'repos' must be a list")
+
+    def test_unsorted_repos_is_red(self):
+        self.core()["repos"] = ["core-hw", "core-fw"]
+        self.assertRed(self.w.contribs(), "'repos' is not sorted")
+
+    def test_duplicate_repo_is_red(self):
+        self.core()["repos"] = ["core-fw", "core-fw", "core-hw"]
+        self.assertRed(self.w.contribs(), "'core-fw' appears more than once")
+
+    def test_bad_repo_name_is_red(self):
+        self.core()["repos"] = ["core fw", "core-hw"]
+        self.assertRed(self.w.contribs(), "not a repository name")
+        self.core()["repos"] = [7, "core-hw"]
+        self.assertRed(self.w.contribs(), "not a repository name")
+
+    def test_commits_not_an_object_is_red(self):
+        self.core()["commits"] = [["aaa", 9]]
+        self.assertRed(self.w.contribs(), "'commits' must be an object")
+
+    def test_bad_login_key_is_red(self):
+        self.core()["commits"]["-dash"] = {"core-fw": 1}
+        self.assertRed(self.w.contribs(), "'-dash' is not a GitHub login")
+        self.core()["commits"].pop("-dash")
+        self.core()["commits"]["a" * 40] = {"core-fw": 1}
+        self.assertRed(self.w.contribs(), "is not a GitHub login")
+
+    def test_bot_login_in_commits_is_red(self):
+        self.core()["commits"]["dependabot[bot]"] = {"core-fw": 1}
+        self.assertRed(self.w.contribs(), "'dependabot[bot]' is not a GitHub login")
+
+    def test_per_login_value_not_an_object_is_red(self):
+        self.core()["commits"]["ccc-9"] = 1
+        self.assertRed(self.w.contribs(), "'ccc-9' must map repo names to counts")
+
+    def test_empty_per_login_object_is_red(self):
+        self.core()["commits"]["ccc-9"] = {}
+        self.assertRed(self.w.contribs(), "'ccc-9' must map repo names to counts")
+
+    def test_repo_key_not_in_repos_is_red(self):
+        self.core()["commits"]["ccc-9"] = {"elsewhere": 1}
+        self.assertRed(self.w.contribs(), "'elsewhere' is not in 'core' repos")
+
+    def test_unsorted_inner_keys_is_red(self):
+        self.core()["commits"]["aaa"] = {"core-hw": 5, "core-fw": 4}
+        self.assertRed(self.w.contribs(), "repo keys of 'aaa' are not sorted")
+
+    def test_unsorted_logins_is_red(self):
+        c = self.core()["commits"]
+        self.core()["commits"] = {k: c[k] for k in reversed(list(c))}
+        self.assertRed(self.w.contribs(), "'commits' logins are not sorted")
+
+    def test_zero_negative_and_bool_counts_are_red(self):
+        for bad in (0, -2, True, 1.5, "3"):
+            self.w = World()
+            self.core()["commits"]["ccc-9"] = {"core-fw": bad}
+            self.assertRed(self.w.contribs(), "must be a positive integer")
+
+    def test_display_login_missing_from_commits_is_red(self):
+        del self.core()["commits"]["bbb"]
+        self.assertRed(self.w.contribs(), "row #1: login 'bbb' has no 'commits' entry")
+
+    def test_display_count_not_the_sum_is_red(self):
+        self.core()["commits"]["aaa"]["core-fw"] = 5
+        self.assertRed(self.w.contribs(),
+                       "row #0: contributions 9 != 10, the sum of 'aaa' commits")
+
+    def test_an_at_sign_in_a_commits_key_is_red(self):
+        self.core()["commits"]["x@y"] = {"core-fw": 1}
+        msgs = self.w.contribs()
+        self.assertRed(msgs, "is not a GitHub login")
+
+
+# --------------------------------------------------------------------------
+# 10b. edit access: data/graph/edit-access.json (Kyle, 2026-10-19)
+# --------------------------------------------------------------------------
+import build_edit_access  # noqa: E402
+
+
+def access_doc():
+    return {"note": "x", "projects": {
+        "core": {"repos": 2,
+                 "editors": [{"login": "aaa", "why": "commits", "repos_with_commits": 2},
+                             {"login": "Bee", "why": "added", "repos_with_commits": 0},
+                             {"login": "ccc-9", "why": "commits", "repos_with_commits": 1}],
+                 "removed": [{"login": "bbb", "had_commits": True}]}}}
+
+
+def access_index():
+    return {"intro": "x", "projects": [{"id": "core", "add": ["Bee"], "remove": ["bbb"]}]}
+
+
+class TestEditAccess(unittest.TestCase):
+    def setUp(self):
+        self.doc = access_doc()
+
+    def run_check(self, doc=None, text=None, index=None, contributors=None, links=None):
+        doc = self.doc if doc is None else doc
+        text = build_edit_access.dump(doc) if text is None else text
+        return check.check_edit_access(doc, text, access_index() if index is None else index,
+                                       contributors, links)
+
+    def assertRed(self, needle, **kw):
+        errs, _ = self.run_check(**kw)
+        self.assertTrue(errs, f"expected an error mentioning {needle!r}, got none")
+        self.assertIn(needle, "\n".join(errs))
+
+    def core(self):
+        return self.doc["projects"]["core"]
+
+    def test_green(self):
+        self.assertEqual(self.run_check(), ([], []))
+
+    def test_the_builder_output_is_green_and_in_step(self):
+        contrib = contributors_doc()
+        doc = build_edit_access.effective_access(access_index(), contrib, {"exclude": []})
+        errs, notes = self.run_check(doc=doc, contributors=contrib, links={"exclude": []})
+        self.assertEqual((errs, notes), ([], []))
+
+    def test_out_of_step_with_its_inputs_is_a_note_never_red(self):
+        contrib = contributors_doc()
+        del self.core()["editors"][1]          # Bee is in the add list: the inputs say she edits
+        errs, notes = self.run_check(contributors=contrib, links={"exclude": []})
+        self.assertEqual(errs, [])
+        self.assertEqual(len(notes), 1, notes)
+        self.assertIn("out of step", notes[0])
+
+    def test_an_extra_or_missing_project_is_a_note_never_red(self):
+        self.doc["projects"]["gone"] = {"repos": 0, "editors": [], "removed": []}
+        errs, notes = self.run_check()
+        self.assertEqual(errs, [])
+        self.assertTrue(any("'gone'" in n and "not in data/projects.json" in n for n in notes), notes)
+        index = access_index()
+        index["projects"].append({"id": "fresh", "add": [], "remove": []})
+        errs, notes = self.run_check(index=index)
+        self.assertEqual(errs, [])
+        self.assertTrue(any("'fresh'" in n and "admins only" in n for n in notes), notes)
+
+    def test_top_level_shape(self):
+        self.assertRed("top level must be an object", doc=[], text="[]\n")
+        self.doc["generated"] = "2026-10-19"
+        self.assertRed("unknown key(s) ['generated']")
+        self.doc = access_doc()
+        self.doc["note"] = 3
+        self.assertRed("'note' must be a sentence")
+        self.doc = access_doc()
+        self.doc["projects"] = []
+        self.assertRed("'projects' must be an object")
+
+    def test_project_shape(self):
+        self.core()["owners"] = []
+        self.assertRed("'core' has unknown key(s) ['owners']")
+        self.doc = access_doc()
+        del self.core()["removed"]
+        self.assertRed("'core' is missing key(s) ['removed']")
+        for bad in (True, -1, "2", 1.5):
+            self.doc = access_doc()
+            self.core()["repos"] = bad
+            self.assertRed("'core' 'repos' must be a whole number")
+        self.doc = access_doc()
+        self.core()["editors"] = "aaa"
+        self.assertRed("'core' 'editors' must be a list")
+
+    def test_editor_rows(self):
+        self.core()["editors"][0]["why"] = "owner"
+        self.assertRed("why 'owner' must be \"commits\" or \"added\"")
+        self.doc = access_doc()
+        self.core()["editors"][0]["repos_with_commits"] = 0
+        self.assertRed("'aaa' has why \"commits\", so repos_with_commits must be at least 1")
+        self.doc = access_doc()
+        self.core()["editors"][1]["repos_with_commits"] = 1
+        self.assertRed("'Bee' has why \"added\", so repos_with_commits must be 0")
+        self.doc = access_doc()
+        self.core()["editors"][0]["repos_with_commits"] = 3
+        self.assertRed("more than the project's 2 repos")
+        self.doc = access_doc()
+        self.core()["editors"][0]["repos_with_commits"] = True
+        self.assertRed("repos_with_commits must be a whole number")
+        self.doc = access_doc()
+        self.core()["editors"][0]["extra"] = 1
+        self.assertRed("unknown key(s) ['extra']")
+        self.doc = access_doc()
+        self.core()["editors"][0] = "aaa"
+        self.assertRed("must be an object")
+
+    def test_removed_rows(self):
+        self.core()["removed"][0]["had_commits"] = "true"
+        self.assertRed("had_commits must be true or false")
+        self.doc = access_doc()
+        del self.core()["removed"][0]["had_commits"]
+        self.assertRed("missing key(s) ['had_commits']")
+
+    def test_legacy_logins_section_10_accepts_are_accepted_here_too(self):
+        # one login pattern for commit logins (code review, 2026-10-19): an old GitHub login such as
+        # "a--b" or "a-" can hold commits in a lab repo; if section 10 accepts it and 10b refused it, the
+        # daily derive would write files the gate refuses, and derive.yml would never push again
+        for legacy in ("a--b", "zz-"):
+            contrib = contributors_doc()
+            commits = contrib["projects"]["core"]["commits"]
+            commits[legacy] = {"core-fw": 1}
+            contrib["projects"]["core"]["commits"] = dict(sorted(commits.items()))
+            self.assertEqual(check.check_contributors(contrib, projects_reg()), [], legacy)
+            doc = build_edit_access.effective_access(access_index(), contrib, {"exclude": []})
+            self.assertIn(legacy, [e["login"] for e in doc["projects"]["core"]["editors"]])
+            self.assertEqual(self.run_check(doc=doc, contributors=contrib, links={"exclude": []}), ([], []), legacy)
+
+    def test_logins_are_well_formed(self):
+        for bad in ("-x", "dependabot[bot]", "x@y", "a" * 40, 7, "a b"):
+            self.doc = access_doc()
+            self.core()["editors"][0]["login"] = bad
+            self.assertRed("is not a GitHub login")
+
+    def test_logins_unique_per_list_and_disjoint(self):
+        self.core()["editors"].insert(1, {"login": "AAA", "why": "added", "repos_with_commits": 0})
+        self.assertRed("'AAA' appears twice in 'editors'")
+        self.doc = access_doc()
+        self.core()["removed"].insert(0, {"login": "AAA", "had_commits": False})
+        self.assertRed("'aaa' is both an editor and removed")
+
+    def test_lists_are_sorted_by_lowercase_login(self):
+        e = self.core()["editors"]
+        e[0], e[1] = e[1], e[0]
+        self.assertRed("'editors' is not sorted by login")
+        self.doc = access_doc()
+        self.core()["removed"] = [{"login": "zzz", "had_commits": False}, {"login": "bbb", "had_commits": True}]
+        self.assertRed("'removed' is not sorted by login")
+
+    def test_the_bytes_are_the_builders_format(self):
+        text = json.dumps(self.doc, indent=2)
+        self.assertRed("not in the format tools/build_edit_access.py writes", text=text)
+        self.assertRed("not in the format", text=build_edit_access.dump(self.doc).rstrip("\n"))
+
+    def test_a_wrong_shape_never_raises(self):
+        for doc in (None, "x", {"projects": {"core": "x"}}, {"projects": {"core": {"editors": [None, 3]}}}):
+            self.run_check(doc=doc, text="x")
+
+    def test_the_reader_entry_names_what_the_readers_dereference(self):
+        spec = check.READER_REQUIRED_KEYS["data/graph/edit-access.json"]
+        self.assertIn("data/graph/edit-access.json", check.READER_OPTIONAL)
+
+        def spec_errors(doc):
+            before = len(check.errors)
+            check.check_reader_registry("data/graph/edit-access.json", doc, spec)
+            got = check.errors[before:]
+            del check.errors[before:]
+            return got
+        self.assertEqual(spec_errors(self.doc), [])
+        self.core()["removed"][0]["had_commits"] = "false"          # truthy: the reason for the types entry
+        self.assertTrue(any("had_commits" in e for e in spec_errors(self.doc)))
+        self.doc = access_doc()
+        del self.core()["editors"][0]["why"]
+        self.assertTrue(any('"why"' in e for e in spec_errors(self.doc)))
+
 
 # --------------------------------------------------------------------------
 # integration: the REAL data/graph/ files must be green (read-only)
@@ -719,6 +1012,14 @@ class TestRealTree(unittest.TestCase):
 
     def test_contributors(self):
         self.assertEqual(check.check_contributors(self.contributors, self.projects), [])
+
+    def test_edit_access(self):
+        p = check.ROOT / "data" / "graph" / "edit-access.json"
+        if not p.exists():
+            self.skipTest("no data/graph/edit-access.json in this checkout")
+        text = p.read_text(encoding="utf-8")
+        errs, _ = check.check_edit_access(json.loads(text), text, self.projects)
+        self.assertEqual(errs, [])
 
     def test_the_real_enumeration_is_the_expected_size(self):
         # every setup page + every project + every tool + about, counted from the

@@ -1,0 +1,20 @@
+{
+ "intro": "Test fixture: a small data/projects.json index (id, add, remove).",
+ "projects": [
+  {
+   "id": "core-stack",
+   "add": [
+    "added-person"
+   ],
+   "remove": [
+    "removed-person",
+    "removed-quiet"
+   ]
+  },
+  {
+   "id": "scalar-field",
+   "add": [],
+   "remove": []
+  }
+ ]
+}

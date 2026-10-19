@@ -1,0 +1,41 @@
+{
+ "note": "Test fixture in the shape of data/graph/edit-access.json (built by tools/build_edit_access.py): who can edit each project, from commits plus the admins' add and remove lists.",
+ "projects": {
+  "core-stack": {
+   "editors": [
+    {
+     "login": "added-person",
+     "repos_with_commits": 0,
+     "why": "added"
+    },
+    {
+     "login": "Commit-Person",
+     "repos_with_commits": 2,
+     "why": "commits"
+    }
+   ],
+   "removed": [
+    {
+     "had_commits": true,
+     "login": "removed-person"
+    },
+    {
+     "had_commits": false,
+     "login": "removed-quiet"
+    }
+   ],
+   "repos": 15
+  },
+  "scalar-field": {
+   "editors": [
+    {
+     "login": "Commit-Person",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 8
+  }
+ }
+}

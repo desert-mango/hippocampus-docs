@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 3 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Project public GitHub contribution counts into privacy-filtered project summaries.
 """Build data/graph/contributors.json — the per-project contributor lists.
@@ -34,10 +34,22 @@ Output schema (indent=1, project keys sorted, trailing newline):
     {"generated": ..., "org": ..., "note": ...,
      "projects": {"<project-id>": {
         "contributors": [{"login", "name", "contributions"[, "roster": true]}],
-        "truncated": <how many were cut, only when > 0>}}}
+        "truncated": <how many were cut, only when > 0>,
+        "repos": ["<counted repo name>", ...],
+        "commits": {"<login>": {"<repo>": <count>, ...}, ...}}}}
 
-A project with no contributors keeps its key with an empty list, so the UI can
-tell "nobody found" apart from "never built". "roster": true marks a login that
+"contributors" is the display list: the top TOP_N logins by summed count.
+"repos" is the project's counted repos (sorted), the very set the counts are
+summed over: non-fork org repos, no external rows, nothing in EXCLUDED_REPOS.
+"commits" is the per-repo count of EVERY counted login, uncapped (the
+per-project edit-access rule in tools/build_edit_access.py reads it): logins sorted, repo
+keys sorted, counts positive, only repos of "repos"; bots and the map's
+excluded logins are dropped exactly as for the display list, so a display
+row's "contributions" is the sum of its login's counts here.
+
+A project with no contributors keeps its key with an empty list (and empty
+"repos"/"commits" when nothing is counted), so the UI can tell "nobody found"
+apart from "never built". "roster": true marks a login that
 the site's ONE name matcher, tools/github_names.py, links to a name in
 data/people.json, with the hand-kept map data/github-links.json.
 
@@ -174,6 +186,23 @@ def tally(rows, excluded=frozenset()):
             raise Abort(f"{login}: contributions is not an integer: {count!r}")
         totals[login] += count
     return totals
+
+
+def per_repo_commits(rows_by_repo, excluded=frozenset()):
+    """{login: {repo: count}} over raw contributor rows per repo — uncapped.
+
+    The same drops and checks as tally(): bots and `excluded` logins go, a
+    row without a login or with a non-integer count aborts. Zero counts are
+    not listed. Logins and repo keys come out sorted.
+    """
+    counts = {}
+    for repo in sorted(rows_by_repo):
+        per_repo = tally(rows_by_repo[repo], excluded)
+        for login, count in per_repo.items():
+            if count > 0:
+                counts.setdefault(login, {})[repo] = count
+    return {login: {repo: counts[login][repo] for repo in sorted(counts[login])}
+            for login in sorted(counts)}
 
 
 def rank(totals, names, roster, top=TOP_N, linked=None):
@@ -375,16 +404,18 @@ def build(source, org_rows, projects, people, excluded=EXCLUDED_REPOS,
     """Fetch, aggregate, project, and check. Returns the finished document."""
     by_project = select_repos(projects, org_rows, excluded)
     skip = github_names.excluded_logins(links)
-    per_project = {}
+    per_project, per_project_commits = {}, {}
     for pid in sorted(by_project):
-        rows = []
+        rows, rows_by_repo = [], {}
         for repo in by_project[pid]:
             payload = source.contributors(repo)
             if not isinstance(payload, list):
                 raise Abort(f"repos/{ORG}/{repo}/contributors: expected a list, "
                             f"got {type(payload).__name__}")
             rows.extend(payload)
+            rows_by_repo[repo] = payload
         per_project[pid] = tally(rows, skip)
+        per_project_commits[pid] = per_repo_commits(rows_by_repo, skip)
     # one match over every login of every project: a login's flag is the same
     # everywhere, and the same as people-public.json's "roster"
     names = display_names(source, {login for totals in per_project.values()
@@ -397,6 +428,8 @@ def build(source, org_rows, projects, people, excluded=EXCLUDED_REPOS,
     for pid in sorted(per_project):
         repos, totals = by_project[pid], per_project[pid]
         entry = rank(totals, names, (), linked=linked)
+        entry["repos"] = list(repos)
+        entry["commits"] = per_project_commits[pid]
         entries[pid] = entry
         print(f"  {pid}: {len(repos)} repo(s), {len(totals)} contributor(s)"
               + (f", {entry['truncated']} beyond the top {TOP_N}"

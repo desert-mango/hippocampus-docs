@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 21 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
-# Purpose: Regenerate the derived data (wiki graph, site search shard, contributors) in one run.
+# Purpose: Regenerate the derived data (wiki graph, site search shard, contributors, edit access, CODEOWNERS) in one run.
 """Regenerate every derived file, so nobody needs a terminal to keep them fresh.
 
-    python3 tools/derive.py                                  # graph + site shard
+    python3 tools/derive.py                                  # graph + site shard + access
     python3 tools/derive.py --contributors                   # ... + contributors (gh)
     python3 tools/derive.py --contributors-if-changed <ref>  # ... + contributors when
                                                              #     its inputs differ
@@ -26,14 +26,25 @@ process, exactly as a maintainer would run them:
        data/org-repos.json, data/people.json or data/github-links.json differ
        from <ref>; it needs `gh` and GH_TOKEN, so
        it stays off the pull-request path)
-    4. tools/build_github_data.py                data/graph/{org-activity,
+    4. tools/build_edit_access.py                data/graph/edit-access.json
+       (ALWAYS: offline, from data/projects.json and the contributors.json on
+       disk — the one just rebuilt, else the committed one)
+    5. tools/build_codeowners.py                 .github/CODEOWNERS
+       (ALWAYS: offline, rendered from the edit-access.json step 4 wrote)
+    6. tools/build_github_data.py                data/graph/{org-activity,
        github-repos,page-authors,people-public}.json + data/graph/avatars/
        (only with --github-data; needs `gh`; LAST, and it fails SOFT: see below)
 
+Steps 4 and 5 run on every call (Kyle, 2026-10-19), so pull-request CI, the
+derive workflow, go-live's gate and a local run all rebuild who may edit with
+no network; like 1-3 they are HARD failures (build_edit_access.py writes
+nothing when contributors.json is missing or too old, and derive stops there).
+
 Output contract (the maintainer protocols quote it): one `derive:` line per
-builder, then `derive: <n> files changed (<paths>)` or `derive: nothing to do`.
-"Changed" means the bytes of a file under search/ or data/graph/ differ from
-before the run. A builder that fails stops the run with exit 1: derive names it
+builder (followed by any "  note: ..." lines that builder printed), then
+`derive: <n> files changed (<paths>)` or `derive: nothing to do`.
+"Changed" means the bytes of a file under search/ or data/graph/, or of
+.github/CODEOWNERS (DERIVED_FILES), differ from before the run. A builder that fails stops the run with exit 1: derive names it
 on one line, then passes the builder's own output through unchanged, so the
 builder's located message is the last thing printed.
 
@@ -69,17 +80,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 DERIVED_DIRS = ("search", "data/graph")
+# derived files outside those directories (2026-10-19): generated, and counted as changed like them
+DERIVED_FILES = (".github/CODEOWNERS",)
 # data/projects/ (a pathspec: every project's facts file, 2026-10-14): a repo added to one changes the counts
 CONTRIBUTOR_INPUTS = ("data/projects.json", "data/projects", "data/org-repos.json", "data/people.json",
                       "data/github-links.json")
 GRAPH = ("build_wiki_graph.py", [])
 SITE_SHARD = ("build_search_index.py", ["--site-only"])
 CONTRIBUTORS = ("build_contributors.py", [])
+EDIT_ACCESS = ("build_edit_access.py", [])
+CODEOWNERS = ("build_codeowners.py", [])
 GITHUB_DATA = ("build_github_data.py", [])
 # what the GitHub step owns: restored byte for byte when it fails
 GITHUB_FILES = ("data/graph/org-activity.json", "data/graph/github-repos.json",
                 "data/graph/page-authors.json", "data/graph/people-public.json")
 GITHUB_DIRS = ("data/graph/avatars",)
+# a success-path line a builder wants shown (build_edit_access.py: a project with no counts yet)
+NOTE_PREFIX = "  note:"
 GITHUB_SOFT_FAIL = "derive: build_github_data.py FAILED — previous GitHub data kept"
 
 
@@ -87,8 +104,12 @@ GITHUB_SOFT_FAIL = "derive: build_github_data.py FAILED — previous GitHub data
 # regeneration
 # --------------------------------------------------------------------------
 def snapshot(root):
-    """{relative path: sha256} of every file under the derived directories."""
+    """{relative path: sha256} of every file under the derived directories, and of each DERIVED_FILES file."""
     digests = {}
+    for rel in DERIVED_FILES:
+        p = Path(root) / rel
+        if p.is_file():
+            digests[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
     for d in DERIVED_DIRS:
         base = Path(root) / d
         if not base.is_dir():
@@ -186,8 +207,14 @@ def regenerate(root, args):
             skip_reason = why
     else:
         skip_reason = "not requested; pass --contributors to run it"
+    if skip_reason:
+        builders.append(None)            # the skip line stands where step 3 would run
+    builders += [EDIT_ACCESS, CODEOWNERS]   # always, after the counts (steps 4 and 5)
 
     for builder in builders:
+        if builder is None:
+            print(f"derive: {label(CONTRIBUTORS)} skipped ({skip_reason})")
+            continue
         rc, output = run_builder(root, builder)
         if rc != 0:
             print(f"derive: {label(builder)} FAILED (exit {rc}) — its own message follows:")
@@ -195,8 +222,10 @@ def regenerate(root, args):
             sys.stdout.flush()
             return 1
         print(f"derive: {label(builder)} ok")
-    if skip_reason:
-        print(f"derive: {label(CONTRIBUTORS)} skipped ({skip_reason})")
+        # a builder's own notes (never failures) are shown; its other chatter is not
+        for line in output.splitlines():
+            if line.startswith(NOTE_PREFIX):
+                print(line)
     if args.github_data:
         # LAST, and soft: a GitHub outage never freezes the rest of derive
         kept = github_state(root)

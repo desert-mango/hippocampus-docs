@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-16",
+ "read_at": "2026-10-19",
  "org": "HippoCampusRobotics",
  "repos": {
   ".github": {
@@ -814,6 +814,48 @@
    "private": false,
    "commits_365d": 0,
    "html_url": "https://github.com/HippoCampusRobotics/howto"
+  },
+  "ipp_interfaces": {
+   "name": "ipp_interfaces",
+   "description": "ROS2 message definitions for obstacle polygons in ipp package.",
+   "language": "CMake",
+   "stars": 0,
+   "forks": 0,
+   "open_issues": 0,
+   "pushed_at": "2026-09-01",
+   "archived": false,
+   "fork": false,
+   "private": false,
+   "commits_365d": 4,
+   "html_url": "https://github.com/HippoCampusRobotics/ipp_interfaces"
+  },
+  "ipp_rig": {
+   "name": "ipp_rig",
+   "description": "Gaussian Process based adaptive informative path planning and control on a BlueROV2",
+   "language": "Python",
+   "stars": 2,
+   "forks": 1,
+   "open_issues": 0,
+   "pushed_at": "2026-10-19",
+   "archived": false,
+   "fork": false,
+   "private": false,
+   "commits_365d": 86,
+   "html_url": "https://github.com/HippoCampusRobotics/ipp_rig"
+  },
+  "ipp_rviz_visuals": {
+   "name": "ipp_rviz_visuals",
+   "description": "Dependency for ipp package. Renders BlueROV mesh and tank inside RViz simulation.",
+   "language": "C++",
+   "stars": 0,
+   "forks": 0,
+   "open_issues": 0,
+   "pushed_at": "2026-09-01",
+   "archived": false,
+   "fork": false,
+   "private": false,
+   "commits_365d": 2,
+   "html_url": "https://github.com/HippoCampusRobotics/ipp_rviz_visuals"
   },
   "ir_adc_read": {
    "name": "ir_adc_read",

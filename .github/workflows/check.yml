@@ -9,6 +9,10 @@
 #     who adds a project never needs a terminal to make this job green.
 #   - on push to main nothing is regenerated: the gate judges the committed
 #     tree, so this job agrees with the deploy build.
+#   - on pull requests only, a guard step fails the job when the pull request
+#     itself commits data/graph/contributors.json, data/graph/edit-access.json
+#     or .github/CODEOWNERS (unless a bot opened it): those files decide who may
+#     edit what, so they reach main only through derive.
 #   - when the gate fails, every finding is re-emitted as a GitHub annotation
 #     (file + line where the message names them), and the job summary keeps
 #     the full output.
@@ -47,11 +51,37 @@ jobs:
       # runner image is pinned to an exact version above rather than tracking
       # the floating rolling alias, so the interpreter only ever moves when
       # someone edits this file on purpose.
+      # Who may edit what (Kyle, 2026-10-19) is decided by three derived files.
+      # A pull request may not carry them: it judges the PR's COMMITTED diff
+      # (base tip HEAD^1 against the merge commit HEAD), never the workspace,
+      # which the derive step below rewrites. Its own step, before that one.
+      - name: Refuse authorization data in a pull request
+        if: github.event_name == 'pull_request'
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          carried=$(git diff --name-only HEAD^1 HEAD -- data/graph/contributors.json data/graph/edit-access.json .github/CODEOWNERS)
+          if [ -z "$carried" ]; then
+            echo "no authorization data in this pull request"
+            exit 0
+          fi
+          case "$PR_AUTHOR" in
+            *'[bot]')
+              echo "a bot's pull request carries: $carried"
+              ;;
+            *)
+              echo "::error title=check::this pull request commits $carried — who may edit what enters main only through derive (derive.yml rebuilds these files after the merge); drop them from the pull request"
+              exit 1
+              ;;
+          esac
+
       - name: Regenerate derived data in the workspace (not committed) so the gate judges what main will hold after derive.yml
         if: github.event_name == 'pull_request'
         # Never aborts the job: derive's exit code is recorded, and the gate
         # below still runs and reports on its own. build_contributors.py is not
-        # run here (network-bound, and contributors.json is optional to the gate).
+        # run here (network-bound): build_edit_access.py reads the committed
+        # contributors.json and fails without it (so does derive, and then the
+        # gate names the missing file), because who may edit is never guessed.
         run: |
           set -o pipefail
           set +e
@@ -106,9 +136,9 @@ jobs:
         # the authored overlay data/graph/edges-authored.json is not carrying
         # derived data.
         run: |
-          if [ -n "$(git status --porcelain search/ data/graph/)" ] && \
+          if [ -n "$(git status --porcelain search/ data/graph/ .github/CODEOWNERS)" ] && \
              [ -n "$(git diff --name-only HEAD^1 HEAD -- search/site.json search/manifest.json \
                     data/graph/wiki.json data/graph/summaries.json data/graph/xref-terms.json \
-                    data/graph/contributors.json)" ]; then
+                    data/graph/contributors.json data/graph/edit-access.json .github/CODEOWNERS)" ]; then
             echo "::notice::this PR carries derived files; derive.yml regenerates them after merge — no action needed"
           fi

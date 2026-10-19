@@ -11,7 +11,21 @@
      "contributions": 25,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "acoustic_msgs",
+    "acoustic_msgs-release",
+    "dvl",
+    "dvl_msgs"
+   ],
+   "commits": {
+    "lennartalff": {
+     "acoustic_msgs": 4,
+     "acoustic_msgs-release": 1,
+     "dvl": 15,
+     "dvl_msgs": 5
+    }
+   }
   },
   "cameras": {
    "contributors": [
@@ -21,7 +35,17 @@
      "contributions": 27,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "event_camera_example",
+    "mjpeg_cam"
+   ],
+   "commits": {
+    "lennartalff": {
+     "event_camera_example": 3,
+     "mjpeg_cam": 24
+    }
+   }
   },
   "core-stack": {
    "contributors": [
@@ -54,7 +78,56 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "hippo_common",
+    "hippo_common_msgs",
+    "hippo_control",
+    "hippo_control_msgs",
+    "hippo_core",
+    "hippo_full",
+    "hippo_msgs",
+    "hippo_robot",
+    "remote_control",
+    "stabilizer",
+    "state_estimation",
+    "state_estimation_msgs",
+    "switch"
+   ],
+   "commits": {
+    "DanielDuecker": {
+     "hippo_core": 1
+    },
+    "Latfoo": {
+     "hippo_common": 2
+    },
+    "NBauschmann": {
+     "hippo_common": 5,
+     "hippo_control": 6,
+     "hippo_core": 28,
+     "hippo_full": 8,
+     "hippo_msgs": 10,
+     "stabilizer": 2
+    },
+    "VincentTUHH": {
+     "hippo_common": 1,
+     "hippo_control": 1,
+     "hippo_msgs": 1
+    },
+    "lennartalff": {
+     "hippo_common": 118,
+     "hippo_common_msgs": 7,
+     "hippo_control": 93,
+     "hippo_control_msgs": 8,
+     "hippo_core": 433,
+     "hippo_full": 11,
+     "hippo_msgs": 30,
+     "hippo_robot": 10,
+     "remote_control": 19,
+     "state_estimation": 2,
+     "state_estimation_msgs": 4
+    }
+   }
   },
   "dev-infrastructure": {
    "contributors": [
@@ -70,7 +143,25 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "bag2to1",
+    "buildbot",
+    "hippo-release",
+    "hippo_deployment",
+    "hippo_infrastructure"
+   ],
+   "commits": {
+    "NBauschmann": {
+     "hippo_deployment": 1
+    },
+    "lennartalff": {
+     "bag2to1": 1,
+     "buildbot": 46,
+     "hippo-release": 17,
+     "hippo_infrastructure": 7
+    }
+   }
   },
   "docs-and-site": {
    "contributors": [
@@ -140,7 +231,174 @@
      "contributions": 3
     }
    ],
-   "truncated": 40
+   "truncated": 40,
+   "repos": [
+    ".github",
+    "docs",
+    "hippocampusrobotics.github.io"
+   ],
+   "commits": {
+    "BryceMehring": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "Cazzar": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "DanielDuecker": {
+     "docs": 5,
+     "hippocampusrobotics.github.io": 51
+    },
+    "EugenSol": {
+     "hippocampusrobotics.github.io": 24
+    },
+    "FinnBreu": {
+     "docs": 2
+    },
+    "JCotton1123": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "JohTobi": {
+     "hippocampusrobotics.github.io": 627
+    },
+    "NBauschmann": {
+     ".github": 5,
+     "docs": 51,
+     "hippocampusrobotics.github.io": 1
+    },
+    "RHochdahl": {
+     "docs": 1
+    },
+    "Scot3004": {
+     "hippocampusrobotics.github.io": 3
+    },
+    "VincentTUHH": {
+     "docs": 1
+    },
+    "YNedderhoff": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "YuyingWu": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "ZenHarbinger": {
+     "hippocampusrobotics.github.io": 6
+    },
+    "alexandrnikitin": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "andreykurenkov": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "artokai": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "bliestal": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "carpiediem": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "clburlison": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "danez": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "denolfe": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "dhruvbhatia": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "earlew": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "ekremkaraca": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "fa-ribeiro": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "felipythondev": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "flohw": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "gabor-meszaros": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "hbarudin": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "jeremyvoltz": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "josina1234": {
+     "docs": 2
+    },
+    "kamilszymanski": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "kishore-mohan": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "kylemanna": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "lennartalff": {
+     "docs": 208,
+     "hippocampusrobotics.github.io": 13
+    },
+    "localstatic": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "martinliu": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "maxheld83": {
+     "hippocampusrobotics.github.io": 14
+    },
+    "mmistakes": {
+     "hippocampusrobotics.github.io": 942
+    },
+    "nmiglio": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "relu": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "rriemann": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "sebcachia": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "sid6mathur": {
+     "hippocampusrobotics.github.io": 1
+    },
+    "soxyl": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "thoemmi": {
+     "hippocampusrobotics.github.io": 3
+    },
+    "tobie": {
+     "hippocampusrobotics.github.io": 3
+    },
+    "vlajos": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "vwchu": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "wilsonmar": {
+     "hippocampusrobotics.github.io": 2
+    },
+    "yihangho": {
+     "hippocampusrobotics.github.io": 3
+    }
+   }
   },
   "hippocampus-vehicle": {
    "contributors": [
@@ -168,7 +426,41 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "TeensyST7735",
+    "camera",
+    "esc",
+    "esc_serial",
+    "hardware",
+    "hardware_interfaces",
+    "hippocampus_pcbs",
+    "teensy_esc_controller"
+   ],
+   "commits": {
+    "DanielDuecker": {
+     "camera": 2,
+     "hardware": 1
+    },
+    "NBauschmann": {
+     "camera": 3,
+     "esc": 3,
+     "hardware_interfaces": 1
+    },
+    "VincentTUHH": {
+     "esc": 1
+    },
+    "lennartalff": {
+     "TeensyST7735": 6,
+     "camera": 11,
+     "esc": 52,
+     "esc_serial": 15,
+     "hardware": 61,
+     "hardware_interfaces": 25,
+     "hippocampus_pcbs": 10,
+     "teensy_esc_controller": 4
+    }
+   }
   },
   "holiday-fun": {
    "contributors": [
@@ -178,7 +470,15 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "hippo-christmas"
+   ],
+   "commits": {
+    "lennartalff": {
+     "hippo-christmas": 1
+    }
+   }
   },
   "lab-infrastructure": {
    "contributors": [
@@ -200,13 +500,49 @@
      "contributions": 11,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "buttons",
+    "buttons_msgs",
+    "gantry",
+    "gantry_control",
+    "gantry_gui",
+    "gantry_msgs",
+    "qualisys_bridge",
+    "rqt_gantry"
+   ],
+   "commits": {
+    "NBauschmann": {
+     "buttons": 2,
+     "gantry": 11,
+     "gantry_control": 2,
+     "qualisys_bridge": 1
+    },
+    "VincentTUHH": {
+     "buttons": 8,
+     "qualisys_bridge": 3
+    },
+    "lennartalff": {
+     "buttons": 36,
+     "buttons_msgs": 4,
+     "gantry": 51,
+     "gantry_control": 42,
+     "gantry_gui": 13,
+     "gantry_msgs": 8,
+     "qualisys_bridge": 45,
+     "rqt_gantry": 8
+    }
+   }
   },
   "learning-to-swim": {
-   "contributors": []
+   "contributors": [],
+   "repos": [],
+   "commits": {}
   },
   "learning-to-swim-run-guide": {
-   "contributors": []
+   "contributors": [],
+   "repos": [],
+   "commits": {}
   },
   "legacy-ros1": {
    "contributors": [
@@ -240,7 +576,45 @@
      "contributions": 2,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "control",
+    "hippocampus_common",
+    "hippocampus_msgs",
+    "hippocampus_sim",
+    "howto",
+    "multi_uuv"
+   ],
+   "commits": {
+    "DanielDuecker": {
+     "control": 19,
+     "hippocampus_common": 1,
+     "hippocampus_msgs": 1,
+     "howto": 2
+    },
+    "NBauschmann": {
+     "control": 7,
+     "hippocampus_common": 25,
+     "hippocampus_sim": 6,
+     "multi_uuv": 2
+    },
+    "RHochdahl": {
+     "control": 1,
+     "hippocampus_msgs": 1
+    },
+    "lennartalff": {
+     "control": 27,
+     "hippocampus_common": 38,
+     "hippocampus_msgs": 16,
+     "hippocampus_sim": 20,
+     "howto": 3,
+     "multi_uuv": 6
+    },
+    "timzarhansen": {
+     "hippocampus_common": 1,
+     "howto": 6
+    }
+   }
   },
   "localization": {
    "contributors": [
@@ -256,7 +630,28 @@
      "contributions": 19,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "acoustic_localization",
+    "apriltag_viz",
+    "apriltags",
+    "vision",
+    "visual_localization"
+   ],
+   "commits": {
+    "NBauschmann": {
+     "acoustic_localization": 3,
+     "apriltag_viz": 2,
+     "visual_localization": 14
+    },
+    "lennartalff": {
+     "acoustic_localization": 1,
+     "apriltag_viz": 1,
+     "apriltags": 1,
+     "vision": 1,
+     "visual_localization": 39
+    }
+   }
   },
   "radio-comms": {
    "contributors": [
@@ -277,7 +672,32 @@
      "contributions": 13,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "hippolink",
+    "hippolink_ros",
+    "mavlink_headers",
+    "radio_firmware",
+    "radio_tools",
+    "sdr",
+    "sdr_msgs"
+   ],
+   "commits": {
+    "LorenzMeier": {
+     "mavlink_headers": 22
+    },
+    "NBauschmann": {
+     "sdr": 11,
+     "sdr_msgs": 2
+    },
+    "lennartalff": {
+     "hippolink": 17,
+     "hippolink_ros": 16,
+     "mavlink_headers": 2,
+     "radio_firmware": 9,
+     "radio_tools": 2
+    }
+   }
   },
   "scalar-field": {
    "contributors": [
@@ -298,7 +718,36 @@
      "name": "Bennett Latosinszky",
      "contributions": 17
     }
-   ]
+   ],
+   "repos": [
+    "ir_adc_read",
+    "ir_field_hardware",
+    "path_planning",
+    "rapid_trajectories",
+    "rapid_trajectories_msgs",
+    "scalar_field_belief",
+    "scalar_field_interfaces",
+    "scalar_field_sim"
+   ],
+   "commits": {
+    "Latfoo": {
+     "scalar_field_belief": 10,
+     "scalar_field_interfaces": 2,
+     "scalar_field_sim": 5
+    },
+    "NBauschmann": {
+     "ir_adc_read": 1,
+     "ir_field_hardware": 4,
+     "scalar_field_belief": 10,
+     "scalar_field_interfaces": 6,
+     "scalar_field_sim": 16
+    },
+    "lennartalff": {
+     "path_planning": 39,
+     "rapid_trajectories": 1,
+     "rapid_trajectories_msgs": 4
+    }
+   }
   },
   "simulation": {
    "contributors": [
@@ -314,7 +763,27 @@
      "contributions": 57,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "acoustic_simulator",
+    "hippo_gz_plugins",
+    "hippo_sim",
+    "hippo_simulation"
+   ],
+   "commits": {
+    "NBauschmann": {
+     "acoustic_simulator": 33,
+     "hippo_gz_plugins": 3,
+     "hippo_sim": 17,
+     "hippo_simulation": 4
+    },
+    "lennartalff": {
+     "acoustic_simulator": 4,
+     "hippo_gz_plugins": 24,
+     "hippo_sim": 50,
+     "hippo_simulation": 51
+    }
+   }
   },
   "teaching": {
    "contributors": [
@@ -347,10 +816,35 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "fav_docs",
+    "python-onramp"
+   ],
+   "commits": {
+    "DanielDuecker": {
+     "fav_docs": 6
+    },
+    "NBauschmann": {
+     "fav_docs": 132
+    },
+    "VincentTUHH": {
+     "fav_docs": 1
+    },
+    "josina1234": {
+     "fav_docs": 57,
+     "python-onramp": 15
+    },
+    "lennartalff": {
+     "fav_docs": 182,
+     "python-onramp": 1
+    }
+   }
   },
   "underwater-localization": {
-   "contributors": []
+   "contributors": [],
+   "repos": [],
+   "commits": {}
   },
   "uvms": {
    "contributors": [
@@ -372,7 +866,26 @@
      "contributions": 1,
      "roster": true
     }
-   ]
+   ],
+   "repos": [
+    "alpha_msgs",
+    "uvms",
+    "uvms_msgs"
+   ],
+   "commits": {
+    "NBauschmann": {
+     "alpha_msgs": 1,
+     "uvms": 7
+    },
+    "VincentTUHH": {
+     "alpha_msgs": 1
+    },
+    "lennartalff": {
+     "alpha_msgs": 4,
+     "uvms": 7,
+     "uvms_msgs": 9
+    }
+   }
   }
  }
 }

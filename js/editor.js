@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte
@@ -789,7 +789,9 @@
     if (epoch !== routeEpoch) return;
     const rows = C.proposalRows(open, merged, (n) => files.get(n) || null, state.regs, login);
     // the gate's status is read for the first LIST_CHECKS open rows only (memoized per head sha); the rest say "Open"
-    const list = h('ul', { class: 'hc-plist' }, ...rows.map((row, i) => proposalRow(row, login, i < LIST_CHECKS)));
+    const byNumber = new Map(open.map((p) => [p.number, p]));
+    const list = h('ul', { class: 'hc-plist' }, ...rows.map((row, i) => proposalRow(row, login, i < LIST_CHECKS,
+      row.state === 'open' && byNumber.has(row.number) ? accessKindOf(byNumber.get(row.number), files.get(row.number)) : null)));
     paint(epoch, [
       rows.length ? list : h('p', { class: 'hc-plist-empty', text: 'No proposals yet. Turn Editor on and change a page: Send for review starts one.' }),
       h('p', { class: 'hc-plist-foot' },
@@ -805,7 +807,24 @@
   }
 
   const LIST_CHECKS = 10;
-  function proposalRow(row, login, withCheck) {
+  /* Edit access (2026-10-19): is open proposal p (files: its rows) an access proposal? Only when its files are
+     exactly one modified data/projects.json; then its two texts (at the merge base with main, else the PR's
+     base sha, and at the head) go to HCCore.classifyAccessProposal. Never from the title. -> null | {kind, changes} */
+  const ACCESS_INDEX = 'data/projects.json';
+  async function accessKindOf(p, files) {
+    if (!Array.isArray(files) || files.length !== 1 || !isPlain(files[0]) || files[0].filename !== ACCESS_INDEX
+      || files[0].status !== 'modified') return null;
+    const head = headShaOf(p);
+    if (!head) return null;
+    let base = null;
+    try { base = await mergeBaseOf(await mainSha(), head); } catch (e) { if (quiet(e)) throw e; base = null; }
+    if (!base && isPlain(p.base) && FULL_SHA.test(String(p.base.sha))) base = p.base.sha;
+    if (!base) return null;
+    const [before, after] = await Promise.all([textAt(base, ACCESS_INDEX, false), textAt(head, ACCESS_INDEX, false)]);
+    return C.classifyAccessProposal(files, before, after, loginOf(p));
+  }
+
+  function proposalRow(row, login, withCheck, access) {
     const mine = Boolean(login) && row.who.toLowerCase() === String(login).toLowerCase();
     const age = row.state === 'open' ? C.ageText(row.when, Date.now()) : '';
     const when = row.state === 'open' ? (age ? `opened ${age}` : '') : `merged ${shortDay(row.when)}`;
@@ -825,6 +844,22 @@
         h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }), h('span', { class: 'hc-prow-where', text: where }))),
     h('span', { class: 'hc-prow-side' }, status, h('span', { class: 'hc-prow-when', text: when })));
     open.addEventListener('click', () => openFromList(row));
+    if (access) {
+      // an access proposal: its label and one line per change, under the title (from the diff, never the title)
+      const slot = h('span', { class: 'hc-prow-access' });
+      slot.hidden = true;
+      const main = open.querySelector ? open.querySelector('.hc-prow-main') : null;
+      (main || open).appendChild(slot);
+      access.then((c) => {
+        if (!c) return;
+        const kind = C.accessKindLabel(c.kind);
+        const lines = c.changes.map((x) => C.accessChangeLine(x));
+        slot.replaceChildren(h('span', { class: 'hc-pill hc-access-kind', text: kind }),
+          ...lines.map((t) => h('span', { class: 'hc-access-change', text: t })));
+        slot.hidden = false;
+        open.setAttribute('aria-label', `${open.getAttribute('aria-label')}. ${kind}: ${lines.join('; ')}`);
+      }).catch(() => {});
+    }
     return h('li', { class: 'hc-prow', 'data-pr': String(row.number), 'data-state': row.state, 'data-slot': String(row.slot) }, open);
   }
 
@@ -932,13 +967,14 @@
   const ACTION_LABEL = { approve: 'Approve', 'request-changes': 'Request changes', merge: 'Merge',
     update: 'Update from main', close: 'Close' };
 
-  function actionsBlock(p, n, sha, epoch, status, files, owners, hasRecords) {
+  function actionsBlock(p, n, sha, epoch, status, files, access, hasRecords) {
     const login = (state.session && state.session.login) || '';
-    // who may approve (Kyle, 2026-10-14): owners come from MAIN's data/projects.json (state.regs), never the proposal's
+    // who may approve (edit access, 2026-10-19): a project's editors come from MAIN's data/graph/edit-access.json
+    // (accessRegistry), never the proposal's
     // every path the proposal touches: a rename's old path too; a list GitHub cut short counts as unknown
     const complete = Array.isArray(files) && !(Number.isInteger(p.changed_files) && files.length < p.changed_files);
     const paths = complete ? files.flatMap((f) => [f && f.filename, f && f.previous_filename].filter((x) => typeof x === 'string')) : null;
-    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, projects: owners || null,
+    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, access: access || null,
       hasRecords: hasRecords === true });
     if (!keys.length) {
       return h('p', { class: 'cms-muted', text: 'You can read this proposal. Reviewing it needs write access to this site\'s repository.' });
@@ -946,7 +982,7 @@
     const approveNote = state.role && state.role.key === 'push' && keys.indexOf('approve') < 0
       ? h('p', { class: 'cms-muted', 'data-approve-note': true, text: loginOf(p).toLowerCase() === login.toLowerCase()
         ? 'Someone else approves your own proposal.'
-        : 'Approve is for the site\'s maintainers here, or for a project\'s owners on that project\'s pages.' })
+        : 'Approve is for the site\'s maintainers here, or for a project\'s editors on that project\'s pages.' })
       : null;
     const isAuthor = loginOf(p).toLowerCase() === login.toLowerCase();
     const box = keys.indexOf('request-changes') >= 0
@@ -1152,7 +1188,7 @@
       }
     }
     const pages = sha && files ? C.previewPages(files, await headRegistries(sha, files)) : [];
-    const owners = await ownersRegistry();                 // main's data/projects.json: the project owners for Approve
+    const access = await accessRegistry();                 // main's data/graph/edit-access.json: the project editors for Approve
     const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
     // plan-u5: a proposal with a TRUSTED edit-by-edit record (the go-live engine's rule: may approve one of its
     // pages, not the author, no commit on it) is not merged whole: no Merge
@@ -1160,13 +1196,13 @@
     const everyComment = comments && comments.ok && Array.isArray(comments.data) && comments.data.length >= 100
       ? await allComments(n).catch((e) => { if (quiet(e)) throw e; return partial(comments.data); })
       : (comments && comments.ok && Array.isArray(comments.data) ? comments.data : partial([]));
-    const hasRecords = await trustedRecordExists(p, files, everyComment, owners);
+    const hasRecords = await trustedRecordExists(p, files, everyComment, access);
     put([
       title, note, prFacts(p, n, files), badgeNotes(files),
       ...statusBlock(status, notes),
       vercel ? h('p', null, link(vercel, 'Vercel\'s preview comment'), ' (a deploy preview, when Vercel made one)') : null,
       showOnPage(n, sha, files, pages, C.previewScope(files)),
-      actionsBlock(p, n, sha, epoch, status, files, owners, hasRecords),
+      actionsBlock(p, n, sha, epoch, status, files, access, hasRecords),
       h('h3', { class: 'hc-card-title', text: 'Files changed' }), filesBlock(files),
     ]);
     markPage();
@@ -1208,7 +1244,7 @@
         h('dt', { text: 'Admin' }), h('dd', { text: 'everything, and managing who can edit' }),
         h('dt', { text: 'Maintainer' }), h('dd', { text: 'reviews and merges proposals' }),
         h('dt', { text: 'Editor' }), h('dd', { text: 'edits pages and proposes changes; approves and merges only on the '
-          + 'pages of a project it owns (the project\'s owners list), never its own proposal' }),
+          + 'pages of a project it can edit (commits in the project\'s repos, or added by an admin), never its own proposal' }),
         h('dt', { text: 'Read-only' }), h('dd', { text: 'reads proposals and previews' })),
       h('p', { class: 'cms-muted', text: 'A new picture also changes the shared image list, so a maintainer approves it, '
         + 'even on a project page.' }),
@@ -1233,24 +1269,47 @@
     return state.regs;
   }
 
-  /* The project owners (Kyle, 2026-10-14) from MAIN's data/projects.json, read through GitHub: read
-     again when a proposal is drawn more than a minute after the last read, so an owner an admin added or
-     removed shows here without a reload. A read that fails gives null: no owner's Approve until one succeeds.
-     -> the document or null. */
-  const OWNERS_TTL_MS = 60 * 1000;
-  let ownersRead = { at: 0, doc: null };
-  async function ownersRegistry() {
-    if (ownersRead.doc && Date.now() - ownersRead.at < OWNERS_TTL_MS) return ownersRead.doc;
+  /* Who can edit which project (edit access, Kyle, 2026-10-19): MAIN's data/graph/edit-access.json, read
+     through GitHub. tools/build_edit_access.py builds it from commits plus the admins' add and remove lists;
+     this file only reads it (HCCore.accessFor). Read again when it is needed more than a minute after the
+     last read, so a change shows here without a reload. A read that fails gives null: no editor's Approve
+     until one succeeds. -> the document or null. */
+  const ACCESS_FILE = 'data/graph/edit-access.json';
+  const ACCESS_TTL_MS = 60 * 1000;
+  let accessRead = { at: 0, doc: null, gen: -1 };
+  async function accessRegistry() {
+    const gen = sessionGen.current();
+    if (accessRead.doc && accessRead.gen === gen && Date.now() - accessRead.at < ACCESS_TTL_MS) return accessRead.doc;
     // main's own file through GitHub (pinned to main's head now), never the copy the hosting deployment serves:
-    // a preview deployment of a branch must not be able to name new owners
+    // a preview deployment of a branch must not be able to name new editors
     let doc = null;
     try {
       const sha = await C.resolveRef(state.client, 'main');
-      const answer = await sessionCache().get(sha, 'data/projects.json');
+      const answer = await sessionCache().get(sha, ACCESS_FILE);
       doc = answer && answer.ok ? JSON.parse(answer.text) : null;
     } catch (e) { doc = null; }
-    ownersRead = { at: doc ? Date.now() : 0, doc };          // a failed read fails closed: no owner rights until it reads
+    if (!isPlain(doc)) doc = null;
+    accessRead = { at: doc ? Date.now() : 0, doc, gen };      // a failed read fails closed: no editor rights until it reads
     return doc;
+  }
+  const sessionLogin = () => (state.session && typeof state.session.login === 'string' ? state.session.login : '');
+  const projectIdOf = (page) => {
+    const m = page ? /^project\/([a-z0-9][a-z0-9-]{0,80})$/.exec(String(page.pageId)) : null;
+    return m ? m[1] : null;
+  };
+  /* The Changes tab's header on a project page: one line, what you can do on this project (HCCore.accessFor).
+     Hidden until the access file is read; a failed read shows nothing (unless you edit every project). */
+  function accessLine(projectId) {
+    const line = h('p', { class: 'hc-access-line', role: 'status', hidden: true });
+    const gen = sessionGen.current();
+    accessRegistry().then((doc) => {
+      if (!sessionGen.isCurrent(gen)) return;
+      const a = C.accessFor(doc, projectId, sessionLogin(), state.role);
+      if (!doc && a.why !== 'site-wide') return;
+      line.textContent = a.text;
+      line.hidden = false;
+    });
+    return line;
   }
 
   // ------------------------------------------------------------ the editor ---
@@ -1359,7 +1418,7 @@
       draftList,
       h('h2', { text: 'Registries (raw JSON)' }),
       h('ul', { class: 'hc-links' }, ...C.RAW_REGISTRIES.map((f) => h('li', null, link(`#/edit/${f.slice(0, -5)}`, f)))),
-      // each project's own facts (2026-10-14): its owners edit and approve these; the list above stays admin-owned
+      // each project's own facts (2026-10-14): its editors (data/graph/edit-access.json) edit and approve these; the list above stays admin-owned
       projectFacts.length ? h('h2', { text: 'Project facts (each project\'s own file)' }) : null,
       projectFacts.length ? h('ul', { class: 'hc-links' }, ...projectFacts.map((x) => h('li', null,
         link(`#/edit/data/projects/${x.id}`, `${x.name} — ${C.projectFactsFile(x.id)}`)))) : null,
@@ -1768,8 +1827,8 @@
     paint(epoch, [
       backToChanges(),
       h('h1', { text: 'New project' }),
-      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json (its id and owners), its facts file '
-        + 'data/projects/<id>.json and one page of Markdown. A new project needs a site admin\'s approval; after that its owners '
+      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json (its id and its add and remove lists), its facts file '
+        + 'data/projects/<id>.json and one page of Markdown. A new project needs a site admin\'s approval; after that its editors '
         + 'look after it. The draft stays in this browser until you propose it.' }),
       h('div', { class: 'cms-form' },
         own.length ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
@@ -3404,11 +3463,11 @@
     const head = headShaOf(pull);
     if (!head) return;
     const base = await mergeBaseOf(main, head);
-    const [baseText, headText, mainText, list, commits, projects] = await Promise.all([
+    const [baseText, headText, mainText, list, commits, access] = await Promise.all([
       textAt(base, page.file, true), textAt(head, page.file, true), textAt(main, page.file, false),
       allComments(n).catch((e) => { if (quiet(e)) throw e; return []; }),
       committersOf(n).catch((e) => { if (quiet(e)) throw e; return null; }),
-      ownersRegistry()]);
+      accessRegistry()]);
     const edits = await C.proposalEdits(page.file, baseText, headText, mainText);
     if (mine !== ed.loads || ed.pv !== pv || !edits) return;
     const talk = await loadTalk(n).catch((e) => { if (quiet(e)) throw e; return { comments: [], resolved: new Map(), ok: false }; });
@@ -3423,7 +3482,7 @@
     const me = String((state.session && state.session.login) || '').toLowerCase();
     const myRole = ROLE_NAME[state.role && state.role.key] || 'read';
     const rule = (login, permission) => !committers.has(login)
-      && C.mayApproveEdit({ login, permission, path: page.file, projects, author });
+      && C.mayApproveEdit({ login, permission, path: page.file, access, author });
     rail.data = { n, pull, file: page.file, head, base, baseText, headText, edits, comments: list, author, talk,
       eligible: C.proposalEligible(pull, pv.files), trusted: (login) => rule(login, roles.get(login)),
       may: () => Boolean(me) && rule(me, myRole), main };
@@ -3469,7 +3528,7 @@
     return out;
   }
 
-  async function trustedRecordExists(pull, files, comments, projects) {
+  async function trustedRecordExists(pull, files, comments, access) {
     const author = loginOf(pull).toLowerCase();
     if (comments && comments.partial === true && C.proposalEligible(pull, files)) return true;   // unknown: no Merge here
     const recs = C.parseRecords(comments, { author }).list;
@@ -3495,7 +3554,7 @@
       if (committers.has(r.login)) continue;
       const role = await roleNameOf(r.login).catch(() => 'none');
       if (files.some((f) => r.keys.some((k) => keysOf.get(f.filename).has(k))
-        && C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, projects, author }))) return true;
+        && C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, access, author }))) return true;
     }
     return false;
   }
@@ -4380,6 +4439,8 @@
     }
     out.push(h('p', { class: 'cms-meta' }, h('code', { text: page.file }), ' · ',
       link(C.pencilUrl(page.file), 'edit on github.com instead')));
+    const projectId = projectIdOf(page);
+    if (projectId) out.push(accessLine(projectId));
     if (!canEdit()) {
       out.push(h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
         + 'repository. You can still ', link(C.pencilUrl(page.file), 'propose a change on github.com'), '.'));
@@ -5090,19 +5151,156 @@
     });
   }
 
+  // ---- a project page: edit access at the top of the aside box (edit access, Kyle, 2026-10-19)
+  /* Shown to ANY signed-in session with Editor off (read-only too: accessOn), not only to members. What
+     you can do on this project is HCCore.accessFor over MAIN's data/graph/edit-access.json (accessRegistry);
+     nothing here works the rule out. "Request edit access" is one proposal changing only data/projects.json
+     (a Write role), or a prefilled GitHub issue (read-only). An admin also gets Remove per person and Add
+     person, each one proposal. Every string from the file is set as text. */
+  function accessOn() {
+    return Boolean(state.session) && state.access === 'ok' && !ed.on && !document.body.classList.contains('hc-editor-on');
+  }
+  function drawIfAccess(el, gen, draw) {
+    if (!sessionGen.isCurrent(gen) || !state.session) return;
+    if (!accessOn()) { el.removeAttribute('data-hc-members-done'); mem.done.delete(el); return; }
+    if ('isConnected' in el && !el.isConnected) return;
+    draw();
+  }
+
+  async function projectNameOf(id) {
+    const doc = await dataFile('data/projects.json');
+    const p = isPlain(doc) && Array.isArray(doc.projects) ? doc.projects.find((x) => isPlain(x) && x.id === id) : null;
+    return p && typeof p.name === 'string' && p.name.trim() ? p.name.trim() : id;
+  }
+
+  const ACCESS_ALREADY_TEXT = 'This change is already open as a proposal.';
+  const ACCESS_BUSY_TEXT = 'Another proposal is being sent — wait a moment.';
+  /* One access proposal: main's data/projects.json at main's sha now, the one change, one new branch. */
+  async function sendAccessProposal(o, ui) {
+    const show = (text, ok) => {
+      ui.result.replaceChildren(...[].concat(text));
+      ui.result.hidden = false;
+      ui.result.classList.toggle('is-error', !ok);
+    };
+    const key = `${o.op}:${String(o.login).toLowerCase()}`;
+    if (!state.client) return;
+    // each change once from this box (it is open now), and one proposal at a time: say so, send nothing
+    if (ui.sent.has(key)) { show(ACCESS_ALREADY_TEXT, true); return; }
+    if (proposing) { show(ACCESS_BUSY_TEXT, true); return; }
+    proposing = true;
+    ui.buttons.forEach((b) => { b.disabled = true; });
+    const gen = sessionGen.current();
+    let out;
+    try {
+      const sha = await C.resolveRef(state.client, 'main');
+      const answer = await sessionCache().get(sha, 'data/projects.json');
+      if (!answer || !answer.ok) throw new Error('data/projects.json could not be read from main');
+      const draft = C.accessRequestDraft(answer.text, o.projectId, o.login, o.op);
+      out = draft.problem ? { ok: false, status: 0, message: `Nothing was sent: ${draft.problem}.` }
+        : await C.runPropose(state.client, {
+          login: sessionLogin(), summary: C.accessProposalTitle(o), now: Date.now(), origin: window.location.origin, target: null,
+          changes: [{ path: 'data/projects.json', text: draft.text, original: answer.text, baseSha: sha }],
+          pages: [{ label: `Edit access: ${o.name}`, file: 'data/projects.json' }],
+        });
+    } catch (e) {
+      if (quiet(e)) { proposing = false; return; }
+      out = { ok: false, status: 0, message: `Nothing was sent: ${(e && e.message) || e}.` };
+    } finally {
+      proposing = false;
+    }
+    if (!sessionGen.isCurrent(gen)) return;
+    if (out.status === 401) { endSession(out.message); return; }
+    const free = (b) => !ui.sent.has(ui.keys.get(b));
+    if (!out.ok) { ui.buttons.forEach((b) => { b.disabled = !free(b); }); show(out.message, false); return; }
+    ui.sent.add(key);
+    ui.buttons.forEach((b) => { b.disabled = !free(b); });
+    forgetProposals();
+    show([`${out.message} `, link(`${C.GITHUB_WEB}/pull/${out.number}`, `Open #${out.number} on GitHub`)], true);
+  }
+
+  async function decorateProjectAccess(box, gen) {
+    const id = box.getAttribute('data-hc-project') || '';
+    if (!PROJECT_ID_SAFE_RE.test(id)) return;
+    const [doc, name] = await Promise.all([accessRegistry(), projectNameOf(id)]);
+    drawIfAccess(box, gen, () => {
+      if (box.querySelector('.hc-access')) return;
+      const login = sessionLogin();
+      const a = C.accessFor(doc, id, login, state.role);
+      const unread = !doc && a.why !== 'site-wide';
+      const result = h('p', { class: 'hc-access-result cms-action-result', role: 'status' });
+      result.hidden = true;
+      const buttons = [];
+      const ui = { result, buttons, sent: new Set(), keys: new Map() };    // keys: a button -> the one change it sends
+      const say = (text) => { result.textContent = text; result.hidden = false; result.classList.toggle('is-error', true); };
+      const propose = (o) => sendAccessProposal(Object.assign({ projectId: id, name }, o), ui);
+      const canPush = Boolean(state.role) && state.role.canPush === true;
+      let ask = null;
+      if (!unread && !a.can && GH_LOGIN_RE.test(login)) {
+        if (canPush && a.why !== 'no-write') {
+          ask = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'access-request' }, C.ACCESS_REQUEST_LABEL);
+          ask.addEventListener('click', () => propose({ kind: 'request', op: 'add', login }));
+          buttons.push(ask);
+          ui.keys.set(ask, `add:${login.toLowerCase()}`);
+        } else {
+          ask = link(C.accessIssueUrl({ login, projectId: id, name }), C.ACCESS_REQUEST_LABEL, 'cms-btn');
+          ask.setAttribute('data-action', 'access-issue');
+        }
+      }
+      const admin = Boolean(state.role) && state.role.key === 'admin' && state.role.canPush === true;
+      const rows = C.accessEditors(doc, id).map((e) => {
+        let remove = null;
+        if (admin) {
+          remove = h('button', { type: 'button', class: 'cms-btn hc-access-remove', 'data-action': 'access-remove',
+            'aria-label': `Remove ${e.login} from ${name}` }, 'Remove');
+          remove.addEventListener('click', () => propose({ kind: 'change', op: 'remove', login: e.login }));
+          buttons.push(remove);
+          ui.keys.set(remove, `remove:${e.login.toLowerCase()}`);
+        }
+        return h('li', { class: 'hc-access-row' }, h('span', { class: 'hc-access-login', text: e.login }),
+          h('span', { class: 'hc-access-chip', text: e.chip }), remove);
+      });
+      let addForm = null;
+      if (admin) {
+        const input = h('input', { type: 'text', 'data-field': 'access-login', class: 'hc-access-input', autocomplete: 'off',
+          spellcheck: 'false', placeholder: 'GitHub login', 'aria-label': `GitHub login to add to ${name}` });
+        const add = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'access-add' }, 'Add person');
+        add.addEventListener('click', () => {
+          const who = String(input.value || '').trim();
+          if (!GH_LOGIN_RE.test(who)) { say(`'${who.slice(0, 60)}' is not a GitHub login.`); return; }
+          propose({ kind: 'change', op: 'add', login: who });
+        });
+        buttons.push(add);
+        addForm = h('div', { class: 'hc-access-add' }, input, add);
+      }
+      box.insertBefore(kept(h('section', { class: 'hc-access', 'data-hc-access': true, 'aria-label': 'Edit access' },
+        h('p', { class: 'hc-access-text', text: unread ? C.ACCESS_UNREAD_TEXT : a.text }),
+        ask,
+        unread ? null : h('div', { class: 'hc-access-who' },
+          h('p', { class: 'hc-access-who-label', text: C.ACCESS_SECTION_LABEL }),
+          rows.length ? h('ul', { class: 'hc-access-list' }, ...rows) : null,
+          h('p', { class: 'hc-access-sitewide', text: C.ACCESS_SITE_WIDE_TEXT }),
+          addForm),
+        result)), box.firstChild);
+    });
+  }
+
   const MEMBER_SURFACES = Object.freeze({ lab: decorateLab, people: decoratePeople, popover: decoratePopover,
     authors: decorateAuthors });
+  // drawn for every signed-in session (read-only too), not only members
+  const SESSION_SURFACES = Object.freeze({ 'project-access': decorateProjectAccess });
 
-  /* Decorate every marked surface not yet done; a no-op unless membersOn().
-     Members-only detail is a page-local extra: it never breaks the Editor. */
+  /* Decorate every marked surface not yet done: the members-only ones only when membersOn(), the
+     session ones (SESSION_SURFACES) when accessOn(). A page-local extra: it never breaks the Editor. */
   function membersSweep() {
     clearTimeout(mem.timer);
     mem.timer = null;
-    if (!membersOn()) return;
+    if (!accessOn()) return;
+    const members = membersOn();
     let found = [];
     try { found = Array.from(document.querySelectorAll('[data-hc-surface]')); } catch (e) { found = []; }
     found.forEach((el) => {
-      const decorate = MEMBER_SURFACES[el.getAttribute('data-hc-surface')];
+      const kind = el.getAttribute('data-hc-surface');
+      const decorate = ownKey(SESSION_SURFACES, kind) ? SESSION_SURFACES[kind] : (members && ownKey(MEMBER_SURFACES, kind) ? MEMBER_SURFACES[kind] : null);
       if (typeof decorate !== 'function' || el.hasAttribute('data-hc-members-done')) return;
       el.setAttribute('data-hc-members-done', '');
       mem.done.add(el);

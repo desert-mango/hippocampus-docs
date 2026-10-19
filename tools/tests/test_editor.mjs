@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub.
 /* js/editor.js runs in the site's own page once a session exists (plan D-C,
@@ -2506,18 +2506,20 @@ test('new project: exactly two files — the registry entry with the six keys, a
   assert.deepEqual(Object.keys(out.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
   assert.equal(out.files['content/projects/sonar-rig.md'], '## What it is\n\nA rig.\n');
   const doc = JSON.parse(out.files['data/projects.json']);
-  assert.deepEqual(doc.projects.at(-1), { id: 'sonar-rig', owners: [] }, 'the index keeps only id and owners');
-  const entry = Object.assign({ id: 'sonar-rig', owners: [] }, JSON.parse(out.files['data/projects/sonar-rig.json']));
-  assert.deepEqual(Object.keys(entry), ['id', 'owners', 'name', 'status', 'tagline', 'file', 'repos']);
-  // (the six keys of the name, plus owners since 2026-10-14: a new project starts with none; an admin names them)
-  assert.deepEqual(entry.owners, [], 'a new project starts with no owners');
+  assert.deepEqual(doc.projects.at(-1), { id: 'sonar-rig', add: [], remove: [] }, 'the index keeps only id, add and remove');
+  const entry = Object.assign({ id: 'sonar-rig', add: [], remove: [] }, JSON.parse(out.files['data/projects/sonar-rig.json']));
+  assert.deepEqual(Object.keys(entry), ['id', 'add', 'remove', 'name', 'status', 'tagline', 'file', 'repos']);
+  // (the six keys of the name, plus add and remove since 2026-10-19: a new project starts with no one added;
+  // commits give access once the daily refresh reads them)
+  assert.deepEqual([entry.add, entry.remove], [[], []], 'a new project starts with empty add and remove lists');
+  assert.ok(!('owners' in doc.projects.at(-1)), 'the old owners key is gone');
   assert.deepEqual(entry.repos, [
     { name: 'sonar_rig', url: 'https://github.com/HippoCampusRobotics/sonar_rig' },
     { name: 'sonar-rig-cad', url: 'https://github.com/HippoCampusRobotics/sonar-rig-cad' }]);
   assert.equal(entry.file, 'content/projects/sonar-rig.md');
   // the only change to the index is the added entry
   const before = JSON.parse(text);
-  before.projects.push({ id: 'sonar-rig', owners: [] });
+  before.projects.push({ id: 'sonar-rig', add: [], remove: [] });
   assert.equal(out.files['data/projects.json'], C.formatLike(text, before));
   assert.equal(C.registryDraftProblem('data/projects.json', text, out.files['data/projects.json']), null);
   const listed = REGS.projects.projects[0].repos.find((r) => !r.external).name;
@@ -2965,7 +2967,7 @@ test('js/editor.js New project: a form -> one draft of two files -> Propose send
   const d = draftsOf(page).get('new/project');
   // three files since 2026-10-14: the index entry, the project's own facts file, its page
   assert.deepEqual(Object.keys(d.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
-  assert.deepEqual(JSON.parse(d.files['data/projects.json']).projects.at(-1), { id: 'sonar-rig', owners: [] });
+  assert.deepEqual(JSON.parse(d.files['data/projects.json']).projects.at(-1), { id: 'sonar-rig', add: [], remove: [] });
   assert.equal(JSON.parse(d.files['data/projects/sonar-rig.json']).name, 'Sonar rig');
   assert.equal(d.route, '/projects/sonar-rig');
   assert.equal(rawEditor(page).value, '## What it is\n\nA rig.\n', 'the story opens in the editor');
@@ -3396,6 +3398,7 @@ function reviewGithub(o) {
     m = /^\/issues\/(\d+)\/comments\?/.exec(rest);
     if (m) return wire(200, (o.pulls[m[1]] && o.pulls[m[1]].comments) || []);
     m = /^\/contents\/(.+)\?ref=([0-9a-f]{40})$/.exec(rest);
+    if (m && o.contents && o.contents[`${m[1]}@${m[2]}`] === null) return wire(404, { message: 'Not Found' });
     if (m && o.contents && o.contents[`${m[1]}@${m[2]}`] !== undefined) return wire(200, o.contents[`${m[1]}@${m[2]}`]);
     return null;
   };
@@ -3664,6 +3667,43 @@ test('js/editor.js the proposals list: a merged proposal says Live and opens on 
   findAll(row, (e) => e.attrs['data-action'] === 'open-proposal')[0].click();
   await settle();
   assert.deepEqual(page.opens.map((o) => o[0]), ['https://github.com/desert-mango/hippocampus-docs/pull/3']);
+});
+
+/* Edit access (2026-10-19): an open proposal that changes only data/projects.json's add or remove lists gets a
+   label in the list: "Access request" (someone asking for themselves) or "Access change", and one line per
+   change, "<login>: add|remove on <project>". Judged from the file's two texts (merge base and head), never the
+   title. */
+test('js/editor.js the proposals list: access proposals get a label from the diff, never from the title', async () => {
+  const main = readRepo('data/projects.json');
+  const BASE = 'a1'.repeat(20);
+  const H1 = 'b1'.repeat(20);
+  const H2 = 'c1'.repeat(20);
+  const H3 = 'd1'.repeat(20);
+  const one = [fileRow('data/projects.json')];
+  const at = (sha, text) => ({ [`data/projects.json@${sha}`]: text });
+  const pulls = {
+    11: { pull: openPull(11, 'new-person', H1, { title: 'Please', base: { ref: 'main', sha: BASE } }), files: one },
+    12: { pull: openPull(12, 'an-admin', H2, { title: 'Tidy up', base: { ref: 'main', sha: BASE } }), files: one },
+    13: { pull: openPull(13, 'sneaky', H3, { title: 'Edit access request: sneaky for Core', base: { ref: 'main', sha: BASE } }),
+      files: one },
+  };
+  const intro = JSON.parse(main); intro.intro = 'Changed.';
+  const contents = Object.assign({}, at(BASE, main),
+    at(H1, C.accessRequestDraft(main, 'core-stack', 'new-person', 'add').text),
+    at(H2, C.accessRequestDraft(main, 'scalar-field', 'someone', 'remove').text),
+    at(H3, C.formatLike(main, intro)));
+  const page = await reviewSite('nathalie', { perms: { push: true }, pulls, contents });
+  await settle();
+  const row = (n) => page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === String(n));
+  const label = (n) => findAll(row(n), (e) => e.classList.contains('hc-prow-access') && !e.hidden)[0];
+  assert.ok(label(11), trayText(page));
+  assert.equal(findAll(label(11), (e) => e.classList.contains('hc-access-kind'))[0].textContent, 'Access request');
+  assert.match(label(11).textContent, /new-person: add on core-stack/);
+  assert.match(findAll(row(11), (e) => e.attrs['data-action'] === 'open-proposal')[0].attrs['aria-label'],
+    /Access request: new-person: add on core-stack/);
+  assert.equal(findAll(label(12), (e) => e.classList.contains('hc-access-kind'))[0].textContent, 'Access change');
+  assert.match(label(12).textContent, /someone: remove on scalar-field/);
+  assert.equal(label(13), undefined, 'a title alone never makes an access proposal');
 });
 
 // ----------------------------------------- /cms/ rows, re-homed: Media ---
@@ -4092,33 +4132,74 @@ test('V2: a message (or the image picker\'s button) unfolds a tucked bubble, wit
   assert.equal(page.one((e) => e.classList.contains('hc-dock')).attrs.inert, undefined, 'and it is not inert');
 });
 
-/* Kyle, 2026-10-14: a Write member who owns a project (main's data/projects.json `owners`) sees Approve and
-   Merge on someone else's proposal that only touches that project; not on their own; not when it also
-   touches another file. */
+/* Edit access (Kyle, 2026-10-19): a Write member who is an editor of a project (main's
+   data/graph/edit-access.json, built by tools/build_edit_access.py from commits plus the admins' add and remove
+   lists) sees Approve and Merge on someone else's proposal that only touches that project; not on their own;
+   not when it also touches another file; not when an admin removed them. */
+const ACCESS_FILE = 'data/graph/edit-access.json';
+const accessText = (editors, removed) => `${JSON.stringify({ note: 'test', projects: {
+  'learning-to-swim': { repos: 2, editors: editors.map((login) => ({ login, why: 'commits', repos_with_commits: 1 })),
+    removed: (removed || []).map((login) => ({ login, had_commits: true })) },
+  'core-stack': { repos: 15, editors: editors.map((login) => ({ login, why: 'commits', repos_with_commits: 2 })),
+    removed: (removed || []).map((login) => ({ login, had_commits: true })) } } }, null, 1)}\n`;
+const accessAtMain = (editors, removed) => ({ [`${ACCESS_FILE}@${MAIN_SHA}`]: accessText(editors, removed) });
+
+// (the title keeps its old word "owner": docs/cms-v2-plan.md's parity table names this test by its title)
 test('owners: Approve and Merge for a Write owner on its own project\'s proposal by someone else; not on its own', async () => {
   const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
-  const owner = 'kyle-nelson-berkeley';
-  let page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  const ed = 'kyle-nelson-berkeley';
+  const contents = accessAtMain([ed], ['removed-one']);
+  const site = (login, pr) => reviewSite(login, { perms: { push: true }, contents, pulls: { 1: pr } }, 1);
+  let page = await site(ed, projectPr('nathalie', ['content/projects/learning-to-swim.md']));
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['approve', 'request-changes', 'merge', 'update', 'close']);
-  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr(owner, ['content/projects/learning-to-swim.md']) } }, 1);
+  page = await site(ed, projectPr(ed, ['content/projects/learning-to-swim.md']));
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'merge', 'update', 'close'], 'its own: no Approve');
   assert.match(trayText(page), /Someone else approves your own proposal/);
-  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md', 'content/about.md']) } }, 1);
+  page = await site(ed, projectPr('nathalie', ['content/projects/learning-to-swim.md', 'content/about.md']));
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About is not its project');
-  page = await reviewSite('someone-else', { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not an owner');
+  page = await site('someone-else', projectPr('nathalie', ['content/projects/learning-to-swim.md']));
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not an editor');
+  assert.match(trayText(page), /for a project's editors on that project's pages/);
+  page = await site('removed-one', projectPr('nathalie', ['content/projects/learning-to-swim.md']));
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'removed by an admin');
+  // no access file on main (not built yet, or the read failed): fails closed
+  page = await reviewSite(ed, { perms: { push: true }, contents: { [`${ACCESS_FILE}@${MAIN_SHA}`]: null },
+    pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'no access file: no Approve');
 });
 
-test('owners: read again from the site after a minute, so a changed owners list shows without a reload', async () => {
+test('edit access: a granting copy of edit-access.json served by the site (the deployment) is ignored: only main\'s, through GitHub', async () => {
   const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
-  const page = await reviewSite('kyle-nelson-berkeley', { perms: { push: true }, pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
-  // the owners come from main's file through GitHub: each read asks where main points now (the file itself is
+  const ed = 'kyle-nelson-berkeley';
+  const granting = JSON.parse(accessText([ed, 'bob']));                 // what a branch's preview deployment might serve
+  const hc = { [ACCESS_FILE]: granting };
+  const page = openSite({ hash: '#/?editor=proposals&pr=1', hc, session: C.makeSession(TOKEN_A, null, ed, Date.now()),
+    intercept: reviewGithub({ login: ed, perms: { push: true }, contents: accessAtMain([]),
+      pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }) });
+  await settle();
+  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'],
+    'main lists no editor: no Approve, no Merge');
+  assert.ok(!page.hcReads.includes(ACCESS_FILE), 'the site\'s own copy is never even read');
+  // the Changes tab of the project page says the same
+  const p2 = await editorOn({ hash: '#/projects/core-stack', hc, files: { [ACCESS_FILE]: accessText([]) } });
+  await p2.showData();
+  const line = p2.one((e) => e.classList.contains('hc-access-line') && !e.hidden);
+  assert.equal(line.textContent, 'You have no commits in this project\'s repos yet.');
+});
+
+test('edit access: read again from the site after a minute, so a changed list shows without a reload', async () => {
+  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
+  const page = await reviewSite('kyle-nelson-berkeley', { perms: { push: true }, contents: accessAtMain(['kyle-nelson-berkeley']),
+    pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
+  // the access file comes from main through GitHub: each read asks where main points now (the file itself is
   // cached by commit, so an unchanged main costs one small read)
   const reads = () => page.calls.filter((c) => /\/git\/ref\/heads\/main$/.test(c.url)).length;
-  assert.ok(page.calls.some((c) => /\/contents\/data\/projects\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
+  assert.ok(page.calls.some((c) => /\/contents\/data\/graph\/edit-access\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
+  assert.ok(!page.calls.some((c) => c.url.includes(`/contents/data/projects.json?ref=${MAIN_SHA}`)),
+    'main\'s index is not read for Approve any more');
   const redraw = async () => { page.tab('changes').click(); await settle(); page.tab('proposals').click(); await settle(); };
   const first = reads();
-  assert.ok(first >= 1, 'the owners were read');
+  assert.ok(first >= 1, 'the access file was read');
   assert.ok(actionButton(page, 'approve'), 'drawn with Approve');
   await redraw();
   assert.ok(actionButton(page, 'approve'), 'the card is drawn again');
@@ -4132,15 +4213,37 @@ test('owners: read again from the site after a minute, so a changed owners list 
   assert.ok(reads() > first, 'read again after the minute');
 });
 
-test('owners: a rename out of a file it does not own, or a file list GitHub cut short, gives no Approve or Merge', async () => {
+test('edit access: the Changes tab on a project page says what you can do there, in one line', async () => {
+  const line = (page) => page.one((e) => e.classList.contains('hc-access-line') && !e.hidden);
+  let page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText(['bob']) } });
+  await page.showData();
+  assert.ok(line(page), trayText(page));
+  assert.equal(line(page).textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
+  page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([]) } });
+  await page.showData();
+  assert.equal(line(page).textContent, 'You have no commits in this project\'s repos yet.');
+  page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([], ['bob']) } });
+  await page.showData();
+  assert.equal(line(page).textContent, 'An admin removed your access to this project.');
+  page = await editorOn({ hash: '#/projects/core-stack', variant: 'maintain', files: { [ACCESS_FILE]: accessText([]) } });
+  await page.showData();
+  assert.equal(line(page).textContent, 'You can edit every project (Maintainer).');
+  // not a project page: no line
+  page = await editorOn({ files: { [ACCESS_FILE]: accessText(['bob']) } });
+  await page.showData();
+  assert.equal(line(page), undefined);
+});
+
+test('edit access: a rename out of a file it may not edit, or a file list GitHub cut short, gives no Approve or Merge', async () => {
   const owner = 'kyle-nelson-berkeley';
+  const contents = accessAtMain([owner]);
   const renamed = { pull: openPull(1, 'nathalie', HEAD_1), runs: runs(gateRun()), comments: [],
     files: [Object.assign(fileRow('content/projects/learning-to-swim.md'), { status: 'renamed', previous_filename: 'content/about.md' })] };
-  let page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: renamed } }, 1);
+  let page = await reviewSite(owner, { perms: { push: true }, contents, pulls: { 1: renamed } }, 1);
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About moved into the project');
   const cut = { pull: openPull(1, 'nathalie', HEAD_1, { changed_files: 4000 }), runs: runs(gateRun()), comments: [],
     files: [fileRow('content/projects/learning-to-swim.md')] };
-  page = await reviewSite(owner, { perms: { push: true }, pulls: { 1: cut } }, 1);
+  page = await reviewSite(owner, { perms: { push: true }, contents, pulls: { 1: cut } }, 1);
   assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not every file was listed');
 });
 
@@ -4150,7 +4253,7 @@ test('Data tab (2026-10-14): each project\'s facts file is listed and opens as r
   const link = page.linkTo('#/edit/data/projects/learning-to-swim');
   assert.ok(link, 'the facts file of Learning to Swim is listed');
   assert.match(link.textContent, /data\/projects\/learning-to-swim\.json/);
-  assert.ok(page.linkTo('#/edit/data/projects'), 'the index (ids and owners) is still a registry');
+  assert.ok(page.linkTo('#/edit/data/projects'), 'the index (ids, add and remove) is still a registry');
   await page.follow(link);
   const ta = rawEditor(page);
   assert.ok(ta, 'it opens in the raw JSON editor');

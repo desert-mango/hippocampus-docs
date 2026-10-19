@@ -1,31 +1,19 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-16",
+ "read_at": "2026-10-19",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
-  "public_repos": 94,
-  "commits_365d": 100,
+  "public_repos": 97,
+  "commits_365d": 192,
   "authors_365d": 5,
-  "repos_touched_365d": 12,
-  "stars": 30,
-  "forks": 59,
+  "repos_touched_365d": 15,
+  "stars": 32,
+  "forks": 60,
   "open_issues": 4,
   "releases": 0
  },
  "weeks": [
-  {
-   "week": "2025-10-13",
-   "days": [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ]
-  },
   {
    "week": "2025-10-20",
    "days": [
@@ -413,9 +401,9 @@
   {
    "week": "2026-06-01",
    "days": [
+    2,
     0,
-    0,
-    0,
+    1,
     0,
     0,
     0,
@@ -452,7 +440,7 @@
     0,
     1,
     1,
-    0,
+    18,
     0,
     0,
     0
@@ -461,33 +449,33 @@
   {
    "week": "2026-06-29",
    "days": [
-    0,
     1,
+    6,
     0,
     0,
-    5,
+    6,
     0,
-    0
+    7
    ]
   },
   {
    "week": "2026-07-06",
    "days": [
-    0,
-    1,
-    0,
-    0,
+    4,
+    8,
     0,
     0,
-    3
+    0,
+    5,
+    6
    ]
   },
   {
    "week": "2026-07-13",
    "days": [
+    2,
     1,
-    0,
-    0,
+    1,
     0,
     0,
     0,
@@ -498,18 +486,18 @@
    "week": "2026-07-20",
    "days": [
     0,
+    1,
     0,
     0,
     0,
-    0,
-    0,
-    0
+    1,
+    1
    ]
   },
   {
    "week": "2026-07-27",
    "days": [
-    0,
+    1,
     1,
     0,
     0,
@@ -535,9 +523,9 @@
    "days": [
     0,
     0,
-    1,
-    0,
-    0,
+    2,
+    2,
+    3,
     0,
     0
    ]
@@ -547,10 +535,10 @@
    "days": [
     0,
     0,
+    2,
+    7,
     0,
-    1,
-    0,
-    1,
+    2,
     0
    ]
   },
@@ -558,8 +546,8 @@
    "week": "2026-08-24",
    "days": [
     3,
-    0,
-    3,
+    2,
+    8,
     1,
     0,
     0,
@@ -570,7 +558,7 @@
    "week": "2026-08-31",
    "days": [
     0,
-    1,
+    5,
     0,
     0,
     0,
@@ -644,14 +632,38 @@
     0,
     0,
     0,
-    4,
+    7,
     3,
+    0,
+    0
+   ]
+  },
+  {
+   "week": "2026-10-19",
+   "days": [
+    2,
+    null,
+    null,
+    null,
+    null,
     null,
     null
    ]
   }
  ],
  "recent_commits": [
+  {
+   "repo": "ipp_rig",
+   "sha": "f09e98c",
+   "date": "2026-10-19",
+   "msg": "refactor(ipp): clean up formatting and node shutdown"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "a49210e",
+   "date": "2026-10-19",
+   "msg": "Update repository URLs in README.md"
+  },
   {
    "repo": "hippo_common",
    "sha": "67f6063",
@@ -669,6 +681,24 @@
    "sha": "da0b968",
    "date": "2026-10-16",
    "msg": "Merge pull request #2 from Latfoo/main"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "fb48508",
+   "date": "2026-10-15",
+   "msg": "fix: wrong obstacle publisher executable in launch file"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "ec7688e",
+   "date": "2026-10-15",
+   "msg": "Declare workspace repo dependencies"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "2af8431",
+   "date": "2026-10-15",
+   "msg": "Slim down README"
   },
   {
    "repo": "scalar_field_sim",
@@ -713,10 +743,34 @@
    "msg": "updated pinout colors"
   },
   {
+   "repo": "ipp_rig",
+   "sha": "58264ef",
+   "date": "2026-09-01",
+   "msg": "Add correct sim params to launch file"
+  },
+  {
    "repo": "docs",
    "sha": "0b28923",
    "date": "2026-09-01",
    "msg": "added new pinout for uuv02"
+  },
+  {
+   "repo": "ipp_interfaces",
+   "sha": "49c43fc",
+   "date": "2026-09-01",
+   "msg": "Add README"
+  },
+  {
+   "repo": "ipp_rviz_visuals",
+   "sha": "973fc24",
+   "date": "2026-09-01",
+   "msg": "Add README"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "0a0622f",
+   "date": "2026-09-01",
+   "msg": "Add dependency and clean up documentation"
   },
   {
    "repo": "docs",
@@ -725,85 +779,37 @@
    "msg": "Add instruction for enabling motors and checking status"
   },
   {
+   "repo": "ipp_rig",
+   "sha": "5bf8fa6",
+   "date": "2026-08-26",
+   "msg": "Improve move_to_start service timeout behaviour"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "3734877",
+   "date": "2026-08-26",
+   "msg": "Improve file name"
+  },
+  {
    "repo": "scalar_field_belief",
    "sha": "a20f5df",
    "date": "2026-08-26",
    "msg": "Improve file name"
   },
   {
-   "repo": "hippo_common",
-   "sha": "509662a",
+   "repo": "ipp_rig",
+   "sha": "3e6f152",
    "date": "2026-08-26",
-   "msg": "Sensor offset values"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "8e94126",
-   "date": "2026-08-26",
-   "msg": "Hardware config v1"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "29c8ded",
-   "date": "2026-08-24",
-   "msg": "Add function to return physical hyperparameters during runs"
-  },
-  {
-   "repo": "ir_field_hardware",
-   "sha": "81c2a68",
-   "date": "2026-08-24",
-   "msg": "Update project title in README.md"
-  },
-  {
-   "repo": "ir_field_hardware",
-   "sha": "b9b43dc",
-   "date": "2026-08-24",
-   "msg": "Initial commit"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "f1cc011",
-   "date": "2026-08-22",
-   "msg": "config params for experiments"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "f3c323f",
-   "date": "2026-08-20",
-   "msg": "Remove dense fields"
-  },
-  {
-   "repo": "hippo_common",
-   "sha": "da68799",
-   "date": "2026-08-12",
-   "msg": "add ir_sensor tf frame"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "6838f75",
-   "date": "2026-08-05",
-   "msg": "Final experiment fields"
-  },
-  {
-   "repo": "fav_docs",
-   "sha": "f0053ba",
-   "date": "2026-07-28",
-   "msg": "update launch instructions for final demo event"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "f355e1b",
-   "date": "2026-07-13",
-   "msg": "Condition GP belief on every measurement, not just on refit"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "99eb12a",
-   "date": "2026-07-12",
-   "msg": "Update README"
+   "msg": "Parameter update"
   }
  ],
  "most_active_repos": [
+  {
+   "name": "ipp_rig",
+   "commits": 86,
+   "language": "Python",
+   "pushed_at": "2026-10-19"
+  },
   {
    "name": "fav_docs",
    "commits": 28,
@@ -841,16 +847,10 @@
    "pushed_at": "2026-10-16"
   },
   {
-   "name": "ir_field_hardware",
+   "name": "ipp_interfaces",
    "commits": 4,
-   "language": null,
-   "pushed_at": "2026-09-17"
-  },
-  {
-   "name": "hippo_control",
-   "commits": 2,
-   "language": "C++",
-   "pushed_at": "2026-06-24"
+   "language": "CMake",
+   "pushed_at": "2026-09-01"
   }
  ],
  "releases": [],

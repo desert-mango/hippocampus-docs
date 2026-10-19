@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 21 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Validate site content and dispatch the deterministic attribution-header check.
 """The check gate. Run before every commit:  python3 tools/check.py
@@ -57,7 +57,18 @@ Validates, failing loudly with actionable messages:
      org repo, xref terms resolve and collide with neither stoplist nor each other,
      and every hand-authored edge was merged into wiki.json as 'related';
   10. contributors: data/graph/contributors.json (when present) is the projected,
-     address-free shape build_contributors.py writes;
+     address-free shape build_contributors.py writes: every bucket carries
+     exactly contributors (top 12) / repos (sorted, unique repo names) /
+     commits (login -> repo of repos -> positive count, uncapped)
+     [/ truncated], and each display row's count is its login's summed counts;
+  10b. edit access: data/graph/edit-access.json (when present) is the exact
+     shape and byte format tools/build_edit_access.py writes (well-formed
+     logins, unique and sorted per list, editors and removed disjoint, a "why"
+     of commits or added that agrees with repos_with_commits), and
+     .github/CODEOWNERS is exactly tools/build_codeowners.py's render of it.
+     Out of step with data/projects.json or contributors.json, or a project id
+     missing from or extra in it, is a printed NOTE, never red (derive.yml
+     rebuilds it; readers treat a missing project as admins-only);
   11. the GitHub layer (tools/github_layer_rules.py, shared with the builder):
      data/graph/{org-activity,github-repos,page-authors,people-public}.json
      (each when present) carry exactly their public key sets with a plain
@@ -89,7 +100,8 @@ from github_layer_rules import (  # noqa: E402  (one copy, shared with the build
     UNSAFE_TAG_RE, UNSAFE_TAGS, scan_markup, unsafe_scheme)
 import github_layer_rules  # noqa: E402
 import projects_registry  # noqa: E402  (the project index + each project's facts file)
-import build_codeowners  # noqa: E402  (.github/CODEOWNERS from the project owners)
+import build_codeowners  # noqa: E402  (.github/CODEOWNERS from data/graph/edit-access.json)
+import build_edit_access  # noqa: E402  (who may edit each project: the one rule, and its byte format)
 
 ROOT = Path(__file__).resolve().parent.parent
 MARKED_SHA256 = "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
@@ -118,6 +130,13 @@ EDGE_TYPES = ("links-to", "member", "mentions", "related")
 SUMMARY_SOURCES = ("derived", "authored")
 CONTRIB_ORG = "HippoCampusRobotics"
 CONTRIB_MAX_ROWS = 12
+# section 10's per-repo counts (plan D2): repo names as GitHub allows them, and
+# GitHub logins (1-39 chars, alnum or hyphen, not starting with a hyphen; no
+# '[bot]' suffix — bots are never contributors)
+CONTRIB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+# One copy, shared with tools/build_edit_access.py (section 10b uses it too).
+CONTRIB_LOGIN_RE = build_edit_access.COMMIT_LOGIN_RE
+CONTRIB_BUCKET_KEYS = frozenset({"contributors", "repos", "commits"})
 
 # ---- 1b. reader inputs -----------------------------------------------------
 # Every key a READER dereferences WITHOUT a guard. A READER is any file in this
@@ -132,10 +151,14 @@ CONTRIB_MAX_ROWS = 12
 #   tools/check_urls.py, tools/derive.py (paths only: it passes registry paths
 #   to git diff and dereferences no key), tools/github_names.py (people.json
 #   and github-links.json only, both excluded below), tools/projects_registry.py
-#   tools/build_codeowners.py (projects[].id and .owners, guarded),
-#   tools/go_live.mjs (2026-10-15: main's data/projects.json, handed to
-#   js/cms-core.js mayApproveEdit/ownsAll, which read projects[].id and .owners
-#   guarded; the spec below already names both),
+#   tools/build_codeowners.py (2026-10-19: data/graph/edit-access.json's
+#   projects.<id>.editors[].login, guarded; the spec below names them),
+#   tools/build_edit_access.py (data/projects.json's projects[].id/add/remove,
+#   data/graph/contributors.json's repos/commits — section 10 — and
+#   data/github-links.json's exclude, excluded below; it aborts with a located
+#   message on a wrong shape),
+#   tools/go_live.mjs (main's data/graph/edit-access.json, handed to
+#   js/cms-core.js, which reads the keys the spec below names),
 #   and js/source.js (2026-10-14: both read data/projects.json's projects[].id
 #   to fetch each project's facts file, data/projects/<id>.json, and merge it;
 #   the facts files' own spec is PROJECT_FACTS_SPEC), tools/rst_convert.py
@@ -169,7 +192,10 @@ CONTRIB_MAX_ROWS = 12
 #     entries below name the keys js/lab.js and js/graph.js dereference bare
 #     (plan D-B is the contract both sides build to). They are optional: a
 #     checkout without them is checked only when they appear
-#     (READER_OPTIONAL).
+#     (READER_OPTIONAL). AND EXCEPT data/graph/edit-access.json, which has
+#     BOTH as well: section 10b holds its exact shape, and the entry below
+#     names the keys js/cms-core.js, js/editor.js, tools/go_live.mjs and
+#     tools/build_codeowners.py dereference (optional the same way).
 #
 # Spec node shape:
 #   {"keys":      (keys this object must carry,),
@@ -250,24 +276,24 @@ READER_REQUIRED_KEYS = {
                                         "commit_date_cloned")}},
     },
     # The project index (since 2026-10-14 each project's facts are in their own
-    # file, data/projects/<id>.json, owner-approved; the index keeps what stays
-    # admin-owned: the list of ids in display order and each project's owners).
+    # file, data/projects/<id>.json; the index keeps what stays admin-owned: the
+    # list of ids in display order and each project's `add` and `remove` lists).
     # Every reader reads the two merged (tools/projects_registry.py,
     # HC.fetchProjects in js/source.js); the facts files' spec is
     # PROJECT_FACTS_SPEC below, applied to every data/projects/*.json.
     "data/projects.json": {
         "keys": ("projects", "intro"),
         "each": {"projects": {
-                     "keys": ("id", "owners"),
+                     "keys": ("id", "add", "remove"),
                      "types": {"id": str},
-                     # 'owners' (Kyle, 2026-10-14): the GitHub logins who may approve
-                     # this project's edits. js/cms-core.js ownsAll() iterates it and
-                     # compares each member with a login, and tools/build_codeowners.py
-                     # writes each member into .github/CODEOWNERS: a string in the
-                     # list's place would iterate as characters, and a non-string
-                     # member would silently never match (str_lists).
-                     "lists": ("owners",),
-                     "str_lists": ("owners",)},
+                     # 'add' and 'remove' (Kyle, 2026-10-19; 'owners' was renamed
+                     # to 'add'): an admin's per-person overrides of the commits
+                     # rule. tools/build_edit_access.py iterates both and compares
+                     # each member with a login, and the editor edits them: a
+                     # string in a list's place would iterate as characters, and
+                     # a non-string member would silently never match (str_lists).
+                     "lists": ("add", "remove"),
+                     "str_lists": ("add", "remove")},
                  # 'exclusions' is optional (section 4 reads it with .get()).
                  "exclusions": {"keys": ("name",)}},
     },
@@ -353,9 +379,25 @@ READER_REQUIRED_KEYS = {
         "values": {"people": {"keys": ("login", "name", "avatar", "html_url",
                                        "roster", "last_active")}},
     },
+    # who may edit each project (Kyle, 2026-10-19; tools/build_edit_access.py).
+    # js/cms-core.js accessFor()/canEditProject() and tools/build_codeowners.py
+    # read these keys; a login is compared with .toLowerCase() (str), the
+    # counts are printed as numbers, and had_commits is branched on (the
+    # string "false" would be truthy). Section 10b holds the exact shape.
+    "data/graph/edit-access.json": {
+        "keys": ("note", "projects"),
+        "values": {"projects": {
+            "keys": ("repos", "editors", "removed"),
+            "types": {"repos": int},
+            "each": {"editors": {"keys": ("login", "why", "repos_with_commits"),
+                                 "types": {"login": str, "repos_with_commits": int}},
+                     "removed": {"keys": ("login", "had_commits"),
+                                 "types": {"login": str, "had_commits": bool}}}}},
+    },
 }
 # Registries with an entry above that may be absent (checked when present).
-READER_OPTIONAL = frozenset(github_layer_rules.FILES.values())
+EDIT_ACCESS = "data/graph/edit-access.json"
+READER_OPTIONAL = frozenset(github_layer_rules.FILES.values()) | {EDIT_ACCESS}
 
 # One project's facts, data/projects/<id>.json (2026-10-14): the keys every
 # reader dereferences on a merged project entry. Not a READER_REQUIRED_KEYS
@@ -372,6 +414,11 @@ PROJECT_FACTS_SPEC = {
              "links": {"keys": ("href", "label")}},
 }
 PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
+# An index entry's keys, in this order (tools/projects_registry.py keeps it).
+INDEX_ENTRY_KEYS = ("id", "add", "remove")
+# Said when an index entry or a facts file still carries the old key: an editor
+# tab opened before the rename would write it back.
+OWNERS_RENAMED = "renamed to `add` (2026-10-19): reload the editor"
 
 
 def check_project_files(index, facts, root=None):
@@ -379,10 +426,13 @@ def check_project_files(index, facts, root=None):
     data/projects.json; facts: {relative path: parsed doc} for every file under
     data/projects/. -> list of error strings; never raises on a bad shape.
 
-    - an index entry is exactly {id, owners}: the facts live in the project's
-      own file, so an owner never has to touch the shared index;
+    - an index entry is exactly {id, add, remove}: the facts live in the
+      project's own file, so an editor never has to touch the shared index (a
+      missing key is READER_REQUIRED_KEYS's to report, a leftover `owners`
+      check_project_access's);
     - every id has its facts file and every facts file is in the index;
-    - a facts file never says id or owners (an owner cannot widen ownership);
+    - a facts file never says id, add, remove or owners (an editor cannot widen
+      access);
     - its 'file' is content/projects/<id>.md (the page the id names)."""
     out = []
     rows = index.get("projects") if isinstance(index, dict) else None
@@ -391,10 +441,10 @@ def check_project_files(index, facts, root=None):
         if not isinstance(e, dict):
             continue
         pid = e.get("id")
-        extra = sorted(set(e) - {"id", "owners"})
+        extra = sorted(set(e) - set(INDEX_ENTRY_KEYS) - {"owners"})
         if extra:
             out.append(f"data/projects.json: projects[{i}] (id '{pid}') carries {extra}: a project's facts go in "
-                       f"data/projects/{pid}.json; the index keeps only id and owners")
+                       f"data/projects/{pid}.json; the index keeps only id, add and remove")
         if isinstance(pid, str):
             if not PROJECT_ID_RE.match(pid):
                 out.append(f"data/projects.json: projects[{i}] id '{pid[:60]}' must be lowercase letters, digits and dashes")
@@ -407,14 +457,15 @@ def check_project_files(index, facts, root=None):
     for rel in sorted(facts):
         pid = rel[len("data/projects/"):-len(".json")]
         if pid not in ids:
-            out.append(f"{rel}: not in data/projects.json's list — add {{\"id\": \"{pid}\", \"owners\": []}} there "
+            out.append(f"{rel}: not in data/projects.json's list — add {{\"id\": \"{pid}\", \"add\": [], \"remove\": []}} there "
                        f"(a new project needs an admin) or remove the file")
         doc = facts[rel]
         if not isinstance(doc, dict):
             continue
-        for k in ("id", "owners"):
+        for k in ("id", "add", "remove", "owners"):
             if k in doc:
-                out.append(f"{rel}: '{k}' belongs in data/projects.json (admins), never in a project's own file")
+                out.append(f"{rel}: '{k}' belongs in data/projects.json (admins), never in a project's own file"
+                           + (f" ({OWNERS_RENAMED})" if k == "owners" else ""))
         if isinstance(doc.get("file"), str) and doc["file"] != f"content/projects/{pid}.md":
             out.append(f"{rel}: file must be content/projects/{pid}.md (the page this id names), not '{doc['file']}'")
     return out
@@ -1034,27 +1085,49 @@ def node_ids(wiki):
             if isinstance(n, dict) and isinstance(n.get("id"), str)}
 
 
-GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$")
+# The `add`/`remove` lists take the SAME pattern as the commit logins (one
+# pattern everywhere, 2026-10-19): an old login such as "a--b" can hold commits
+# and so be an editor, and an admin must be able to remove it. The editor's
+# access drafts (js/cms-core.js) accept this pattern too.
+ACCESS_LIST_LOGIN_RE = build_edit_access.COMMIT_LOGIN_RE
 
 
-def check_project_owners(projects):
-    """Each project's 'owners' (Kyle, 2026-10-14): GitHub logins, each a
-    well-formed login, none twice (GitHub logins are case-insensitive). The
-    list may be empty (admins only). -> list of error strings. Shape (a list
-    of strings) is READER_REQUIRED_KEYS's; this never raises on a wrong shape."""
+def check_project_access(projects):
+    """Each project's `add` and `remove` lists (Kyle, 2026-10-19): an admin's
+    per-person overrides of the commits rule (tools/build_edit_access.py).
+    Each member is a well-formed GitHub login (ACCESS_LIST_LOGIN_RE, the same
+    pattern as the commit logins), none twice in one list, and no
+    login in both lists of one project. GitHub logins are case-insensitive, so
+    every comparison is lowercased. Either list may be empty. A leftover
+    `owners` key (the old name of `add`) is named. -> list of error strings.
+    Shape (lists of strings) is READER_REQUIRED_KEYS's; this never raises on a
+    wrong shape."""
     out = []
     for pr in projects.get("projects", []) if isinstance(projects, dict) else []:
-        if not isinstance(pr, dict) or not isinstance(pr.get("owners"), list):
+        if not isinstance(pr, dict):
             continue
-        seen = set()
-        for login in pr["owners"]:
-            if not isinstance(login, str):
+        pid = pr.get("id")
+        if "owners" in pr:
+            out.append(f"projects.json: {pid} still has `owners`: it was {OWNERS_RENAMED}")
+        seen = {}
+        for key in ("add", "remove"):
+            if not isinstance(pr.get(key), list):
                 continue
-            if not GITHUB_LOGIN_RE.match(login):
-                out.append(f"projects.json: {pr.get('id')} owner '{login[:60]}' is not a GitHub login")
-            elif login.lower() in seen:
-                out.append(f"projects.json: {pr.get('id')} lists owner '{login}' twice")
-            seen.add(login.lower())
+            mine = set()
+            for login in pr[key]:
+                if not isinstance(login, str):
+                    continue
+                low = login.lower()
+                if not ACCESS_LIST_LOGIN_RE.match(login):
+                    out.append(f"projects.json: {pid} `{key}` login '{login[:60]}' is not a GitHub login")
+                    continue
+                if low in mine:
+                    out.append(f"projects.json: {pid} `{key}` lists '{login}' twice")
+                    continue
+                mine.add(low)
+            seen[key] = mine
+        for low in sorted(seen.get("add", set()) & seen.get("remove", set())):
+            out.append(f"projects.json: {pid} has '{low}' in both `add` and `remove`: keep it in one")
     return out
 
 
@@ -1416,7 +1489,71 @@ def check_authored_edges(authored, wiki):
 # --------------------------------------------------------------------------
 # 10. contributors — optional-when-present, like data/people.json at 6c.
 # --------------------------------------------------------------------------
-def check_contributors(contributors, projects):
+def check_contributor_commits(where, pid, bucket, out):
+    """A bucket's 'repos' and 'commits' (plan D2); appends to `out`.
+
+    Returns the 'commits' object when it is one (so the display rows can be
+    cross-checked against it), else None.
+    """
+    repos = bucket.get("repos")
+    repo_set = set()
+    if "repos" in bucket:
+        if not isinstance(repos, list):
+            out.append(f"{where}: '{pid}' 'repos' must be a list of repository "
+                       f"names, got {type(repos).__name__} — re-run "
+                       f"tools/build_contributors.py")
+        else:
+            names = []
+            for item in repos:
+                if not (isinstance(item, str) and CONTRIB_REPO_RE.match(item)):
+                    out.append(f"{where}: '{pid}' 'repos' item {item!r} is not a "
+                               f"repository name")
+                    continue
+                if item in repo_set:
+                    out.append(f"{where}: '{pid}' 'repos' entry '{item}' appears "
+                               f"more than once — re-run tools/build_contributors.py")
+                repo_set.add(item)
+                names.append(item)
+            if names != sorted(names):
+                out.append(f"{where}: '{pid}' 'repos' is not sorted — re-run "
+                           f"tools/build_contributors.py")
+    if "commits" not in bucket:
+        return None
+    commits = bucket["commits"]
+    if not isinstance(commits, dict):
+        out.append(f"{where}: '{pid}' 'commits' must be an object keyed by login, "
+                   f"got {type(commits).__name__} — re-run "
+                   f"tools/build_contributors.py")
+        return None
+    if list(commits) != sorted(commits):
+        out.append(f"{where}: '{pid}' 'commits' logins are not sorted — re-run "
+                   f"tools/build_contributors.py")
+    for login, per_repo in commits.items():
+        if not CONTRIB_LOGIN_RE.match(login):
+            out.append(f"{where}: '{pid}' 'commits' key {login!r} is not a GitHub "
+                       f"login (bots are not contributors) — re-run "
+                       f"tools/build_contributors.py")
+        if not (isinstance(per_repo, dict) and per_repo):
+            out.append(f"{where}: '{pid}' 'commits' entry {login!r} must map repo "
+                       f"names to counts (a non-empty object)")
+            continue
+        if list(per_repo) != sorted(per_repo):
+            out.append(f"{where}: '{pid}' 'commits' repo keys of {login!r} are not "
+                       f"sorted — re-run tools/build_contributors.py")
+        for repo, count in per_repo.items():
+            if repo not in repo_set:
+                out.append(f"{where}: '{pid}' 'commits' entry {login!r}: repo "
+                           f"{repo!r} is not in '{pid}' repos — re-run "
+                           f"tools/build_contributors.py")
+            if not (isinstance(count, int) and not isinstance(count, bool)
+                    and count > 0):
+                out.append(f"{where}: '{pid}' 'commits' entry {login!r}: the count "
+                           f"for {repo!r} must be a positive integer, got "
+                           f"{count!r}")
+    return commits
+
+
+def check_contributors(contributors, projects, notes=None):
     """data/graph/contributors.json, when it exists, is address-free and sorted.
 
     The file is a gated artifact: a checkout without it is fine (None), and the
@@ -1454,27 +1591,39 @@ def check_contributors(contributors, projects):
         return out
     project_ids = {p["id"] for p in projects.get("projects", [])
                    if isinstance(p, dict)}
+    # A bucket for a project the index no longer lists is a NOTE, never red
+    # (design D4, 2026-10-19): a pull request that removes a project can
+    # neither rebuild contributors.json (network) nor commit it (check.yml's
+    # guard), and build_edit_access.py ignores such a bucket; the next
+    # contributor build drops it. Its shape is still checked below.
     for pid in sorted(set(buckets) - project_ids):
-        out.append(f"{where}: '{pid}' is not a project id of data/projects.json — "
-                   f"re-run tools/build_contributors.py")
+        if notes is not None:
+            notes.append(f"{where}: '{pid}' is not a project id of data/projects.json "
+                         f"(the next contributor build drops it)")
     # A project WITHOUT a bucket is allowed: it is the "never built yet" state
     # (build_contributors.py's docstring tells it apart from "nobody found" =
     # an empty list, and js/graph.js renders nothing for it). The bucket cannot
     # exist yet on a pull request that adds a project: build_contributors.py
     # needs the network, so it stays off the offline PR path and derive.yml
     # fills the bucket only after the merge (plan D4). Requiring it here would
-    # make every project-adding PR red. A bucket for a project that no longer
-    # exists, and a malformed bucket, stay red.
-    for pid in sorted(set(buckets) & project_ids):
+    # make every project-adding PR red. A malformed bucket stays red, also one
+    # for a project that no longer exists (that bucket itself is only a note).
+    for pid in sorted(buckets):
         bucket = buckets[pid]
         if not isinstance(bucket, dict):
             out.append(f"{where}: '{pid}' must be an object with a 'contributors' "
                        f"list")
             continue
-        extra_keys = sorted(set(bucket) - {"contributors", "truncated"})
+        extra_keys = sorted(set(bucket) - CONTRIB_BUCKET_KEYS - {"truncated"})
         if extra_keys:
             out.append(f"{where}: '{pid}' has unknown key(s) {extra_keys} — exactly "
-                       f"contributors/truncated")
+                       f"contributors/repos/commits[/truncated]")
+        missing_keys = sorted(CONTRIB_BUCKET_KEYS - set(bucket))
+        if missing_keys:
+            out.append(f"{where}: '{pid}' is missing key(s) {missing_keys} — exactly "
+                       f"contributors/repos/commits[/truncated]; re-run "
+                       f"tools/build_contributors.py")
+        commits = check_contributor_commits(where, pid, bucket, out)
         if "truncated" in bucket and not (
                 isinstance(bucket["truncated"], int)
                 and not isinstance(bucket["truncated"], bool)
@@ -1525,11 +1674,152 @@ def check_contributors(contributors, projects):
             if isinstance(login, str) and isinstance(n, int) \
                     and not isinstance(n, bool):
                 order.append((-n, login))
+            # the display list and the per-repo counts must tell one story
+            if commits is not None and isinstance(login, str) and login.strip():
+                if login not in commits:
+                    out.append(f"{who}: login '{login}' has no 'commits' entry — "
+                               f"every displayed contributor has per-repo counts; "
+                               f"re-run tools/build_contributors.py")
+                elif isinstance(commits[login], dict) and isinstance(n, int) \
+                        and not isinstance(n, bool):
+                    total = sum(v for v in commits[login].values()
+                                if isinstance(v, int) and not isinstance(v, bool))
+                    if total != n:
+                        out.append(f"{who}: contributions {n} != {total}, the sum of "
+                                   f"'{login}' commits — re-run "
+                                   f"tools/build_contributors.py")
         if order != sorted(order):
             out.append(f"{where}: '{pid}' rows are not sorted by contributions "
                        f"(descending) then login — re-run "
                        f"tools/build_contributors.py")
     return out
+
+
+# --------------------------------------------------------------------------
+# 10b. edit access — data/graph/edit-access.json (Kyle, 2026-10-19), derived by
+# tools/build_edit_access.py; .github/CODEOWNERS is rendered from it.
+# --------------------------------------------------------------------------
+ACCESS_PROJECT_KEYS = frozenset({"repos", "editors", "removed"})
+ACCESS_EDITOR_KEYS = frozenset({"login", "why", "repos_with_commits"})
+ACCESS_REMOVED_KEYS = frozenset({"login", "had_commits"})
+ACCESS_WHY = ("commits", "added")
+
+
+def _whole(n):
+    return isinstance(n, int) and not isinstance(n, bool)
+
+
+def _access_rows(where, pid, key, rows, want, out):
+    """Shape of one project's 'editors' or 'removed' list; -> its well-formed logins."""
+    if not isinstance(rows, list):
+        out.append(f"{where}: '{pid}' '{key}' must be a list, got {type(rows).__name__}")
+        return []
+    logins, seen = [], set()
+    for i, row in enumerate(rows):
+        at = f"{where}: '{pid}' {key}[{i}]"
+        if not isinstance(row, dict):
+            out.append(f"{at} must be an object, got {type(row).__name__}")
+            continue
+        extra, missing = sorted(set(row) - want), sorted(want - set(row))
+        if extra:
+            out.append(f"{at} has unknown key(s) {extra}")
+        if missing:
+            out.append(f"{at} is missing key(s) {missing}")
+        login = row.get("login")
+        # section 10's pattern (CONTRIB_LOGIN_RE), never a stricter one: a login
+        # that may hold commits must be a login this file may name
+        if not (isinstance(login, str) and CONTRIB_LOGIN_RE.match(login)):
+            out.append(f"{at} login {login!r} is not a GitHub login (bots never edit)")
+            continue
+        if login.lower() in seen:
+            out.append(f"{where}: '{pid}' login '{login}' appears twice in '{key}'")
+        seen.add(login.lower())
+        logins.append(login)
+        if key == "editors":
+            why, k = row.get("why"), row.get("repos_with_commits")
+            if why not in ACCESS_WHY:
+                out.append(f"{at} why {why!r} must be \"commits\" or \"added\"")
+            if "repos_with_commits" in row and not (_whole(k) and k >= 0):
+                out.append(f"{at} repos_with_commits must be a whole number (0 or more), got {k!r}")
+            elif why == "commits" and _whole(k) and k < 1:
+                out.append(f"{at} '{login}' has why \"commits\", so repos_with_commits must be at least 1")
+            elif why == "added" and _whole(k) and k != 0:
+                out.append(f"{at} '{login}' has why \"added\", so repos_with_commits must be 0")
+        elif "had_commits" in row and not isinstance(row["had_commits"], bool):
+            out.append(f"{at} had_commits must be true or false, got {row['had_commits']!r}")
+    if logins != sorted(logins, key=lambda x: (x.lower(), x)):
+        out.append(f"{where}: '{pid}' '{key}' is not sorted by login (in lowercase)")
+    return logins
+
+
+def check_edit_access(doc, text, index, contributors=None, links=None):
+    """data/graph/edit-access.json, when it exists. doc: parsed; text: the
+    file's bytes as text; index: parsed data/projects.json (raw or merged);
+    contributors / links: parsed contributors.json and github-links.json when
+    available (None skips the in-step note). -> (errors, notes). Never raises.
+
+    Hard: the exact shape and byte format tools/build_edit_access.py writes.
+    Notes, never red (design D4): a project id missing from or extra in the
+    file, and a file out of step with its inputs — pull-request CI rebuilds it,
+    derive.yml commits it on main, and every reader treats a project missing
+    from it as admins-only."""
+    where, out, notes = EDIT_ACCESS, [], []
+    if not isinstance(doc, dict):
+        return [f"{where}: top level must be an object, got {type(doc).__name__} — "
+                f"run python3 tools/build_edit_access.py"], notes
+    extra = sorted(set(doc) - {"note", "projects"})
+    if extra:
+        out.append(f"{where}: unknown key(s) {extra} at the top — exactly note/projects (no timestamp: "
+                   f"the bytes change only when access does)")
+    if not isinstance(doc.get("note"), str):
+        out.append(f"{where}: 'note' must be a sentence (a string)")
+    projects = doc.get("projects")
+    if not isinstance(projects, dict):
+        out.append(f"{where}: 'projects' must be an object keyed by project id")
+        return out, notes
+    for pid, entry in projects.items():
+        if not isinstance(entry, dict):
+            out.append(f"{where}: '{pid}' must be an object with repos/editors/removed")
+            continue
+        extra, missing = sorted(set(entry) - ACCESS_PROJECT_KEYS), sorted(ACCESS_PROJECT_KEYS - set(entry))
+        if extra:
+            out.append(f"{where}: '{pid}' has unknown key(s) {extra} — exactly repos/editors/removed")
+        if missing:
+            out.append(f"{where}: '{pid}' is missing key(s) {missing} — run python3 tools/build_edit_access.py")
+        repos = entry.get("repos")
+        if "repos" in entry and not (_whole(repos) and repos >= 0):
+            out.append(f"{where}: '{pid}' 'repos' must be a whole number (0 or more), got {repos!r}")
+        editors = _access_rows(where, pid, "editors", entry.get("editors", []), ACCESS_EDITOR_KEYS, out)
+        removed = _access_rows(where, pid, "removed", entry.get("removed", []), ACCESS_REMOVED_KEYS, out)
+        for login in sorted({x.lower() for x in editors} & {x.lower() for x in removed}):
+            shown = next(x for x in editors if x.lower() == login)
+            out.append(f"{where}: '{pid}' login '{shown}' is both an editor and removed")
+        if _whole(repos) and isinstance(entry.get("editors"), list):
+            for row in entry["editors"]:
+                if isinstance(row, dict) and _whole(row.get("repos_with_commits")) \
+                        and row["repos_with_commits"] > repos:
+                    out.append(f"{where}: '{pid}' '{row.get('login')}' has commits in "
+                               f"{row['repos_with_commits']} repos, more than the project's {repos} repos")
+    if not out and text != build_edit_access.dump(doc):
+        out.append(f"{where}: not in the format tools/build_edit_access.py writes (indent 1, sorted keys, "
+                   f"one trailing newline) — run python3 tools/build_edit_access.py")
+    # ---- notes: out of step, never red ----
+    ids = [e["id"] for e in index.get("projects", []) if isinstance(e, dict) and isinstance(e.get("id"), str)] \
+        if isinstance(index, dict) and isinstance(index.get("projects"), list) else []
+    for pid in sorted(set(projects) - set(ids)):
+        notes.append(f"{where}: '{pid}' is not in data/projects.json (the next derive drops it)")
+    for pid in sorted(set(ids) - set(projects)):
+        notes.append(f"{where}: '{pid}' is not in it yet: until the next derive, admins only may edit it")
+    if not out and contributors is not None and links is not None:
+        try:
+            want = build_edit_access.effective_access(index, contributors, links)
+        except build_edit_access.Abort as exc:
+            notes.append(f"{where}: could not compare it with its inputs ({exc})")
+        else:
+            if want["projects"] != projects:
+                notes.append(f"{where}: out of step with data/projects.json and data/graph/contributors.json "
+                             f"(derive rebuilds it: python3 tools/derive.py)")
+    return out, notes
 
 
 def main():
@@ -1576,6 +1866,9 @@ def main():
     for key, rel in github_layer_rules.FILES.items():
         if (ROOT / rel).exists():
             registries[rel] = github_docs[key] = load(rel)
+    # who may edit each project: optional the same way; section 10b judges it
+    if (ROOT / EDIT_ACCESS).exists():
+        registries[EDIT_ACCESS] = load(EDIT_ACCESS)
     for rel in sorted(set(READER_REQUIRED_KEYS) - set(registries) - READER_OPTIONAL):
         err(f"{rel}: has a READER_REQUIRED_KEYS entry but no load() call in "
             f"tools/check.py — add one so a syntax error is located too")
@@ -1647,18 +1940,8 @@ def main():
             err(f"docs/setup-parity.md counts stale ({m.group(1)} vs {len(old_set)} old pages) — re-run tools/rst_convert.py")
 
     # ---- 4. projects coverage ----
-    for msg in check_project_owners(projects):
+    for msg in check_project_access(projects):
         err(msg)
-    # .github/CODEOWNERS is generated from the owners (2026-10-14): GitHub's ruleset enforces it, so it may
-    # never drift from data/projects.json
-    try:
-        want_owners = build_codeowners.render(registries["data/projects.json"])
-        have_owners = (ROOT / build_codeowners.OUT).read_text(encoding="utf-8")
-        if have_owners != want_owners:
-            err(f"{build_codeowners.OUT}: not in step with the project owners in data/projects.json — "
-                f"run python3 tools/build_codeowners.py and commit the result")
-    except FileNotFoundError:
-        err(f"{build_codeowners.OUT}: missing — run python3 tools/build_codeowners.py")
     org_names = {r["name"] for r in org}
     seen = {}
     for pr in projects["projects"]:
@@ -2001,8 +2284,33 @@ def main():
         err(f"{GRAPH}/contributors.json: top level must be a JSON object, got "
             f"{type(contributors).__name__} — re-run tools/build_contributors.py")
     else:
-        for msg in check_contributors(contributors, projects):
+        for msg in check_contributors(contributors, projects, notes):
             err(msg)
+
+    # ---- 10b. edit access + .github/CODEOWNERS ----
+    # edit-access.json is derived (tools/build_edit_access.py); CODEOWNERS is
+    # rendered from it and GitHub ENFORCES it, so the two may never drift.
+    # Without edit-access.json there is nothing to render CODEOWNERS from:
+    # that is red too (derive.py builds both).
+    access_doc = registries.get(EDIT_ACCESS)
+    if not (ROOT / EDIT_ACCESS).exists():
+        err(f"{EDIT_ACCESS}: missing — run python3 tools/derive.py (it builds it and .github/CODEOWNERS)")
+    elif access_doc is not None:
+        links_doc, _ = read_github_links(ROOT)        # its problems are section 11's to report
+        access_errs, access_notes = check_edit_access(
+            access_doc, (ROOT / EDIT_ACCESS).read_text(encoding="utf-8"), registries["data/projects.json"],
+            contributors if isinstance(contributors, dict) else None,
+            links_doc if isinstance(links_doc, dict) else None)
+        for msg in access_errs:
+            err(msg)
+        notes.extend(access_notes)
+        try:
+            have_owners = (ROOT / build_codeowners.OUT).read_text(encoding="utf-8")
+            if have_owners != build_codeowners.render(access_doc):
+                err(f"{build_codeowners.OUT}: not in step with {EDIT_ACCESS} — "
+                    f"run python3 tools/build_codeowners.py (or python3 tools/derive.py) and commit the result")
+        except FileNotFoundError:
+            err(f"{build_codeowners.OUT}: missing — run python3 tools/build_codeowners.py")
 
     # ---- 11. the GitHub layer (shared rules: tools/github_layer_rules.py) ----
     # HARD: intrinsic to the files. NOTES: stale against the registries —

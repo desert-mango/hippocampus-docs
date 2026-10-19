@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 21 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Test derived-data regeneration order, filters, failure pass-through, and CI annotations.
 """Unit tests for tools/derive.py and the two workflow files that call it.
@@ -81,6 +81,12 @@ class DeriveCase(unittest.TestCase):
         write(self.root / "data/graph/avatars/ada.png", "png-v1\n")
         self.builder("build_github_data.py",
                      fake_writer({"data/graph/org-activity.json": "activity-v1\n"}))
+        # who may edit (2026-10-19): edit-access.json, then CODEOWNERS from it, on every call
+        write(self.root / "data/graph/edit-access.json", "access-v1\n")
+        write(self.root / ".github/CODEOWNERS", "owners-v1\n")
+        self.builder("build_edit_access.py",
+                     fake_writer({"data/graph/edit-access.json": "access-v1\n"}))
+        self.builder("build_codeowners.py", fake_writer({".github/CODEOWNERS": "owners-v1\n"}))
 
     def builder(self, name, body):
         write(self.root / "tools" / name, FAKE_HEAD + body)
@@ -101,26 +107,53 @@ class DeriveCase(unittest.TestCase):
         return p.read_text().splitlines() if p.exists() else []
 
 
+ACCESS_STEPS = ["build_edit_access.py ", "build_codeowners.py "]
+
+
 class TestOrderAndOutput(DeriveCase):
-    def test_default_runs_graph_then_site_shard_and_skips_contributors(self):
+    def test_default_runs_graph_site_shard_then_access_and_skips_contributors(self):
         self.assertEqual(self.run_derive(), 0)
-        self.assertEqual(self.order(), ["build_wiki_graph.py ", "build_search_index.py --site-only"])
+        self.assertEqual(self.order(), ["build_wiki_graph.py ", "build_search_index.py --site-only"]
+                         + ACCESS_STEPS)
         self.assertIn("derive: build_wiki_graph.py ok", self.lines)
         self.assertIn("derive: build_search_index.py --site-only ok", self.lines)
+        self.assertIn("derive: build_edit_access.py ok", self.lines)
+        self.assertIn("derive: build_codeowners.py ok", self.lines)
         self.assertTrue(any(l.startswith("derive: build_contributors.py skipped")
                             for l in self.lines), self.out)
 
-    def test_one_line_per_builder_plus_summary(self):
+    def test_one_line_per_builder_plus_summary_in_order(self):
         self.run_derive()
-        self.assertEqual(len(self.lines), 4, self.out)
+        self.assertEqual(len(self.lines), 6, self.out)
         self.assertTrue(all(l.startswith("derive: ") for l in self.lines), self.out)
+        # the skip line stands where the contributors step would have run
+        self.assertTrue(self.lines[2].startswith("derive: build_contributors.py skipped"), self.out)
+        self.assertEqual(self.lines[3:5], ["derive: build_edit_access.py ok", "derive: build_codeowners.py ok"])
 
-    def test_contributors_flag_runs_all_three_in_order(self):
+    def test_contributors_flag_runs_all_five_in_order(self):
         self.assertEqual(self.run_derive("--contributors"), 0)
         self.assertEqual(self.order(), ["build_wiki_graph.py ",
                                         "build_search_index.py --site-only",
-                                        "build_contributors.py "])
+                                        "build_contributors.py "] + ACCESS_STEPS)
         self.assertIn("derive: build_contributors.py ok", self.lines)
+
+    def test_codeowners_and_edit_access_changes_are_counted(self):
+        self.builder("build_edit_access.py", fake_writer({"data/graph/edit-access.json": "access-v2\n"}))
+        self.builder("build_codeowners.py", fake_writer({".github/CODEOWNERS": "owners-v2\n"}))
+        self.assertEqual(self.run_derive(), 0)
+        self.assertEqual(self.lines[-1], "derive: 2 files changed (.github/CODEOWNERS, "
+                                         "data/graph/edit-access.json)")
+
+    def test_a_new_codeowners_file_is_counted(self):
+        (self.root / ".github/CODEOWNERS").unlink()
+        self.assertEqual(self.run_derive(), 0)
+        self.assertEqual(self.lines[-1], "derive: 1 file changed (.github/CODEOWNERS)")
+
+    def test_other_github_files_are_not_counted(self):
+        self.builder("build_codeowners.py", fake_writer({".github/CODEOWNERS": "owners-v1\n",
+                                                         ".github/workflows/x.yml": "x\n"}))
+        self.run_derive()
+        self.assertEqual(self.lines[-1], "derive: nothing to do")
 
     def test_nothing_to_do_when_outputs_unchanged(self):
         self.run_derive("--contributors")
@@ -208,20 +241,20 @@ class TestGithubData(DeriveCase):
         self.assertNotIn("build_github_data.py ", self.order())
         self.assertFalse(any("build_github_data" in l for l in self.lines), self.out)
 
-    def test_runs_last_after_contributors(self):
+    def test_runs_last_after_contributors_and_access(self):
         self.assertEqual(self.run_derive("--contributors", "--github-data"), 0)
         self.assertEqual(self.order(), ["build_wiki_graph.py ",
                                         "build_search_index.py --site-only",
-                                        "build_contributors.py ",
-                                        "build_github_data.py "])
+                                        "build_contributors.py "] + ACCESS_STEPS
+                         + ["build_github_data.py "])
         self.assertIn("derive: build_github_data.py ok", self.lines)
         self.assertEqual(self.lines[-1], "derive: nothing to do")
 
     def test_combines_with_contributors_if_changed(self):
         self.assertEqual(self.run_derive("--contributors-if-changed", "0" * 40,
                                          "--github-data"), 0)
-        self.assertEqual(self.order()[-2:], ["build_contributors.py ",
-                                             "build_github_data.py "])
+        self.assertEqual(self.order()[-4:], ["build_contributors.py "] + ACCESS_STEPS
+                         + ["build_github_data.py "])
 
     def test_not_with_annotate(self):
         self.assertEqual(self.run_derive("--annotate", "x.txt", "--github-data"), 2)
@@ -262,6 +295,43 @@ class TestGithubData(DeriveCase):
         self.builder("build_contributors.py", "sys.exit(1)\n")
         self.assertEqual(self.run_derive("--contributors", "--github-data"), 1)
         self.assertNotIn("build_github_data.py ", self.order())
+        self.assertNotIn("build_edit_access.py ", self.order(), "never build access from a failed count")
+
+
+class TestAccessSteps(DeriveCase):
+    """build_edit_access.py and build_codeowners.py: on every call, hard failures."""
+
+    def test_edit_access_failure_is_hard_and_stops_codeowners(self):
+        self.builder("build_edit_access.py",
+                     'print("build_edit_access: FAILED — data/graph/contributors.json: missing")\nsys.exit(1)\n')
+        self.assertEqual(self.run_derive("--github-data"), 1)
+        self.assertEqual(self.order(), ["build_wiki_graph.py ", "build_search_index.py --site-only",
+                                        "build_edit_access.py "])
+        self.assertIn("derive: build_edit_access.py FAILED (exit 1) — its own message follows:", self.lines)
+        self.assertEqual(self.lines[-1], "build_edit_access: FAILED — data/graph/contributors.json: missing")
+
+    def test_codeowners_failure_is_hard(self):
+        self.builder("build_codeowners.py", "sys.exit(1)\n")
+        self.assertEqual(self.run_derive("--github-data"), 1)
+        self.assertNotIn("build_github_data.py ", self.order())
+        self.assertTrue(any(l.startswith("derive: build_codeowners.py FAILED") for l in self.lines), self.out)
+
+    def test_a_builders_note_lines_are_passed_through_after_its_ok_line(self):
+        # build_edit_access.py prints "  note: ..." for a project with no contributors entry yet
+        self.builder("build_edit_access.py",
+                     'print("  note: \'fresh\' has no entry in data/graph/contributors.json yet: its add list only")\n'
+                     'print("wrote data/graph/edit-access.json: 1 projects, 1 editor entries")\n')
+        self.assertEqual(self.run_derive(), 0)
+        i = self.lines.index("derive: build_edit_access.py ok")
+        self.assertEqual(self.lines[i + 1],
+                         "  note: 'fresh' has no entry in data/graph/contributors.json yet: its add list only")
+        self.assertEqual(self.lines[i + 2], "derive: build_codeowners.py ok")
+        self.assertNotIn("wrote data/graph/edit-access.json", self.out, "other chatter stays quiet")
+
+    def test_they_run_on_the_committed_contributors_when_it_is_not_rebuilt(self):
+        self.assertEqual(self.run_derive(), 0)
+        self.assertNotIn("build_contributors.py ", self.order())
+        self.assertEqual(self.order()[-2:], ACCESS_STEPS)
 
 
 class TestContributorsIfChanged(DeriveCase):
@@ -437,8 +507,10 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("concurrency: derive-main", d)
         # A push made with the App token starts workflows (GITHUB_TOKEN's did not),
         # so the loop guard is load-bearing: no bot push ever runs derive again. Never a skip by message: a human commit with
-        # derive's subject must still be rebuilt (codex r1).
-        self.assertIn("    if: ${{ !endsWith(github.actor, '[bot]') }}\n", d)
+        # derive's subject must still be rebuilt (codex r1). Only a bot PUSH is skipped (2026-10-19):
+        # a schedule or a manual dispatch always runs, and a dispatch only from main.
+        self.assertIn("    if: ${{ (!endsWith(github.actor, '[bot]') || github.event_name != 'push') && "
+                      "(github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') }}\n", d)
         self.assertNotIn("head_commit.message", d)
         self.assertIn("fetch-depth: 2", d)
         self.assertIn("--contributors-if-changed", d)
@@ -470,7 +542,8 @@ class TestWorkflows(unittest.TestCase):
 
     def test_derive_workflow_github_data(self):
         d = self.derive
-        run = [l for l in d.splitlines() if "python3 tools/derive.py" in l]
+        run = [l for l in d.splitlines() if "python3 tools/derive.py" in l
+               and "--contributors-if-changed" in l]
         self.assertEqual(len(run), 1, run)
         self.assertIn('--contributors-if-changed "$BEFORE" --github-data', run[0])
         perms = d[d.index("    permissions:"):d.index("    steps:")]
@@ -478,6 +551,60 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("::warning", d)
         self.assertIn(SOFT_FAIL, d)
         self.assertIn("set -euo pipefail", d)
+
+
+    def test_derive_workflow_daily_schedule_and_dispatch(self):
+        # Kyle, 2026-10-19: commit counts change when someone commits to a lab repo, not when this
+        # repo changes, so who may edit is rebuilt daily; a manual run may start only from main.
+        d = self.derive
+        on = d[d.index("\non:\n"):d.index("\nconcurrency:")]
+        self.assertIn("  push:\n    branches: [main]", on)
+        self.assertIn("  schedule:\n    - cron: '17 4 * * *'", on)
+        self.assertIn("  workflow_dispatch:", on)
+        self.assertIn("ref: ${{ github.event_name == 'push' && github.sha || 'refs/heads/main' }}", d)
+        self.assertIn("EVENT_NAME: ${{ github.event_name }}", d)
+        self.assertIn('if [ "$EVENT_NAME" = push ]; then', d)
+        run = [l.strip() for l in d.splitlines() if "python3 tools/derive.py" in l]
+        self.assertEqual(len(run), 2, run)
+        sched = [l for l in run if "--contributors-if-changed" not in l]
+        self.assertEqual(len(sched), 1, run)
+        self.assertTrue(sched[0].startswith("python3 tools/derive.py --contributors --github-data |"), sched)
+        self.assertNotIn("BEFORE", sched[0])
+        self.assertIn("60 days", d)
+
+    def test_derive_workflow_commits_codeowners_too(self):
+        d = self.derive
+        self.assertIn('git status --porcelain search/ data/graph/ .github/CODEOWNERS', d)
+        self.assertIn("git add -A search/ data/graph/ .github/CODEOWNERS", d)
+        self.assertNotIn("git add -A\n", d)
+
+    def guard_step(self):
+        c = self.check
+        i = c.index("- name: Refuse authorization data in a pull request")
+        return c[i:c.index("- name:", i + 1)]
+
+    def test_check_refuses_authorization_data_in_a_pull_request(self):
+        step = self.guard_step()
+        self.assertIn("if: github.event_name == 'pull_request'", step)
+        self.assertIn("PR_AUTHOR: ${{ github.event.pull_request.user.login }}", step)
+        self.assertIn("git diff --name-only HEAD^1 HEAD -- data/graph/contributors.json "
+                      "data/graph/edit-access.json .github/CODEOWNERS", step)
+        self.assertIn("*'[bot]')", step)
+        self.assertIn("exit 1", step)
+        self.assertIn("only through derive", step)
+        run = step[step.index("run: |"):]
+        self.assertNotIn("${{", run, "event text reaches the shell only through env")
+        # its own step, BEFORE the derive step rewrites the workspace
+        self.assertLess(self.check.index("- name: Refuse authorization data"),
+                        self.check.index("python3 tools/derive.py 2>&1 | tee derive-output.txt"))
+
+    def test_check_notice_lists_the_access_files(self):
+        c = self.check
+        note = c[c.index("- name: Note derived files carried by the pull request"):]
+        self.assertIn("git status --porcelain search/ data/graph/ .github/CODEOWNERS", note)
+        self.assertIn("data/graph/edit-access.json", note)
+        self.assertIn(".github/CODEOWNERS", note)
+        self.assertNotIn("contributors.json is optional to the gate", c)
 
 
 class TestGoLiveWorkflow(unittest.TestCase):

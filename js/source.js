@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Fetch site content same-origin, or through the CMS preview bridge inside a preview frame.
 /* HC — the content-source seam. js/app.js, js/search.js and js/graph.js read
@@ -220,8 +220,10 @@
     return err;
   }
 
-  /* The index merged with each project's facts (factsList[i] for entry i): an entry keeps the index's id and
-     owners first (a facts file cannot change them), then the facts. js/cms-core.js mergeProjects is the same. */
+  /* The index merged with each project's facts (factsList[i] for entry i): an entry keeps the index's id, add
+     and remove first (a facts file cannot change them, nor the old `owners`), then the facts. js/cms-core.js
+     mergeProjects is the same. */
+  const INDEX_KEYS = ['id', 'add', 'remove'];
   const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
   function mergeProjects(index, factsList) {
     if (!index || typeof index !== 'object' || !Array.isArray(index.projects)) return index;
@@ -230,9 +232,8 @@
       if (!e || typeof e !== 'object') return e;
       const f = facts[i] && typeof facts[i] === 'object' && !Array.isArray(facts[i]) ? facts[i] : {};
       const out = {};
-      if ('id' in e) out.id = e.id;
-      if ('owners' in e) out.owners = e.owners;
-      Object.keys(f).forEach((k) => { if (k !== 'id' && k !== 'owners') out[k] = f[k]; });
+      INDEX_KEYS.forEach((k) => { if (k in e) out[k] = e[k]; });
+      Object.keys(f).forEach((k) => { if (INDEX_KEYS.indexOf(k) < 0 && k !== 'owners') out[k] = f[k]; });
       return Object.assign(out, e);
     }) });
   }
@@ -538,7 +539,7 @@
       return nonce ? Promise.resolve(fakeResponse(405)) : Promise.resolve(fetchImpl(url, init));
     }
 
-    /* The project registry (2026-10-14): data/projects.json lists {id, owners} in order; each project's facts
+    /* The project registry (2026-10-14): data/projects.json lists {id, add, remove} in order; each project's facts
        are in data/projects/<id>.json. -> the merged document every page reads (mergeProjects). */
     function fetchProjects() {
       return fetchJSON('data/projects.json').then((index) => {

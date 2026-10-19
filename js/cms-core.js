@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test
@@ -950,31 +950,113 @@
     return c ? c.html_url : null;
   }
 
-  /* Who may approve (Kyle, 2026-10-14). A project's owners are the GitHub logins in its `owners` list in
-     MAIN's data/projects.json (the caller passes main's registry, never a proposal's). ownsAll is true when
-     every changed file is a file of a project the login owns: its page content/projects/<id>.md, or (with
-     the per-project facts files) data/projects/<id>.json. Anything else (setup, tools, About, Lab, a shared
-     registry, the image list) is never a project owner's. */
+  /* Edit access (Kyle, 2026-10-19). Who can edit which project is decided ONCE, in Python:
+     tools/build_edit_access.py writes data/graph/edit-access.json from each person's commits in the
+     project's repos plus the admins' add and remove lists in data/projects.json (remove wins). This code
+     only READS that file, never works the rule out again. The caller passes MAIN's file (a proposal's copy
+     must never grant). Shape: {note, projects: {<id>: {repos, editors: [{login, why, repos_with_commits}],
+     removed: [{login, had_commits}]}}}. Logins compare lowercased. Anything odd grants nothing. */
+  const ACCESS_LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+  const ACCESS_SITE_WIDE_TEXT = 'Admins and Maintainers can edit every project.';
+  const ACCESS_REQUEST_LABEL = 'Request edit access';
+  const ACCESS_SECTION_LABEL = 'Who can edit';
+  const ACCESS_UNREAD_TEXT = 'Could not read who can edit this project right now: try again in a minute.';
+  const ACCESS_TEXTS = Object.freeze({
+    added: 'An admin gave you access to this project.',
+    removed: 'An admin removed your access to this project.',
+    none: 'You have no commits in this project\'s repos yet.',
+    'no-write': 'You have commits here, but your GitHub account can\'t approve on this site yet: ask an admin to add you as a Write collaborator.',
+    'no-data': 'This project\'s access list is not built yet: only admins can approve here.',
+  });
+  const isAccessCount = (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+  const reposWord = (n) => (n === 1 ? 'repo' : 'repos');
+  /* One project's entry of the access file, or null (missing, odd, or a name like __proto__). */
+  function accessProject(doc, projectId) {
+    if (!isObj(doc) || !isObj(doc.projects) || typeof projectId !== 'string') return null;
+    if (!Object.prototype.hasOwnProperty.call(doc.projects, projectId)) return null;
+    const p = doc.projects[projectId];
+    return isObj(p) ? p : null;
+  }
+  /* The well-formed editor rows of a project entry: a login, why 'commits' (with k >= 1 of n repos) or
+     'added' (k = 0). A row that breaks the shape names no one. */
+  function accessEditorRows(p) {
+    const n = p && isAccessCount(p.repos) ? p.repos : null;
+    return listOf(p && p.editors).filter((e) => isObj(e) && typeof e.login === 'string' && ACCESS_LOGIN_RE.test(e.login)
+      && isAccessCount(e.repos_with_commits) && ((e.why === 'commits' && e.repos_with_commits >= 1 && n !== null && e.repos_with_commits <= n)
+        || (e.why === 'added' && e.repos_with_commits === 0)));
+  }
+  function accessRemovedRows(p) {
+    return listOf(p && p.removed).filter((e) => isObj(e) && typeof e.login === 'string' && ACCESS_LOGIN_RE.test(e.login)
+      && typeof e.had_commits === 'boolean');
+  }
+  /* The editor's role object (roleFromPermissions) -> 'site-wide' | 'write' | 'read'. Anything else is read-only. */
+  function accessRoleKind(role) {
+    const r = isObj(role) ? role : {};
+    if (r.canPush !== true) return 'read';
+    if (r.key === 'admin' || r.key === 'maintain') return 'site-wide';
+    return r.key === 'push' ? 'write' : 'read';
+  }
+  /* What one person can do on one project -> {can, why, text, editor, removed, hadCommits, reposWithCommits,
+     repos}. why: 'site-wide' (Admin or Maintain: every project), 'commits' / 'added' (an editor with a Write
+     role), 'no-write' (an editor whose GitHub role cannot approve), 'removed', 'none', or 'no-data' (the
+     project is not in the file yet: admins only, fails closed). */
+  function accessFor(doc, projectId, login, role) {
+    const kind = accessRoleKind(role);
+    const p = accessProject(doc, projectId);
+    const repos = p && isAccessCount(p.repos) ? p.repos : null;
+    const out = (can, why, text, extra) => Object.assign({ can, why, text, editor: null, removed: false, hadCommits: false,
+      reposWithCommits: 0, repos }, extra || {});
+    if (kind === 'site-wide') {
+      return out(true, 'site-wide', `You can edit every project (${role.key === 'admin' ? 'Admin' : 'Maintainer'}).`);
+    }
+    if (!p) return out(false, 'no-data', ACCESS_TEXTS['no-data']);
+    const me = typeof login === 'string' && login ? login.toLowerCase() : '';
+    if (!me) return out(false, 'none', ACCESS_TEXTS.none);
+    const gone = accessRemovedRows(p).find((e) => e.login.toLowerCase() === me);
+    if (gone) return out(false, 'removed', ACCESS_TEXTS.removed, { removed: true, hadCommits: gone.had_commits });
+    const ed = accessEditorRows(p).find((e) => e.login.toLowerCase() === me);
+    if (!ed) return out(false, 'none', ACCESS_TEXTS.none);
+    const extra = { editor: { login: ed.login, why: ed.why, reposWithCommits: ed.repos_with_commits },
+      hadCommits: ed.why === 'commits', reposWithCommits: ed.repos_with_commits };
+    if (kind !== 'write') return out(false, 'no-write', ACCESS_TEXTS['no-write'], extra);
+    if (ed.why === 'added') return out(true, 'added', ACCESS_TEXTS.added, extra);
+    return out(true, 'commits',
+      `You can edit this project: you have commits in ${ed.repos_with_commits} of its ${repos} ${reposWord(repos)}.`, extra);
+  }
+  const canEditProject = (doc, projectId, login, role) => accessFor(doc, projectId, login, role).can;
+  /* The "Who can edit" rows of one project, in the file's order: {login, why, chip}. The chip says why
+     the site lists them; it does not claim GitHub enforces each one. */
+  function accessEditors(doc, projectId) {
+    const p = accessProject(doc, projectId);
+    if (!p) return [];
+    return accessEditorRows(p).map((e) => ({ login: e.login, why: e.why,
+      chip: e.why === 'added' ? 'added by an admin' : `commits in ${e.repos_with_commits} of ${p.repos} ${reposWord(p.repos)}` }));
+  }
+
+  /* Who may approve: ownsAll is true when every changed file is a file of a project that lists the login
+     as an editor in MAIN's edit-access.json (the caller passes it as `access`): its page
+     content/projects/<id>.md, or its facts file data/projects/<id>.json. Anything else (setup, tools, About,
+     Lab, a shared registry, the image list, data/projects.json itself) is never a project editor's. */
   const PROJECT_FILE_RE = /^(?:content\/projects\/([a-z0-9][a-z0-9-]{0,80})\.md|data\/projects\/([a-z0-9][a-z0-9-]{0,80})\.json)$/;
   function ownsAll(o) {
     const c = o || {};
     const login = typeof c.login === 'string' ? c.login.toLowerCase() : '';
     const files = Array.isArray(c.files) ? c.files : null;
-    const list = c.projects && Array.isArray(c.projects.projects) ? c.projects.projects : [];
     if (!login || !files || !files.length) return false;
     return files.every((f) => {
       const m = typeof f === 'string' ? PROJECT_FILE_RE.exec(f) : null;
       const id = m ? (m[1] || m[2]) : null;
-      const p = id ? list.find((x) => x && x.id === id) : null;
-      return Boolean(p) && Array.isArray(p.owners) && p.owners.some((w) => typeof w === 'string' && w.toLowerCase() === login);
+      const p = id ? accessProject(c.access, id) : null;
+      return Boolean(p) && !accessRemovedRows(p).some((e) => e.login.toLowerCase() === login)
+        && accessEditorRows(p).some((e) => e.login.toLowerCase() === login);
     });
   }
 
-  /* Which buttons a role gets (D8, owners 2026-10-14). Read-only: none. Write ("Editor"): request changes,
-     update and close; Approve and Merge only when ctx shows the proposal is wholly inside projects the
-     member owns (ownsAll), and never Approve on their own proposal. Maintain and Admin: all. A merged PR
-     offers only Undo on GitHub (Revert needs write, [S89]); a closed one nothing. ctx: {login, files
-     (changed file names, or null while unread), projects (main's data/projects.json)}. */
+  /* Which buttons a role gets (D8; edit access 2026-10-19). Read-only: none. Write ("Editor"): request
+     changes, update and close; Approve and Merge only when ctx shows the proposal is wholly inside projects
+     that list the member as an editor (ownsAll), and never Approve on their own proposal. Maintain and Admin:
+     all. A merged PR offers only Undo on GitHub (Revert needs write, [S89]); a closed one nothing. ctx:
+     {login, files (changed file names, or null while unread), access (main's data/graph/edit-access.json)}. */
   function reviewActionsFor(role, pull, ctx) {
     const r = role || {};
     const p = pull || {};
@@ -1328,7 +1410,7 @@
         if (res && res.ok === true && typeof res.text === 'string') regs[key] = JSON.parse(res.text);
       } catch (e) { /* a registry that cannot be read maps no page */ }
     }));
-    // the changed projects' own facts at the head, for their names (the index holds only ids and owners)
+    // the changed projects' own facts at the head, for their names (the index holds only ids and the add/remove lists)
     const ids = new Set(names.map((n) => (/^content\/projects\/([a-z0-9][a-z0-9-]*)\.md$/.exec(n) || PROJECT_FACTS_FILE_RE.exec(n) || [])[1])
       .filter(Boolean));
     if (regs.projects && Array.isArray(regs.projects.projects) && ids.size) {
@@ -1365,7 +1447,9 @@
   const projectFactsFile = (id) => `data/projects/${id}.json`;
   const isRawRegistry = (f) => RAW_REGISTRIES.indexOf(f) >= 0 || PROJECT_FACTS_FILE_RE.test(String(f));
   /* The index merged with each project's facts (factsList[i] for index entry i; js/source.js's
-     HC.fetchProjects does the same): an entry keeps the index's id and owners, then the facts. */
+     HC.fetchProjects does the same): an entry keeps the index's id, add and remove, then the facts (a facts
+     file can never set those, nor the old `owners`). */
+  const PROJECT_INDEX_KEYS = Object.freeze(['id', 'add', 'remove']);
   function mergeProjects(index, factsList) {
     if (!index || typeof index !== 'object' || !Array.isArray(index.projects)) return index;
     const facts = listOf(factsList);
@@ -1373,9 +1457,8 @@
       if (!e || typeof e !== 'object') return e;
       const f = facts[i] && typeof facts[i] === 'object' && !Array.isArray(facts[i]) ? facts[i] : {};
       const out = {};
-      if ('id' in e) out.id = e.id;
-      if ('owners' in e) out.owners = e.owners;
-      for (const k of Object.keys(f)) if (k !== 'id' && k !== 'owners') out[k] = f[k];
+      for (const k of PROJECT_INDEX_KEYS) if (k in e) out[k] = e[k];
+      for (const k of Object.keys(f)) if (PROJECT_INDEX_KEYS.indexOf(k) < 0 && k !== 'owners') out[k] = f[k];
       return Object.assign(out, e);
     }) });
   }
@@ -1768,8 +1851,9 @@
   }
 
   /* form = {id, name, status, tagline, repos (one name per line), story}.
-     -> {problem, id, files}: files = exactly data/projects.json (the index entry {id, owners: []} appended:
-     a new project needs an admin's approval, who also names its owners), data/projects/<id>.json (its facts:
+     -> {problem, id, files}: files = exactly data/projects.json (the index entry {id, add: [], remove: []}
+     appended: a new project needs an admin's approval; its editors then come from commits and the admin's
+     add/remove lists), data/projects/<id>.json (its facts:
      name, status, tagline, file, repos; 2026-10-14) and the story at content/projects/<id>.md. A repository
      already in a project (merged: the projects with their facts, HC.fetchProjects; else the index's own
      entries) or in the exclusions is refused: check.py wants each org repo in exactly one. */
@@ -1810,12 +1894,115 @@
       return fail(`the repository '${taken}' is already listed in ${owner.get(taken)} — each repository belongs to exactly one project`);
     }
     const file = `content/projects/${id}.md`;
-    // owners: [] (Kyle, 2026-10-14): a new project starts admin-owned; an admin names its owners
-    reg.doc.projects.push({ id, owners: [] });
+    // add/remove (Kyle, 2026-10-19): a new project starts with no one added or removed; commits in its
+    // repos give edit access after the daily refresh, and an admin can add or remove people
+    reg.doc.projects.push({ id, add: [], remove: [] });
     const facts = { name, status, tagline, file, repos: names.map((n) => ({ name: n, url: `${ORG_WEB}/${n}` })) };
     const story = String(typeof f.story === 'string' ? f.story : '').replace(/\s+$/, '');
     return { problem: null, id, files: { 'data/projects.json': formatLike(projectsText, reg.doc),
       [projectFactsFile(id)]: formatLike(projectsText, facts), [file]: `${story}\n` } };
+  }
+
+  /* Access proposals (Kyle, 2026-10-19): asking for edit access, or an admin adding or removing a person,
+     is ONE commit that changes only data/projects.json: the login goes into that project's `add` list (and
+     out of `remove`), or into `remove` (and out of `add`). Logins compare lowercased; the file keeps its
+     own format (formatLike). -> {problem, text}. */
+  function accessRequestDraft(projectsText, projectId, login, op) {
+    const fail = (problem) => ({ problem, text: null });
+    if (op !== 'add' && op !== 'remove') return fail('the change must be add or remove');
+    const who = trimmed(login);
+    if (!ACCESS_LOGIN_RE.test(who)) return fail(`'${who.slice(0, 60)}' is not a GitHub login (letters, digits and dashes, not starting with a dash)`);
+    const reg = parsedRegistry('data/projects.json', projectsText, 'projects');
+    if (reg.problem) return fail(reg.problem);
+    const entry = reg.doc.projects.find((p) => isObj(p) && p.id === projectId);
+    if (!entry) return fail(`there is no project '${String(projectId).slice(0, 80)}' in data/projects.json`);
+    for (const k of ['add', 'remove']) {
+      if (k in entry && !Array.isArray(entry[k])) return fail(`data/projects.json: '${k}' of '${projectId}' must be a list — fix the registry first`);
+    }
+    if (!('add' in entry)) entry.add = [];
+    if (!('remove' in entry)) entry.remove = [];
+    const me = who.toLowerCase();
+    const same = (w) => typeof w === 'string' && w.toLowerCase() === me;
+    const into = op, outOf = op === 'add' ? 'remove' : 'add';
+    if (entry[into].some(same)) return fail(`${who} is already on the ${into} list of '${projectId}'`);
+    entry[into] = entry[into].concat([who]);
+    entry[outOf] = entry[outOf].filter((w) => !same(w));
+    return { problem: null, text: formatLike(projectsText, reg.doc) };
+  }
+
+  /* Is an open proposal an access proposal? Judged from the change itself, never from its title: its
+     files are exactly one modified data/projects.json, and between the base text and the head text only
+     the add and remove lists of existing projects differ (same projects, same order, every other key the
+     same). -> null, or {kind, changes: [{login, op, project}]}. op 'add': the login went into `add` or
+     out of `remove`; op 'remove': into `remove` or out of `add`. kind 'request' when it is one add of the
+     proposal's own author (or, with no author given, one add); else 'change'. */
+  function classifyAccessProposal(files, baseText, headText, author) {
+    const rows = Array.isArray(files) ? files : null;
+    if (!rows || rows.length !== 1) return null;
+    const r = rows[0];
+    const name = typeof r === 'string' ? r : (isObj(r) ? r.filename : null);
+    const status = typeof r === 'string' ? 'modified' : (isObj(r) ? r.status : null);
+    if (name !== 'data/projects.json' || status !== 'modified') return null;
+    const parse = (t) => { if (typeof t !== 'string') return null; try { return JSON.parse(t); } catch (e) { return null; } };
+    const base = parse(baseText), head = parse(headText);
+    if (!isObj(base) || !isObj(head) || !Array.isArray(base.projects) || !Array.isArray(head.projects)) return null;
+    const rest = (o, drop) => JSON.stringify(Object.keys(o).sort().filter((k) => drop.indexOf(k) < 0).map((k) => [k, o[k]]));
+    if (rest(base, ['projects']) !== rest(head, ['projects'])) return null;
+    if (base.projects.length !== head.projects.length) return null;
+    const logins = (v) => {
+      if (v === undefined) return [];
+      if (!Array.isArray(v) || !v.every((w) => typeof w === 'string' && ACCESS_LOGIN_RE.test(w))) return null;
+      return v;
+    };
+    const changes = [];
+    for (let i = 0; i < base.projects.length; i += 1) {
+      const b = base.projects[i], h = head.projects[i];
+      if (!isObj(b) || !isObj(h) || typeof b.id !== 'string' || b.id !== h.id) return null;
+      if (rest(b, ['add', 'remove']) !== rest(h, ['add', 'remove'])) return null;
+      const lists = [logins(b.add), logins(b.remove), logins(h.add), logins(h.remove)];
+      if (lists.some((l) => l === null)) return null;
+      const [bAdd, bRem, hAdd, hRem] = lists.map((l) => new Set(l.map((w) => w.toLowerCase())));
+      const spelled = new Map();
+      for (const l of [lists[2], lists[3], lists[0], lists[1]]) for (const w of l) if (!spelled.has(w.toLowerCase())) spelled.set(w.toLowerCase(), w);
+      for (const [low, w] of [...spelled.entries()].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))) {
+        let op = null;
+        if (hRem.has(low) && !bRem.has(low)) op = 'remove';
+        else if (hAdd.has(low) && !bAdd.has(low)) op = 'add';
+        else if (bRem.has(low) && !hRem.has(low)) op = 'add';
+        else if (bAdd.has(low) && !hAdd.has(low)) op = 'remove';
+        if (op) changes.push({ login: w, op, project: b.id });
+      }
+    }
+    if (!changes.length) return null;
+    const one = changes.length === 1 && changes[0].op === 'add';
+    const by = typeof author === 'string' && author ? author.toLowerCase() : null;
+    const request = one && (by === null || changes[0].login.toLowerCase() === by);
+    return { kind: request ? 'request' : 'change', changes };
+  }
+
+  /* The title of an access proposal (it is also the pull request's title). */
+  function accessProposalTitle(o) {
+    const c = o || {};
+    if (c.kind === 'request') return `Edit access request: ${c.login} for ${c.name}`;
+    return c.op === 'remove' ? `Edit access change: remove ${c.login} from ${c.name}` : `Edit access change: add ${c.login} to ${c.name}`;
+  }
+  const accessKindLabel = (kind) => (kind === 'request' ? 'Access request' : 'Access change');
+  const accessChangeLine = (c) => `${c.login}: ${c.op} on ${c.project}`;
+
+  /* A read-only member cannot open a branch, so "Request edit access" is a prefilled new issue on
+     github.com instead: the same title, and a body in plain words. */
+  function accessIssueUrl(o) {
+    const c = o || {};
+    const title = accessProposalTitle({ kind: 'request', login: c.login, name: c.name });
+    const body = [
+      `Please give ${c.login} edit access to the project "${c.name}" (${c.projectId}).`,
+      '',
+      `An admin can do this on the site: open the project page, then "${ACCESS_SECTION_LABEL}" > Add person. That opens one`,
+      `proposal that adds ${c.login} to the project's \`add\` list in data/projects.json.`,
+      '',
+      'Why I would like access: <say what you want to change>',
+    ].join('\n');
+    return `${GITHUB_WEB}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
   }
 
   /* The groups of a people.json text -> [{id, title}] ([] when unreadable). */
@@ -3176,8 +3363,8 @@
 
   /* Who may approve ONE edit of `path` (plan-u5 r1): what GitHub's ruleset would let them approve. A
      repository admin anywhere (the admin role bypasses the ruleset); a maintainer or write member only on
-     a page of a project they own (owners from MAIN's data/projects.json = its CODEOWNERS line); nobody on
-     their own proposal. permission: the collaborator API's role_name ('admin' | 'maintain' | 'write' |
+     a page of a project that lists them as an editor (MAIN's data/graph/edit-access.json, passed as
+     `access`; the same list renders its CODEOWNERS line); nobody on their own proposal. permission: the collaborator API's role_name ('admin' | 'maintain' | 'write' |
      'triage' | 'read'; its `permission` field reports Maintain as write). */
   function mayApproveEdit(o) {
     const c = o || {};
@@ -3186,7 +3373,7 @@
     if (!login || !author || login === author) return false;
     if (c.permission === 'admin') return true;
     if (c.permission !== 'maintain' && c.permission !== 'write') return false;
-    return ownsAll({ login, files: [c.path], projects: c.projects });
+    return ownsAll({ login, files: [c.path], access: c.access });
   }
   /* plan-u5 B3: edit-by-edit review only for a proposal the editor made (head ref cms/… in THIS
      repository), open, not a draft, whose every changed file is an existing page (content/**.md,
@@ -3608,7 +3795,9 @@
     isMachineryPath, isDerivedPath, pullBadges, loadPullFiles, ageText,
     PREVIEW_CONTENT_ONLY_TEXT, PREVIEW_UNLISTED_TEXT, previewScope,
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
-    vercelCommentUrl, ownsAll, reviewActionsFor, reviewRequest, actionOutcome, runReviewAction,
+    vercelCommentUrl, ownsAll, reviewActionsFor,
+    ACCESS_SITE_WIDE_TEXT, ACCESS_REQUEST_LABEL, ACCESS_SECTION_LABEL, ACCESS_UNREAD_TEXT, ACCESS_TEXTS, accessFor, canEditProject, accessEditors,
+    accessRequestDraft, classifyAccessProposal, accessProposalTitle, accessKindLabel, accessChangeLine, accessIssueUrl, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
     ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, draftsKey, SNIPPETS, SNIPPET_CATALOG,
     editKind, pageTree, pageList, pageIdForFile, routeForPage,

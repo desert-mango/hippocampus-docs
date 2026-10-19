@@ -425,6 +425,11 @@ body.hc-editor-on #content { display: none; }
 .hc-prow-main { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
 .hc-prow-title { color: var(--heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hc-prow-meta { display: flex; gap: .4rem; min-width: 0; color: var(--body-soft); font-size: .82rem; }
+/* an access proposal (edit access, 2026-10-19): its label and one line per change, from the diff */
+.hc-prow-access { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .45rem; min-width: 0; font-size: .76rem; color: var(--body); }
+.hc-prow-access[hidden] { display: none; }
+.hc-prow-access .hc-access-kind { background: var(--hc-edit-soft); }
+.hc-access-change { font-family: var(--mono); font-size: .72rem; overflow-wrap: anywhere; }
 .hc-prow-who { flex: none; color: var(--body); }
 .hc-prow-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hc-prow-side { display: flex; flex-direction: column; align-items: flex-end; gap: .2rem; font-size: .8rem; white-space: nowrap; }
@@ -705,6 +710,33 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--hc-edit); outline-offse
 .hc-m-authors { margin: .6rem 0 0; padding: .55rem .7rem; border: 1px dashed var(--edge); border-radius: 8px; }
 .hc-m-authors .hc-m-label { margin: 0 0 .3rem; color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
 .hc-m-line { margin: .25rem 0; line-height: 1.6; color: var(--body); }
+/* a project page: edit access at the top of the aside box (any signed-in session, Editor off; 2026-10-19) */
+.hc-access { display: grid; gap: .5rem; padding: .6rem .7rem; border: 1px dashed var(--edge); border-radius: 8px;
+  font-size: .8rem; line-height: 1.5; min-width: 0; }
+.hc-access p { margin: 0; }
+.hc-access-text { color: var(--body); overflow-wrap: anywhere; }
+.hc-access > .cms-btn { justify-self: start; }
+.hc-access-who { display: grid; gap: .35rem; padding-top: .45rem; border-top: 1px solid var(--edge-soft); }
+.hc-access-who-label { color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+.aside-box .hc-access-list { gap: .25rem; font-size: .8rem; }
+.hc-access-row { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .45rem; min-width: 0; }
+.hc-access-login { color: var(--heading); font-family: var(--mono); font-size: .76rem; overflow-wrap: anywhere; }
+.hc-access-chip { padding: .05rem .45rem; border: 1px solid var(--edge); border-radius: 999px; color: var(--body-soft);
+  font-size: .7rem; white-space: nowrap; }
+.hc-access-row .hc-access-remove { margin-left: auto; padding: .1rem .5rem; font-size: .72rem; }
+.hc-access-sitewide { color: var(--muted); font-size: .74rem; }
+.hc-access-add { display: flex; flex-wrap: wrap; gap: .35rem; }
+.hc-access-input { flex: 1 1 9rem; min-width: 0; font: inherit; font-size: .78rem; padding: .25rem .45rem; color: var(--heading);
+  background: var(--surface); border: 1px solid var(--edge); border-radius: 6px; }
+.hc-access-input:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-access-result { font-size: .76rem; color: var(--body); overflow-wrap: anywhere; }
+.hc-access-result.is-error { color: var(--danger); }
+.hc-access-result[hidden] { display: none; }
+.hc-access-result a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* Editor on: the same sentence under the Changes header of a project page */
+.hc-access-line { margin: .45rem 0 .2rem; padding: .4rem .55rem; border: 1px dashed var(--edge); border-radius: 8px;
+  font-size: .78rem; line-height: 1.5; color: var(--body); overflow-wrap: anywhere; }
+.hc-access-line[hidden] { display: none; }
 
 @media (max-width: 359px) { .hc-dock .hc-role { display: none; } }
 /* Phones: the tray is a bottom sheet; the handle sits at the bottom edge. */

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the content-source seam and the CMS preview bridge client in js/source.js.
 /* Unit tests for js/source.js — HC.fetchText / HC.fetchJSON / HC.callFunction.
@@ -630,9 +630,10 @@ test('hc-block-move is built from two checked indices only', () => {
    facts). A missing facts file leaves the bare entry; an id that is not a page address is not fetched. */
 test('HC.fetchProjects: the index merged with each project\'s facts file, in the index\'s order', async () => {
   const files = {
-    '/data/projects.json': { intro: 'All of them.', projects: [{ id: 'b-proj', owners: ['x'] }, { id: 'a-proj', owners: [] },
-      { id: '../evil', owners: [] }, { id: 'gone', owners: [] }] },
-    '/data/projects/b-proj.json': { name: 'B', status: 'active', file: 'content/projects/b-proj.md', owners: ['sneaky'], id: 'zzz' },
+    '/data/projects.json': { intro: 'All of them.', projects: [{ id: 'b-proj', add: ['x'], remove: ['y'] },
+      { id: 'a-proj', add: [], remove: [] }, { id: '../evil', add: [], remove: [] }, { id: 'gone', add: [], remove: [] }] },
+    '/data/projects/b-proj.json': { name: 'B', status: 'active', file: 'content/projects/b-proj.md', add: ['sneaky'],
+      remove: ['x'], owners: ['old'], id: 'zzz' },
     '/data/projects/a-proj.json': { name: 'A', status: 'legacy', file: 'content/projects/a-proj.md' },
   };
   const asked = [];
@@ -642,12 +643,13 @@ test('HC.fetchProjects: the index merged with each project\'s facts file, in the
   const doc = await HC.fetchProjects();
   assert.equal(doc.intro, 'All of them.');
   assert.deepEqual(doc.projects.map((p) => p.id), ['b-proj', 'a-proj', '../evil', 'gone']);
-  assert.deepEqual(doc.projects[0], { id: 'b-proj', owners: ['x'], name: 'B', status: 'active', file: 'content/projects/b-proj.md' },
-    'the index\'s id and owners win; a facts file cannot widen ownership');
-  assert.deepEqual(Object.keys(doc.projects[1]), ['id', 'owners', 'name', 'status', 'file']);
-  assert.deepEqual(doc.projects[3], { id: 'gone', owners: [] }, 'no facts file: the bare entry');
+  assert.deepEqual(doc.projects[0], { id: 'b-proj', add: ['x'], remove: ['y'], name: 'B', status: 'active',
+    file: 'content/projects/b-proj.md' }, 'the index\'s id, add and remove win; a facts file cannot widen access');
+  assert.deepEqual(Object.keys(doc.projects[1]), ['id', 'add', 'remove', 'name', 'status', 'file']);
+  assert.deepEqual(doc.projects[3], { id: 'gone', add: [], remove: [] }, 'no facts file: the bare entry');
   assert.ok(!asked.some((u) => u.includes('evil')), 'an id that is not a page address is never fetched');
-  assert.deepEqual(SRC.mergeProjects({ projects: [{ id: 'a', owners: [] }] }, [{ name: 'A' }]).projects[0], { id: 'a', owners: [], name: 'A' });
+  assert.deepEqual(SRC.mergeProjects({ projects: [{ id: 'a', add: [], remove: [] }] }, [{ name: 'A' }]).projects[0],
+    { id: 'a', add: [], remove: [], name: 'A' });
   assert.equal(SRC.mergeProjects(null, []), null);
 });
 

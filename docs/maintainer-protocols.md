@@ -62,6 +62,10 @@ A few words used on this page:
    at the bottom (or **Sign in to edit** if you are not signed in yet), click the block you want
    to change, change its text in the **Changes** tab, then click **Propose…** and **Propose**
    (section 1b).
+10. **To get edit access to a project:** sign in, open the project's page, and read the
+   small box above the project's repositories (its list is headed **Who can edit**). Its first
+   line says whether you can edit the project and why. If you cannot, click
+   **Request edit access**; an admin says yes or no in the Proposals tab (section 2b).
 
 The old editor addresses (`/cms/#/review`, `/cms/#/pages`, `/cms/#/media` and the rest) still
 work: each one sends you to the same place in Editor mode.
@@ -83,11 +87,12 @@ The badge shows in the header, next to your name, once you are signed in.
 Nathalie and the Maintainers merge. Since 15 October 2026 GitHub enforces who may approve:
 `main` has a rule (the `main-review` ruleset) that every change needs a pull request, the green
 `check`, and one approval from a **code owner** of the changed files. The code owners are the
-site's admins for everything, and a project's `owners` (in `data/projects.json`) for that
-project's own page and facts file. So a lab member can approve and merge only proposals that
-stay inside their own project, and never their own proposal. Admins can still push to `main`
-directly; so can the site's robot (`hippocampus-derive[bot]`), which only ever adds the derived
-data and the changes reviewers approved on the page (below).
+site's admins for everything, and for each project the people who have **edit access** to it
+(section 2b: everyone with a commit in that project's repositories, plus the people an admin
+added, minus the people an admin removed). So a lab member can approve and merge only
+proposals that stay inside a project they have edit access to, and never their own proposal.
+Admins can still push to `main` directly; so can the site's robot (`hippocampus-derive[bot]`),
+which only ever adds the derived data and the changes reviewers approved on the page (below).
 
 ## 1. Make a change on github.com (lab members)
 
@@ -172,9 +177,10 @@ starting point goes into the same proposal; "What goes in" lists them all.
 **New project and New person.** At the bottom of the **Changes** tab, under **New**, click
 **New project** or **New person**, fill in the form, and click **Make the draft** (project) or
 **Add to the people draft** (person). Then propose it the same way. A new project is three files:
-its story, its facts file `data/projects/<id>.json` and one entry (`id` and `owners`) in
-`data/projects.json`; a site admin approves a new project. After that, the project's owners
-approve changes to its two files (its story and its facts). A person is one card on the About page; their
+its story, its facts file `data/projects/<id>.json` and one entry (`id`, `add` and `remove`, both
+lists empty) in `data/projects.json`; a site admin approves a new project. After that, the people
+with edit access to the project (section 2b) approve changes to its two files (its story and its
+facts). A person is one card on the About page; their
 photo comes from **Photo from Media** (section 7). Both forms have the same "Start from:"
 choice.
 
@@ -274,8 +280,9 @@ only and stay in your browser.
 **Approve one change at a time, on the page.** When a proposal is drawn on the page, a column
 of cards stands beside it: one card per changed block, with who proposed it, when, and the
 change in words ("Replace: … with …", "Add: …", "Delete: …"). Hover a card and its block gets the
-blue line. If you may approve that page (an admin anywhere; a project's owner on that project's
-pages; never your own proposal), the card has a check mark (**Approve**) and a cross (**Reject**),
+blue line. If you may approve that page (an admin anywhere; a person with edit access to the
+project on its pages; never your own proposal), the card has a check mark (**Approve**) and a
+cross (**Reject**),
 and the bar above the page has **Approve all (N)**.
 
 - **Approve** puts that one change on the live site by itself, in about a minute: the card says
@@ -341,6 +348,69 @@ Other things the card and the bar can say:
   for that part.
 - With the Read-only badge, a card says "You can read this proposal. Reviewing it needs write
   access to this site's repository." and shows no buttons.
+
+## 2b. Who can edit which project (everyone)
+
+The site knows who worked on what. Once a day it reads each person's commits across the lab's
+GitHub repositories, and from that it builds one list per project: the people who can edit that
+project. The rule, in order:
+
+1. **An admin's "remove" wins.** If an admin removed you from a project, you cannot edit it, even
+   with commits there.
+2. **Commits count.** If you have at least one commit in any of the project's own repositories
+   (the lab's repositories, not forks and not outside projects), you can edit the project.
+3. **An admin's "add" counts too.** An admin can add you to a project even with no commits there.
+4. Otherwise you cannot edit that project.
+
+Admins and Maintainers can edit every project; the rule above is for lab members (Editors).
+
+"Edit" means: approve and merge proposals that change only that project's two files, its story
+`content/projects/<id>.md` and its facts `data/projects/<id>.json`. The list is written into
+`.github/CODEOWNERS`, and GitHub's rule on `main` (section "Who can do what") uses that file. So
+GitHub enforces it, not just the site.
+
+**What you see.** Signed in, with Editor mode off, every project page shows a small box above
+its list of repositories. Its first line says one of:
+
+- "You can edit every project (Admin)." or "(Maintainer)."
+- "You can edit this project: you have commits in 2 of its 3 repos."
+- "An admin gave you access to this project."
+- "An admin removed your access to this project."
+- "You have no commits in this project's repos yet."
+- "You have commits here, but your GitHub account can't approve on this site yet: ask an admin
+  to add you as a Write collaborator." (You are on the list, but you are not a member of the
+  site's repository yet; section 6.)
+
+Under it, **Who can edit** lists the people with edit access and why ("commits" or "added").
+
+**To request edit access.** Click **Request edit access** in the box. The site opens a proposal
+that adds your GitHub username to the project's `add` list in `data/projects.json` (and takes it
+off the `remove` list, if it was there). The proposal shows in the Proposals tab with the label
+"Access request". An admin merges it (yes) or closes it (no). After the merge, the site's robot
+rebuilds the list within a few minutes. If you are signed in but not a member of the repository
+(the Read-only badge), the button opens a prefilled issue on GitHub instead, and an admin takes
+it from there.
+
+**To add or remove someone (Admins).** On the project's page, the **Who can edit** list has a
+**Remove** button next to each person, and a "GitHub login" field with an **Add person** button
+under the list. Both open a
+proposal (labelled "Access change") that changes the project's `add` or `remove` list. As an
+admin you can merge it right away in the Proposals tab. Removing someone keeps them off the
+project even if they have commits there; adding someone back takes them off the `remove` list.
+
+**What GitHub enforces, and what the site only shows.** GitHub enforces the approval rule: a
+proposal that changes a project's files needs an approval from someone on that project's list
+(or an admin), and a change to `data/projects.json` itself needs an admin. The site's buttons,
+the box and its words are a guide: they are drawn from the same list, but hiding a button is not
+what stops a merge, GitHub is. Two more things to know:
+
+- GitHub only counts a code owner who is a member of the repository with the Write role or
+  higher. Someone with commits but no membership is on the list but cannot approve until an
+  admin adds them (section 6).
+- The list is rebuilt after every merge and once a day (the robot's `derive` run). GitHub turns
+  off a daily run after 60 days without any change to the repository; if that happens, an admin
+  opens `https://github.com/desert-mango/hippocampus-docs/actions/workflows/derive.yml`, clicks
+  **Run workflow** from `main`, and the daily run is back.
 
 ## 3. When the check is red
 

@@ -1,0 +1,593 @@
+{
+ "note": "Derived by tools/build_edit_access.py from data/projects.json (add, remove) and data/graph/contributors.json (commits): a person in a project's remove list cannot edit it; else one commit in its repos, or a place in its add list, lets them edit it.",
+ "projects": {
+  "acoustics": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 4,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 4
+  },
+  "cameras": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 2,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 2
+  },
+  "core-stack": {
+   "editors": [
+    {
+     "login": "DanielDuecker",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "Latfoo",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 11,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 6,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 3,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 13
+  },
+  "dev-infrastructure": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 4,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 5
+  },
+  "docs-and-site": {
+   "editors": [
+    {
+     "login": "alexandrnikitin",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "andreykurenkov",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "artokai",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "bliestal",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "BryceMehring",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "carpiediem",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "Cazzar",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "clburlison",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "danez",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "DanielDuecker",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "denolfe",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "dhruvbhatia",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "earlew",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "ekremkaraca",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "EugenSol",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "fa-ribeiro",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "felipythondev",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "FinnBreu",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "flohw",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "gabor-meszaros",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "hbarudin",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "JCotton1123",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "jeremyvoltz",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "JohTobi",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "josina1234",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "kamilszymanski",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "kishore-mohan",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "kylemanna",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "localstatic",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "martinliu",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "maxheld83",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "mmistakes",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 3,
+     "why": "commits"
+    },
+    {
+     "login": "nmiglio",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "relu",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "RHochdahl",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "rriemann",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "Scot3004",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "sebcachia",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "sid6mathur",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "soxyl",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "thoemmi",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "tobie",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "vlajos",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "vwchu",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "wilsonmar",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "yihangho",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "YNedderhoff",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "YuyingWu",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "ZenHarbinger",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 3
+  },
+  "hippocampus-vehicle": {
+   "editors": [
+    {
+     "login": "DanielDuecker",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 8,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 3,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 8
+  },
+  "holiday-fun": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 1
+  },
+  "lab-infrastructure": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 8,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 4,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 2,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 8
+  },
+  "learning-to-swim": {
+   "editors": [
+    {
+     "login": "kyle-nelson-berkeley",
+     "repos_with_commits": 0,
+     "why": "added"
+    }
+   ],
+   "removed": [],
+   "repos": 0
+  },
+  "learning-to-swim-run-guide": {
+   "editors": [
+    {
+     "login": "kyle-nelson-berkeley",
+     "repos_with_commits": 0,
+     "why": "added"
+    }
+   ],
+   "removed": [],
+   "repos": 0
+  },
+  "legacy-ros1": {
+   "editors": [
+    {
+     "login": "DanielDuecker",
+     "repos_with_commits": 4,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 6,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 4,
+     "why": "commits"
+    },
+    {
+     "login": "RHochdahl",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "timzarhansen",
+     "repos_with_commits": 2,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 6
+  },
+  "localization": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 5,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 3,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 5
+  },
+  "radio-comms": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 5,
+     "why": "commits"
+    },
+    {
+     "login": "LorenzMeier",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 2,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 7
+  },
+  "scalar-field": {
+   "editors": [
+    {
+     "login": "kyle-nelson-berkeley",
+     "repos_with_commits": 0,
+     "why": "added"
+    },
+    {
+     "login": "Latfoo",
+     "repos_with_commits": 3,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 3,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 5,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 8
+  },
+  "simulation": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 4,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 4,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 4
+  },
+  "teaching": {
+   "editors": [
+    {
+     "login": "DanielDuecker",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "josina1234",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 1,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 2
+  },
+  "underwater-localization": {
+   "editors": [
+    {
+     "login": "kyle-nelson-berkeley",
+     "repos_with_commits": 0,
+     "why": "added"
+    }
+   ],
+   "removed": [],
+   "repos": 0
+  },
+  "uvms": {
+   "editors": [
+    {
+     "login": "lennartalff",
+     "repos_with_commits": 3,
+     "why": "commits"
+    },
+    {
+     "login": "NBauschmann",
+     "repos_with_commits": 2,
+     "why": "commits"
+    },
+    {
+     "login": "VincentTUHH",
+     "repos_with_commits": 1,
+     "why": "commits"
+    }
+   ],
+   "removed": [],
+   "repos": 3
+  }
+ }
+}

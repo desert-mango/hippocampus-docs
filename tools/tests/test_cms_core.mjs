@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host.
 /* Unit tests for js/cms-core.js — everything in the signed-in area that is
@@ -1445,49 +1445,219 @@ test('sign-out: clearSession also removes every hc-org-cache:* key, and nothing 
   assert.doesNotThrow(() => C.clearSession(hostile));
 });
 
-/* Kyle, 2026-10-14 (feedback item 9): Approve is shown to repo Admin/Maintain everywhere, and to a Write member
-   only on a proposal whose every file belongs to a project that member owns (owners from MAIN's
-   data/projects.json), never on their own proposal. A Write owner may also merge such a proposal. Setup, Agent
-   tools, About and Lab pages, and any shared file (an image list, a registry), are never theirs. */
-test('owners: approve and merge for Write only inside its own projects; never its own proposal', () => {
+/* Edit access (Kyle, 2026-10-19). Who can edit a project is built ONCE, in Python (tools/build_edit_access.py
+   writes data/graph/edit-access.json from commits plus the admins' add and remove lists). The editor only
+   READS that file: accessFor says what one person can do on one project, in plain words. A Write member gets
+   Approve and Merge only on a proposal whose every file belongs to a project that lists them as an editor
+   (main's edit-access.json), never on their own proposal. Admin and Maintain can edit every project. */
+const ACCESS = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'tests', 'fixtures', 'edit-access', 'edit-access.json'), 'utf8'));
+const ACCESS_INDEX_TEXT = fs.readFileSync(path.join(ROOT, 'tools', 'tests', 'fixtures', 'edit-access', 'projects-index.json'), 'utf8');
+
+test('accessFor: every state, in the exact plain words', () => {
+  const R = (perms) => C.roleFromPermissions(perms);
+  const W = R({ push: true });
+  const of = (login, role, id) => C.accessFor(ACCESS, id || 'core-stack', login, role);
+  let a = of('commit-person', W);
+  assert.deepEqual([a.can, a.why, a.text], [true, 'commits', 'You can edit this project: you have commits in 2 of its 15 repos.']);
+  assert.deepEqual([a.reposWithCommits, a.repos, a.removed, a.editor.login], [2, 15, false, 'Commit-Person'], 'logins compare lowercased');
+  a = of('Added-Person', W);
+  assert.deepEqual([a.can, a.why, a.text], [true, 'added', 'An admin gave you access to this project.']);
+  a = of('removed-person', W);
+  assert.deepEqual([a.can, a.why, a.text, a.removed, a.hadCommits], [false, 'removed', 'An admin removed your access to this project.', true, true]);
+  assert.equal(of('removed-quiet', W).hadCommits, false);
+  a = of('stranger', W);
+  assert.deepEqual([a.can, a.why, a.text, a.editor], [false, 'none', 'You have no commits in this project\'s repos yet.', null]);
+  a = of('commit-person', R({ pull: true }));
+  assert.deepEqual([a.can, a.why, a.text], [false, 'no-write',
+    'You have commits here, but your GitHub account can\'t approve on this site yet: ask an admin to add you as a Write collaborator.']);
+  a = of('stranger', R({ maintain: true }));
+  assert.deepEqual([a.can, a.why, a.text], [true, 'site-wide', 'You can edit every project (Maintainer).']);
+  a = of('stranger', R({ admin: true }), 'not-built-yet');
+  assert.deepEqual([a.can, a.why, a.text], [true, 'site-wide', 'You can edit every project (Admin).'], 'site-wide even without data');
+  a = of('commit-person', W, 'not-built-yet');
+  assert.deepEqual([a.can, a.why, a.text], [false, 'no-data', 'This project\'s access list is not built yet: only admins can approve here.']);
+  assert.equal(of('commit-person', W, 'scalar-field').text, 'You can edit this project: you have commits in 1 of its 8 repos.');
+  assert.equal(C.canEditProject(ACCESS, 'core-stack', 'commit-person', W), true);
+  assert.equal(C.canEditProject(ACCESS, 'core-stack', 'removed-person', W), false);
+});
+
+test('accessFor: odd roles read as read-only; odd shapes never throw and never grant', () => {
+  const W = C.roleFromPermissions({ push: true });
+  for (const role of [null, undefined, {}, 'admin', { key: 'push', canPush: 'true' }, { key: 'owner', canPush: true },
+    { key: 'push' }]) {
+    const a = C.accessFor(ACCESS, 'core-stack', 'commit-person', role);
+    assert.equal(a.can, false, JSON.stringify(role));
+    assert.equal(a.why, 'no-write', `${JSON.stringify(role)}: an editor without a Write role`);
+  }
+  assert.equal(C.accessFor(ACCESS, 'core-stack', 'commit-person', { key: 'push', label: 'Editor', canPush: true }).can, true);
+  for (const doc of [null, 'x', [], {}, { projects: [] }, { projects: 'abc' }, { projects: { 'core-stack': 'x' } },
+    { projects: { 'core-stack': [] } }]) {
+    const a = C.accessFor(doc, 'core-stack', 'commit-person', W);
+    assert.deepEqual([a.can, a.why], [false, 'no-data'], JSON.stringify(doc));
+  }
+  const odd = { projects: { 'core-stack': { repos: 'many', editors: [null, 7, { login: 5 }, { login: 'Commit-Person', why: 'magic' },
+    { login: 'commit-person', why: 'commits', repos_with_commits: '2' }], removed: 'removed-person' } } };
+  assert.doesNotThrow(() => C.accessFor(odd, 'core-stack', 'commit-person', W));
+  let a = C.accessFor(odd, 'core-stack', 'removed-person', W);
+  assert.deepEqual([a.can, a.why], [false, 'none'], 'a removed list that is not a list names no one');
+  a = C.accessFor(odd, 'core-stack', 'commit-person', W);
+  assert.equal(a.why, 'none', 'an editor row with an unknown reason grants nothing');
+  for (const login of [null, '', 5, {}]) {
+    assert.deepEqual([C.accessFor(ACCESS, 'core-stack', login, W).can, C.accessFor(ACCESS, 'core-stack', login, W).why], [false, 'none']);
+  }
+  assert.equal(C.accessFor(ACCESS, '__proto__', 'commit-person', W).why, 'no-data');
+  assert.equal(C.accessFor(ACCESS, 'constructor', 'commit-person', W).why, 'no-data');
+});
+
+test('accessEditors: the "Who can edit" rows in order, with plain reason chips', () => {
+  assert.deepEqual(C.accessEditors(ACCESS, 'core-stack'), [
+    { login: 'added-person', why: 'added', chip: 'added by an admin' },
+    { login: 'Commit-Person', why: 'commits', chip: 'commits in 2 of 15 repos' }]);
+  assert.deepEqual(C.accessEditors(ACCESS, 'nope'), []);
+  assert.deepEqual(C.accessEditors(null, 'core-stack'), []);
+  assert.equal(C.ACCESS_SITE_WIDE_TEXT, 'Admins and Maintainers can edit every project.');
+  assert.equal(C.ACCESS_REQUEST_LABEL, 'Request edit access');
+  assert.equal(C.ACCESS_SECTION_LABEL, 'Who can edit');
+});
+
+test('edit access: Approve and Merge for Write only inside projects that list it; never its own proposal', () => {
   const role = (perms) => C.roleFromPermissions(perms);
   const W = role({ push: true });
-  const projects = { projects: [
-    { id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] },
-    { id: 'scalar-field', owners: ['Kyle-Nelson-Berkeley', 'someone-else'] },
-    { id: 'hippocampus-vehicle', owners: [] },
-    { id: 'odd', owners: 'kyle-nelson-berkeley' },                         // a string, not a list: owns nothing
-  ] };
   const pull = (author) => ({ state: 'open', merged: false, merged_at: null, user: { login: author } });
-  const ctx = (files, login) => ({ login: login || 'kyle-nelson-berkeley', files, projects });
+  const ctx = (files, login) => ({ login: login || 'commit-person', files, access: ACCESS });
   const rest = ['request-changes', 'update', 'close'];
   const mine = ['approve', 'request-changes', 'merge', 'update', 'close'];
   const of = (files, author, login) => C.reviewActionsFor(W, pull(author || 'nathalie'), ctx(files, login));
-  assert.deepEqual(of(['content/projects/learning-to-swim.md']), mine, 'an owner on its project');
-  assert.deepEqual(of(['content/projects/scalar-field.md', 'content/projects/learning-to-swim.md']), mine, 'two projects it owns (case-insensitive)');
-  assert.deepEqual(of(['content/projects/learning-to-swim.md'], 'kyle-nelson-berkeley'), ['request-changes', 'merge', 'update', 'close'], 'its own proposal: no Approve');
-  assert.deepEqual(of(['content/projects/hippocampus-vehicle.md']), rest, 'another project');
-  assert.deepEqual(of(['content/projects/odd.md']), rest, 'owners that are not a list');
-  assert.deepEqual(of(['content/projects/learning-to-swim.md', 'data/cloudinary-manifest.json']), rest, 'a shared file in the proposal');
+  assert.deepEqual(of(['content/projects/core-stack.md']), mine, 'an editor on its project');
+  assert.deepEqual(of(['content/projects/core-stack.md', 'data/projects/scalar-field.json']), mine, 'two projects (case-insensitive)');
+  assert.deepEqual(of(['content/projects/core-stack.md'], 'Commit-Person'), ['request-changes', 'merge', 'update', 'close'], 'own proposal: no Approve');
+  assert.deepEqual(of(['content/projects/core-stack.md'], 'x', 'added-person'), mine, 'an added editor');
+  assert.deepEqual(of(['content/projects/scalar-field.md'], 'x', 'added-person'), rest, 'added on another project only');
+  assert.deepEqual(of(['content/projects/core-stack.md'], 'x', 'removed-person'), rest, 'removed: nothing');
+  assert.deepEqual(of(['content/projects/hippocampus-vehicle.md']), rest, 'a project not in the access file');
+  assert.deepEqual(of(['content/projects/core-stack.md', 'data/cloudinary-manifest.json']), rest, 'a shared file in the proposal');
   for (const f of ['content/setup/lab-gantry/usage.md', 'content/tools/claude-code.md', 'content/about.md', 'data/projects.json',
-    'data/people.json', 'js/lab.js', 'content/projects/learning-to-swim.md.bak', 'content/projects/../about.md']) {
+    'data/graph/edit-access.json', '.github/CODEOWNERS', 'data/people.json', 'js/lab.js', 'content/projects/core-stack.md.bak',
+    'content/projects/../about.md']) {
     assert.deepEqual(of([f]), rest, f);
   }
   assert.deepEqual(of([]), rest, 'no files known');
-  assert.deepEqual(C.reviewActionsFor(W, pull('x'), { login: 'kyle-nelson-berkeley', files: null, projects }), rest, 'files not read yet');
-  assert.deepEqual(of(['content/projects/learning-to-swim.md'], 'x', 'someone-else'), rest, 'not an owner of that one');
-  // Admin and Maintain are unchanged
+  assert.deepEqual(C.reviewActionsFor(W, pull('x'), { login: 'commit-person', files: null, access: ACCESS }), rest, 'files not read yet');
+  assert.deepEqual(C.reviewActionsFor(W, pull('x'), { login: 'commit-person', files: ['content/projects/core-stack.md'], access: null }),
+    rest, 'no access file read: fails closed');
+  assert.deepEqual(C.reviewActionsFor(W, pull('x'), { login: 'commit-person', files: ['content/projects/core-stack.md'],
+    projects: { projects: [{ id: 'core-stack', owners: ['commit-person'], add: ['commit-person'] }] } }), rest,
+  'the index lists (add, or the old owners) never grant by themselves: only the built access file does');
   const all = ['approve', 'request-changes', 'merge', 'update', 'close'];
   assert.deepEqual(C.reviewActionsFor(role({ admin: true }), pull('x'), ctx(['content/setup/a.md'])), all);
   assert.deepEqual(C.reviewActionsFor(role({ maintain: true }), pull('x'), ctx(['content/about.md'])), all);
-  assert.equal(C.ownsAll({ login: 'kyle-nelson-berkeley', files: ['content/projects/learning-to-swim.md'], projects }), true);
-  assert.equal(C.ownsAll({ login: '', files: ['content/projects/hippocampus-vehicle.md'], projects }), false);
+  assert.equal(C.ownsAll({ login: 'Commit-Person', files: ['content/projects/core-stack.md'], access: ACCESS }), true);
+  assert.equal(C.ownsAll({ login: 'removed-person', files: ['content/projects/core-stack.md'], access: ACCESS }), false);
+  assert.equal(C.ownsAll({ login: '', files: ['content/projects/core-stack.md'], access: ACCESS }), false);
+  // one edit (go-live): mayApproveEdit reads the same access file
+  const base = { login: 'commit-person', author: 'nathalie', access: ACCESS, path: 'content/projects/core-stack.md' };
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write' }), true);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'maintain' }), true);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', login: 'removed-person' }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', access: null }), false);
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'admin', path: 'content/setup/x.md', login: 'stranger' }), true);
+});
+
+test('accessRequestDraft: one change to data/projects.json, formatted like the file', () => {
+  const t = ACCESS_INDEX_TEXT;
+  let out = C.accessRequestDraft(t, 'scalar-field', 'New-Person', 'add');
+  assert.equal(out.problem, null);
+  const want = JSON.parse(t);
+  want.projects[1].add.push('New-Person');
+  assert.equal(out.text, C.formatLike(t, want), 'the only change is the one login');
+  out = C.accessRequestDraft(t, 'core-stack', 'removed-person', 'add');
+  let doc = JSON.parse(out.text);
+  assert.deepEqual([doc.projects[0].add, doc.projects[0].remove], [['added-person', 'removed-person'], ['removed-quiet']],
+    'add takes the login out of remove');
+  out = C.accessRequestDraft(t, 'core-stack', 'Added-Person', 'remove');
+  doc = JSON.parse(out.text);
+  assert.deepEqual([doc.projects[0].add, doc.projects[0].remove], [[], ['removed-person', 'removed-quiet', 'Added-Person']],
+    'remove takes the login out of add (case-insensitive)');
+  out = C.accessRequestDraft(t, 'scalar-field', 'commit-person', 'remove');
+  assert.deepEqual(JSON.parse(out.text).projects[1].remove, ['commit-person']);
+  const noKeys = JSON.stringify({ projects: [{ id: 'core-stack' }] }, null, 1) + '\n';
+  assert.deepEqual(JSON.parse(C.accessRequestDraft(noKeys, 'core-stack', 'x', 'add').text).projects[0], { id: 'core-stack', add: ['x'], remove: [] });
+  const bad = (args, re) => { const o = C.accessRequestDraft(...args); assert.equal(o.text, null); assert.match(o.problem, re, JSON.stringify(args)); };
+  bad([t, 'core-stack', 'added-person', 'add'], /already/);
+  bad([t, 'core-stack', 'Removed-Person', 'remove'], /already/);
+  bad([t, 'nope', 'x', 'add'], /no project/);
+  bad([t, 'core-stack', 'not a login', 'add'], /GitHub login/);
+  bad([t, 'core-stack', '-dash', 'add'], /GitHub login/);
+  bad([t, 'core-stack', 'x', 'grant'], /add or remove/);
+  bad(['{', 'core-stack', 'x', 'add'], /data\/projects\.json/);
+  bad([JSON.stringify({ projects: [{ id: 'core-stack', add: 'x' }] }), 'core-stack', 'y', 'add'], /list/);
+});
+
+test('classifyAccessProposal: judged from the two texts of data/projects.json, never the title', () => {
+  const t = ACCESS_INDEX_TEXT;
+  const row = [{ filename: 'data/projects.json', status: 'modified' }];
+  const head = (id, login, op) => C.accessRequestDraft(t, id, login, op).text;
+  assert.deepEqual(C.classifyAccessProposal(row, t, head('scalar-field', 'new-person', 'add'), 'new-person'),
+    { kind: 'request', changes: [{ login: 'new-person', op: 'add', project: 'scalar-field' }] }, 'a person adding themselves');
+  assert.deepEqual(C.classifyAccessProposal(row, t, head('scalar-field', 'new-person', 'add'), 'an-admin'),
+    { kind: 'change', changes: [{ login: 'new-person', op: 'add', project: 'scalar-field' }] }, 'someone else adding a person');
+  assert.deepEqual(C.classifyAccessProposal(row, t, head('core-stack', 'added-person', 'remove'), 'an-admin'),
+    { kind: 'change', changes: [{ login: 'added-person', op: 'remove', project: 'core-stack' }] });
+  assert.equal(C.classifyAccessProposal(row, t, head('scalar-field', 'new-person', 'add')).kind, 'request', 'no author: a single add');
+  // two changes
+  const two = JSON.parse(t); two.projects[0].add.push('p1'); two.projects[1].remove.push('p2');
+  assert.deepEqual(C.classifyAccessProposal(row, t, JSON.stringify(two), 'x'), { kind: 'change', changes: [
+    { login: 'p1', op: 'add', project: 'core-stack' }, { login: 'p2', op: 'remove', project: 'scalar-field' }] });
+  // lifting a removal reads as add; dropping an added login reads as remove
+  const lift = JSON.parse(t); lift.projects[0].remove = ['removed-quiet']; lift.projects[0].add = [];
+  assert.deepEqual(C.classifyAccessProposal(row, t, JSON.stringify(lift), 'x').changes,
+    [{ login: 'added-person', op: 'remove', project: 'core-stack' }, { login: 'removed-person', op: 'add', project: 'core-stack' }]);
+  // anything else is not an access proposal
+  const not = (files, a, b, why) => assert.equal(C.classifyAccessProposal(files, a, b, 'x'), null, why);
+  not(row, t, t, 'no change');
+  not(row, t, t.replace('Test fixture', 'Changed'), 'the intro changed');
+  const id = JSON.parse(t); id.projects[1].id = 'scalar-field-2'; id.projects[1].add = ['z'];
+  not(row, t, JSON.stringify(id), 'an id changed');
+  const order = JSON.parse(t); order.projects.reverse(); order.projects[0].add = ['z'];
+  not(row, t, JSON.stringify(order), 'the order changed');
+  const more = JSON.parse(t); more.projects.push({ id: 'new-one', add: [], remove: [] });
+  not(row, t, JSON.stringify(more), 'a project added');
+  const extra = JSON.parse(t); extra.projects[1].add = ['z']; extra.projects[1].name = 'sneaky';
+  not(row, t, JSON.stringify(extra), 'another key in an entry');
+  const odd = JSON.parse(t); odd.projects[1].add = 'z';
+  not(row, t, JSON.stringify(odd), 'add is not a list');
+  const badLogin = JSON.parse(t); badLogin.projects[1].add = ['not a login'];
+  not(row, t, JSON.stringify(badLogin), 'not a login');
+  not([{ filename: 'data/projects.json', status: 'modified' }, { filename: 'content/about.md', status: 'modified' }], t,
+    head('scalar-field', 'z', 'add'), 'two files');
+  not([{ filename: 'data/projects.json', status: 'added' }], t, head('scalar-field', 'z', 'add'), 'not modified');
+  not([{ filename: 'data/people.json', status: 'modified' }], t, head('scalar-field', 'z', 'add'), 'another file');
+  not(null, t, head('scalar-field', 'z', 'add'), 'files unread');
+  not(row, null, head('scalar-field', 'z', 'add'), 'no base');
+  not(row, t, '{', 'head not JSON');
+  assert.equal(C.accessProposalTitle({ kind: 'request', login: 'z', name: 'Core software stack' }), 'Edit access request: z for Core software stack');
+  assert.equal(C.accessProposalTitle({ kind: 'change', op: 'add', login: 'z', name: 'Core' }), 'Edit access change: add z to Core');
+  assert.equal(C.accessProposalTitle({ kind: 'change', op: 'remove', login: 'z', name: 'Core' }), 'Edit access change: remove z from Core');
+  assert.equal(C.accessChangeLine({ login: 'z', op: 'add', project: 'core-stack' }), 'z: add on core-stack');
+  assert.equal(C.accessKindLabel('request'), 'Access request');
+  assert.equal(C.accessKindLabel('change'), 'Access change');
+});
+
+test('accessIssueUrl: a prefilled new-issue link on github.com for a read-only member', () => {
+  const u = new URL(C.accessIssueUrl({ login: 'reader-one', projectId: 'core-stack', name: 'Core software stack' }));
+  assert.equal(u.origin + u.pathname, 'https://github.com/desert-mango/hippocampus-docs/issues/new');
+  assert.equal(u.searchParams.get('title'), 'Edit access request: reader-one for Core software stack');
+  const body = u.searchParams.get('body');
+  assert.match(body, /reader-one/);
+  assert.match(body, /core-stack/);
+  assert.match(body, /Core software stack/);
+  assert.match(body, /data\/projects\.json/);
 });
 
 /* Each project's facts in its own file (2026-10-14): a bare index (a proposal's head) still maps every project
    to its page; a facts file maps to its project page; the head registries read the changed projects' facts. */
 test('split projects: bare index -> pages; a facts file -> its project page; head registries merge the changed facts', async () => {
-  const index = { intro: 'x', projects: [{ id: 'learning-to-swim', owners: ['k'] }, { id: 'scalar-field', owners: [] }] };
+  const index = { intro: 'x', projects: [{ id: 'learning-to-swim', add: ['k'], remove: [] }, { id: 'scalar-field', add: [], remove: [] }] };
   const regs = { projects: index };
   assert.equal(C.editPath('project/learning-to-swim', regs), 'content/projects/learning-to-swim.md');
   assert.equal(C.editPath('data/projects/learning-to-swim', regs), 'data/projects/learning-to-swim.json');
@@ -1501,11 +1671,13 @@ test('split projects: bare index -> pages; a facts file -> its project page; hea
   const fetcher = async (p) => (files[p] ? { ok: true, status: 200, text: JSON.stringify(files[p]) } : { ok: false, status: 404, text: '' });
   const head = await C.loadHeadRegistries(fetcher, [{ filename: 'data/projects/scalar-field.json', status: 'modified' }]);
   assert.equal(head.projects.projects[1].name, 'Scalar field', 'the changed project\'s name, from its facts at the head');
-  assert.deepEqual(head.projects.projects[1].owners, [], 'the index keeps the owners');
+  assert.deepEqual([head.projects.projects[1].add, head.projects.projects[1].remove], [[], []], 'the index keeps add and remove');
   assert.deepEqual(C.previewPages([{ filename: 'data/projects/scalar-field.json', status: 'modified' }], head)[0],
     { route: '/projects/scalar-field', label: 'Scalar field', file: 'data/projects/scalar-field.json' });
-  assert.deepEqual(C.mergeProjects(index, [{ name: 'L', owners: ['x'], id: 'y' }, null]).projects,
-    [{ id: 'learning-to-swim', owners: ['k'], name: 'L' }, { id: 'scalar-field', owners: [] }]);
+  assert.deepEqual(C.mergeProjects(index, [{ name: 'L', add: ['x'], remove: ['k'], owners: ['x'], id: 'y' }, null]).projects,
+    [{ id: 'learning-to-swim', add: ['k'], remove: [], name: 'L' }, { id: 'scalar-field', add: [], remove: [] }],
+    'a facts file can never set id, add, remove (or the old owners)');
+  assert.deepEqual(Object.keys(C.mergeProjects(index, [{ name: 'L' }]).projects[0]), ['id', 'add', 'remove', 'name']);
 });
 
 /* G (2026-10-14): main's ruleset refuses a merge until a code owner approved and the check passed. The editor

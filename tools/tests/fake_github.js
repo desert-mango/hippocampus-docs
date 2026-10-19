@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 2 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: One fake GitHub route table over the U0 fixtures, for the node tests and the localhost Editor walk.
 /* The fake GitHub (plan D-C). ONE route table, used by
@@ -21,7 +21,10 @@
        extra             optional more open proposals, for the overlay
                          tests and walk steps (U7), all synthetic:
                            {pulls: [pull], files: {<n>: [file rows]},
-                            contents: {<head sha>: {<path>: text}},
+                            contents: {<sha>: {<path>: text | null}} (null:
+                              404; at MAIN_SHA a path not listed is still
+                              readFile's, so a walk step can hand main one
+                              extra file, e.g. data/graph/edit-access.json),
                             compare: {<head sha>: <merge base sha>},
                             checks: {<head sha>: check-runs payload},
                             updates: {<n>: <new head sha>},
@@ -190,7 +193,9 @@
     }
 
     async function contents(f, p, ref) {
-      if (own(x.contents, ref)) return own(x.contents[ref], p) ? answer(200, x.contents[ref][p]) : notFound();
+      // an extra text at that sha (null: GitHub's 404 for it); at main's sha any other path is the working tree's
+      if (own(x.contents, ref) && own(x.contents[ref], p)) return x.contents[ref][p] === null ? notFound() : answer(200, x.contents[ref][p]);
+      if (own(x.contents, ref) && ref !== MAIN_SHA) return notFound();
       if (ref === MAIN_SHA) {
         const t = await o.readFile(p);
         return t === null || t === undefined ? notFound() : answer(200, t);

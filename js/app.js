@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Route and render the documentation site's pages from JSON registries and Markdown.
 /* HippoCampus Robotics docs — hash router + renderers.
@@ -396,7 +396,7 @@
         <h1 style="margin-top:0.8rem">${esc(p.name)}</h1>
         <p class="lead">${esc(p.tagline)} ${statusBadge(p.status)}</p>
         <div class="detail-grid">
-          <aside class="detail-aside"><div class="aside-box">
+          <aside class="detail-aside"><div class="aside-box" data-hc-surface="project-access" data-hc-project="${esc(p.id)}">
             <div><h3>Repositories</h3><ul>${repoRows}</ul></div>
             ${hw ? `<div><h3>Hardware</h3><ul>${hw}</ul></div>` : ''}
             ${docs ? `<div><h3>See also</h3><ul>${docs}</ul></div>` : ''}

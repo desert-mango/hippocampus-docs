@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test that members-only GitHub detail reaches signed-in members only, through the org reader alone.
 /* Members-only detail (plan U4, D-A, D-B, D-B2, D-C, D-H). A signed-in member
@@ -244,6 +244,7 @@ function openSite(opts) {
     readFile: async (p) => { try { return readRepo(p); } catch (e) { return null; } },
     variant: o.variant,
     extra: o.extra,
+    onWrite: o.onWrite,
   });
   const calls = [];
   const dataReads = [];
@@ -349,6 +350,21 @@ function openSite(opts) {
       return doc.body.querySelector('.hc-person-pop');
     },
     card: (name) => content.querySelectorAll('.person-card').find((c) => c.querySelector('.person-name').textContent === name),
+    // a project page's aside box, as js/app.js's viewProjectDetail draws it (the project-access surface)
+    async project(id) {
+      content.replaceChildren();
+      const box = doc.createElement('div');
+      box.className = 'aside-box';
+      box.setAttribute('data-hc-surface', 'project-access');
+      box.setAttribute('data-hc-project', id);
+      const repos = doc.createElement('div');
+      repos.textContent = 'Repositories';
+      box.appendChild(repos);
+      content.appendChild(box);
+      observers.forEach((ob) => ob.fire());
+      await settle();
+      return box;
+    },
   };
   return site;
 }
@@ -452,13 +468,12 @@ test('push role: the Lab page gains authors on recent commits and "People commit
     ['Vincent Lenz', '@VincentTUHH', '1 commit', 'last active 2026-02-13'],
   ]);
   assert.equal(people.querySelector('.hc-m-row').getAttribute('data-hc-login'), 'NBauschmann', 'a row opens the popover');
-  // the recent-commit rows the public file lists gain their author, when the live read has the sha
+  // the recent-commit rows the public file lists gain their author, when the live read has the sha AND the page
+  // drew that row (how many recent commits the page shows depends on the committed data)
   const act = readJSON('data/graph/org-activity.json');
   const docsRow = (act.recent_commits || []).find((c) => c.repo === 'docs' && c.sha === '1063769');
-  if (docsRow) {
-    const row = lab.querySelector('[data-hc-sha="1063769"]');
-    assert.equal(row.querySelector('.hc-m-author').textContent, 'Finn Breuer');
-  }
+  const row = docsRow ? lab.querySelector('[data-hc-sha="1063769"]') : null;
+  if (row) assert.equal(row.querySelector('.hc-m-author').textContent, 'Finn Breuer');
   lab.querySelectorAll('.hc-m-author').forEach((a) => assert.ok(a.hasAttribute('data-hc-members')));
   assertNoHostileElement(site.doc);
 });
@@ -874,4 +889,193 @@ test('a session login that is not a GitHub login: no cache marker, and the cache
     assert.ok(site.orgCalls().length > before, `no cached answer is served (${JSON.stringify(bad)})`);
     assert.ok(site.content.querySelector('.hc-m-people'), 'and the read is drawn');
   }
+});
+
+// ------------------------------------------------------------------ edit access on a project page
+/* Edit access (Kyle, 2026-10-19). On a project page, ANY signed-in session (read-only too) with Editor off
+   sees a small box: what they can do on this project (HCCore.accessFor over MAIN's
+   data/graph/edit-access.json, read through GitHub), "Request edit access" when they cannot, and "Who can edit"
+   with a reason chip per person. An admin also gets Remove per person and Add person. A request or a change is
+   ONE proposal that changes only data/projects.json. A guest never loads js/editor.js, so sees nothing. */
+const ACCESS_FILE = 'data/graph/edit-access.json';
+const ME = 'kyle-nelson-berkeley';
+const CORE = 'Core software stack (ROS 2)';
+const accessDoc = (o) => ({ note: 'test', projects: { 'core-stack': { repos: 15,
+  editors: (o.editors || []).map(([login, why, k]) => ({ login, why, repos_with_commits: k })),
+  removed: (o.removed || []).map(([login, had]) => ({ login, had_commits: had })) } } });
+const MAIN_TREE = 'e'.repeat(40);
+const accessExtra = (doc) => ({ contents: { [MAIN_SHA_OF()]: { [ACCESS_FILE]: doc === null ? null : `${JSON.stringify(doc, null, 1)}\n` } },
+  trees: { [MAIN_SHA_OF()]: MAIN_TREE } });
+function MAIN_SHA_OF() { return require(path.join(ROOT, 'tools', 'tests', 'fake_github.js')).MAIN_SHA; }
+const accessBox = (box) => box.querySelector('.hc-access');
+const textOf = (el) => (el ? el.textContent : null);
+const click = async (el) => { (el.listeners.click || []).forEach((fn) => fn({ preventDefault() {}, target: el })); await settle(); };
+/* GitHub's answers to a proposal's writes, recorded (fresh shas, PR #77). */
+function proposalWrites() {
+  const writes = [];
+  let k = 0;
+  const onWrite = (method, url, body) => {
+    const rest = url.replace('https://api.github.com/repos/desert-mango/hippocampus-docs', '');
+    writes.push({ method, rest, body });
+    if (method === 'POST' && ['/git/blobs', '/git/trees', '/git/commits'].includes(rest)) { k += 1; return { status: 201, body: { sha: k.toString(16).padStart(40, 'b') } }; }
+    if (method === 'POST' && rest === '/git/refs') return { status: 201, body: { ref: body.ref, object: { sha: body.sha } } };
+    if (method === 'POST' && rest === '/pulls') return { status: 201, body: { number: 77 } };
+    if (method === 'PATCH' && rest === '/pulls/77') return { status: 200, body: { number: 77 } };
+    return { status: 500, body: { message: `unexpected ${method} ${rest}` } };
+  };
+  return { writes, onWrite };
+}
+
+test('project page, Write role with commits: the status line, no Request, "Who can edit" with reason chips', async () => {
+  const site = await member({ extra: accessExtra(accessDoc({ editors: [['added-one', 'added', 0], [ME, 'commits', 2]] })) });
+  const box = await site.project('core-stack');
+  const a = accessBox(box);
+  assert.ok(a, 'the box is drawn');
+  assert.equal(box.firstChild, a, 'at the top of the aside');
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'You can edit this project: you have commits in 2 of its 15 repos.');
+  assert.equal(a.querySelector('[data-action="access-request"]'), null, 'no Request: you can edit');
+  assert.equal(textOf(a.querySelector('.hc-access-who-label')), 'Who can edit');
+  const rows = a.querySelectorAll('.hc-access-row');
+  assert.deepEqual(rows.map((r) => [textOf(r.querySelector('.hc-access-login')), textOf(r.querySelector('.hc-access-chip'))]),
+    [['added-one', 'added by an admin'], [ME, 'commits in 2 of 15 repos']]);
+  assert.equal(textOf(a.querySelector('.hc-access-sitewide')), 'Admins and Maintainers can edit every project.');
+  assert.equal(a.querySelector('[data-action="access-remove"]'), null, 'only an admin gets Remove');
+  assert.equal(a.querySelector('[data-action="access-add"]'), null, 'only an admin gets Add person');
+  assert.deepEqual(site.orgCalls(), [], 'the box asks no org reader');
+  assert.ok(site.calls.some((c) => c.url.includes(`/contents/${ACCESS_FILE}?ref=${MAIN_SHA_OF()}`)), 'main\'s file, through GitHub');
+  // drawn once, however often the page repaints
+  site.observers.forEach((ob) => ob.fire());
+  await settle();
+  assert.equal(box.querySelectorAll('.hc-access').length, 1);
+  assertNoHostileElement(site.doc);
+});
+
+test('project page, read-only role: the box too (commits but no Write), and a prefilled GitHub issue instead of a proposal', async () => {
+  const site = await member({ variant: 'readonly', extra: accessExtra(accessDoc({ editors: [[ME, 'commits', 1]] })) });
+  const a = accessBox(await site.project('core-stack'));
+  assert.ok(a, 'a read-only session sees the box');
+  assert.equal(textOf(a.querySelector('.hc-access-text')),
+    'You have commits here, but your GitHub account can\'t approve on this site yet: ask an admin to add you as a Write collaborator.');
+  assert.equal(a.querySelector('button[data-action="access-request"]'), null, 'no proposal: a read-only member cannot open branches');
+  const issue = a.querySelector('a[data-action="access-issue"]');
+  assert.ok(issue, 'the issue link');
+  assert.equal(issue.textContent, 'Request edit access');
+  const u = new URL(issue.getAttribute('href'));
+  assert.equal(u.origin + u.pathname, 'https://github.com/desert-mango/hippocampus-docs/issues/new');
+  assert.equal(u.searchParams.get('title'), `Edit access request: ${ME} for ${CORE}`);
+  assert.deepEqual(site.orgCalls(), []);
+  // a read-only member with no commits gets the same link
+  const none = await member({ variant: 'readonly', extra: accessExtra(accessDoc({})) });
+  const b = accessBox(await none.project('core-stack'));
+  assert.equal(textOf(b.querySelector('.hc-access-text')), 'You have no commits in this project\'s repos yet.');
+  assert.ok(b.querySelector('a[data-action="access-issue"]'));
+});
+
+test('project page, Write role without access: "Request edit access" opens ONE proposal changing only data/projects.json', async () => {
+  const w = proposalWrites();
+  const site = await member({ extra: accessExtra(accessDoc({ editors: [['someone', 'commits', 3]] })), onWrite: w.onWrite });
+  const a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'You have no commits in this project\'s repos yet.');
+  const btn = a.querySelector('button[data-action="access-request"]');
+  assert.ok(btn);
+  assert.equal(btn.textContent, 'Request edit access');
+  await click(btn);
+  const main = readRepo('data/projects.json');
+  const want = C.accessRequestDraft(main, 'core-stack', ME, 'add').text;
+  assert.deepEqual(w.writes.map((x) => `${x.method} ${x.rest}`),
+    ['POST /git/blobs', 'POST /git/trees', 'POST /git/commits', 'POST /git/refs', 'POST /pulls', 'PATCH /pulls/77']);
+  assert.equal(w.writes[0].body.content, want, 'the one file: the login added to the project\'s add list');
+  assert.deepEqual(w.writes[1].body.tree.map((t) => t.path), ['data/projects.json']);
+  assert.equal(w.writes[4].body.title, `Edit access request: ${ME} for ${CORE}`);
+  assert.match(w.writes[4].body.body, /Edit access: Core software stack \(ROS 2\) \(`data\/projects\.json`\)/);
+  assert.match(w.writes[3].body.ref, new RegExp(`^refs/heads/cms/${ME}/edit-access-request-`));
+  const result = a.querySelector('.hc-access-result');
+  assert.ok(result && !result.hidden && /#77/.test(result.textContent), textOf(result));
+  assert.equal(btn.disabled, true, 'sent once');
+  await click(btn);
+  assert.equal(w.writes.length, 6, 'a second click sends nothing');
+  assert.equal(result.textContent, 'This change is already open as a proposal.', 'and says why');
+});
+
+test('project page: a granting edit-access.json served by the site itself is ignored; main\'s, through GitHub, decides', async () => {
+  const site = await member({ hc: { [ACCESS_FILE]: accessDoc({ editors: [[ME, 'commits', 2]] }) }, extra: accessExtra(accessDoc({})) });
+  const a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'You have no commits in this project\'s repos yet.');
+  assert.ok(a.querySelector('button[data-action="access-request"]'), 'it offers Request: it cannot edit');
+  assert.ok(!site.dataReads.includes(ACCESS_FILE), 'the site\'s copy is never read');
+});
+
+test('project page: removed by an admin (may ask again), no data yet, and a failed read', async () => {
+  let site = await member({ extra: accessExtra(accessDoc({ removed: [[ME, true]] })) });
+  let a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'An admin removed your access to this project.');
+  assert.ok(a.querySelector('button[data-action="access-request"]'), 'a removed person may ask again');
+  site = await member({ extra: accessExtra(accessDoc({})) });
+  a = accessBox(await site.project('scalar-field'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'This project\'s access list is not built yet: only admins can approve here.');
+  assert.equal(a.querySelectorAll('.hc-access-row').length, 0);
+  site = await member({ extra: accessExtra(null) });
+  a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), C.ACCESS_UNREAD_TEXT, 'the read failed: say so, grant nothing');
+  assert.equal(a.querySelector('button[data-action="access-request"]'), null);
+});
+
+test('project page, Maintainer: every project; Admin: Remove per person and Add person, each one proposal', async () => {
+  let site = await member({ variant: 'maintain', extra: accessExtra(accessDoc({ editors: [['someone', 'commits', 3]] })) });
+  let a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'You can edit every project (Maintainer).');
+  assert.equal(a.querySelector('[data-action="access-request"]'), null);
+  assert.equal(a.querySelector('[data-action="access-remove"]'), null, 'a Maintainer does not manage access');
+  const w = proposalWrites();
+  site = await member({ variant: 'admin', extra: accessExtra(accessDoc({ editors: [['added-one', 'added', 0], ['someone', 'commits', 3]] })),
+    onWrite: w.onWrite });
+  a = accessBox(await site.project('core-stack'));
+  assert.equal(textOf(a.querySelector('.hc-access-text')), 'You can edit every project (Admin).');
+  const removes = a.querySelectorAll('button[data-action="access-remove"]');
+  assert.equal(removes.length, 2);
+  assert.equal(removes[1].getAttribute('aria-label'), 'Remove someone from Core software stack (ROS 2)');
+  await click(removes[1]);
+  const main = readRepo('data/projects.json');
+  assert.equal(w.writes[0].body.content, C.accessRequestDraft(main, 'core-stack', 'someone', 'remove').text);
+  assert.equal(w.writes.find((x) => x.rest === '/pulls').body.title, `Edit access change: remove someone from ${CORE}`);
+  assert.equal(removes[1].disabled, true, 'that change is open now');
+  assert.equal(removes[0].disabled, false, 'another person can still be removed');
+  await click(removes[1]);
+  assert.equal(w.writes.filter((x) => x.rest === '/pulls').length, 1, 'the same change is never sent twice');
+  // Add person: a login that is not a GitHub login sends nothing
+  const w2 = proposalWrites();
+  site = await member({ variant: 'admin', extra: accessExtra(accessDoc({})), onWrite: w2.onWrite });
+  a = accessBox(await site.project('core-stack'));
+  const input = a.querySelector('input[data-field="access-login"]');
+  const add = a.querySelector('button[data-action="access-add"]');
+  assert.ok(input && add);
+  input.value = 'not a login';
+  await click(add);
+  assert.deepEqual(w2.writes, []);
+  assert.match(textOf(a.querySelector('.hc-access-result')), /not a GitHub login/);
+  input.value = '  New-Person ';
+  // two clicks before the first proposal is sent: the second says to wait, and sends nothing
+  (add.listeners.click || []).forEach((fn) => fn({ preventDefault() {}, target: add }));
+  (add.listeners.click || []).forEach((fn) => fn({ preventDefault() {}, target: add }));
+  assert.equal(textOf(a.querySelector('.hc-access-result')), 'Another proposal is being sent — wait a moment.');
+  await settle();
+  assert.equal(w2.writes.filter((x) => x.rest === '/pulls').length, 1, 'one proposal only');
+  assert.equal(w2.writes[0].body.content, C.accessRequestDraft(main, 'core-stack', 'New-Person', 'add').text);
+  assert.equal(w2.writes.find((x) => x.rest === '/pulls').body.title, `Edit access change: add New-Person to ${CORE}`);
+});
+
+test('project page: Editor on draws nothing; a hostile login in the file is text, never markup', async () => {
+  const hostile = accessDoc({ editors: [[ME, 'commits', 2]] });
+  hostile.projects['core-stack'].editors.push({ login: HOSTILE, why: 'added', repos_with_commits: 0 });
+  const site = await member({ extra: accessExtra(hostile) });
+  site.doc.body.classList.add('hc-editor-on');
+  const box = await site.project('core-stack');
+  assert.equal(accessBox(box), null, 'Editor on: nothing');
+  site.doc.body.classList.remove('hc-editor-on');
+  site.observers.forEach((ob) => ob.fire());
+  await settle();
+  const a = accessBox(box);
+  assert.ok(a, 'Editor off: drawn');
+  assert.deepEqual(a.querySelectorAll('.hc-access-login').map((e) => e.textContent), [ME], 'a row that is not a login is dropped');
+  assertNoHostileElement(site.doc);
 });

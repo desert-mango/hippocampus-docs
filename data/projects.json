@@ -7,83 +7,101 @@
  "projects": [
   {
    "id": "hippocampus-vehicle",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "core-stack",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "simulation",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "localization",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "acoustics",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "scalar-field",
-   "owners": [
+   "add": [
     "kyle-nelson-berkeley"
-   ]
+   ],
+   "remove": []
   },
   {
    "id": "uvms",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "lab-infrastructure",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "radio-comms",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "cameras",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "dev-infrastructure",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "legacy-ros1",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "teaching",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "docs-and-site",
-   "owners": []
+   "add": [],
+   "remove": []
   },
   {
    "id": "underwater-localization",
-   "owners": [
+   "add": [
     "kyle-nelson-berkeley"
-   ]
+   ],
+   "remove": []
   },
   {
    "id": "learning-to-swim",
-   "owners": [
+   "add": [
     "kyle-nelson-berkeley"
-   ]
+   ],
+   "remove": []
   },
   {
    "id": "learning-to-swim-run-guide",
-   "owners": [
+   "add": [
     "kyle-nelson-berkeley"
-   ]
+   ],
+   "remove": []
   },
   {
    "id": "holiday-fun",
-   "owners": []
+   "add": [],
+   "remove": []
   }
  ],
  "exclusions": []

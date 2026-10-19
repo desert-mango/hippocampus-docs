@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test per-edit go-live: edit keys, the already-live rule, applying edits to main, and approval records.
 /* Unit tests for the go-live half of js/cms-core.js (plan-u5 U5a):
@@ -198,9 +198,14 @@ test('parseRecords: author by API login; edited, self-authored and malformed rec
   assert.deepEqual(r.list.map((x) => [x.id, x.login, x.kind, x.keys]), [[1, 'reviewer', 'approved', [K1]], [6, 'other', 'declined', [K2]]]);
 });
 
-test('mayApproveEdit: admin anywhere; maintain or write only as the project\'s owner (= CODEOWNERS); never the author', () => {
-  const projects = { projects: [{ id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] }, { id: 'other', owners: [] }] };
-  const base = { login: 'kyle-nelson-berkeley', projects, author: 'someone' };
+/* main's data/graph/edit-access.json (built by tools/build_edit_access.py; C2 shape): who can edit a project. */
+const accessDoc = (editors) => ({ note: 'test', projects: {
+  'learning-to-swim': { repos: 2, removed: [], editors: editors.map((login) => ({ login, why: 'commits', repos_with_commits: 1 })) },
+  other: { repos: 1, editors: [], removed: [] } } });
+const ACCESS_DOC = accessDoc(['kyle-nelson-berkeley']);
+
+test('mayApproveEdit: admin anywhere; maintain or write only as an editor of the project (= CODEOWNERS); never the author', () => {
+  const base = { login: 'kyle-nelson-berkeley', access: ACCESS_DOC, author: 'someone' };
   assert.equal(C.mayApproveEdit({ ...base, permission: 'admin', path: 'content/setup/x.md' }), true);
   assert.equal(C.mayApproveEdit({ ...base, permission: 'maintain', path: 'content/about.md' }), false,
     'a Maintainer who is not a code owner cannot approve on GitHub, so not through the App either');
@@ -213,7 +218,10 @@ test('mayApproveEdit: admin anywhere; maintain or write only as the project\'s o
     'nobody approves their own proposal edit by edit');
   assert.equal(C.mayApproveEdit({ ...base, permission: 'read', path: P }), false);
   assert.equal(C.mayApproveEdit({ ...base, permission: 'triage', path: P }), false);
-  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P, projects: null }), false, 'no registry: no');
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P, access: null }), false, 'no access file: no');
+  assert.equal(C.mayApproveEdit({ ...base, permission: 'write', path: P, access: undefined,
+    projects: { projects: [{ id: 'learning-to-swim', add: ['kyle-nelson-berkeley'] }] } }), false,
+  'the index\'s add list alone never trusts anyone: only the built access file does');
 });
 
 test('recordRequests: Approve all is chunked into records of at most RECORD_MAX keys, each one allowed write', () => {
@@ -263,7 +271,7 @@ test('failures: trusted only from github-actions[bot] (type Bot), unedited, exac
 const ENGINE = await import(path.join(ROOT, 'tools', 'go_live.mjs'));
 const REPO = 'desert-mango/hippocampus-docs';
 const RA = `/repos/${REPO}`;
-const PROJECTS = JSON.stringify({ projects: [{ id: 'learning-to-swim', owners: ['kyle-nelson-berkeley'] }] });
+const ACCESS_TEXT = JSON.stringify(ACCESS_DOC);
 const HEAD1 = '1'.repeat(40);
 const BASE1 = '0'.repeat(40);
 const SETUP = 'content/setup/a.md';
@@ -301,7 +309,7 @@ function fakeWorld(o) {
     async post(p, body) { posted.push({ p: p.slice(RA.length), body }); return { status: 201, data: {} }; },
     async patch(p, body) { patched.push({ p: p.slice(RA.length), body }); return { status: 200, data: {} }; },
   };
-  const files = Object.assign({ 'data/projects.json': PROJECTS }, o.main);
+  const files = Object.assign({ [ENGINE.ACCESS_FILE]: ACCESS_TEXT }, o.main);
   const fs = {
     read: async (f) => (f in files ? files[f] : null),
     write: async (f, t) => { files[f] = t; },
@@ -319,7 +327,7 @@ const pr = (n, o) => ({
 
 const greenGate = async () => ({ ok: true, finding: '' });
 
-test('engine: an owner\'s record on their project page goes live; the plan names the author; nothing else moves', async () => {
+test('engine: an editor\'s record on their project page goes live; the plan names the author; nothing else moves', async () => {
   const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
   const [e] = await C.proposalEdits(P, BASE, head, BASE);
   const w = fakeWorld({
@@ -338,13 +346,13 @@ test('engine: an owner\'s record on their project page goes live; the plan names
   assert.match(plan[0].message, /^go-live: content\/projects\/learning-to-swim\.md \(1 change from #7, approved by kyle-nelson-berkeley\)/);
 });
 
-test('engine: untrusted records change nothing (not an owner, read role, the author, a committer, a fork, a draft, not cms/)', async () => {
+test('engine: untrusted records change nothing (not an editor, read role, the author, a committer, a fork, a draft, not cms/)', async () => {
   const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
   const kp = (await C.proposalEdits(P, BASE, head, BASE))[0].key;
   const ks = (await C.proposalEdits(SETUP, BASE, head, BASE))[0].key;
   const w = fakeWorld({
     pulls: [
-      pr(1, { files: [SETUP], comments: [rec(1, 'kyle-nelson-berkeley', `hc-approved ${ks}`)] }),     // not an owner of setup
+      pr(1, { files: [SETUP], comments: [rec(1, 'kyle-nelson-berkeley', `hc-approved ${ks}`)] }),     // not an editor of setup
       pr(2, { files: [P], comments: [rec(2, 'mallory', `hc-approved ${kp}`)] }),                       // read role
       pr(3, { files: [P], author: 'kyle-nelson-berkeley', comments: [rec(3, 'kyle-nelson-berkeley', `hc-approved ${kp}`)] }),
       pr(4, { files: [P], commits: [{ author: { login: 'someone' } }, { author: { login: 'kyle-nelson-berkeley' } }],
@@ -441,6 +449,124 @@ test('closeDone: closes a PR whose every edit is live or declined and that has a
   assert.equal(done.posted[0].body.body, 'Everything here is live (or declined).');
   const untrusted = mk([rec(1, 'mallory', `hc-declined ${e2.key}`)]);
   assert.deepEqual(await ENGINE.closeDone({ api: untrusted.api, repo: REPO, fs: untrusted.fs }), []);
+});
+
+/* Edit access (2026-10-19): go-live reads main's data/graph/edit-access.json AFTER its first gate, because
+   that gate's derive run rebuilds it from main's own inputs. A copy from before the gate is never used. */
+test('engine: access is read after the first gate (fresh), never before it', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const world = (before) => fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'kyle-nelson-berkeley', `hc-approved ${e.key}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE, [ENGINE.ACCESS_FILE]: before } });
+  // stale main lists nobody; the gate's derive writes the fresh file that lists the reviewer: it goes live
+  const w = world(JSON.stringify(accessDoc([])));
+  let gates = 0;
+  const fresh = async () => { gates += 1; if (gates === 1) w.files[ENGINE.ACCESS_FILE] = ACCESS_TEXT; return { ok: true, finding: '' }; };
+  const out = await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: fresh });
+  assert.deepEqual(out.groups.map((g) => g.pr), [7]);
+  assert.equal(w.files[P], head);
+  // and the other way round: stale main lists the reviewer, the fresh file does not: nothing goes live
+  const w2 = world(ACCESS_TEXT);
+  let g2 = 0;
+  const gone = async () => { g2 += 1; if (g2 === 1) w2.files[ENGINE.ACCESS_FILE] = JSON.stringify(accessDoc([])); return { ok: true, finding: '' }; };
+  const out2 = await ENGINE.sweep({ api: w2.api, repo: REPO, fs: w2.fs, gate: gone });
+  assert.deepEqual(out2.groups, []);
+  assert.equal(w2.files[P], BASE);
+  assert.equal(g2, 1, 'the gate ran once (on untouched main), then nothing to apply');
+  // no access file at all: only an admin's record is trusted
+  const w3 = world(undefined);
+  delete w3.files[ENGINE.ACCESS_FILE];
+  assert.deepEqual((await ENGINE.sweep({ api: w3.api, repo: REPO, fs: w3.fs, gate: greenGate })).groups, []);
+  const w4 = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [rec(1, 'desert-mango-robotics', `hc-approved ${e.key}`)] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE } });
+  delete w4.files[ENGINE.ACCESS_FILE];
+  assert.deepEqual((await ENGINE.sweep({ api: w4.api, repo: REPO, fs: w4.fs, gate: greenGate })).groups.map((g) => g.pr), [7]);
+});
+
+test('engine: an approval followed by a decline from someone who may not approve still goes live (candidates are a superset)', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const w = fakeWorld({
+    pulls: [pr(7, { files: [P], comments: [
+      rec(1, 'desert-mango-robotics', `hc-approved ${e.key}`, { created_at: '2026-10-15T00:00:01Z', updated_at: '2026-10-15T00:00:01Z' }),
+      rec(2, 'writer-two', `hc-declined ${e.key}`, { created_at: '2026-10-15T00:00:02Z', updated_at: '2026-10-15T00:00:02Z' })] })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE }, roles: { 'writer-two': 'write' } });
+  assert.deepEqual((await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate: greenGate })).groups.map((g) => g.pr), [7],
+    'writer-two is not an editor of the project, so its decline does not count');
+});
+
+test('engine: approvals all declined later by an admin run no gate; a newer approval after the decline still does', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const t = (s) => ({ created_at: `2026-10-15T00:00:0${s}Z`, updated_at: `2026-10-15T00:00:0${s}Z` });
+  const world = (comments) => fakeWorld({ pulls: [pr(7, { files: [P], comments })],
+    texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE }, roles: { 'writer-two': 'write' } });
+  const counting = () => { const g = async () => { g.n += 1; return { ok: true, finding: '' }; }; g.n = 0; return g; };
+  // an editor's and a writer's approvals, then an admin's decline: nothing can go live, so no gate at all
+  let w = world([rec(1, 'kyle-nelson-berkeley', `hc-approved ${e.key}`, t(1)), rec(2, 'writer-two', `hc-approved ${e.key}`, t(2)),
+    rec(3, 'desert-mango-robotics', `hc-declined ${e.key}`, t(3))]);
+  let gate = counting();
+  assert.deepEqual((await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate })).groups, []);
+  assert.equal(gate.n, 0, 'declined by an admin after every approval: no gate');
+  // a writer's decline is not enough to skip (it may not count): the gate runs, the editor's approval goes live
+  w = world([rec(1, 'kyle-nelson-berkeley', `hc-approved ${e.key}`, t(1)), rec(2, 'writer-two', `hc-declined ${e.key}`, t(2))]);
+  gate = counting();
+  assert.deepEqual((await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate })).groups.map((g) => g.pr), [7]);
+  assert.ok(gate.n >= 1);
+  // an approval newer than the admin's decline: the gate runs and it goes live
+  w = world([rec(1, 'desert-mango-robotics', `hc-declined ${e.key}`, t(1)), rec(2, 'kyle-nelson-berkeley', `hc-approved ${e.key}`, t(2))]);
+  gate = counting();
+  assert.deepEqual((await ENGINE.sweep({ api: w.api, repo: REPO, fs: w.fs, gate })).groups.map((g) => g.pr), [7]);
+});
+
+test('closeDone: reads main\'s edit-access.json for trust', async () => {
+  const head = '# Title\n\nFirst para, fixed.\n\nSecond para.\n\nThird para.\n';
+  const [e] = await C.proposalEdits(P, BASE, head, BASE);
+  const mk = (access) => {
+    const w = fakeWorld({ pulls: [pr(7, { files: [P], comments: [rec(1, 'kyle-nelson-berkeley', `hc-declined ${e.key}`)] })],
+      texts: { [BASE1]: { [P]: BASE }, [HEAD1]: { [P]: head } }, main: { [P]: BASE } });
+    w.files[ENGINE.ACCESS_FILE] = access;
+    return w;
+  };
+  const yes = mk(ACCESS_TEXT);
+  assert.deepEqual(await ENGINE.closeDone({ api: yes.api, repo: REPO, fs: yes.fs }), [7], 'an editor declined the one edit');
+  const no = mk(JSON.stringify(accessDoc([])));
+  assert.deepEqual(await ENGINE.closeDone({ api: no.api, repo: REPO, fs: no.fs }), [], 'not an editor: the record is not trusted');
+});
+
+test('strayPaths: the plan\'s pages and the derived outputs (search/, data/graph/, .github/CODEOWNERS); nothing else', () => {
+  const plan = [{ files: [P] }];
+  assert.deepEqual(ENGINE.strayPaths([P, 'search/site.json', 'data/graph/edit-access.json', '.github/CODEOWNERS'], plan), []);
+  assert.deepEqual(ENGINE.strayPaths(['.github/workflows/check.yml', '.github/CODEOWNERS.bak', '.github/codeowners',
+    'CODEOWNERS', 'docs/CODEOWNERS', 'data/projects.json', 'content/about.md'], plan),
+  ['.github/workflows/check.yml', '.github/CODEOWNERS.bak', '.github/codeowners', 'CODEOWNERS', 'docs/CODEOWNERS',
+    'data/projects.json', 'content/about.md']);
+});
+
+test('commitAll: a stale main (edit-access.json and CODEOWNERS behind their inputs): the derive commit carries both', async () => {
+  const calls = [];
+  const written = {};
+  const status = [` M ${P}`, ' M data/graph/edit-access.json', ' M .github/CODEOWNERS', '?? search/shard-1.json'].join('\n') + '\n';
+  const io = {
+    git: (args) => { calls.push(args); return args[0] === 'status' ? status : ''; },
+    ok: (args) => { calls.push(['ok', ...args]); return false; },                       // something is staged
+    write: async (p, t) => { written[p] = t; },
+  };
+  const plan = [{ author_name: 'someone', author_email: '99+someone@users.noreply.github.com', files: [P], texts: { [P]: 'new\n' }, message: 'go-live: x' }];
+  assert.equal(await ENGINE.commitAll(plan, io), 1);
+  assert.deepEqual(written, { [P]: 'new\n' });
+  assert.deepEqual(calls.slice(1), [
+    ['add', '--', P],
+    ['commit', '-q', '--author', 'someone <99+someone@users.noreply.github.com>', '-m', 'go-live: x'],
+    ['add', '-A', '--', 'search', 'data/graph', '.github/CODEOWNERS'],
+    ['ok', 'diff', '--cached', '--quiet'],
+    ['commit', '-q', '-m', 'derive: regenerate derived data after go-live'],
+  ]);
+  // anything outside the plan stops the commit before any write
+  const bad = { git: (args) => (args[0] === 'status' ? ' M .github/workflows/go-live.yml\n' : ''), ok: () => true, write: async () => { throw new Error('no'); } };
+  await assert.rejects(ENGINE.commitAll(plan, bad), /outside the plan: \.github\/workflows\/go-live\.yml/);
 });
 
 test('keys do not move when main moves: edit 1 goes live, edit 2 keeps its key (base = the merge base)', async () => {

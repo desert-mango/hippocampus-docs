@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 3 September 2026
+# Last substantive modification: 19 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Test contributor aggregation, privacy filtering, roster matching, and input failures.
 """Unit tests for tools/build_contributors.py.
@@ -241,6 +241,65 @@ class TestTally(unittest.TestCase):
             bc.tally([{"contributions": 3, "type": "User"}])
 
 
+class TestPerRepoCommits(unittest.TestCase):
+    """D2: the uncapped per-repo counts the edit-rights rule reads."""
+
+    def test_counts_per_login_per_repo_and_drops_bots(self):
+        commits = bc.per_repo_commits({"alpha": CONTRIBUTORS["alpha"],
+                                       "beta": CONTRIBUTORS["beta"]})
+        self.assertEqual(commits, {
+            "ada": {"alpha": 10, "beta": 3},      # a login in two repos
+            "bob": {"alpha": 5},
+            "cleo": {"beta": 8},
+            "eve": {"beta": 8},
+        })
+
+    def test_excluded_logins_are_dropped(self):
+        commits = bc.per_repo_commits({"beta": CONTRIBUTORS["beta"]},
+                                      frozenset({"cleo"}))
+        self.assertEqual(sorted(commits), ["ada", "eve"])
+
+    def test_logins_and_repo_keys_are_sorted(self):
+        commits = bc.per_repo_commits({
+            "zeta": [{"login": "zed", "contributions": 1, "type": "User"},
+                     {"login": "Amy", "contributions": 2, "type": "User"}],
+            "alpha": [{"login": "zed", "contributions": 4, "type": "User"}],
+        })
+        self.assertEqual(list(commits), ["Amy", "zed"])
+        self.assertEqual(list(commits["zed"]), ["alpha", "zeta"])
+
+    def test_uncapped_beyond_top_n(self):
+        rows = [{"login": f"user{i:02d}", "contributions": 100 - i,
+                 "type": "User"} for i in range(bc.TOP_N + 5)]
+        commits = bc.per_repo_commits({"gamma": rows})
+        self.assertEqual(len(commits), bc.TOP_N + 5)
+
+    def test_a_repeated_row_in_one_repo_is_summed(self):
+        commits = bc.per_repo_commits({"alpha": [
+            {"login": "ada", "contributions": 2, "type": "User"},
+            {"login": "ada", "contributions": 3, "type": "User"}]})
+        self.assertEqual(commits, {"ada": {"alpha": 5}})
+
+    def test_zero_counts_are_not_listed(self):
+        commits = bc.per_repo_commits({"alpha": [
+            {"login": "ada", "contributions": 0, "type": "User"}]})
+        self.assertEqual(commits, {})
+
+    def test_bad_count_and_missing_login_abort(self):
+        with self.assertRaises(bc.Abort):
+            bc.per_repo_commits({"alpha": [{"login": "ada",
+                                            "contributions": True}]})
+        with self.assertRaises(bc.Abort):
+            bc.per_repo_commits({"alpha": [{"contributions": 3}]})
+
+    def test_sums_agree_with_tally(self):
+        rows = {"alpha": CONTRIBUTORS["alpha"], "beta": CONTRIBUTORS["beta"]}
+        commits = bc.per_repo_commits(rows)
+        totals = bc.tally(CONTRIBUTORS["alpha"] + CONTRIBUTORS["beta"])
+        self.assertEqual({k: sum(v.values()) for k, v in commits.items()},
+                         dict(totals))
+
+
 class TestRank(unittest.TestCase):
     def setUp(self):
         self.roster = bc.roster_index(PEOPLE)
@@ -417,7 +476,55 @@ class TestEndToEnd(FixtureCase):
         self.assertEqual(two, [{"login": "dana", "name": "Dana Nelsen",
                                 "contributions": 1}])
 
-        self.assertEqual(doc["projects"]["p-forks"], {"contributors": []})
+        self.assertEqual(doc["projects"]["p-forks"],
+                         {"contributors": [], "repos": [], "commits": {}})
+
+    def test_repos_and_commits_per_bucket(self):
+        code, log = self.build()
+        self.assertEqual(code, 0, log)
+        doc = json.loads(self.out.read_text(encoding="utf-8"))
+        one = doc["projects"]["p-one"]
+        # the counted repos: no fork, no external row
+        self.assertEqual(one["repos"], ["alpha", "beta"])
+        self.assertEqual(one["commits"], {
+            "ada": {"alpha": 10, "beta": 3},
+            "bob": {"alpha": 5},
+            "cleo": {"beta": 8},
+            "eve": {"beta": 8},
+        })
+        self.assertEqual(doc["projects"]["p-two"]["repos"], ["gamma"])
+        self.assertEqual(doc["projects"]["p-two"]["commits"],
+                         {"dana": {"gamma": 1}})
+        for pid, bucket in doc["projects"].items():
+            for row in bucket["contributors"]:
+                self.assertEqual(
+                    row["contributions"],
+                    sum(bucket["commits"][row["login"]].values()), pid)
+                for repo in bucket["commits"][row["login"]]:
+                    self.assertIn(repo, bucket["repos"])
+
+    def test_commits_are_uncapped_end_to_end(self):
+        rows = [{"login": f"user{i:02d}", "contributions": 100 - i,
+                 "type": "User"} for i in range(15)]
+        users = {f"user{i:02d}": {"name": None} for i in range(15)}
+        users.update(USERS)
+        contributors = dict(CONTRIBUTORS)
+        contributors["gamma"] = rows
+        code, log = self.build(contributors=contributors, users=users)
+        self.assertEqual(code, 0, log)
+        two = json.loads(self.out.read_text(encoding="utf-8"))["projects"]["p-two"]
+        self.assertEqual(len(two["contributors"]), bc.TOP_N)
+        self.assertEqual(len(two["commits"]), 15)
+        self.assertEqual(two["commits"]["user14"], {"gamma": 86})
+
+    def test_excluded_logins_absent_from_commits(self):
+        links = {"note": "x", "links": {}, "exclude": ["bob"]}
+        users = {k: v for k, v in USERS.items() if k != "bob"}
+        code, log = self.build(links=links, users=users)
+        self.assertEqual(code, 0, log)
+        doc = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertNotIn("bob", doc["projects"]["p-one"]["commits"])
+        self.assertNotIn('"bob"', self.out.read_text(encoding="utf-8"))
 
     def test_no_bot_survives_anywhere(self):
         self.build()

@@ -10,15 +10,17 @@
 #   - It runs MAIN's workflow and MAIN's tools only (issue_comment, schedule and workflow_dispatch all run
 #     the default branch). It never checks out or runs proposal code: proposal texts are data read
 #     through the contents API.
-#   - Who may approve is the engine's rule (js/cms-core.js mayApproveEdit): an admin anywhere, a
-#     project's owner (its CODEOWNERS line) on that project's pages, never the proposal's author or anyone
-#     who committed to it. Comments from people without access do not even start a run.
+#   - Who may approve is the engine's rule (js/cms-core.js mayApproveEdit), read from MAIN's
+#     data/graph/edit-access.json: an admin anywhere, and on a project's pages the people with edit
+#     access to that project; never the proposal's author or anyone who committed to it. Comments from
+#     people without access do not even start a run.
 #   - The App key lives in the `derive` environment (main only), is read only by the push step, and is
 #     unset as soon as the token is minted; the token is this repository only, contents: write only,
 #     masked, and revoked on exit. The push is exactly `git push origin HEAD:main`: never a force, a `+`
 #     refspec or a delete (the bypass would allow them).
-#   - The commits may hold only the approved pages plus search/ and data/graph/ (go_live.mjs --commit
-#     refuses anything else), and check.py must be green before the push.
+#   - The commits may hold only the approved pages, plus the derive commit's search/, data/graph/ and
+#     .github/CODEOWNERS (CODEOWNERS is rendered from data/graph/edit-access.json); go_live.mjs
+#     --commit refuses anything else, and check.py must be green before the push.
 #   - On a moved main the job starts itself again (at most 3 attempts) instead of looping with the key.
 # A push by the App starts CI's `check` but not derive.yml (its bot guard); go-live already derived.
 name: go-live

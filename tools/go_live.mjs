@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 19 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Put approved per-edit changes from open proposals onto main, under the site's trust rules and gate.
 /* The go-live engine (plan-u5 U5a), run by .github/workflows/go-live.yml from MAIN's own files.
@@ -13,13 +13,17 @@
                   content/**.md (anything else: whole-proposal review on GitHub, never per edit)
      a record     trusted when its author (the comment's API login, never its text) is not the proposal's
                   author, wrote or committed no commit of the PR, and may approve that page
-                  (HCCore.mayApproveEdit: role_name admin anywhere; maintain/write only as the project's
-                  owner, the same people CODEOWNERS names); the latest trusted record per key wins
+                  (HCCore.mayApproveEdit: role_name admin anywhere; maintain/write only as an editor of
+                  the page's project in main's data/graph/edit-access.json, the same people CODEOWNERS
+                  names); the latest trusted record per key wins
      an edit      HCCore.proposalEdits(path, merge base, head, main): applied in head order by
                   HCCore.applyEdits; a key not in the head's CURRENT diff is stale and ignored
 
-   Order: work out the groups (one group = one PR x one file; reads only) -> none: exit quietly -> the
-   gate (derive.py offline + check.py) on untouched main: red: exit 1, post nothing -> each group added
+   Order: work out the candidate groups (one group = one PR x one file; reads only; a candidate has a key
+   approved by some record that COULD be trusted) -> none: exit quietly -> the gate (derive.py offline +
+   check.py) on untouched main: red: exit 1, post nothing -> read data/graph/edit-access.json from the tree
+   the gate just rebuilt (fresh access, never the copy from before the gate) -> the trusted decisions per
+   group -> each group added
    onto the passing set, gate after each; a group that turns it red is put back and each of its keys gets
    a failure record `hc-go-live-failed <key> <head sha>: `<reason>`` (never retried at that head) ->
    the plan file for the push step. The engine never runs or checks out proposal code: proposal texts
@@ -111,11 +115,42 @@ function roleReader(api, repo) {
   };
 }
 
-async function trustFor(prop, roleOf, projects) {
+async function rolesFor(prop, roleOf) {
   const roles = new Map();
   for (const r of prop.records) if (!roles.has(r.login)) roles.set(r.login, await roleOf(r.login));
+  return roles;
+}
+
+/* Who is trusted on page p: HCCore.mayApproveEdit with main's edit-access.json (`access`). */
+function trustFor(prop, roles, access) {
   return (p) => (login) => !prop.committers.has(login)
-    && C.mayApproveEdit({ login, permission: roles.get(login), path: p, projects, author: prop.author });
+    && C.mayApproveEdit({ login, permission: roles.get(login), path: p, access, author: prop.author });
+}
+
+/* Before the gate, access is not read yet. A record COULD be trusted when its login is not the author or a
+   committer and its role can approve somewhere (admin, maintain, write). Going through the records in the
+   order HCCore.decisions uses (created_at, then id), a key such a record approves becomes a candidate, and
+   a later decline by an ADMIN (always trusted: admins may approve anywhere) takes it back out. This stays a
+   superset of what the trusted decisions can approve (a key they approve has a trusted approval newer than
+   every trusted decline, admins' included), so "nothing to do" runs no gate and nothing real is skipped. */
+function candidateKeys(prop, roles) {
+  const could = (login) => login !== prop.author && !prop.committers.has(login)
+    && ['admin', 'maintain', 'write'].includes(roles.get(login));
+  const ordered = prop.records.filter((r) => could(r.login))
+    .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : (x.id || 0) - (y.id || 0)));
+  const keys = new Set();
+  for (const r of ordered) {
+    if (r.kind === 'approved') for (const k of r.keys) keys.add(k);
+    else if (r.kind === 'declined' && roles.get(r.login) === 'admin') for (const k of r.keys) keys.delete(k);
+  }
+  return keys;
+}
+
+/* Main's data/graph/edit-access.json from the tree (null when missing or unreadable: then only admins
+   are trusted, as HCCore.mayApproveEdit fails closed). */
+export const ACCESS_FILE = 'data/graph/edit-access.json';
+async function readAccess(files) {
+  try { return JSON.parse((await files.read(ACCESS_FILE)) || 'null'); } catch (e) { return null; }
 }
 
 const FAIL_WORDS = {
@@ -131,28 +166,36 @@ export async function sweep(o) {
   const { api, repo, gate } = o;
   const files = o.fs;
   const log = o.log || (() => {});
-  const projects = JSON.parse((await files.read('data/projects.json')) || 'null');
   const roleOf = roleReader(api, repo);
   const pulls = (await allPages(api, `/repos/${repo}/pulls?state=open`))
     .filter((p) => isProposal(p, repo, o) && (!o.pr || p.number === o.pr))
     .sort((a, b) => a.number - b.number);
-  const work = [];
+  // 1. the candidates (reads only; no access needed yet)
+  const failedHere = (prop, k) => (prop.failures.get(k) || []).some((f) => f.sha === prop.pull.head.sha);
+  const candidates = [];
   for (const pull of pulls) {
     const prop = await readProposal(api, repo, pull, files);
     if (!prop) continue;
-    const trust = await trustFor(prop, roleOf, projects);
+    const roles = await rolesFor(prop, roleOf);
+    if (![...candidateKeys(prop, roles)].some((k) => !failedHere(prop, k))) continue;
     for (const p of prop.paths.slice().sort()) {
-      const d = C.decisions(prop.records, trust(p));
-      const keys = [...d].filter(([k, v]) => v.kind === 'approved'
-        && !(prop.failures.get(k) || []).some((f) => f.sha === pull.head.sha)).map(([k]) => k);
-      if (!keys.length) continue;
-      work.push({ prop, path: p, keys, d,
+      candidates.push({ prop, roles, path: p,
         baseText: await rawAt(api, repo, prop.base, p), headText: await rawAt(api, repo, pull.head.sha, p) });
     }
   }
-  if (!work.length) { log('go-live: nothing approved is waiting'); return { groups: [], failed: [] }; }
+  if (!candidates.length) { log('go-live: nothing approved is waiting'); return { groups: [], failed: [] }; }
+  // 2. the gate on untouched main; it also rebuilds data/graph/edit-access.json from main's own inputs
   const first = await gate();
   if (!first.ok) throw new Error(`main is red before go-live (nothing applied): ${first.finding}`);
+  // 3. fresh access, then the trusted decisions
+  const access = await readAccess(files);
+  const work = [];
+  for (const c of candidates) {
+    const d = C.decisions(c.prop.records, trustFor(c.prop, c.roles, access)(c.path));
+    const keys = [...d].filter(([k, v]) => v.kind === 'approved' && !failedHere(c.prop, k)).map(([k]) => k);
+    if (keys.length) work.push(Object.assign({}, c, { keys, d }));
+  }
+  if (!work.length) { log('go-live: nothing approved by someone who may approve it'); return { groups: [], failed: [] }; }
   const memo = new Map();                                  // dry-run: texts as they would be
   const readNow = async (p) => (memo.has(p) ? memo.get(p) : files.read(p));
   const groups = [];
@@ -190,14 +233,14 @@ export async function sweep(o) {
 export async function closeDone(o) {
   const { api, repo } = o;
   const files = o.fs;
-  const projects = JSON.parse((await files.read('data/projects.json')) || 'null');
+  const access = await readAccess(files);                   // main's checkout: the access derive.yml committed
   const roleOf = roleReader(api, repo);
   const closed = [];
   const pulls = (await allPages(api, `/repos/${repo}/pulls?state=open`)).filter((p) => isProposal(p, repo, {}));
   for (const pull of pulls) {
     const prop = await readProposal(api, repo, pull, files);
     if (!prop) continue;
-    const trust = await trustFor(prop, roleOf, projects);
+    const trust = trustFor(prop, await rolesFor(prop, roleOf), access);
     let trustedAny = false;
     let open = false;
     for (const p of prop.paths) {
@@ -230,10 +273,40 @@ export function commitPlan(groups) {
   });
 }
 
-/* Only the plan's pages and the derived folders may be in the commit (the App bypasses review). */
+/* Only the plan's pages and the derived outputs may be in the commit (the App bypasses review). The
+   derived outputs: search/, data/graph/ (edit-access.json among them) and .github/CODEOWNERS, which
+   tools/derive.py renders from data/graph/edit-access.json.
+   Why .github/CODEOWNERS is safe here: go-live writes only CONTENT_RE pages, so its derive run can never
+   change data/projects.json or data/graph/contributors.json (the inputs of the access rule). Any
+   edit-access.json or CODEOWNERS change it finds is main's own lag behind its inputs, and committing it
+   is what derive.yml would do. The condition "CODEOWNERS equals the render of the edit-access.json being
+   committed" is enforced by realGate's check.py (a hard rule of the gate), not here: derive.py in that
+   same gate has just written both files from the tree's own inputs. */
+export const DERIVED_FILES = Object.freeze(['.github/CODEOWNERS']);
+export const DERIVE_COMMIT_PATHS = Object.freeze(['search', 'data/graph', ...DERIVED_FILES]);
 export function strayPaths(changed, plan) {
-  const allowed = new Set(plan.flatMap((c) => c.files));
+  const allowed = new Set([...plan.flatMap((c) => c.files), ...DERIVED_FILES]);
   return changed.filter((p) => !allowed.has(p) && !p.startsWith('search/') && !p.startsWith('data/graph/'));
+}
+
+/* --commit: one commit per plan entry, then the derived data as ONE commit (search/, data/graph/ and
+   .github/CODEOWNERS together, so a committed CODEOWNERS never lags the committed edit-access.json).
+   io: {git(args) -> stdout (throws on failure), ok(args) -> boolean, write(p, text)}. */
+export async function commitAll(plan, io) {
+  const changed = io.git(['status', '--porcelain', '--untracked-files=all']).split('\n').filter(Boolean).map((l) => l.slice(3));
+  const stray = strayPaths(changed, plan);
+  if (stray.length) throw new Error(`refusing to commit files outside the plan: ${stray.slice(0, 5).join(', ')}`);
+  for (const c of plan) {
+    for (const f of c.files) {
+      if (!CONTENT_RE.test(f) || typeof (c.texts || {})[f] !== 'string') throw new Error(`the plan's entry for ${f} is not a page text`);
+      await io.write(f, c.texts[f]);
+    }
+    io.git(['add', '--', ...c.files]);
+    io.git(['commit', '-q', '--author', `${c.author_name} <${c.author_email}>`, '-m', c.message]);
+  }
+  io.git(['add', '-A', '--', ...DERIVE_COMMIT_PATHS]);
+  if (!io.ok(['diff', '--cached', '--quiet'])) io.git(['commit', '-q', '-m', 'derive: regenerate derived data after go-live']);
+  return plan.length;
 }
 
 // ------------------------------------------------------------------ CLI ---
@@ -285,20 +358,8 @@ async function main(argv) {
   const repo = process.env.GITHUB_REPOSITORY || 'desert-mango/hippocampus-docs';
   if (argv.includes('--commit')) {
     const plan = JSON.parse(fs.readFileSync(arg('--commit'), 'utf8'));
-    const changed = git(['status', '--porcelain', '--untracked-files=all']).split('\n').filter(Boolean).map((l) => l.slice(3));
-    const stray = strayPaths(changed, plan);
-    if (stray.length) throw new Error(`refusing to commit files outside the plan: ${stray.slice(0, 5).join(', ')}`);
-    for (const c of plan) {
-      for (const f of c.files) {
-        if (!CONTENT_RE.test(f) || typeof (c.texts || {})[f] !== 'string') throw new Error(`the plan's entry for ${f} is not a page text`);
-        await treeFs.write(f, c.texts[f]);
-      }
-      git(['add', '--', ...c.files]);
-      git(['commit', '-q', '--author', `${c.author_name} <${c.author_email}>`, '-m', c.message]);
-    }
-    git(['add', '-A', '--', 'search', 'data/graph']);
-    if (!run('git', ['diff', '--cached', '--quiet']).ok) git(['commit', '-q', '-m', 'derive: regenerate derived data after go-live']);
-    console.log(`go-live: ${plan.length} commit(s) made`);
+    const n = await commitAll(plan, { git, ok: (args) => run('git', args).ok, write: treeFs.write });
+    console.log(`go-live: ${n} commit(s) made`);
     return 0;
   }
   const token = process.env.GH_TOKEN;

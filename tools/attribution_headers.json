@@ -70,13 +70,13 @@
     "js/app.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "1abbd9c8f853f5c09687cb8e87bbfe70cd6c99a95df219f8697f05cb7ef4270a",
+        "baseline_sha256": "3fbb27f6148b8923f1bede7483c7d06e8b715e7a738c143bbce7f0fb9ec181e7",
         "commit": "30ba7913e57afa32b1d9e713b0716d9c6ddbe911"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Route and render the documentation site's pages from JSON registries and Markdown."
       },
@@ -100,13 +100,13 @@
     "js/cms-core.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "64b784ae359cad15ddbf3b2e8eb6536bdbb2dbda8df95e8384652a1e0e0ca92c",
+        "baseline_sha256": "a40ab26298cff4801b52a31583fea6d21b6a9f425c2373130fa012f18f69b987",
         "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
       },
@@ -182,13 +182,13 @@
     "js/source.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d23a015bc090c360de2714ff0aedd9ff2951e2540f92f5266bf0976ea64215a0",
+        "baseline_sha256": "1aaa7947945a70c46ddc0c08c4457f04d64c87559be4de07534359f871d7fa47",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Fetch site content same-origin, or through the CMS preview bridge inside a preview frame."
       },
@@ -212,28 +212,28 @@
     "tools/build_codeowners.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "06e0ba03911eee726e5909c8d42627de861c59b09cccbda1fdaa6294a8f73721",
+        "baseline_sha256": "705218a0bb449b31b0109f1e69913e12b24fa4be03d44aba6bf0e6612157a98e",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Write .github/CODEOWNERS from the project owners in data/projects.json: who may approve which files."
+        "purpose": "Write .github/CODEOWNERS from data/graph/edit-access.json: who may approve which files."
       },
       "reason": "First-party site tool written for the editor redesign (access-level approval, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
     },
     "tools/build_contributors.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "b8b84b07292950f70defd5900e1fdb5bff84f94c25d12b3d638373adc1409c2f",
+        "baseline_sha256": "235f1ad0e04478c4f793702c7c2c3116afd436cf2f7971a548004112887940e6",
         "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "3 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Project public GitHub contribution counts into privacy-filtered project summaries."
       },
@@ -302,13 +302,13 @@
     "tools/check.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "042ca53947fe80d19de195e6f998f96544119df601c1cc928d1671791e5eb46f",
+        "baseline_sha256": "2e9be42931cfdb2fa29002c0a3c96271a6d73cd75ecf100ee5a103e712af61d9",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Validate site content and dispatch the deterministic attribution-header check."
       },
@@ -346,15 +346,15 @@
     "tools/derive.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "b5d9c928deef2bef0d1a72ba5db58db92ad7689933fdb3db7e994ceb0563f923",
+        "baseline_sha256": "af1a0043e5249a1e04b81aa96e91f9926647adf73c3f7fc36f43924898905f24",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Regenerate the derived data (wiki graph, site search shard, contributors) in one run."
+        "purpose": "Regenerate the derived data (wiki graph, site search shard, contributors, edit access, CODEOWNERS) in one run."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
@@ -406,15 +406,15 @@
     "tools/projects_registry.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "4a45564472bc2095331ef108cf42dca567d5a38a01ec998f1ade9c6a773e2ccc",
+        "baseline_sha256": "1f40301afd1e66e2541f0937aa88bb72f3c130b56668a9c3dd14806348528f02",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Load the project registry: the shared index (ids, order, owners) merged with each project's facts file."
+        "purpose": "Load the project registry: the shared index (ids, order, add and remove lists) merged with each project's facts file."
       },
       "reason": "First-party site tool written for the editor redesign (per-project facts files, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
     },
@@ -525,13 +525,13 @@
     "tools/tests/test_build_contributors.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "e9a9b680cd84f7e0c790963819ef5c54dae44557f89dc9e0c3043b19dd835399",
+        "baseline_sha256": "eba9beceb127254b723dd105d48aa180077777b2691b4bc07ac8feefecedfede",
         "commit": "524acb16d8cc4d083396f22eeb3eefe369108a5c"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "3 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test contributor aggregation, privacy filtering, roster matching, and input failures."
       },
@@ -615,13 +615,13 @@
     "tools/tests/test_check_graph.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "30beff58712377ba9d3bf5cfb5a66128a4078d6c5e6d9ec2cbc031c68a7085f9",
+        "baseline_sha256": "a1f418b77f1b2dd0ac37a090bc0c6075046195e64eaf28d8793353987c0f3d2f",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test graph parity and contributor validation in the site quality gate."
       },
@@ -630,28 +630,28 @@
     "tools/tests/test_check_projects.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "0a286be0782e559e5a22506b57462748b234b424f6f4d9043b30f76c16efb922",
+        "baseline_sha256": "5e5e376e23253456a88f7f1a98e00aca0154eb34e0394b865a40667268bf4678",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "purpose": "Test the project registry rules in the site quality gate: owners and their shape."
+        "purpose": "Test the project registry rules in the site quality gate: the add and remove lists and their shape."
       },
       "reason": "First-party test written for the editor redesign (project owners, Kyle's 2026-10-14 feedback); the baseline is the file as introduced."
     },
     "tools/tests/test_cms_core.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c06527838a5e7693bd7c370e8ae849bde89e2f4296790f754d06486c3568a175",
+        "baseline_sha256": "220a53cae4970af589115d3d00321caff3faefa890cd13c25ec8db8c8aecdc3d",
         "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host."
       },
@@ -690,13 +690,13 @@
     "tools/tests/test_derive.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "366cc810ea4118135a87f1deb55398e948fa07b28a49eb0d158563eec42be9f5",
+        "baseline_sha256": "1b0cd9b1f04fa8cfabfe15f7120f29f5b7a3350c43308c019e915181f7fee2d7",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test derived-data regeneration order, filters, failure pass-through, and CI annotations."
       },
@@ -779,13 +779,13 @@
     "tools/tests/test_preview_bridge.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "709289cd8c3b9051a543c0f15400cf27a4f5d9cd308ddb7a0d52fc9bfe708d04",
+        "baseline_sha256": "10d00eac88653c83610b7419e262b7cf0dc41b31c73e937134fd369f2be52f23",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the content-source seam and the CMS preview bridge client in js/source.js."
       },
@@ -884,13 +884,13 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "e889bcc57726505cdd7fc30575030b6b73562c75dde5d271470fd34e7e270c67",
+        "baseline_sha256": "f89a072e5d54c31ce464c089f62ef28261e8ff9dee0c248cca223bff6e6673bb",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
       },
@@ -899,13 +899,13 @@
     "tools/tests/fake_github.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "f7f21b2300c82c2a99e5c49cc8c00c0cf9a68e336e6d4de0cee5eb7da7242caf",
+        "baseline_sha256": "92b0703a9a1a87662e5f26b50dac64d426f48db94b555719fadb2ef723bd3240",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "One fake GitHub route table over the U0 fixtures, for the node tests and the localhost Editor walk."
       },
@@ -914,13 +914,13 @@
     "tools/tests/test_editor.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "7391a9dbb4fb80fa998952ee3943c882723eb580ade3dde5d31297c59769c843",
+        "baseline_sha256": "0ed4378f77fe10022a5a59682a7d224e82f65d98c8fe8492f346e4eea10eee5a",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub."
       },
@@ -944,13 +944,13 @@
     "tools/tests/test_members_gating.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "0eacf3841b53d7de06cb4e7a9e11438efc8901861887ff919111b5ccecf5d6fe",
+        "baseline_sha256": "0af426f6e14e3cf70af8e775b0880880ad704d6900fd57fc13e995291d861563",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test that members-only GitHub detail reaches signed-in members only, through the org reader alone."
       },
@@ -1079,13 +1079,13 @@
     "tools/go_live.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "51ba56ae3083c75e9e3d9e9c3c98ec9c86ffe6293c64113065cca26557b2d1e8",
+        "baseline_sha256": "d2e3858305bd0dc95baebd70e7e511eac27a253781a2da50eb0c7d0ac74c2ba1",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Put approved per-edit changes from open proposals onto main, under the site's trust rules and gate."
       },
@@ -1094,13 +1094,13 @@
     "tools/tests/test_go_live.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "14fe4c2d8ea110904845c1b96cacf6488d308bcbc6be6818685dd580f5119e43",
+        "baseline_sha256": "84440de80c0138d4ead0da03c4212fcc67d983441de863b4477e2b3a2a4028bc",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "19 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test per-edit go-live: edit keys, the already-live rule, applying edits to main, and approval records."
       },
@@ -1120,6 +1120,36 @@
         "purpose": "Test conversations on a suggested change: the comment and reply writes, the GraphQL door, thread mapping."
       },
       "reason": "First-party test written for the editor redesign (threads, plan-u5 U6); the baseline is the file as introduced."
+    },
+    "tools/build_edit_access.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "52178a09208eaa841a0a6e7fce94522aac119794d6293541286a40e2872dc3e0",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "19 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Build data/graph/edit-access.json: who may edit each project, from commits and the admin's add and remove lists."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_build_edit_access.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "70c9cba9f50953273298341833510c2713fe3e1547db1cb7bff4edc8d04d403d",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "19 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the edit-access rule (commits first, admin add and remove win) and its fail-safe writer."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     }
   },
   "schema_version": 1

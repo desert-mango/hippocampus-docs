@@ -1,8 +1,11 @@
-# derive — regenerate and commit the derived data after every push to main.
+# derive — regenerate and commit the derived data after every push to main,
+# once a day, and on demand.
 #
 # Derived data = files that are a pure function of the content: search/site.json,
 # search/manifest.json, data/graph/{wiki,summaries,xref-terms}.json, when its
-# inputs changed data/graph/contributors.json, and on every run the GitHub layer
+# inputs changed data/graph/contributors.json, on every run who may edit each
+# project (data/graph/edit-access.json, and .github/CODEOWNERS rendered from
+# it, which GitHub enforces), and on every run the GitHub layer
 # data/graph/{org-activity,github-repos,page-authors,people-public}.json plus
 # data/graph/avatars/ (public reads; its step fails SOFT — a ::warning, the
 # previous GitHub data kept, the rest still committed). Pull requests never commit them
@@ -30,11 +33,24 @@
 #
 # The job runs the offline gate before pushing and pushes nothing when it is
 # red: a red gate is content to fix, never something to push past.
+#
+# Daily, and on demand (Kyle, 2026-10-19): commit counts change when someone
+# commits to a lab repo, not when this repo changes, so a schedule rebuilds the
+# contributor counts, and with them who may edit each project, once a day. A
+# scheduled or manual run never reads BEFORE: `derive.py --contributors
+# --github-data`. It commits only when something changed. A failed contributor
+# read keeps the previous contributors.json, so a network failure never takes
+# anyone's access away. GitHub turns a schedule off after 60 days without
+# activity in the repository; a manual run (Actions → derive → Run workflow,
+# from main) starts it again.
 name: derive
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
 
 # One run at a time on main; a newer push waits for the running one.
 concurrency: derive-main
@@ -45,7 +61,14 @@ permissions:
 jobs:
   derive:
     name: derive
-    if: ${{ !endsWith(github.actor, '[bot]') }}
+    # Skip a push made by a bot (the loop guard above). A schedule or a manual
+    # dispatch always runs: on a schedule, github.actor is whoever last changed
+    # this file, and even if that were a bot the run must not be skipped. A
+    # manual dispatch may only be started FROM main: this job pushes to main,
+    # so a dispatch from another branch would let that branch's generated files
+    # reach main without a review. The checkout below pins main for every
+    # non-push event too.
+    if: ${{ (!endsWith(github.actor, '[bot]') || github.event_name != 'push') && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-24.04
     environment: derive
     permissions:
@@ -56,6 +79,8 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+          # push: the pushed commit; schedule / dispatch: main itself
+          ref: ${{ github.event_name == 'push' && github.sha || 'refs/heads/main' }}
 
       - name: Regenerate, check, commit and push the derived data
         env:
@@ -64,6 +89,7 @@ jobs:
           # history, pull requests, profiles' display names).
           GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
           DERIVE_APP_ID: ${{ vars.DERIVE_APP_ID || secrets.DERIVE_APP_ID }}
           DERIVE_APP_PRIVATE_KEY: ${{ secrets.DERIVE_APP_PRIVATE_KEY }}
         # derive.py resolves BEFORE itself: a multi-commit push or a new branch
@@ -85,13 +111,18 @@ jobs:
           trap 'DERIVE_APP_TOKEN="$APP_TOKEN" python3 tools/github_app_token.py --revoke || true' EXIT
           for attempt in 1 2 3; do
             echo "::group::attempt $attempt: derive"
-            python3 tools/derive.py --contributors-if-changed "$BEFORE" --github-data | tee "$RUNNER_TEMP/derive-output.txt"
+            if [ "$EVENT_NAME" = push ]; then
+              python3 tools/derive.py --contributors-if-changed "$BEFORE" --github-data | tee "$RUNNER_TEMP/derive-output.txt"
+            else
+              # schedule / workflow_dispatch: always recount the commits
+              python3 tools/derive.py --contributors --github-data | tee "$RUNNER_TEMP/derive-output.txt"
+            fi
             echo "::endgroup::"
             if grep -qF "derive: build_github_data.py FAILED — previous GitHub data kept" "$RUNNER_TEMP/derive-output.txt"; then
               echo "::warning title=derive::build_github_data.py failed — the previous GitHub data was kept; the next push catches it up"
             fi
             python3 tools/check.py
-            if [ -z "$(git status --porcelain search/ data/graph/)" ]; then
+            if [ -z "$(git status --porcelain search/ data/graph/ .github/CODEOWNERS)" ]; then
               echo "derive: nothing to commit"
               exit 0
             fi
@@ -106,7 +137,7 @@ jobs:
               echo "derive: pushing as $(git config user.name)"
             fi
             short=$(git rev-parse --short HEAD)
-            git add -A search/ data/graph/
+            git add -A search/ data/graph/ .github/CODEOWNERS
             git commit -q -m "derive: regenerate derived data after $short"
             auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"
             echo "::add-mask::$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)"

@@ -55,6 +55,23 @@
                      commits, "People committing this year", and the popover
                      of its first row opened (counts, projects, recent
                      commits); on /about: the GitHub strips on the cards.
+    access-*         (edit access, 2026-10-19) Editor OFF on a project page
+                     (&page=/projects/core-stack is the default for these
+                     steps): the "Edit access" box at the top of the aside.
+                     The fake GitHub gets a synthetic data/graph/edit-access.json
+                     and data/projects.json at main's sha (extra.contents),
+                     never the tree's file; the walk's login (user.json)
+                     lands in the step's state:
+                       access-sitewide  Maintainer (&variant=admin: Admin)
+                       access-commits   Write, commits in 2 of the repos
+                       access-added     Write, added by an admin
+                       access-removed   Write, removed by an admin (Request shown)
+                       access-nowrite   read-only, commits (the issue link)
+                       access-none      Write, not listed (Request shown)
+                       access-admin     Admin: Remove per person, Add person
+                       access-proposals Editor ON, the proposals list with an
+                                        "Access request" and an "Access
+                                        change" row (labels from the diff)
 
   The synthetic proposals (U7) are built here from the page's own Markdown
   with HCCore.splitBlocks and handed to the fake GitHub as `extra`; PR #1
@@ -108,11 +125,14 @@
     return;
   }
   const STEPS = ['on', 'select', 'edit', 'insert', 'inserted', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
-    'overlay-inline', 'overlay-side', 'two-prs', 'members', 'scroll'];
+    'overlay-inline', 'overlay-side', 'two-prs', 'members', 'scroll',
+    'access-sitewide', 'access-commits', 'access-added', 'access-removed', 'access-nowrite', 'access-none', 'access-admin',
+    'access-proposals'];
+  const ACCESS_STEPS = STEPS.filter((s) => s.indexOf('access-') === 0);
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
-  const page = params.get('page') || '/setup/hippocampus-bringup/fcu-firmware';
+  const page = params.get('page') || (/^access-/.test(step) ? '/projects/core-stack' : '/setup/hippocampus-bringup/fcu-firmware');
   const LIMIT_MS = 20000;
   const SETTLE_MS = 900;
 
@@ -215,8 +235,13 @@
     return { orgCommits, repoCommits };
   }
 
-  // &variant=admin|maintain|readonly (U5b: a reviewer who may approve any page); default: Write
-  const variant = ['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant') : undefined;
+  // &variant=admin|maintain|readonly (U5b: a reviewer who may approve any page); default: Write.
+  // The access steps set their own (access-sitewide takes &variant=admin too).
+  const ACCESS_VARIANT = { 'access-sitewide': params.get('variant') === 'admin' ? 'admin' : 'maintain', 'access-commits': undefined,
+    'access-added': undefined, 'access-removed': undefined, 'access-nowrite': 'readonly', 'access-none': undefined,
+    'access-admin': 'admin', 'access-proposals': undefined };
+  const variant = Object.prototype.hasOwnProperty.call(ACCESS_VARIANT, step) ? ACCESS_VARIANT[step]
+    : (['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant') : undefined);
   // U5b: an approval record written by the page is kept as proposal #2's comment (window.walkWrites lists every write)
   window.walkWrites = [];
   const onWrite = (extra) => (method, url, body) => {
@@ -260,6 +285,52 @@
     readFile: (p) => (/^[A-Za-z0-9._/-]+$/.test(p) && p.indexOf('..') < 0 ? readText(`../../${p}`) : Promise.resolve(null)),
     extra,
   });
+
+  /* Edit access: main's data/graph/edit-access.json (the shape tools/build_edit_access.py writes) and
+     data/projects.json for the project of the page, with the walk's login in the step's state; for
+     access-proposals, two open proposals that change only data/projects.json's add/remove lists. */
+  async function accessExtra(login) {
+    const m = /^\/projects\/([a-z0-9][a-z0-9-]*)$/.exec(page);
+    const id = m ? m[1] : 'core-stack';
+    const C = window.HCCore;
+    const MAIN = window.HCFakeGitHub.MAIN_SHA;
+    const mainText = await readText('../../data/projects.json');
+    const facts = JSON.parse(await readText(`../../data/projects/${id}.json`) || 'null');
+    const repos = facts && Array.isArray(facts.repos) ? facts.repos.filter((r) => r && r.external !== true).length || 1 : 3;
+    const editors = [['lab-lead', 'commits', Math.min(3, repos)], ['new-student', 'added', 0]];
+    const removed = [];
+    let index = mainText;
+    const put = (who, op) => { const d = C.accessRequestDraft(index, id, who, op); if (d.text) index = d.text; };
+    put('new-student', 'add');
+    if (step === 'access-commits' || step === 'access-nowrite') editors.push([login, 'commits', Math.min(2, repos)]);
+    if (step === 'access-added') { editors.push([login, 'added', 0]); put(login, 'add'); }
+    if (step === 'access-removed') { removed.push([login, true]); put(login, 'remove'); }
+    const byLogin = (a, b) => (a[0].toLowerCase() < b[0].toLowerCase() ? -1 : 1);
+    const doc = { note: 'Walk data (synthetic): who can edit each project, in the shape of data/graph/edit-access.json.',
+      projects: { [id]: { repos,
+        editors: editors.sort(byLogin).map(([l, why, k]) => ({ login: l, repos_with_commits: k, why })),
+        removed: removed.sort(byLogin).map(([l, had]) => ({ had_commits: had, login: l })) } } };
+    const extra = { contents: { [MAIN]: { 'data/graph/edit-access.json': `${JSON.stringify(doc, null, 1)}\n`, 'data/projects.json': index } },
+      trees: { [MAIN]: 'e'.repeat(40) } };
+    if (step === 'access-proposals') {
+      const pull1 = JSON.parse(await readText('fixtures/github-data/pull-1.json'));
+      const sha = (c) => c.repeat(40).slice(0, 40);
+      const pull = (n, who, created, headSha, title) => Object.assign({}, pull1, { number: n, title, created_at: created,
+        user: Object.assign({}, pull1.user, { login: who }),
+        head: Object.assign({}, pull1.head, { sha: headSha, ref: `cms/${who}/walk-access-${n}` }) });
+      const row = { filename: 'data/projects.json', status: 'modified', additions: 1, deletions: 0, changes: 1, patch: '@@ -1 +1 @@' };
+      const name = facts && facts.name ? facts.name : id;
+      extra.pulls = [pull(4, 'walk-student', '2026-10-18T09:00:00Z', sha('a4'), C.accessProposalTitle({ kind: 'request', login: 'walk-student', name })),
+        pull(5, 'walk-admin', '2026-10-19T09:00:00Z', sha('a5'), C.accessProposalTitle({ kind: 'change', op: 'remove', login: 'lab-lead', name }))];
+      extra.files = { 4: [row], 5: [row] };
+      extra.contents[sha('a4')] = { 'data/projects.json': C.accessRequestDraft(index, id, 'walk-student', 'add').text };
+      extra.contents[sha('a5')] = { 'data/projects.json': C.accessRequestDraft(index, id, 'lab-lead', 'remove').text };
+      extra.compare = { [sha('a4')]: MAIN, [sha('a5')]: MAIN };
+      extra.checks = { [sha('a4')]: { total_count: 0, check_runs: [] }, [sha('a5')]: { total_count: 0, check_runs: [] } };
+      extra.comments = { 4: [], 5: [] };
+    }
+    return extra;
+  }
 
   // theme=light|dark (screenshots of both themes): the site reads hc-theme from this origin's storage
   const theme = params.get('theme');
@@ -536,6 +607,37 @@
     box.closest('.hc-authors').scrollIntoView({ block: 'start', behavior: 'instant' });
   };
 
+  // Edit access: Editor OFF, the box at the top of a project page's aside (access-proposals: Editor on, the list)
+  const accessBoxReady = async (check) => {
+    await until(() => $('[data-editor-switch]') && !$('[data-editor-switch]').disabled, 'the role read (the switch enabled)');
+    const box = await until(() => $('.aside-box .hc-access'), 'the Edit access box on the project page');
+    await until(() => check(box), 'the box in the step\'s state');
+    // the aside is sticky (scrollIntoView lands anywhere): the page's top shows the title and the box
+    SW.scrollTo({ top: 0, behavior: 'instant' });
+  };
+  const accessText = (box) => (box.querySelector('.hc-access-text') || {}).textContent || '';
+  RUN['access-sitewide'] = () => accessBoxReady((b) => /^You can edit every project \((Maintainer|Admin)\)\.$/.test(accessText(b)));
+  RUN['access-commits'] = () => accessBoxReady((b) => /^You can edit this project: you have commits in/.test(accessText(b)));
+  RUN['access-added'] = () => accessBoxReady((b) => accessText(b) === 'An admin gave you access to this project.');
+  RUN['access-removed'] = () => accessBoxReady((b) => accessText(b) === 'An admin removed your access to this project.'
+    && b.querySelector('button[data-action="access-request"]'));
+  RUN['access-nowrite'] = () => accessBoxReady((b) => /^You have commits here, but/.test(accessText(b))
+    && b.querySelector('a[data-action="access-issue"]'));
+  RUN['access-none'] = () => accessBoxReady((b) => /^You have no commits/.test(accessText(b))
+    && b.querySelector('button[data-action="access-request"]'));
+  RUN['access-admin'] = () => accessBoxReady((b) => accessText(b) === 'You can edit every project (Admin).'
+    && b.querySelector('button[data-action="access-remove"]') && b.querySelector('button[data-action="access-add"]'));
+  RUN['access-proposals'] = async () => {
+    // the list needs no page frame: Editor on, then the Proposals view (not editorOn's wait for the frame)
+    const sw = await until(() => { const b = $('[data-editor-switch]'); return b && !b.disabled ? b : null; },
+      'the Editor switch (GitHub access confirmed)');
+    sw.click();
+    await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
+    await openTray('proposals');
+    await until(() => $('#hc-tray .hc-prow[data-pr="4"] .hc-prow-access:not([hidden])')
+      && $('#hc-tray .hc-prow[data-pr="5"] .hc-prow-access:not([hidden])'), 'the two access labels in the list');
+  };
+
   site.addEventListener('load', async () => {
     try {
       SW = site.contentWindow;
@@ -547,14 +649,18 @@
       });
       await until(() => SW.HCApp && SD.querySelector('#content h1'), 'the site\'s page');
       const overlay = OVERLAY_STEPS.indexOf(step) >= 0;
-      const fake = fakeFor(overlay ? await synthetic() : (step === 'members' ? await membersExtra() : undefined));
+      const user = JSON.parse(await readText('fixtures/github-data/user.json'));
+      const access = ACCESS_STEPS.indexOf(step) >= 0;
+      const fake = fakeFor(overlay ? await synthetic() : (step === 'members' ? await membersExtra()
+        : (access ? await accessExtra(String(user.login)) : undefined)));
       // the View settings are this browser's: the walk sets them for its step (side by side only there)
       try {
         if (step === 'overlay-side') {
           SW.localStorage.setItem('hc-editor-view', JSON.stringify({ suggestions: true, diff: 'side', compact: false, outlines: true }));
         } else if (overlay) SW.localStorage.removeItem('hc-editor-view');
+        // the access steps start with Editor OFF, whatever an earlier step in this tab left on
+        if (access) SW.sessionStorage.removeItem('hc-editor');
       } catch (e) { /* the defaults */ }
-      const user = JSON.parse(await readText('fixtures/github-data/user.json'));
       const started = await SW.HCApp.loadEditor({ fetch: fake.fetch,
         session: { token: 'walk-fake-not-a-token', login: String(user.login), expiresAt: null } });
       if (started !== true) throw new Error('HCApp.loadEditor did not start the editor');
