@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-19",
+ "read_at": "2026-10-20",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 194,
+  "commits_365d": 195,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -642,7 +642,7 @@
    "week": "2026-10-19",
    "days": [
     4,
-    null,
+    1,
     null,
     null,
     null,
@@ -652,6 +652,12 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "ipp_rig",
+   "sha": "6fcef02",
+   "date": "2026-10-20",
+   "msg": "refactor(config): delete leftover scenarios not needed"
+  },
   {
    "repo": "hippo_sim",
    "sha": "597eee8",
@@ -795,20 +801,14 @@
    "sha": "5bf8fa6",
    "date": "2026-08-26",
    "msg": "Improve move_to_start service timeout behaviour"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "3734877",
-   "date": "2026-08-26",
-   "msg": "Improve file name"
   }
  ],
  "most_active_repos": [
   {
    "name": "ipp_rig",
-   "commits": 87,
+   "commits": 88,
    "language": "Python",
-   "pushed_at": "2026-10-19"
+   "pushed_at": "2026-10-20"
   },
   {
    "name": "fav_docs",

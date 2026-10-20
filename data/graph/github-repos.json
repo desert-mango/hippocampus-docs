@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-19",
+ "read_at": "2026-10-20",
  "org": "HippoCampusRobotics",
  "repos": {
   ".github": {
@@ -836,11 +836,11 @@
    "stars": 2,
    "forks": 1,
    "open_issues": 0,
-   "pushed_at": "2026-10-19",
+   "pushed_at": "2026-10-20",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 87,
+   "commits_365d": 88,
    "html_url": "https://github.com/HippoCampusRobotics/ipp_rig"
   },
   "ipp_rviz_visuals": {
