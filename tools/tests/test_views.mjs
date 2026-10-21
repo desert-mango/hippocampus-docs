@@ -611,3 +611,74 @@ test('E2: text contrast pairs, parsed from css/site.css (WCAG 1.4.3)', () => {
   const darkTitle = cp.ratio(D['--note-warn'], darkTint);
   assert.ok(darkTitle >= 4.5, `dark title on the note tint: ${darkTitle.toFixed(2)}`);
 });
+
+/* WCAG-2/3/4: light-mode ink for small non-link coloured text. Each rule is read from the UNIT E block of
+   css/site.css; its color: value is resolved against the light tokens (var() then color-mix()), never a
+   hard-coded hex, and measured on every background that text sits on. */
+function unitERules() {
+  const block = SITE_CSS.slice(SITE_CSS.indexOf('/* ==== UNIT E')).replace(/\/\*[\s\S]*?\*\//g, '');
+  return [...block.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    sels: m[1].split(',').map((x) => x.trim().replace(/\s+/g, ' ')), body: m[2] }));
+}
+function lightInk(sel) {
+  const rule = unitERules().find((r) => r.sels.includes(`[data-theme="light"] ${sel}`) && /(^|;|\s)color\s*:/.test(r.body));
+  assert.ok(rule, `the UNIT E block has a [data-theme="light"] ${sel} { color: … } rule`);
+  return /(?:^|;|\s)color\s*:\s*([^;]+)/.exec(rule.body)[1].trim();
+}
+function resolveVars(expr, tokens) {
+  return expr.replace(/var\((--[\w-]+)\)/g, (s, n) => {
+    assert.ok(n in tokens, `unknown token ${n}`);
+    return tokens[n];
+  });
+}
+
+test('WCAG-2 light .badge.active text ink is the --active hue darkened, >= 4.5:1 on --surface and --bg', () => {
+  const cp = contrastPairs(SITE_CSS);
+  const L = cp.light;
+  const ink = lightInk('.badge.active');
+  assert.match(ink, /var\(--active\)/, 'the same hue: mixed from --active');
+  for (const bg of ['--surface', '--bg']) {
+    const r = cp.ratio(resolveVars(ink, L), L[bg]);
+    assert.ok(r >= 4.5, `.badge.active on ${bg}: ${r.toFixed(2)}:1`);
+  }
+  assert.ok(cp.ratio(L['--active'], L['--surface']) < 4.5, 'the plain token alone would fail: the rule is what fixes it');
+});
+
+test('WCAG-3 light small non-link accent text (maintained badge, note titles, selected tab) is >= 4.5:1 on --surface and --bg', () => {
+  const cp = contrastPairs(SITE_CSS);
+  const L = cp.light;
+  for (const sel of ['.badge.maintained', '.adm-note .adm-title', '.adm-important .adm-title',
+    '.adm-seealso .adm-title', '.adm-todo .adm-title', '.tabbar button[aria-selected="true"]']) {
+    const ink = lightInk(sel);
+    assert.match(ink, /var\(--accent\)/, `${sel}: the same hue, mixed from --accent`);
+    for (const bg of ['--surface', '--bg']) {
+      const r = cp.ratio(resolveVars(ink, L), L[bg]);
+      assert.ok(r >= 4.5, `${sel} on ${bg}: ${r.toFixed(2)}:1`);
+    }
+  }
+});
+
+test('WCAG-4 light active sidebar link and current filter chip are >= 4.5:1 on the --accent-soft tint', () => {
+  const cp = contrastPairs(SITE_CSS);
+  const L = cp.light;
+  for (const sel of ['#sidebar a.active', '.filter-chip[aria-current="true"]']) {
+    const ink = lightInk(sel);
+    assert.match(ink, /var\(--accent\)/, `${sel}: the same hue, mixed from --accent`);
+    for (const base of ['--bg', '--surface', '--bg-soft']) {
+      const r = cp.ratio(resolveVars(ink, L), L['--accent-soft'], L[base]);
+      assert.ok(r >= 4.5, `${sel} on --accent-soft over ${base}: ${r.toFixed(2)}:1`);
+    }
+  }
+});
+
+test('WCAG-2/3/4 links keep Kyle\'s light accent untouched, and dark mode has no such ink rules', () => {
+  const cp = contrastPairs(SITE_CSS);
+  assert.equal(cp.light['--accent'].toLowerCase(), '#2391ff');
+  for (const r of unitERules()) {
+    for (const s of r.sels) {
+      if (/\.badge\.(active|maintained)|\.adm-title|aria-selected|a\.active|filter-chip/.test(s) && /(^|;|\s)color\s*:/.test(r.body)) {
+        assert.match(s, /^\[data-theme="light"\] /, `${s} is light-only`);
+      }
+    }
+  }
+});
