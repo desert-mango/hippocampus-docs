@@ -1151,6 +1151,21 @@
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     },
+    "tools/tests/test_projects_ui.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "41b8e0335a7ec86b1029855d1f7b1d16b2c3afbfa38150a440439edcd1eac047",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Test the projects list and project page helpers (groups, status filter, key facts, start-here links) and the facts files' group/image keys."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
     "tools/tests/test_views.mjs": {
       "classification": "included",
       "evidence": {

@@ -354,27 +354,139 @@
     return `<span class="badge ${esc(status)}">${esc(status)}</span>`;
   }
 
+  // ---------- projects: groups, the status filter, key facts (uiux unit J) ----------
+  // J12: the list is grouped. A facts file's optional "group" picks the section;
+  // a missing or unknown one lands in "Other", last.
+  const PROJECT_GROUPS = [
+    ['vehicles', 'Vehicles'], ['software', 'Software'], ['research', 'Research'],
+    ['lab', 'Lab infrastructure'], ['teaching', 'Teaching'], ['fun', 'Fun'],
+  ];
+  const PROJECT_STATUSES = ['active', 'maintained', 'legacy'];
+
+  function groupProjects(projects, status) {
+    const list = Array.isArray(projects) ? projects : [];
+    const known = new Map(PROJECT_GROUPS.map(([id, title]) => [id, { id, title, projects: [] }]));
+    const other = { id: 'other', title: 'Other', projects: [] };
+    list.forEach((p) => {
+      if (!p || (status && p.status !== status)) return;
+      (known.get(p.group || null) || other).projects.push(p);
+    });
+    return [...known.values(), other].filter((g) => g.projects.length);
+  }
+
+  // '#/projects?status=legacy' -> 'legacy'; anything else -> null (All)
+  function statusFilter(hash) {
+    const h = typeof hash === 'string' ? hash : '';
+    const q = h.split('@')[0].split('?')[1] || '';
+    const s = new URLSearchParams(q).get('status');
+    return PROJECT_STATUSES.includes(s) ? s : null;
+  }
+
+  // J11: the key-facts row. people: the contributors file's rows plus its
+  // "truncated" rest (null when that file is missing); lastActivity: the newest
+  // pushed_at among the project's repositories in data/graph/github-repos.json.
+  function keyFacts(p, contributorsEntry, reposDoc) {
+    const repos = (p && Array.isArray(p.repos)) ? p.repos : [];
+    const rows = (contributorsEntry && Array.isArray(contributorsEntry.contributors))
+      ? contributorsEntry.contributors : null;
+    const people = rows ? rows.length + (Number(contributorsEntry.truncated) || 0) : null;
+    const raw = reposDoc && reposDoc.repos;
+    const byName = new Map();
+    if (Array.isArray(raw)) raw.forEach((r) => { if (r && r.name) byName.set(r.name, r); });
+    else if (raw && typeof raw === 'object') Object.keys(raw).forEach((k) => byName.set(k, raw[k]));
+    let lastActivity = null;
+    repos.forEach((r) => {
+      const hit = r && byName.get(r.name);
+      const at = hit && typeof hit.pushed_at === 'string' ? hit.pushed_at : null;
+      if (at && (!lastActivity || at > lastActivity)) lastActivity = at;
+    });
+    return { status: (p && p.status) || null, people, repos: repos.length, lastActivity };
+  }
+
+  // J11: the first three setup links become "start here" cards; the rest stay in See also.
+  function startHere(links) {
+    const start = [];
+    const rest = [];
+    (Array.isArray(links) ? links : []).forEach((l) => {
+      const setup = l && typeof l.href === 'string' && l.href.startsWith('#/setup/');
+      if (setup && start.length < 3) start.push(l); else if (l) rest.push(l);
+    });
+    return { start, rest };
+  }
+
+  // the GitHub layer behind the key facts, read once and guarded: missing means "unknown"
+  let projectGraph = null;
+  function loadProjectGraph() {
+    if (!projectGraph) {
+      const soft = (path) => fetchJSON(path).catch(() => null);
+      projectGraph = Promise.all([soft('data/graph/contributors.json'), soft('data/graph/github-repos.json')])
+        .then(([contributors, repos]) => ({ contributors, repos }));
+    }
+    return projectGraph;
+  }
+
+  function projectInitials(name) {
+    const words = String(name || '').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+    return (words.slice(0, 2).map((w) => Array.from(w)[0]).join('') || '?').toUpperCase();
+  }
+
+  // an animated GIF becomes its first frame: a still card, no motion in a grid
+  const stillTx = (url) => (/\.gif$/i.test(url) ? ',pg_1' : '');
+
+  function projectCard(p) {
+    const n = Array.isArray(p.repos) ? p.repos.length : 0;
+    const img = typeof p.image === 'string' ? safeHttpUrl(p.image) : null;
+    const pic = img
+      ? `<img class="card-img" src="${esc(cloudinaryTx(img, `w_640,c_fill,ar_16:9,g_auto${stillTx(img)},f_auto,q_auto`))}"
+           width="640" height="360" loading="lazy" decoding="async" alt="">`
+      : `<span class="card-img card-tile" aria-hidden="true">${esc(projectInitials(p.name))}</span>`;
+    return `
+      <a class="card project-card" href="#/projects/${esc(p.id)}">
+        ${pic}
+        <span class="card-body">
+          <h3><span class="card-name">${esc(p.name)}</span> ${statusBadge(p.status)}</h3>
+          <p>${esc(p.tagline)}</p>
+          ${n ? `<span class="card-meta">${n} ${n === 1 ? 'repository' : 'repositories'}</span>` : ''}
+        </span>
+      </a>`;
+  }
+
   function viewProjects() {
-    sidebarList('Projects', DATA.projects.projects, '/projects', null);
+    sidebar.innerHTML = '';                 // J6: the cards are the list; no copy beside them
     setTitle(['Projects']);
-    const cards = DATA.projects.projects.map((p) => `
-      <a class="card" href="#/projects/${p.id}">
-        <h3>${esc(p.name)} ${statusBadge(p.status)}<span class="arrow">→</span></h3>
-        <p>${esc(p.tagline)}</p>
-        <div class="chips">${p.repos.slice(0, 5).map((r) => `<span class="chip">${esc(r.name)}</span>`).join('')}
-        ${p.repos.length > 5 ? `<span class="chip">+${p.repos.length - 5} more</span>` : ''}</div>
-      </a>`).join('');
+    const all = DATA.projects.projects;
+    const status = statusFilter(location.hash);
+    const count = (s) => all.filter((p) => !s || p.status === s).length;
+    const chip = (s, label) => `<a class="filter-chip" href="#/projects${s ? `?status=${s}` : ''}"${
+      s === status ? ' aria-current="true"' : ''}>${label} <span class="filter-n">${count(s)}</span></a>`;
+    const filters = [chip(null, 'All'), chip('active', 'Active'), chip('maintained', 'Maintained'), chip('legacy', 'Legacy')].join('');
+    const groups = groupProjects(all, status).map((g) => `
+      <section class="project-group" aria-labelledby="pg-${g.id}">
+        <h2 id="pg-${g.id}">${esc(g.title)}</h2>
+        <div class="project-grid">${g.projects.map(projectCard).join('')}</div>
+      </section>`).join('');
     content.innerHTML = `
-      <div class="page-body">
+      <div class="page-body projects-page">
         <p class="kicker">The team's work</p>
         <h1>Projects</h1>
         <p class="lead">${esc(DATA.projects.intro)}</p>
-        <div class="card-grid">${cards}</div>
+        <nav class="project-filter" aria-label="Filter by status">${filters}</nav>
+        ${groups || '<p class="empty-note">No project has this status.</p>'}
         <p class="provenance">Coverage rule: every repository in the
         <a href="https://github.com/HippoCampusRobotics">HippoCampusRobotics org</a> belongs to exactly
         one project above (in its own file under <code>data/projects/</code>, or listed with a reason in the
         exclusions inside <code>data/projects.json</code>); <code>tools/check.py</code> enforces this.</p>
       </div>`;
+  }
+
+  function keyFactsHTML(f) {
+    const item = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+    return `<dl class="key-facts">
+      ${item('Status', statusBadge(f.status || 'unknown'))}
+      ${f.people !== null ? item('People', String(f.people)) : ''}
+      ${f.repos ? item('Repositories', String(f.repos)) : ''}
+      ${f.lastActivity ? item('Last activity', `<time datetime="${esc(f.lastActivity)}">${esc(f.lastActivity)}</time>`) : ''}
+    </dl>`;
   }
 
   async function viewProjectDetail(id, anchor) {
@@ -383,32 +495,71 @@
     sidebarList('Projects', DATA.projects.projects, '/projects', id);
     setTitle([p.name, 'Projects']);
     const epoch = routeEpoch;
-    const md = await fetchMD(p.file);
+    const [md, graph] = await Promise.all([fetchMD(p.file), loadProjectGraph()]);
     if (epoch !== routeEpoch) return;
-    const repoRows = p.repos.map((r) => `
+    const entry = graph.contributors && graph.contributors.projects ? graph.contributors.projects[p.id] : null;
+    const facts = keyFacts(p, entry || null, graph.repos);
+    const repos = Array.isArray(p.repos) ? p.repos : [];
+    const repoRows = repos.map((r) => `
       <li class="repo-row"><a class="chip" href="${esc(r.url)}">${esc(r.name)}</a>
       <span class="role">${esc(r.role || '')}</span></li>`).join('');
-    const hw = (p.hardware || []).map((h) => `<li>${esc(h)}</li>`).join('');
-    const docs = (p.links || []).map((l) => `<li><a href="${esc(l.href)}">${esc(l.label)}</a></li>`).join('');
+    const hwList = Array.isArray(p.hardware) ? p.hardware : [];
+    const hw = hwList.map((h) => `<li>${esc(h)}</li>`).join('');
+    const links = startHere(p.links);
+    const docs = links.rest.map((l) => `<li><a href="${esc(l.href)}">${esc(l.label)}</a></li>`).join('');
+    const sectionOf = new Map();
+    DATA.setup.sections.forEach((s) => s.pages.forEach((pg) => sectionOf.set(`#/setup/${pg.id}`, s.title)));
+    const start = links.start.map((l) => `
+      <a class="start-card" href="${esc(l.href)}">
+        <span class="start-sec">${esc(sectionOf.get(l.href.split('@')[0]) || 'Setup')}</span>
+        <span class="start-title">${esc(l.label)}</span>
+      </a>`).join('');
+    const img = typeof p.image === 'string' ? safeHttpUrl(p.image) : null;
+    const hero = img ? `<img class="project-hero" src="${esc(cloudinaryTx(img, `w_1400,c_fill,ar_21:9,g_auto${stillTx(img)},f_auto,q_auto`))}"
+      width="1400" height="600" alt="" decoding="async">` : '';
     content.innerHTML = `
-      <div>
+      <div class="project-page">
         <a class="back-link" href="#/projects">← All projects</a>
         <h1 style="margin-top:0.8rem">${esc(p.name)}</h1>
         <p class="lead">${esc(p.tagline)} ${statusBadge(p.status)}</p>
-        <div class="detail-grid">
-          <aside class="detail-aside"><div class="aside-box" data-hc-surface="project-access" data-hc-project="${esc(p.id)}">
-            <div><h3>Repositories</h3><ul>${repoRows}</ul></div>
-            ${hw ? `<div><h3>Hardware</h3><ul>${hw}</ul></div>` : ''}
-            ${docs ? `<div><h3>See also</h3><ul>${docs}</ul></div>` : ''}
-          </div></aside>
-          <div class="detail-main" id="project-md"></div>
+        ${hero}
+        ${keyFactsHTML(facts)}
+        <div id="project-people" class="project-people"></div>
+        ${start ? `<section class="start-here" aria-labelledby="start-here-h">
+          <h2 id="start-here-h">Start here</h2><div class="start-grid">${start}</div></section>` : ''}
+        <div class="detail-wrap">
+          <div class="detail-grid">
+            <aside class="detail-aside"><div class="aside-box" data-hc-surface="project-access" data-hc-project="${esc(p.id)}">
+              ${repoRows ? `<div><h3>Repositories (${repos.length})</h3><ul>${repoRows}</ul></div>` : ''}
+              ${hw ? `<div><h3>Hardware (${hwList.length})</h3><ul>${hw}</ul></div>` : ''}
+              ${docs ? `<div><h3>See also</h3><ul>${docs}</ul></div>` : ''}
+            </div></aside>
+            <div class="detail-main" id="project-md"></div>
+          </div>
         </div>
       </div>`;
-    $('#project-md').appendChild(renderMarkdown(md));
-    if (window.HCGraph) HCGraph.renderContributors(id, $('.aside-box'));
+    const body = renderMarkdown(md);
+    $('#project-md').appendChild(body);
+    if (img) dropHeroTwin($('#project-md'), img, $('.project-hero', content));
+    if (window.HCGraph) HCGraph.renderContributors(id, $('.aside-box'), $('#project-people'));
     if (window.HCLab) { HCLab.renderRepoCards($('.aside-box')); HCLab.renderAuthors($('#project-md .page-body'), `projects/${id}`); }
     scrollToAnchor(anchor);
   }
+
+  // J10: when the story opens with the hero's own picture, the hero takes its alt text
+  // and the story's copy goes, so the page never shows the same image twice.
+  function dropHeroTwin(root, url, hero) {
+    if (!root || !hero || typeof root.querySelectorAll !== 'function') return;
+    const twin = Array.from(root.querySelectorAll('img')).find((im) => im.getAttribute('src') === url);
+    if (!twin) return;
+    hero.setAttribute('alt', twin.getAttribute('alt') || '');
+    const para = twin.parentElement;
+    if (para && para.tagName === 'P' && para.textContent.trim() === '' && para.children.length === 1) para.remove();
+    else twin.remove();
+  }
+
+  // the projects helpers, pure (uiux unit J; tools/tests/test_projects_ui.mjs)
+  window.HCProjects = Object.freeze({ groupProjects, statusFilter, keyFacts, startHere });
 
   function viewTools() {
     sidebarList('Agent tools', DATA.tools.tools, '/tools', null);
