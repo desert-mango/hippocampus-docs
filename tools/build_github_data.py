@@ -17,15 +17,21 @@ before it writes anything):
 
   data/graph/org-activity.json   totals, the 53-week heatmap, the most active
                                  repositories, recent commits as
-                                 {repo, sha, date, msg} (NO author fields),
-                                 releases; forks excluded from every number
+                                 {repo, sha, date, msg, author} (author: the
+                                 GitHub login or null; never a name or an
+                                 e-mail; M11, uiux 2026-10), releases; forks
+                                 excluded from every number
   data/graph/github-repos.json   repository metadata (the repo cards), public
                                  repositories only (private: false)
   data/graph/page-authors.json   who wrote each page — names only, no counts,
                                  no dates: the original authors (the old docs
                                  repository for setup pages, this repository
                                  for project/tool/about pages), the conversion,
-                                 and this repository's pull requests
+                                 and this repository's pull requests; and per
+                                 page last_commit, the day of the page file's
+                                 newest commit on this repository's main, with
+                                 last_commit_blob, the blob that day was read
+                                 at (P10, uiux 2026-10; see page_authors())
   data/graph/people-public.json  per login: login, display name, a committed
                                  avatar path, profile link, roster name and,
                                  for a roster-linked login only, last_active
@@ -55,9 +61,15 @@ Reads (plan D-K; typically under 100 calls, under 250 worst case):
                                           by commit sha — FROZEN: cached in the
                                           committed page-authors.json, re-read
                                           only for pages missing from it
-  repos/<this>/commits?path=…             project/tool/about page history,
-                                          cached per page by the file's blob
-                                          sha at HEAD, re-read when it changed
+  repos/<this>/commits?path=…             every page file's history here
+                                          (authors of project/tool/about pages;
+                                          last_commit of every page), cached
+                                          per page by the file's blob sha at
+                                          HEAD, re-read when it changed
+  repos/<this>/commits/main               GitHub's main sha, once, only when a
+                                          page needs a read: last_commit_blob
+                                          is written only when the local HEAD
+                                          is exactly that commit (R3-1)
   repos/<this>/pulls?state=all            this repository's pull requests;
   repos/<this>/pulls/<n>/files            the file list of a closed/merged PR
                                           is read once (its number joins
@@ -143,7 +155,9 @@ CONVERSION = {"date": "2026-08-28", "by": "kyle-nelson-berkeley",
 PAGE_NOTE = ("who wrote each page: names only, no counts and no dates; "
              "'original' follows a setup page across the old docs repository's "
              "2025-03-10 folder move; 'blob' is the cache key of pages whose "
-             "history lives in this repository")
+             "history lives in this repository; 'last_commit' is the day of the "
+             "page file's newest commit on this repository's main, cached by "
+             "'last_commit_blob'")
 PEOPLE_NOTE = ("public GitHub data only: login, the display name GitHub "
                "publishes, a 64-px avatar copy, the profile link, the "
                "People-roster name it matches (tools/github_names.py) and, for a "
@@ -433,6 +447,20 @@ def git_blob_sha(root, rel):
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
+def git_head(root):
+    """The checkout's HEAD commit sha, or None (not a checkout)."""
+    proc = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True)
+    sha = proc.stdout.strip()
+    return sha if proc.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}", sha) else None
+
+
+def newest_day(rows):
+    """The newest commit day (YYYY-MM-DD) among commit_facts rows, or None."""
+    days = [f["ts"][:10] for f in rows if rules.DAY_RE.fullmatch(f["ts"][:10] or "")]
+    return max(days) if days else None
+
+
 def old_docs_paths(old):
     """[(path, until or None)] for one setup page's old docs history."""
     reads = [(f"{old}.rst", None)]
@@ -474,6 +502,7 @@ class Build:
         self.since = f"{self.window_start.isoformat()}T00:00:00Z"
         self.bots = set()
         self.active = {}            # login -> newest day of work seen (commits here, events below)
+        self._on_main = None        # R3-1: is the checkout exactly GitHub's main? (read once, when needed)
 
     def load(self, rel, default=None):
         p = self.root / rel
@@ -578,7 +607,8 @@ class Build:
             "weeks": heatmap(self.today, per_day),
             "recent_commits": [
                 {"repo": f["repo"], "sha": f["sha"][:7], "date": f["ts"][:10],
-                 "msg": clean_msg(f["message"], f"{f['repo']}@{f['sha'][:7]}", self.log)}
+                 "msg": clean_msg(f["message"], f"{f['repo']}@{f['sha'][:7]}", self.log),
+                 "author": self.author_login(f["login"])}
                 for f in flat[:RECENT_COMMITS]],
             "most_active_repos": [
                 {"name": n, "commits": per_repo[n], "language": by_name[n].get("language"),
@@ -608,6 +638,13 @@ class Build:
         repos_doc = {"generated": GENERATED, "read_at": self.read_at, "org": ORG,
                      "repos": cards}
         return doc, repos_doc
+
+    def author_login(self, login):
+        """A recent commit's author (M11): the GitHub login, or None when GitHub could not link the commit, the
+        login is not a plain login, or it is an org service account (data/github-links.json "exclude")."""
+        if isinstance(login, str) and rules.LOGIN_RE.fullmatch(login) and login not in self.excluded:
+            return login
+        return None
 
     # ---- who worked lately (round 2, R4) --------------------------------
     def note_active(self, login, day):
@@ -641,6 +678,38 @@ class Build:
         rows, _ = paged(self.api, f"repos/{repo}/commits", query)
         return [commit_facts(c) for c in rows]
 
+    def on_main(self):
+        """R3-1: is the local checkout exactly GitHub's main? commits?path= reads GitHub's main, while the blob
+        is the LOCAL file's, so a date may be cached against a blob only when the two are the same tree. GitHub's
+        main sha is read once, through the same API as every other read (never a git fetch); a failed read, or
+        no local HEAD, counts as "no"."""
+        if self._on_main is None:
+            try:
+                data, _ = self.api.get(f"repos/{THIS_REPO}/commits/main", {})
+                remote = data.get("sha") if isinstance(data, dict) else None
+            except Exception:                   # noqa: BLE001 — any failure is "not on main", never an abort
+                remote = None
+            local = git_head(self.root)
+            self._on_main = bool(local and isinstance(remote, str) and remote == local)
+            if not self._on_main:
+                self.log.warn("the checkout is not exactly GitHub's main: last_commit is written, "
+                              "last_commit_blob left null (the next run on main caches it)")
+        return self._on_main
+
+    def last_commit(self, rel, before, rows=None):
+        """P10: (last_commit, last_commit_blob) of a page file. A page whose blob still matches its cached
+        last_commit_blob keeps its date with no read; otherwise its history here is read (or the rows already
+        read for its authors are reused) and the blob is written only on main (R3-1)."""
+        blob = git_blob_sha(self.root, rel)
+        cached_blob = before.get("last_commit_blob")
+        cached = before.get("last_commit")
+        if isinstance(cached_blob, str) and cached_blob == blob \
+                and (cached is None or (isinstance(cached, str) and rules.DAY_RE.fullmatch(cached))):
+            return cached, cached_blob
+        if rows is None:
+            rows = self.history(THIS_REPO, rel)
+        return newest_day(rows), (blob if self.on_main() else None)
+
     def page_authors(self, pages):
         prev = self.previous("page-authors")
         prev_pages = prev.get("pages") if isinstance(prev.get("pages"), dict) else {}
@@ -648,6 +717,7 @@ class Build:
         for key, rel, old in pages:
             before = prev_pages.get(key) if isinstance(prev_pages.get(key), dict) else {}
             porig = before.get("original") if isinstance(before.get("original"), dict) else {}
+            here = None                               # this repository's history of the page file, once read
             if old:
                 path = f"{old}.rst"
                 if porig.get("repo") == OLD_DOCS_REPO and porig.get("path") == path \
@@ -666,6 +736,8 @@ class Build:
                 original = {"repo": OLD_DOCS_REPO, "path": path, "authors": authors,
                             "history_read": True, "blob": None}
                 converted = dict(CONVERSION)
+                if not (self.root / rel).is_file():
+                    raise Abort(f"{rel}: the page file is missing")
             else:
                 if not (self.root / rel).is_file():
                     raise Abort(f"{rel}: the page file is missing")
@@ -674,12 +746,14 @@ class Build:
                         and isinstance(porig.get("authors"), list):
                     authors = porig["authors"]            # unchanged since: cached
                 else:
-                    authors = self.project_authors(self.history(THIS_REPO, rel),
-                                                   f"{THIS_REPO}:{rel}")
+                    here = self.history(THIS_REPO, rel)
+                    authors = self.project_authors(here, f"{THIS_REPO}:{rel}")
                 original = {"repo": THIS_REPO, "path": rel, "authors": authors,
                             "history_read": True, "blob": blob}
                 converted = None
-            out[key] = {"original": original, "converted": converted, "edited_here": []}
+            last, last_blob = self.last_commit(rel, before, here)
+            out[key] = {"original": original, "converted": converted, "edited_here": [],
+                        "last_commit": last, "last_commit_blob": last_blob}
         prs_read = self.edits(out, pages, prev, prev_pages)
         return {"generated": GENERATED, "read_at": self.read_at, "note": PAGE_NOTE,
                 "prs_read": prs_read, "pages": {k: out[k] for k in sorted(out)}}

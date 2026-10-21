@@ -365,11 +365,13 @@ READER_REQUIRED_KEYS = {
                              "types": {"fork": bool, "archived": bool}}},
     },
     # "who wrote this" under every page; js/lab.js iterates authors and
-    # edited_here ('converted' may be null, so it is read with a guard)
+    # edited_here ('converted' may be null, so it is read with a guard);
+    # last_commit (P10, uiux 2026-10) is the setup page's "last updated" day
+    # (a day or null; last_commit_blob is the builder's cache key, never read)
     "data/graph/page-authors.json": {
         "keys": ("pages",),
         "values": {"pages": {
-            "keys": ("original", "converted", "edited_here"),
+            "keys": ("original", "converted", "edited_here", "last_commit"),
             "objects": {"original": {"keys": ("repo", "path", "authors"),
                                      "each": {"authors": {"keys": ("login", "name")}}}},
             "each": {"edited_here": {"keys": ("pr", "by", "state")}}}},

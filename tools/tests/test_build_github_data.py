@@ -42,6 +42,9 @@ SINCE = "2025-09-29T00:00:00Z"
 PNG = rules.PNG_MAGIC + b"\x00" * 100
 JPG = rules.JPEG_MAGIC + b"\xe0" + b"\x00" * 100
 THIS = "/repos/desert-mango/hippocampus-docs"
+MAIN = "c" * 40          # GitHub's main in the fixture; the fake local HEAD equals it unless a test says otherwise
+SETUP_LAST = {"raspberry-pi/ubuntu-24-04-server": "2026-08-28", "raspberry-pi/ethernet": "2026-09-10",
+              "getting-started/ros-installation": "2026-08-28"}
 
 
 def u0(name):
@@ -175,6 +178,12 @@ def standard_fixture(dirpath):
                [commit("a" * 40, "2026-08-28T10:00:00Z", "kyle-nelson-berkeley",
                        "kyle", "first"),
                 commit("b" * 40, "2026-09-01T10:00:00Z", None, "Desert Mango", "edit")])
+    # P10 (uiux 2026-10): each setup page's own history in this repository (last_commit), and GitHub's main
+    for pid, day in SETUP_LAST.items():
+        fx.add(f"{THIS}/commits", {"path": f"content/setup/{pid}.md", "per_page": "100"},
+               [commit("d" * 40, f"{day}T09:00:00Z", "kyle-nelson-berkeley", "kyle", "edit"),
+                commit("e" * 40, "2026-08-28T08:00:00Z", "kyle-nelson-berkeley", "kyle", "convert")])
+    fx.add(f"{THIS}/commits/main", {}, {"sha": MAIN, "commit": {"message": "x"}})
     fx.add(f"{THIS}/pulls", {"state": "all", "per_page": "100"}, u0("pulls-all.json"))
     fx.add(f"{THIS}/pulls/1/files", {"per_page": "100"}, u0("pull-1-files.json"))
     fx.add(f"{THIS}/pulls/2/files", {"per_page": "100"},
@@ -212,6 +221,11 @@ class BuildCase(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.site = site_tree(self.tmp / "site")
         self.fx = standard_fixture(self.tmp / "fx")
+        # R3-1: the local checkout's HEAD, faked (the temp site is not a git checkout)
+        self.head = MAIN
+        real = bgd.git_head
+        bgd.git_head = lambda root: self.head
+        self.addCleanup(setattr, bgd, "git_head", real)
 
     def build(self, fx=None):
         fixture = (fx or self.fx).save()
@@ -257,7 +271,7 @@ class Shapes(BuildCase):
             for _path, _key, value in check.walk_json(json.loads(p.read_text())):
                 self.assertFalse(rules.EMAIL_RE.search(value), (p.name, value))
 
-    def test_org_activity(self):
+    def test_org_activity_m11_commits_carry_the_author(self):
         self.ok()
         doc = self.out("org-activity")
         self.assertEqual(doc["read_at"], TODAY)           # day precision
@@ -272,7 +286,7 @@ class Shapes(BuildCase):
         self.assertEqual(sum(sum(d or 0 for d in w["days"]) for w in doc["weeks"]), 17)
         self.assertEqual(t["releases"], 1)                  # the draft is dropped
         for c in doc["recent_commits"]:
-            self.assertEqual(set(c), {"repo", "sha", "date", "msg"})
+            self.assertEqual(set(c), {"repo", "sha", "date", "msg", "author"})
             self.assertEqual(len(c["sha"]), 7)
         self.assertEqual([r["name"] for r in doc["most_active_repos"]],
                          ["hippocampus_common", "docs"])
@@ -789,6 +803,108 @@ class Paging(BuildCase):
                     "https://api.github.com/orgs/x#frag"):
             with self.subTest(url=url), self.assertRaises(bgd.Abort):
                 bgd.api_path(url)
+
+
+class AuthorAndLastCommit(BuildCase):
+    """M11: a recent commit names its author's login. P10 + R3-1: every page carries last_commit (the newest day
+    of the page file's history on GitHub's main) and last_commit_blob (the blob that day was read at), cached by
+    the blob, and the blob is written only when the local HEAD is exactly GitHub's main."""
+
+    def pages(self):
+        return self.out("page-authors")["pages"]
+
+    def drop_page_reads(self):
+        for rel in ("content/projects/p1.md", "content/tools/t1.md", "content/about.md") + tuple(
+                f"content/setup/{pid}.md" for pid in SETUP_LAST):
+            self.fx.drop(f"{THIS}/commits", path=rel)
+
+    def test_m11_recent_commits_name_the_author_login_or_null(self):
+        self.ok()
+        rows = self.out("org-activity")["recent_commits"]
+        authors = [c["author"] for c in rows]
+        self.assertIn("NBauschmann", authors)
+        self.assertIn(None, authors, "an author:null commit has no login")
+        for a in authors:
+            self.assertTrue(a is None or rules.LOGIN_RE.fullmatch(a), a)
+
+    def test_m11_an_excluded_account_is_never_named_as_an_author(self):
+        rows = json.loads((self.fx.root / "b2.json").read_text())       # docs commits
+        rows[0]["author"] = {"login": "hippocampusmum", "type": "User", "id": 7}
+        rows[0]["commit"]["author"]["date"] = "2026-09-28T10:00:00Z"
+        (self.fx.root / "b2.json").write_text(json.dumps(rows))
+        self.ok()
+        authors = [c["author"] for c in self.out("org-activity")["recent_commits"]]
+        self.assertNotIn("hippocampusmum", authors)
+
+    def test_p10_last_commit_is_the_newest_day_and_the_blob_is_cached_on_main(self):
+        self.ok()
+        pages = self.pages()
+        for pid, day in SETUP_LAST.items():
+            page = pages[f"setup/{pid}"]
+            self.assertEqual(page["last_commit"], day, pid)
+            self.assertEqual(page["last_commit_blob"], bgd.git_blob_sha(self.site, f"content/setup/{pid}.md"))
+            self.assertIsNone(page["original"]["blob"], "the old docs page keeps original.blob null")
+        about = pages["about"]
+        self.assertEqual(about["last_commit"], "2026-09-01")
+        self.assertEqual(about["last_commit_blob"], about["original"]["blob"])
+        self.assertEqual(self.out("page-authors")["pages"]["setup/raspberry-pi/ethernet"]["last_commit"],
+                         "2026-09-10")
+
+    def test_p10_an_unchanged_blob_costs_no_commits_path_read(self):
+        self.ok()
+        first = self.outputs_bytes()
+        self.drop_page_reads()
+        self.fx.drop(f"{THIS}/commits/main")
+        self.ok()                                   # any commits?path= read would abort: no fixture left
+        self.assertEqual(self.outputs_bytes(), first)
+
+    def test_r3_1_an_unpushed_head_writes_the_date_but_no_blob_and_the_next_run_on_main_caches(self):
+        self.head = "f" * 40                        # a local commit GitHub's main does not have
+        self.ok()
+        page = self.pages()["setup/raspberry-pi/ethernet"]
+        self.assertEqual(page["last_commit"], "2026-09-10")
+        self.assertIsNone(page["last_commit_blob"])
+        # the next run, on main (derive.yml): it reads again and caches the blob
+        self.head = MAIN
+        self.fx.drop(f"{THIS}/commits", path="content/setup/raspberry-pi/ethernet.md")
+        self.fx.add(f"{THIS}/commits", {"path": "content/setup/raspberry-pi/ethernet.md", "per_page": "100"},
+                    [commit("9" * 40, "2026-09-20T09:00:00Z", "NBauschmann", "N", "fix")])
+        self.ok()
+        page = self.pages()["setup/raspberry-pi/ethernet"]
+        self.assertEqual(page["last_commit"], "2026-09-20", "read again: the date GitHub's main now has")
+        self.assertEqual(page["last_commit_blob"],
+                         bgd.git_blob_sha(self.site, "content/setup/raspberry-pi/ethernet.md"))
+        # and once more on main, unchanged: nothing is read
+        self.drop_page_reads()
+        self.ok()
+        self.assertEqual(self.pages()["setup/raspberry-pi/ethernet"]["last_commit"], "2026-09-20")
+
+    def test_r3_1_off_main_an_unchanged_page_keeps_its_cached_date_and_blob_with_no_read(self):
+        self.ok()
+        before = self.pages()
+        self.head = "f" * 40
+        self.drop_page_reads()
+        self.ok()
+        after = self.pages()
+        for key in before:
+            self.assertEqual([after[key]["last_commit"], after[key]["last_commit_blob"]],
+                             [before[key]["last_commit"], before[key]["last_commit_blob"]], key)
+
+    def test_r3_1_off_main_a_changed_page_is_read_and_its_blob_left_null(self):
+        self.ok()
+        self.head = "f" * 40
+        (self.site / "content" / "setup" / "raspberry-pi" / "ethernet.md").write_text("# changed\n")
+        self.ok()
+        page = self.pages()["setup/raspberry-pi/ethernet"]
+        self.assertEqual(page["last_commit"], "2026-09-10")
+        self.assertIsNone(page["last_commit_blob"])
+
+    def test_r3_1_a_failed_main_read_counts_as_not_on_main(self):
+        self.fx.drop(f"{THIS}/commits/main")
+        self.ok()                                   # never an abort
+        for key, page in self.pages().items():
+            self.assertIsNone(page["last_commit_blob"], key)
+            self.assertRegex(page["last_commit"], r"^\d{4}-\d{2}-\d{2}$", key)
 
 
 class Caching(BuildCase):

@@ -162,12 +162,16 @@ TOP_KEYS = {
 TOTALS_KEYS = {"public_repos", "commits_365d", "authors_365d",
                "repos_touched_365d", "stars", "forks", "open_issues", "releases"}
 WEEK_KEYS = {"week", "days"}
-COMMIT_KEYS = {"repo", "sha", "date", "msg"}
+# author (M11, uiux 2026-10): the commit's GitHub author LOGIN, or null — public data, never an e-mail or a name
+COMMIT_KEYS = {"repo", "sha", "date", "msg", "author"}
 ACTIVE_REPO_KEYS = {"name", "commits", "language", "pushed_at"}
 RELEASE_KEYS = {"repo", "tag", "name", "date"}
 REPO_KEYS = {"name", "description", "language", "stars", "forks", "open_issues",
              "pushed_at", "archived", "fork", "private", "commits_365d", "html_url"}
-PAGE_KEYS = {"original", "converted", "edited_here"}
+# last_commit (P10, uiux 2026-10): the day of the page file's newest commit on this repository's main, or null;
+# last_commit_blob: the page file's blob that day was read at (the builder's cache key), or null when the
+# checkout was not exactly GitHub's main. Each is checked on its own; neither is tied to original.blob.
+PAGE_KEYS = {"original", "converted", "edited_here", "last_commit", "last_commit_blob"}
 ORIGINAL_KEYS = {"repo", "path", "authors", "history_read", "blob"}
 AUTHOR_KEYS = {"login", "name"}
 CONVERTED_KEYS = {"date", "by", "tool", "commit"}
@@ -362,6 +366,9 @@ def _check_org_activity(doc, rep):
     for i, c in rep.entries(doc, "recent_commits", COMMIT_KEYS, ""):
         if not (isinstance(c.get("sha"), str) and SHA7_RE.fullmatch(c["sha"])):
             rep.add(f"'recent_commits'[{i}].sha must be the 7-character form")
+        who = c.get("author")
+        if not (who is None or (isinstance(who, str) and LOGIN_RE.fullmatch(who))):
+            rep.add(f"'recent_commits'[{i}].author must be a GitHub login or null")
         msg = c.get("msg")
         if not isinstance(msg, str) or "\n" in msg or len(msg) > MSG_MAX:
             rep.add(f"'recent_commits'[{i}].msg must be one line of at most "
@@ -407,6 +414,11 @@ def _check_page_authors(doc, rep):
         label = f"page '{key}'"
         if not rep.keys(page, PAGE_KEYS, label):
             continue
+        last, last_blob = page.get("last_commit"), page.get("last_commit_blob")
+        if not (last is None or (isinstance(last, str) and DAY_RE.fullmatch(last))):
+            rep.add(f"{label}.last_commit must be a day (YYYY-MM-DD) or null")
+        if not (last_blob is None or (isinstance(last_blob, str) and SHA40_RE.fullmatch(last_blob))):
+            rep.add(f"{label}.last_commit_blob must be a 40-hex blob sha or null")
         orig = page.get("original")
         if rep.keys(orig, ORIGINAL_KEYS, f"{label}.original"):
             repo, blob = orig.get("repo"), orig.get("blob")
