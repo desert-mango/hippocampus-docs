@@ -2,6 +2,7 @@
  "name": "Learning to Swim replication",
  "status": "active",
  "tagline": "A simulation replication and vehicle-specific evaluation of the published reinforcement-learning control pipeline.",
+ "group": "research",
  "file": "content/projects/learning-to-swim.md",
  "repos": [],
  "hardware": [

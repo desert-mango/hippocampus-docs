@@ -19,6 +19,7 @@ const HC = require(new URL('../../js/graph.js', import.meta.url).pathname);
 const {
   buildTermMatcher, findMatches, currentNodeId, hrefFor,
   contributorRows, contributorAction, truncatedLabel, commitLabel, safeHttpUrl,
+  faceModels, buildFacesBlock,
 } = HC;
 
 // ---------------------------------------------------------------- safeHttpUrl
@@ -355,4 +356,82 @@ test('truncatedLabel renders the "+N more on GitHub" line only when there is a r
   assert.equal(truncatedLabel(null), null);
   assert.equal(truncatedLabel(-3), null);
   assert.equal(truncatedLabel('nope'), null);
+});
+
+// ------------------------------------------------------------- J11 faces
+// A tiny document: enough for buildFacesBlock (createElement, attributes, children).
+function fakeDoc() {
+  const make = (tag) => {
+    const node = {
+      tagName: tag.toUpperCase(), children: [], attrs: {}, listeners: {}, className: '', textContent: '',
+      appendChild(c) { node.children.push(c); return c; },
+      setAttribute(k, v) { node.attrs[k] = String(v); },
+      getAttribute(k) { return k in node.attrs ? node.attrs[k] : null; },
+      addEventListener(t, fn) { (node.listeners[t] = node.listeners[t] || []).push(fn); },
+    };
+    return node;
+  };
+  return { createElement: make };
+}
+const walk = (n, out = []) => { out.push(n); (n.children || []).forEach((c) => walk(c, out)); return out; };
+
+const FACE_PEOPLE = {
+  groups: [{ id: 'active', people: [
+    { name: 'Nathalie Bauschmann', title: 'Research Associate',
+      photo: 'https://res.cloudinary.com/dr76gues0/image/upload/v1/hippocampus-docs/people/n.jpg', link: null },
+  ] }],
+};
+const FACE_PUBLIC = { people: {
+  NBauschmann: { login: 'NBauschmann', name: 'Nathalie Bauschmann', avatar: 'data/graph/avatars/NBauschmann.png', roster: 'Nathalie Bauschmann' },
+  lennartalff: { login: 'lennartalff', name: 'Thies Lennart Alff', avatar: 'data/graph/avatars/lennartalff.png', roster: null },
+  bad: { login: 'bad', name: 'Bad Avatar', avatar: 'javascript:alert(1)', roster: null },
+} };
+
+test('J11 faceModels: roster photo first (a face-sized Cloudinary rendition), then the GitHub avatar, then initials', () => {
+  const rows = [
+    { login: 'NBauschmann', label: 'Nathalie Bauschmann' },
+    { login: 'lennartalff', label: 'Thies Lennart Alff' },
+    { login: 'bad', label: 'Bad Avatar' },
+    { login: '', label: 'No Login' },
+  ];
+  const faces = faceModels(rows, FACE_PEOPLE, FACE_PUBLIC);
+  assert.equal(faces.length, 4);
+  assert.equal(faces[0].photo,
+    'https://res.cloudinary.com/dr76gues0/image/upload/w_80,h_80,c_fill,g_face,f_auto/v1/hippocampus-docs/people/n.jpg');
+  assert.equal(faces[1].photo, 'data/graph/avatars/lennartalff.png');
+  assert.equal(faces[2].photo, null, 'an avatar path outside data/graph/avatars/ is refused');
+  assert.equal(faces[2].initials, 'BA');
+  assert.equal(faces[3].login, null);
+  assert.equal(faceModels(rows, null, null)[0].photo, null, 'no people files, no pictures');
+});
+
+test('J11 faceModels keeps at most five, in contribution order; nothing for no rows', () => {
+  const rows = Array.from({ length: 8 }, (_, i) => ({ login: 'u' + i, label: 'User ' + i }));
+  assert.deepEqual(faceModels(rows, null, null).map((f) => f.login), ['u0', 'u1', 'u2', 'u3', 'u4']);
+  assert.deepEqual(faceModels([], null, null), []);
+  assert.deepEqual(faceModels(null, null, null), []);
+});
+
+test('J11 buildFacesBlock: <= 5 faces; data-hc-login only where a login exists; null when empty', () => {
+  const doc = fakeDoc();
+  const opened = [];
+  const faces = faceModels([
+    { login: 'NBauschmann', label: 'Nathalie Bauschmann' },
+    { login: '', label: 'No Login' },
+    ...Array.from({ length: 6 }, (_, i) => ({ login: 'u' + i, label: 'User ' + i })),
+  ], FACE_PEOPLE, FACE_PUBLIC);
+  const block = buildFacesBlock(faces, doc, (btn, login) => opened.push(login));
+  const nodes = walk(block);
+  const items = nodes.filter((n) => /(^| )hc-face( |$)/.test(n.className));
+  assert.equal(items.length, 5);
+  const buttons = items.filter((n) => n.tagName === 'BUTTON');
+  assert.deepEqual(buttons.map((b) => b.getAttribute('data-hc-login')), ['NBauschmann', 'u0', 'u1', 'u2']);
+  const plain = items.filter((n) => n.tagName !== 'BUTTON');
+  assert.equal(plain.length, 1);
+  assert.equal(plain[0].getAttribute('data-hc-login'), null);
+  buttons[0].listeners.click[0]({ preventDefault() {} });
+  assert.deepEqual(opened, ['NBauschmann']);
+  const imgs = nodes.filter((n) => n.tagName === 'IMG');
+  assert.ok(imgs.every((i) => i.getAttribute('alt') === '' && i.getAttribute('width') === '40'));
+  assert.equal(buildFacesBlock([], doc, () => {}), null);
 });

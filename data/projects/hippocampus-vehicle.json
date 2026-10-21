@@ -2,6 +2,8 @@
  "name": "HippoCampus vehicle",
  "status": "active",
  "tagline": "The lab's own micro AUV: hull, electronics, ESCs, and the CAD that defines it.",
+ "group": "vehicles",
+ "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1788428902/hippocampus-docs/setup/hippocampus_markers.jpg",
  "file": "content/projects/hippocampus-vehicle.md",
  "repos": [
   {
@@ -100,5 +102,10 @@
   "Raspberry Pi 4",
   "Pixhawk-class FCU"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/hippocampus-bringup/motor-configuration",
+   "label": "Motor Configuration"
+  }
+ ]
 }

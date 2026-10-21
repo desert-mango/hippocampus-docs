@@ -2,6 +2,7 @@
  "name": "Documentation & site",
  "status": "active",
  "tagline": "The public lab reference: setup guides, project maps, code search, and the tooling that keeps the site consistent.",
+ "group": "software",
  "file": "content/projects/docs-and-site.md",
  "repos": [
   {

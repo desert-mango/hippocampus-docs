@@ -2,6 +2,8 @@
  "name": "Simulation",
  "status": "maintained",
  "tagline": "Gazebo worlds, plugins, and vehicle models for testing in software before the tank.",
+ "group": "software",
+ "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1788428900/hippocampus-docs/setup/hippo_inf_path_in_simulation.gif",
  "file": "content/projects/simulation.md",
  "repos": [
   {
@@ -60,5 +62,10 @@
   }
  ],
  "hardware": [],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/getting-started/starting-gazebo-simulation",
+   "label": "Starting Simulation"
+  }
+ ]
 }

@@ -2,6 +2,7 @@
  "name": "Core software stack (ROS 2)",
  "status": "active",
  "tagline": "The shared ROS 2 packages every vehicle runs: control, estimation, messages, and the meta packages that tie them together.",
+ "group": "software",
  "file": "content/projects/core-stack.md",
  "repos": [
   {
@@ -141,5 +142,10 @@
   }
  ],
  "hardware": [],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/concepts/ros2-workspace",
+   "label": "ROS2 Workspace"
+  }
+ ]
 }

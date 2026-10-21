@@ -2,6 +2,7 @@
  "name": "Teaching — Formulas and Vehicles",
  "status": "active",
  "tagline": "The course side of the lab: the Formulas and Vehicles class docs and the python onramp.",
+ "group": "teaching",
  "file": "content/projects/teaching.md",
  "repos": [
   {

@@ -186,6 +186,61 @@
     return byLogin;
   }
 
+  // J11 (uiux unit J): the "who to ask" faces above a project's story. The first
+  // five contributor rows, each with a picture: the roster photo (through
+  // people-public.json's login -> roster name, never a display-name match) at a
+  // face-sized Cloudinary rendition, else the committed 64-px GitHub avatar, else
+  // initials. Same transform rule as js/app.js cloudinaryTx.
+  const FACES_MAX = 5;
+  const FACE_TX = 'w_80,h_80,c_fill,g_face,f_auto';
+  function faceTx(url) {
+    const m = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.+)$/.exec(url);
+    if (!m) return url;
+    const first = m[2].split('/')[0];
+    const transformed = !/^v\d+$/.test(first) && /^[a-z]+_[^/]+$/.test(first)
+      && !/\.[a-z0-9]{2,4}$/i.test(first);
+    return transformed ? url : m[1] + FACE_TX + '/' + m[2];
+  }
+  function faceAvatar(value) {
+    return (typeof value === 'string'
+      && /^data\/graph\/avatars\/[A-Za-z0-9][A-Za-z0-9-]*\.(png|jpg)$/.test(value)) ? value : null;
+  }
+  function faceInitials(name) {
+    const words = String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    return (words.map(function (w) { return Array.from(w)[0]; }).join('') || '?').toUpperCase();
+  }
+  function faceModels(rows, people, peoplePublic) {
+    const list = Array.isArray(rows) ? rows.slice(0, FACES_MAX) : [];
+    if (!list.length) return [];
+    const photos = new Map();
+    const groups = (people && Array.isArray(people.groups)) ? people.groups : [];
+    groups.forEach(function (g) {
+      ((g && Array.isArray(g.people)) ? g.people : []).forEach(function (person) {
+        if (!person || typeof person.name !== 'string') return;
+        const key = person.name.trim();
+        if (key && !photos.has(key)) photos.set(key, safeHttpUrl(person.photo));
+      });
+    });
+    const raw = peoplePublic && typeof peoplePublic === 'object' ? peoplePublic.people : null;
+    const entries = Array.isArray(raw) ? raw
+      : (raw && typeof raw === 'object') ? Object.keys(raw).map(function (k) { return raw[k]; }) : [];
+    const byLogin = new Map();
+    entries.forEach(function (e) {
+      if (e && typeof e === 'object' && typeof e.login === 'string' && !byLogin.has(e.login.trim())) {
+        byLogin.set(e.login.trim(), e);
+      }
+    });
+    return list.map(function (row) {
+      const login = row && typeof row.login === 'string' && row.login.trim() ? row.login.trim() : null;
+      const label = (row && row.label) || login || '';
+      const pub = login ? byLogin.get(login) : null;
+      const roster = pub && typeof pub.roster === 'string' ? pub.roster.trim() : '';
+      const rosterPhoto = roster ? photos.get(roster) : null;
+      const photo = rosterPhoto ? faceTx(rosterPhoto) : faceAvatar(pub && pub.avatar);
+      return { login: login, label: label, photo: photo || null, initials: faceInitials(label) };
+    });
+  }
+
   // GitHub profile URLs are deliberately never used as the row's link.
   function contributorRows(projectEntry, people, peoplePublic) {
     const rows = [];
@@ -714,10 +769,63 @@
     return wrap;
   }
 
+  // doc: the document to build in (a fake one under node); onOpen(btn, login) opens
+  // the person dialog. A face with a login is a button, every other face plain text.
+  function buildFacesBlock(faces, doc, onOpen) {
+    if (!Array.isArray(faces) || !faces.length || !doc) return null;
+    const wrap = doc.createElement('section');
+    wrap.className = 'hc-faces';
+    wrap.setAttribute('aria-label', 'Who to ask');
+    const h = doc.createElement('h2');
+    h.className = 'hc-faces-h';
+    h.textContent = 'Who to ask';
+    wrap.appendChild(h);
+    const ul = doc.createElement('ul');
+    ul.className = 'hc-faces-list';
+    faces.slice(0, FACES_MAX).forEach(function (f) {
+      const li = doc.createElement('li');
+      const face = doc.createElement(f.login && onOpen ? 'button' : 'div');
+      face.className = 'hc-face';
+      if (f.login && onOpen) {
+        face.setAttribute('type', 'button');
+        face.setAttribute('data-hc-login', f.login);
+        face.addEventListener('click', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          onOpen(face, f.login);
+        });
+      }
+      if (f.photo) {
+        const img = doc.createElement('img');
+        img.className = 'hc-face-pic';
+        img.setAttribute('src', f.photo);
+        img.setAttribute('width', '40');
+        img.setAttribute('height', '40');
+        img.setAttribute('alt', '');
+        img.setAttribute('loading', 'lazy');
+        face.appendChild(img);
+      } else {
+        const ini = doc.createElement('span');
+        ini.className = 'hc-face-pic hc-face-ini';
+        ini.setAttribute('aria-hidden', 'true');
+        ini.textContent = f.initials;
+        face.appendChild(ini);
+      }
+      const name = doc.createElement('span');
+      name.className = 'hc-face-name';
+      name.textContent = f.label;
+      face.appendChild(name);
+      li.appendChild(face);
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    return wrap;
+  }
+
   // Renders nothing at all when the data is missing or empty — no heading, no
   // placeholder. Links resolve through people-public.json + data/people.json; either
-  // one missing leaves every name plain.
-  function renderContributors(projectId, asideBox) {
+  // one missing leaves every name plain. facesSlot (optional, J11): the first five
+  // rows also go there as faces.
+  function renderContributors(projectId, asideBox, facesSlot) {
     if (!BROWSER) return;
     if (!asideBox || !asideBox.querySelector) return;
     if (typeof projectId !== 'string' || !projectId) return;
@@ -732,6 +840,12 @@
         const rows = contributorRows(entry, parts[0], parts[1]);
         if (!rows.length) return;
         asideBox.appendChild(buildContributorsBlock(rows, entry.truncated));
+        if (facesSlot && isConnected(facesSlot) && !facesSlot.querySelector('.hc-faces')) {
+          const lab = (window.HCLab && typeof window.HCLab.openPerson === 'function') ? window.HCLab : null;
+          const block = buildFacesBlock(faceModels(rows, parts[0], parts[1]), document,
+            lab ? function (btn, login) { lab.openPerson(btn, { login: login }); } : null);
+          if (block) facesSlot.appendChild(block);
+        }
       });
     }).catch(function (err) {
       info('contributors skipped — ' + ((err && err.message) || err));
@@ -790,6 +904,8 @@
     hrefFor: hrefFor,
     contributorRows: contributorRows,
     contributorAction: contributorAction,
+    faceModels: faceModels,
+    buildFacesBlock: buildFacesBlock,
     commitLabel: commitLabel,
     truncatedLabel: truncatedLabel,
     safeHttpUrl: safeHttpUrl,

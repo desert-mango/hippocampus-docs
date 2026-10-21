@@ -2,6 +2,8 @@
  "name": "Localization",
  "status": "active",
  "tagline": "Knowing where the vehicle is: visual localization with AprilTags, EKF fusion, and the older acoustic and RF approaches.",
+ "group": "software",
+ "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1788428905/hippocampus-docs/setup/l_frame_in_tank.jpg",
  "file": "content/projects/localization.md",
  "repos": [
   {
@@ -109,5 +111,10 @@
   "Vehicle cameras",
   "Qualisys as ground truth"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/getting-started/apriltag-localization",
+   "label": "Apriltag Localization"
+  }
+ ]
 }

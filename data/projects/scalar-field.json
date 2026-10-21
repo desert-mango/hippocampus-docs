@@ -2,6 +2,7 @@
  "name": "Scalar-field exploration",
  "status": "active",
  "tagline": "Informative path planning over scalar fields: a Gaussian-process belief, a field simulator, trajectory generation, and an infrared benchmark rig.",
+ "group": "research",
  "file": "content/projects/scalar-field.md",
  "repos": [
   {
