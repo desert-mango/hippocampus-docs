@@ -72,6 +72,13 @@ body.hc-edit-on .page-body > .hc-side > .hc-block.hc-hot::after { background: va
 @media (prefers-reduced-motion: reduce) {
   body.hc-edit-on .page-body > .hc-block::after, body.hc-edit-on .page-body > .hc-side > .hc-block::after { transition: none; } }
 
+/* the edit gate (2026-10-21): a project page this person may not edit is read, not picked: no "+" rails, no line */
+body.hc-edit-on.hc-edit-locked .hc-plus { display: none; }
+body.hc-edit-on.hc-edit-locked .page-body > .hc-block,
+body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block { cursor: auto; }
+body.hc-edit-on.hc-edit-locked .page-body > .hc-block:not(.hc-hot)::after,
+body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block:not(.hc-hot)::after { background: transparent; }
+
 /* an image block (V2): it can be dragged; the line shows where it lands */
 body.hc-edit-on .page-body > .hc-block[data-hc-image] { cursor: grab; }
 body.hc-edit-on .page-body > .hc-block[data-hc-image]:active { cursor: grabbing; }
@@ -338,6 +345,20 @@ body.hc-compact .page-body pre { font-size: .8em; }
   background: var(--hc-edit-ink); color: #fff; font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
 body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
 body.hc-dock-collapsed .hc-dock-tag { transform: none; }
+/* the edit gate in the bubble, on a project page: why you can edit it (one quiet line), or "You can't edit this
+   project." with why and Request edit access */
+.hc-dock-lock { grid-column: 1 / -1; display: grid; gap: .3rem; margin-top: .45rem; padding-top: .5rem;
+  border-top: 1px solid var(--edge-soft); max-width: 19rem; font-size: .78rem; line-height: 1.45; }
+.hc-dock-lock[hidden] { display: none; }
+.hc-dock-lock p { margin: 0; overflow-wrap: anywhere; }
+.hc-dock-lock-head { color: var(--heading); font-weight: 600; }
+.hc-dock-lock-why { color: var(--body-soft); }
+.hc-dock-lock > .cms-btn { justify-self: start; margin-top: .15rem; }
+.hc-dock-lock .cms-action-result { font-size: .76rem; }
+.hc-access-locked { margin: .2rem 0 .6rem; }
+.hc-access-locked .hc-dock-lock-head { color: var(--heading); font-weight: 600; }
+.hc-access-locked .hc-dock-lock-why { color: var(--body-soft); }
+
 /* Send for review opens below the bubble (js/editor.js sets its top from the bubble's bottom) */
 .hc-sendbox { position: fixed; right: 1.25rem; top: calc(var(--header-h) + 128px); z-index: 85; width: 26rem; max-width: calc(100vw - 24px);
   max-height: calc(100vh - var(--header-h) - 150px); overflow: auto;

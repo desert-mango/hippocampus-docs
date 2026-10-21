@@ -155,8 +155,10 @@
       and the nonce is the one of the current load (as in 5).
       One message parent -> frame:
         iframe.contentWindow.postMessage(
-          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot, tint, people}, '*')
+          {type: 'hc-editor', nonce, on, settings, theme, selected, overlay, open, hot, tint, people, locked}, '*')
         on        true: draw the block marks (false: draw none)
+        locked    true: a project page the person may not edit (the edit gate, 2026-10-21): no "+" rails and no
+                  pick affordance; the parent refuses a pick or an insert anyway
         settings  {suggestions, diff: 'inline'|'side', compact, outlines}
         theme     'light' | 'dark' | absent: the site's theme now (the frame sets
                   data-theme on its <html>; the first load gets it in the
@@ -386,6 +388,7 @@
         && m.open.md.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(m.open.kind) >= 0)
         ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
       hot: isIndex(m.hot) ? m.hot : null,          // U5b: the block whose review card is hovered or active
+      locked: m.locked === true,                   // the edit gate: a project page this person may not edit
       // round 2 (R1): the drawn proposal's proposer colour slot, 0 = the viewer's own magenta
       tint: Number.isInteger(m.tint) && m.tint >= 0 && m.tint <= MAX_TINT ? m.tint : 0,
       // round 2 (R5): on the Team page — the card tools on/off, and each changed person's mark

@@ -105,7 +105,12 @@ class FakeElement {
   get src() { return this.attrs.src; }
   appendChild(c) { if (c.parent) c.remove(); this.childNodes.push(c); c.parent = this; return c; }
   prepend(c) { if (c.parent) c.remove(); this.childNodes.unshift(c); c.parent = this; return c; }
-  replaceChildren(...cs) { this.ownText = ''; this.childNodes = cs; cs.forEach((c) => { c.parent = this; }); }
+  // a string is a text node, as in the DOM (sendAccessProposal says its result with one)
+  replaceChildren(...cs) {
+    this.ownText = '';
+    this.childNodes = cs.map((c) => (typeof c === 'string' ? { textContent: c, nodeType: 3 } : c));
+    this.childNodes.forEach((c) => { c.parent = this; });
+  }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   removeAttribute(k) { delete this.attrs[k]; }
@@ -4590,4 +4595,175 @@ test('R2b: a step that reloaded the page (an inserted block) is undone with a re
   await page.send({ type: 'hc-key', op: 'redraw' });
   await settle();
   assert.ok(page.frame().srcs.length > n);
+});
+
+/* The edit gate (Kyle, 2026-10-21: "I can edit the main robot project"). Editing a project page follows main's
+   data/graph/edit-access.json (HCCore.accessFor): an Editor (Write) edits a project only when the list names
+   them; Admin and Maintainer edit every project; until the list is read, and after a failed read, an Editor
+   edits no project. Other pages are as before. */
+const GATE_ROUTE = '/projects/core-stack';
+const GATE_PAGE = 'project/core-stack';
+const GATE_FILE = 'content/projects/core-stack.md';
+const GATE_TEXT = readRepo(GATE_FILE);
+const gateOn = (opts) => editorOn(Object.assign({ hash: `#${GATE_ROUTE}` }, opts));
+const dockLock = (page) => page.one((e) => e.classList.contains('hc-dock-lock') && !e.hidden);
+const lastLocked = (page) => page.editorMessages().at(-1).locked;
+/* An access-file read through GitHub that waits until released (or answers `status`). */
+function heldAccess(status) {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const intercept = (url) => (/\/contents\/data\/graph\/edit-access\.json\?ref=/.test(url)
+    ? (status ? wire(status, { message: 'Server Error' }) : held) : null);
+  return { intercept, release: (text) => release(wire(200, text)) };
+}
+async function cannotTouch(page, why) {
+  await page.send({ type: 'hc-ready' });
+  assert.equal(lastLocked(page), true, `${why}: the frame is told the page is locked`);
+  const i = firstParagraph(GATE_TEXT);
+  await page.send({ type: 'hc-block-select', index: i });
+  await page.send({ type: 'hc-block-insert', index: 1, kind: 'note' });
+  assert.equal(page.editorMessages().at(-1).selected, null, `${why}: no block is selected`);
+  assert.equal(draftsOf(page).get(GATE_PAGE), null, `${why}: no draft was made`);
+  assert.equal(page.action('dock-send').hidden, true, `${why}: no Send for review`);
+  await page.showData();
+  assert.equal(page.textarea(), undefined, `${why}: no block editor`);
+  assert.equal(page.action('edit-whole-page'), undefined, `${why}: no whole-page Markdown`);
+}
+
+test('edit gate: an Editor without access to a project cannot select, insert, edit the whole page or send; the dock says so', async () => {
+  const page = await gateOn({ files: { [ACCESS_FILE]: accessText(['someone-else']) } });
+  await cannotTouch(page, 'not on the list');
+  const lock = dockLock(page);
+  assert.ok(lock, 'the dock has the can\'t-edit line');
+  assert.match(lock.textContent, /You can't edit this project\./);
+  assert.match(lock.textContent, /You have no commits in this project's repos yet\./);
+  const ask = findAll(lock, (e) => e.attrs['data-action'] === 'access-request')[0];
+  assert.ok(ask, 'with Request edit access');
+  assert.equal(ask.textContent, C.ACCESS_REQUEST_LABEL);
+  // removed by an admin: the same
+  const gone = await gateOn({ files: { [ACCESS_FILE]: accessText(['bob'], ['bob']) } });
+  await cannotTouch(gone, 'removed');
+  assert.match(dockLock(gone).textContent, /An admin removed your access to this project\./);
+});
+
+test('edit gate: Request edit access in the dock sends the one access proposal (the project box\'s own path)', async () => {
+  const { writes, onWrite } = recordWrites();
+  const page = await gateOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } }, files: { [ACCESS_FILE]: accessText([]) } });
+  const ask = findAll(dockLock(page), (e) => e.attrs['data-action'] === 'access-request')[0];
+  ask.click();
+  await settle();
+  const tree = writes.find((w) => /\/git\/trees$/.test(w.url));
+  assert.ok(tree, 'one proposal was sent');
+  assert.deepEqual(tree.body.tree.map((e) => e.path), ['data/projects.json']);
+  assert.match(dockLock(page).textContent, /#42/, 'the result is said in the dock');
+});
+
+test('edit gate: a read-only member on a project page gets the GitHub issue link, not a proposal', async () => {
+  const page = await gateOn({ variant: 'readonly', files: { [ACCESS_FILE]: accessText([]) } });
+  await page.send({ type: 'hc-ready' });
+  assert.equal(lastLocked(page), true);
+  const ask = findAll(dockLock(page), (e) => e.attrs['data-action'] === 'access-issue')[0];
+  assert.ok(ask, 'the issue link');
+  assert.match(ask.attrs.href, /\/issues\/new\?title=/);
+});
+
+test('edit gate: an Editor with access edits the project page; the dock says why', async () => {
+  const page = await gateOn({ files: { [ACCESS_FILE]: accessText(['bob']) } });
+  await page.send({ type: 'hc-ready' });
+  assert.equal(lastLocked(page), false);
+  const i = firstParagraph(GATE_TEXT);
+  await page.pick(i);
+  assert.ok(page.textarea(), 'the block editor is open');
+  assert.equal(page.textarea().readOnly, false);
+  assert.equal(page.editorMessages().at(-1).selected, i);
+  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
+  assert.equal(page.action('dock-send').hidden, false);
+  const lock = dockLock(page);
+  assert.ok(lock, 'one short line');
+  assert.equal(lock.textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
+  assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'nothing to request');
+  await page.type(page.textarea(), 'A changed paragraph.\n\n');
+  assert.ok(draftsOf(page).get(GATE_PAGE), 'the draft is kept');
+  assert.equal(page.action('dock-send').disabled, false, 'and can be sent');
+});
+
+test('edit gate: Admin and Maintainer edit every project, with or without the access file', async () => {
+  for (const variant of ['admin', 'maintain']) {
+    for (const files of [{ [ACCESS_FILE]: accessText([]) }, { [ACCESS_FILE]: null }]) {
+      const page = await gateOn({ variant, files });
+      await page.send({ type: 'hc-ready' });
+      assert.equal(lastLocked(page), false, variant);
+      await page.pick(firstParagraph(GATE_TEXT));
+      assert.ok(page.textarea(), `${variant}: the block editor is open`);
+      assert.equal(page.textarea().readOnly, false);
+      assert.match(dockLock(page).textContent, /You can edit every project/);
+    }
+  }
+});
+
+test('edit gate: until the access file is read an Editor cannot edit a project; when it arrives, the page opens', async () => {
+  const held = heldAccess();
+  const page = await gateOn({ intercept: held.intercept });
+  await cannotTouch(page, 'not read yet');
+  assert.match(dockLock(page).textContent, /You can't edit this project\./);
+  assert.match(dockLock(page).textContent, new RegExp(C.ACCESS_READING_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  held.release(accessText(['bob']));
+  await settle();
+  assert.equal(lastLocked(page), false, 'the frame is told again');
+  await page.pick(firstParagraph(GATE_TEXT));
+  assert.ok(page.textarea(), 'now the block editor opens');
+  assert.equal(page.action('dock-send').hidden, false);
+});
+
+test('edit gate: a failed read keeps an Editor out of every project and says why', async () => {
+  const page = await gateOn({ intercept: heldAccess(500).intercept });
+  await cannotTouch(page, 'failed read');
+  assert.match(dockLock(page).textContent, /You can't edit this project\./);
+  assert.ok(dockLock(page).textContent.includes(C.ACCESS_UNREAD_TEXT), 'says the list could not be read');
+  assert.equal(findAll(dockLock(page), (e) => /^access-/.test(e.attrs['data-action'] || '')).length, 0, 'no request on a guess');
+});
+
+test('edit gate: a page that is not a project is edited as before, whatever the access file says', async () => {
+  const page = await editorOn({ files: { [ACCESS_FILE]: accessText([]) } });
+  await page.send({ type: 'hc-ready' });
+  assert.equal(lastLocked(page), false);
+  await page.pick(firstParagraph(PAGE_TEXT));
+  assert.ok(page.textarea());
+  assert.equal(dockLock(page), undefined, 'no access line in the dock');
+  const failed = await editorOn({ intercept: heldAccess(500).intercept });
+  await failed.pick(firstParagraph(PAGE_TEXT));
+  assert.ok(failed.textarea(), 'a failed access read does not touch other pages');
+});
+
+test('edit gate: a project\'s facts file opened in the editor is view only without access; editable with it', async () => {
+  const raw = async (files) => {
+    const page = await gateOn({ files });
+    page.win.HCEditor.openView('#/edit/data/projects/core-stack');
+    await settle();
+    return page;
+  };
+  let page = await raw({ [ACCESS_FILE]: accessText([]) });
+  assert.ok(rawEditor(page), page.tray().textContent);
+  assert.equal(rawEditor(page).readOnly, true, 'view only');
+  assert.equal(page.action('propose'), undefined, 'no Propose');
+  assert.match(page.tray().textContent, /You can't edit this project\./);
+  assert.ok(findAll(page.tray(), (e) => e.attrs['data-action'] === 'access-request')[0], 'Request edit access there too');
+  page = await raw({ [ACCESS_FILE]: accessText(['bob']) });
+  assert.equal(rawEditor(page).readOnly, false, 'editable');
+  assert.ok(page.action('propose'));
+});
+
+test('edit gate: a draft of a locked project kept from before is listed, but cannot be proposed', async () => {
+  const storage = memoryStorage();
+  const local = localFor(storage);
+  const store = C.createDraftStore(local, C.draftsKey('bob'));
+  store.put({ key: GATE_PAGE, label: 'Core stack', route: GATE_ROUTE, files: { [GATE_FILE]: `${GATE_TEXT}\nMore.\n` },
+    originals: { [GATE_FILE]: GATE_TEXT }, base: { ref: 'main', sha: MAIN_SHA, number: null } });
+  const page = await gateOn({ storage, files: { [ACCESS_FILE]: accessText([]) } });
+  await page.showData();
+  const row = page.one((e) => e.attrs['data-draft'] === GATE_PAGE);
+  assert.ok(row, 'the draft is listed');
+  assert.equal(findAll(row, (e) => e.attrs['data-action'] === 'propose-draft').length, 0, 'no Propose…');
+  assert.ok(findAll(row, (e) => e.attrs['data-action'] === 'discard-draft')[0], 'Discard stays');
+  assert.equal(page.action('dock-send').hidden, true, 'no Send for review');
 });

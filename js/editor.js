@@ -79,6 +79,7 @@
   let dockSend = null;     // "Send for review" in the dock
   let dockUndo = null;     // round 2 (R2b): Undo / Redo in the dock
   let dockRedo = null;
+  let dockLock = null;     // the edit gate (2026-10-21): on a project page, what you can do there, in one or two lines
   let sendBox = null;      // the box above the dock that Send opens (the propose form)
   let sendKey = null;      // the draft that box was opened for
   let switchBtn = null;
@@ -461,7 +462,7 @@
   }
   function undoRedo(op) {
     const page = ed.page;
-    if (!ed.on || !page || hist.key !== page.pageId || !canEdit() || ed.show) return;
+    if (!ed.on || !page || hist.key !== page.pageId || !canEditPage(page) || ed.show) return;
     const from = op === 'undo' ? hist.undo : hist.redo;
     const to = op === 'undo' ? hist.redo : hist.undo;
     const e = from.pop();
@@ -521,7 +522,9 @@
     handle = h('button', { type: 'button', class: 'hc-dock-pages hc-dock-link', 'data-action': 'tray-open', 'aria-expanded': 'false',
       title: 'Open proposals' }, 'Proposals');
     handle.hidden = true;
-    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, x, sendWrap);
+    dockLock = h('div', { class: 'hc-dock-lock', role: 'status', 'data-dock-lock': true });
+    dockLock.hidden = true;
+    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, x, sendWrap, dockLock);
     dockTag = h('button', { type: 'button', class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
       title: 'Show the editor controls' });
     dockTag.addEventListener('click', () => collapseDock(false));
@@ -550,6 +553,31 @@
     if (!diff) return d.files[page.file] !== d.originals[page.file] ? 1 : 0;   // a page the block model refuses (CRLF): changed or not
     return diff.filter((e) => e.status !== 'same').length;
   }
+  /* The edit gate in the dock, on a project page: "You can't edit this project." with why and Request edit access
+     (accessAsk, the project box's own), or one short line saying why you can. Redrawn only when the answer
+     changed, so a request's result stays on screen. */
+  /* "You can't edit this project.", why, and Request edit access (only once the list is read) with its result
+     line: the dock's lines and the facts-file page's note. */
+  function lockParts(a, projectId, name) {
+    const result = h('p', { class: 'hc-access-result cms-action-result', role: 'status' });
+    result.hidden = true;
+    const ask = a.status === 'read' ? accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)) : null;
+    return [h('p', { class: 'hc-dock-lock-head', text: C.ACCESS_LOCKED_TEXT }), h('p', { class: 'hc-dock-lock-why', text: a.text }),
+      ask, result].filter(Boolean);
+  }
+  const accessLockNote = (a, projectId, name) => h('section', { class: 'hc-access hc-access-locked', 'data-access-locked': true,
+    'aria-label': 'Edit access' }, ...lockParts(a, projectId, name));
+  let dockLockKey = '';
+  function drawDockLock(a, page) {
+    const key = a ? [page.pageId, a.status, a.can, a.why, a.text].join('\n') : '';
+    if (key === dockLockKey) return;
+    dockLockKey = key;
+    if (!a) { dockLock.replaceChildren(); dockLock.hidden = true; return; }
+    if (a.can) dockLock.replaceChildren(h('p', { class: 'hc-dock-lock-why', text: a.text }));
+    else dockLock.replaceChildren(...lockParts(a, projectIdOf(page), page.label));
+    dockLock.classList.toggle('is-locked', !a.can);
+    dockLock.hidden = false;
+  }
   function closeSendBox() { if (sendBox) { sendBox.remove(); sendBox = null; sendKey = null; } }
   function refreshDock() {
     if (!dock) return;
@@ -558,8 +586,8 @@
     const tucked = document.body.classList.contains('hc-dock-collapsed');
     dockTag.hidden = !signedIn || !tucked;                // only while tucked away
     if (tucked) { dock.setAttribute('inert', ''); closeMenu(); } else dock.removeAttribute('inert');   // nothing hidden is in the tab order
-    const n = ed.on && canEdit() ? pageChanges() : 0;
-    const editing = ed.on && canEdit() && Boolean(ed.page);
+    const editing = ed.on && Boolean(ed.page) && canEditPage(ed.page);
+    const n = editing ? pageChanges() : 0;
     dockCount.textContent = !editing ? '' : (n === 0 ? 'No changes yet' : `${n} ${n === 1 ? 'change' : 'changes'}`);
     dockSend.hidden = !editing;
     dockSend.disabled = n === 0;
@@ -568,6 +596,8 @@
     dockRedo.hidden = !editing;
     dockUndo.disabled = !(ours && hist.undo.length);
     dockRedo.disabled = !(ours && hist.redo.length);
+    const projectId = signedIn && ed.on && state.access === 'ok' ? projectIdOf(ed.page) : null;
+    drawDockLock(projectId ? projectAccess(projectId) : null, ed.page);
     // the page bar keeps its buttons clear of the bubble above it (css/editor.css reads the width)
     const bs = document.body.style;
     if (bs && typeof bs.setProperty === 'function') {
@@ -600,7 +630,7 @@
   async function openSendBox() {
     if (sendBox) { closeSendBox(); return; }
     const d = ed.draft;
-    if (!d || !canEdit() || !pageChanges()) return;
+    if (!d || !canEditPage(ed.page) || !canEditKey(d.key) || !pageChanges()) return;
     const slot = h('div', { class: 'hc-propose-slot' });
     const close = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'send-close', 'aria-label': 'Close' }, '×');
     close.addEventListener('click', closeSendBox);
@@ -1312,6 +1342,66 @@
     return line;
   }
 
+  /* The edit gate (Kyle, 2026-10-21: an Editor could change every project). Editing a project in Editor mode
+     follows the same list as Approve: an Admin or Maintainer edits every project; an Editor (Write) edits a
+     project only when HCCore.accessFor says so over MAIN's file (accessRegistry); this file never works the
+     rule out. The list is read in the background: until it is read, and after a failed read, an Editor edits
+     no project (fails closed) and the read is tried again a minute later. When an answer changes what you may
+     do, the dock, the frame and the editor page are drawn again (accessChanged). Every other page keeps the
+     role rule (canEdit): any Editor may propose there. */
+  let accessGate = { gen: -1, status: 'unread', doc: null, at: 0, sig: '', pending: null };
+  function accessGateNow() {
+    const gen = sessionGen.current();
+    if (accessGate.gen !== gen) accessGate = { gen, status: 'unread', doc: null, at: 0, sig: '', pending: null };
+    const g = accessGate;
+    const due = g.status === 'unread' || Date.now() - g.at >= ACCESS_TTL_MS;
+    if (due && !g.pending && state.client && state.access === 'ok') {
+      g.pending = accessRegistry().catch(() => null).then((doc) => {
+        if (accessGate !== g) return;
+        Object.assign(g, { pending: null, doc, status: doc ? 'read' : 'failed', at: Date.now() });
+        const sig = `${g.status}\n${doc ? JSON.stringify(doc) : ''}`;
+        if (sig !== g.sig) { g.sig = sig; accessChanged(); }
+      });
+    }
+    return g;
+  }
+  /* Wait for a read under way (the raw facts-file page decides once, when it is drawn). */
+  async function accessSettled() {
+    const g = accessGateNow();
+    if (g.pending) await g.pending;
+  }
+  /* What you may do on project `projectId` now -> HCCore.accessFor's answer plus status 'read' | 'unread' | 'failed'
+     (not read yet, or the read failed: can is false, and text says which). */
+  function projectAccess(projectId) {
+    const login = sessionLogin();
+    const wide = C.accessFor(null, projectId, login, state.role);
+    if (wide.can) return Object.assign({ status: 'read' }, wide);          // Admin or Maintainer: no list needed
+    const g = accessGateNow();
+    if (g.status !== 'read') {
+      return Object.assign({}, wide, { can: false, why: g.status, status: g.status,
+        text: g.status === 'failed' ? C.ACCESS_UNREAD_TEXT : C.ACCESS_READING_TEXT });
+    }
+    return Object.assign({ status: 'read' }, C.accessFor(g.doc, projectId, login, state.role));
+  }
+  // a draft or page key that belongs to one project: its page (project/<id>) or its facts file (data/projects/<id>)
+  const PROJECT_KEY_RE = /^(?:project|data\/projects)\/([a-z0-9][a-z0-9-]{0,80})$/;
+  const projectOfKey = (key) => { const m = PROJECT_KEY_RE.exec(String(key || '')); return m ? m[1] : null; };
+  /* May I change what `key` names (a page id or a draft key)? The role rule, and on a project its access list. */
+  function canEditKey(key) {
+    if (!canEdit()) return false;
+    const id = projectOfKey(key);
+    return !id || projectAccess(id).can;
+  }
+  const canEditPage = (page) => canEditKey(page && page.pageId);
+  // a project page you may not edit (any role): nothing on it is selected, inserted, opened or sent
+  const pageLocked = (page) => Boolean(projectIdOf(page)) && !canEditPage(page);
+  /* The access answer changed: draw again what depends on it. */
+  function accessChanged() {
+    if (ed.on && pageLocked(ed.page) && (ed.sel || ed.selected !== null)) clearSelection();
+    refreshDock();
+    if (ed.on) { postEditor(); refreshChanges(); }
+  }
+
   // ------------------------------------------------------------ the editor ---
   /* U7b. #/pages is the page tree (the registries' pages, as js/app.js
      routes them, plus the four raw-JSON registries). #/edit/<page> is the
@@ -1443,7 +1533,7 @@
     const page = ed.page;
     if (!slot || !page) return;
     ownOpen().then((own) => {
-      if (epoch !== routeEpoch || !samePage(page, ed.page) || !own.length || !canEdit()) return;
+      if (epoch !== routeEpoch || !samePage(page, ed.page) || !own.length || !canEditPage(page)) return;
       slot.replaceChildren(pageBasePicker(page, own));
     }).catch(shown);
   }
@@ -1480,11 +1570,14 @@
       }
     });
     discard.addEventListener('click', () => discardDraft(d));
+    // the edit gate: a kept draft of a project you may not edit is listed (to discard), never proposed
+    const mine = canEditKey(d.key);
     return h('li', { 'data-draft': d.key },
       h('span', { class: 'hc-draft-label', text: d.label }),
       ...Object.keys(d.files).map((f) => h('code', { text: f })),
       d.base.number ? h('span', { class: 'cms-meta', text: `for your proposal #${d.base.number}` }) : null,
-      h('div', { class: 'cms-action-row' }, propose, discard), problem, slot);
+      mine ? null : h('p', { class: 'cms-muted', 'data-draft-locked': true, text: C.ACCESS_LOCKED_TEXT }),
+      h('div', { class: 'cms-action-row' }, mine ? propose : null, discard), problem, slot);
   }
 
   function discardDraft(d) {
@@ -1518,14 +1611,22 @@
     const meta = { label: kind === 'registry' ? file
       : (C.pageList(regs).find((pg) => pg.pageId === pageId) || {}).title || pageId, route };
     paint(epoch, [h('h1', { text: `Edit: ${meta.label}` }), h('p', { class: 'cms-muted', text: 'Loading the page…' })]);
-    const editable = canEdit();
+    // the edit gate: a project's facts file follows that project's access list (read first, fails closed)
+    const projectId = projectOfKey(pageId);
+    if (projectId && canEdit()) await accessSettled();
+    const editable = canEditKey(pageId);
     let d = editable ? drafts.get(pageId) : null;
     // an unchanged draft is not kept: the page opens at the base's newest head
     if (d && !C.isDirty(d)) { drafts.remove(pageId); d = null; }
     const own = editable ? await myProposals() : [];
     if (!d) d = await loadDraft(pageId, meta, [file], baseFor(pageId, own));
     if (d.originals[file] === null) throw new Error(`${file} is not on ${d.base.ref}`);
-    if (!paint(epoch, editorPage(d, file, kind, editable, epoch, own))) return;
+    const nodes = editorPage(d, file, kind, editable, epoch, own);
+    if (projectId && canEdit() && !editable) {
+      const name = (C.pageList(regs).find((pg) => pg.pageId === `project/${projectId}`) || {}).title || projectId;
+      nodes.splice(2, 0, accessLockNote(projectAccess(projectId), projectId, name));
+    }
+    if (!paint(epoch, nodes)) return;
     editing = { key: pageId, hash: trayHash };
   }
 
@@ -1615,7 +1716,7 @@
         : h('p', { class: 'cms-meta' }, h('code', { text: file }), ' · ', link(C.pencilUrl(file), 'edit on github.com instead')),
       editable && own.length && d.key.indexOf('new/') !== 0 ? basePicker(d, own) : null,
       d.base.number ? h('p', { class: 'cms-muted', text: `Building on your proposal #${d.base.number}.` }) : null,
-      !editable ? h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
+      !editable && !canEdit() ? h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
         + 'repository. You can still ', link(C.pencilUrl(file), 'propose a change on github.com'), '.') : null,
       kind === 'registry' ? h('p', { class: 'cms-locked', 'data-locked': '' }, ids.length
         ? `Locked ids (${ids.length}): ${ids.join(', ')} — ${C.ID_RULE_TEXT}.`
@@ -1698,7 +1799,8 @@
      them, and one button — "Propose" (a new branch and PR) or "Add to
      proposal #n" (one more commit on my proposal's branch). */
   function openPropose(d, epoch, slot, own) {
-    const group = () => drafts.dirty().filter((o) => sameBase(o, d));
+    // the edit gate: a draft of a project you may not edit never rides along in a proposal
+    const group = () => drafts.dirty().filter((o) => sameBase(o, d) && canEditKey(o.key));
     const plan = C.collectProposal(group());
     const problems = plan.problems.concat(stillOpen(d, own) ? [] : [closedText(d)]);
     const box = h('input', { type: 'text', 'data-field': 'summary', maxlength: 120,
@@ -3976,10 +4078,12 @@
     if (document.body) document.body.setAttribute('data-hc-tint', String(tint));   // the bar and the review cards
     // round 2 (R5): the Team page's card tools (my own edits only, never over a drawn proposal) and its marks
     const onTeam = Boolean(ed.page && ed.page.data);
-    const people = { edit: onTeam && canEdit() && !ed.show && !(ed.pv && ed.pv.pr), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
+    const people = { edit: onTeam && canEditPage(ed.page) && !ed.show && !(ed.pv && ed.pv.pr), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
       focus: onTeam ? ed.peopleFocus || null : null };
+    // the edit gate: a project page you may not edit shows no "+" and no pick affordance (the parent refuses them too)
+    const locked = pageLocked(ed.page);
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
-      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people,
+      selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people, locked,
       cmd: ed.cmdOut || null }, '*');
     ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
@@ -3991,7 +4095,7 @@
   function openBlockMessage() {
     const sel = ed.sel;
     const d = ed.draft;
-    if (!sel || sel.whole || ed.selected === null || !d || d.key !== sel.key || !canEdit() || showing()) return null;
+    if (!sel || sel.whole || ed.selected === null || !d || d.key !== sel.key || !canEditKey(d.key) || showing()) return null;
     if (ed.trayEdit === ed.selected) return null;           // typed in the tray: the tray's textarea owns it
     if (ed.pv && ed.pv.ov) return null;                    // a proposal is drawn over the page
     const md = d.files[sel.file].slice(sel.span.start, sel.span.end);
@@ -4010,7 +4114,7 @@
     const sel = ed.sel;
     const d = ed.draft;
     if (!ed.inPage || ed.inPage.index !== index || ed.selected !== index || !sel || sel.whole || !d || d.key !== sel.key
-      || !canEdit() || showing() || typeof md !== 'string' || md.length > MAX_BLOCK_MD) return;
+      || !canEditKey(d.key) || showing() || typeof md !== 'string' || md.length > MAX_BLOCK_MD) return;
     hist.spanBefore = { start: sel.span.start, end: sel.span.end };   // R2b: the span an undo of this step comes back to
     const out = C.replaceSpan(d.files[sel.file], sel.span, md);
     d.files[sel.file] = out.text;
@@ -4231,7 +4335,7 @@
   function askImage(index) {
     const page = ed.page;
     const d = ed.draft;
-    if (!page || !d || d.key !== page.pageId || !canEdit() || showing() || (ed.pv && ed.pv.ov)) return;
+    if (!page || !d || d.key !== page.pageId || !canEditPage(page) || showing() || (ed.pv && ed.pv.ov)) return;
     const span0 = C.spanOf(d.files[page.file], index);
     imageWant = { key: d.key, file: page.file, index, md: span0 ? d.files[page.file].slice(span0.start, span0.end) : null };
     const input = imageInputEl();
@@ -4297,7 +4401,7 @@
      add: "+" opens the New person form for that list, which comes back to the page. */
   async function peopleEdit(m) {
     const page = ed.page;
-    if (!page || !page.data || !canEdit() || showing() || (ed.pv && ed.pv.pr)) return;
+    if (!page || !page.data || !canEditPage(page) || showing() || (ed.pv && ed.pv.pr)) return;
     if (m.op === 'add') {
       ed.addGroup = m.group === 'team' ? 'active' : 'alumni';
       ed.trayOpen = true;
@@ -4322,7 +4426,7 @@
 
   async function moveImage(from, to) {
     const page = ed.page;
-    if (!page || !canEdit() || showing() || (ed.pv && ed.pv.ov)) return;
+    if (!page || !canEditPage(page) || showing() || (ed.pv && ed.pv.ov)) return;
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
     const text = d.files[page.file];
@@ -4351,7 +4455,7 @@
      the draft view with this block selected, instead of telling the old view. */
   async function selectBlock(index, reload) {
     const page = ed.page;
-    if (!page || showing()) return;
+    if (!page || showing() || pageLocked(page)) return;          // the edit gate: nothing is picked on a locked project
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
     ed.draft = d;
@@ -4370,12 +4474,12 @@
     showChanges(null, false);
     if (reload) frameTo(ed.route, true);
     else postEditor();
-    if (canEdit() && imageParts(text.slice(span.start, span.end))) askImage(index);
+    if (canEditPage(page) && imageParts(text.slice(span.start, span.end))) askImage(index);
   }
 
   async function insertBlock(index, kind) {
     const page = ed.page;
-    if (!page || !canEdit() || !Object.prototype.hasOwnProperty.call(C.SNIPPET_CATALOG, kind) || showing()) return;
+    if (!page || !canEditPage(page) || !Object.prototype.hasOwnProperty.call(C.SNIPPET_CATALOG, kind) || showing()) return;
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
     const out = C.insertAt(d.files[page.file], index, kind);
@@ -4392,7 +4496,7 @@
 
   async function editWholePage() {
     const page = ed.page;
-    if (!page || showing()) return;
+    if (!page || showing() || pageLocked(page)) return;
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
     ed.draft = d;
@@ -4411,7 +4515,7 @@
   function blockChanged(ta, line) {
     const d = ed.draft;
     const sel = ed.sel;
-    if (!d || !sel || !canEdit() || d.key !== sel.key) return;
+    if (!d || !sel || !canEditKey(d.key) || d.key !== sel.key) return;
     // typing in the tray's textarea: the tray owns this block (the frame must not open it as well)
     if (!sel.whole && ed.selected !== null) ed.trayEdit = ed.selected;
     const out = C.replaceSpan(d.files[sel.file], sel.span, ta.value);
@@ -4441,6 +4545,11 @@
       link(C.pencilUrl(page.file), 'edit on github.com instead')));
     const projectId = projectIdOf(page);
     if (projectId) out.push(accessLine(projectId));
+    if (canEdit() && pageLocked(page)) {
+      // the edit gate: a project you may not edit; the dock has why and Request edit access
+      out.push(h('p', { class: 'cms-muted', 'data-page-locked': true, text: `${C.ACCESS_LOCKED_TEXT} ${projectAccess(projectId).text}` }));
+      return box(null);
+    }
     if (!canEdit()) {
       out.push(h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
         + 'repository. You can still ', link(C.pencilUrl(page.file), 'propose a change on github.com'), '.'));
@@ -4491,8 +4600,8 @@
     const ta = h('textarea', { class: 'cms-editor-text hc-block-text', 'data-block-editor': true, rows: 12,
       spellcheck: 'true', 'aria-label': sel.whole ? `Text of ${sel.file}` : 'This block, as Markdown' });
     ta.value = ed.draft.files[sel.file].slice(sel.span.start, sel.span.end);
-    ta.readOnly = !canEdit();
-    const line = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: canEdit()
+    ta.readOnly = !canEditPage(page);
+    const line = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: canEditPage(page)
       ? draftStateText(ed.draft) : 'View only.' });
     ta.addEventListener('input', () => blockChanged(ta, line));
     // a snippet, a link or an image goes in at the cursor, inside the span
@@ -4503,7 +4612,7 @@
       blockChanged(ta, line);
     };
     out.push(h('p', { class: 'hc-block-label', text: sel.whole ? 'The whole page, as Markdown' : 'This block, as Markdown' }),
-      canEdit() ? snippetBar(ta, replaceText, ed.draft) : null,
+      canEditPage(page) ? snippetBar(ta, replaceText, ed.draft) : null,
       ta, line, sel.whole ? null : h('div', { class: 'cms-action-row' }, whole));
     return box(ta);
   }
@@ -5218,6 +5327,25 @@
     show([`${out.message} `, link(`${C.GITHUB_WEB}/pull/${out.number}`, `Open #${out.number} on GitHub`)], true);
   }
 
+  /* "Request edit access" to one project, or null when there is nothing to ask (a can, or no login): one
+     proposal for a Write role, else a prefilled GitHub issue. The one implementation, for the project box and
+     the Editor dock. o: {projectId, name, login}; ui: sendAccessProposal's {result, buttons, sent, keys}. */
+  function accessAsk(a, o, ui) {
+    if (!a || a.can || !GH_LOGIN_RE.test(o.login)) return null;
+    const canPush = Boolean(state.role) && state.role.canPush === true;
+    if (canPush && a.why !== 'no-write') {
+      const ask = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'access-request' }, C.ACCESS_REQUEST_LABEL);
+      ask.addEventListener('click', () => sendAccessProposal({ projectId: o.projectId, name: o.name, kind: 'request', op: 'add', login: o.login }, ui));
+      ui.buttons.push(ask);
+      ui.keys.set(ask, `add:${o.login.toLowerCase()}`);
+      return ask;
+    }
+    const ask = link(C.accessIssueUrl({ login: o.login, projectId: o.projectId, name: o.name }), C.ACCESS_REQUEST_LABEL, 'cms-btn');
+    ask.setAttribute('data-action', 'access-issue');
+    return ask;
+  }
+  const accessUi = (result) => ({ result, buttons: [], sent: new Set(), keys: new Map() });   // keys: a button -> the one change it sends
+
   async function decorateProjectAccess(box, gen) {
     const id = box.getAttribute('data-hc-project') || '';
     if (!PROJECT_ID_SAFE_RE.test(id)) return;
@@ -5229,23 +5357,11 @@
       const unread = !doc && a.why !== 'site-wide';
       const result = h('p', { class: 'hc-access-result cms-action-result', role: 'status' });
       result.hidden = true;
-      const buttons = [];
-      const ui = { result, buttons, sent: new Set(), keys: new Map() };    // keys: a button -> the one change it sends
+      const ui = accessUi(result);
+      const buttons = ui.buttons;
       const say = (text) => { result.textContent = text; result.hidden = false; result.classList.toggle('is-error', true); };
       const propose = (o) => sendAccessProposal(Object.assign({ projectId: id, name }, o), ui);
-      const canPush = Boolean(state.role) && state.role.canPush === true;
-      let ask = null;
-      if (!unread && !a.can && GH_LOGIN_RE.test(login)) {
-        if (canPush && a.why !== 'no-write') {
-          ask = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'access-request' }, C.ACCESS_REQUEST_LABEL);
-          ask.addEventListener('click', () => propose({ kind: 'request', op: 'add', login }));
-          buttons.push(ask);
-          ui.keys.set(ask, `add:${login.toLowerCase()}`);
-        } else {
-          ask = link(C.accessIssueUrl({ login, projectId: id, name }), C.ACCESS_REQUEST_LABEL, 'cms-btn');
-          ask.setAttribute('data-action', 'access-issue');
-        }
-      }
+      const ask = unread ? null : accessAsk(a, { projectId: id, name, login }, ui);
       const admin = Boolean(state.role) && state.role.key === 'admin' && state.role.canPush === true;
       const rows = C.accessEditors(doc, id).map((e) => {
         let remove = null;

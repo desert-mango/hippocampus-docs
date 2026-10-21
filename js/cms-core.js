@@ -961,6 +961,9 @@
   const ACCESS_REQUEST_LABEL = 'Request edit access';
   const ACCESS_SECTION_LABEL = 'Who can edit';
   const ACCESS_UNREAD_TEXT = 'Could not read who can edit this project right now: try again in a minute.';
+  // Editor mode on a project page (the edit gate, 2026-10-21): editing follows the same list
+  const ACCESS_LOCKED_TEXT = 'You can\'t edit this project.';
+  const ACCESS_READING_TEXT = 'Checking who can edit this project…';
   const ACCESS_TEXTS = Object.freeze({
     added: 'An admin gave you access to this project.',
     removed: 'An admin removed your access to this project.',
@@ -3796,7 +3799,7 @@
     PREVIEW_CONTENT_ONLY_TEXT, PREVIEW_UNLISTED_TEXT, previewScope,
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
     vercelCommentUrl, ownsAll, reviewActionsFor,
-    ACCESS_SITE_WIDE_TEXT, ACCESS_REQUEST_LABEL, ACCESS_SECTION_LABEL, ACCESS_UNREAD_TEXT, ACCESS_TEXTS, accessFor, canEditProject, accessEditors,
+    ACCESS_SITE_WIDE_TEXT, ACCESS_REQUEST_LABEL, ACCESS_SECTION_LABEL, ACCESS_UNREAD_TEXT, ACCESS_LOCKED_TEXT, ACCESS_READING_TEXT, ACCESS_TEXTS, accessFor, canEditProject, accessEditors,
     accessRequestDraft, classifyAccessProposal, accessProposalTitle, accessKindLabel, accessChangeLine, accessIssueUrl, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
     ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, draftsKey, SNIPPETS, SNIPPET_CATALOG,

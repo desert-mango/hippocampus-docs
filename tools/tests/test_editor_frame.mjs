@@ -592,3 +592,21 @@ test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop
   assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 1 })).alumni, ['Cid', 'Ann*', 'Dot']);
   assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Nobody' }), null);
 });
+
+test('editor-frame (the edit gate): a locked project page picks nothing; body.hc-edit-locked hides the "+" rails', () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  HC.send({ on: true, locked: true });
+  assert.ok(doc.body.classList.contains('hc-edit-locked'));
+  const [, w2, w3] = blocksOf(body);
+  w3.dispatch('keydown', w3, { key: 'Enter' });
+  kids(w2)[1].click();
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-block-select').length, 0, 'no pick is sent');
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
+  assert.match(css, /body\.hc-edit-on\.hc-edit-locked \.hc-plus \{ display: none; \}/);
+  HC.send({ on: true, locked: false });
+  assert.equal(doc.body.classList.contains('hc-edit-locked'), false);
+  kids(w2)[1].click();
+  assert.deepEqual(HC.posts.filter((p) => p.type === 'hc-block-select'), [{ type: 'hc-block-select', index: 2 }], 'unlocked: picks again');
+});

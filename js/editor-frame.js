@@ -306,8 +306,11 @@
       return r;
     }
 
+    // the edit gate (2026-10-21): a project page this person may not edit picks, adds and moves nothing
+    const locked = () => Boolean(state && state.locked);
     function select(index) {
       closePicker();
+      if (locked()) return;
       if (openNow && openNow.index !== index) flush(openNow);   // the last keystrokes (a finished composition too) first
       HC.post('hc-block-select', { index });
     }
@@ -350,13 +353,13 @@
       w.setAttribute('draggable', 'true');
       w.setAttribute('data-hc-image', '1');
       w.addEventListener('dragstart', (e) => {
-        if (openNow) { if (e && e.preventDefault) e.preventDefault(); return; }
+        if (openNow || locked()) { if (e && e.preventDefault) e.preventDefault(); return; }
         dragFrom = i;
         if (e && e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ''); } catch (x) { /* ok */ } }
       });
       w.addEventListener('dragend', endDrag);
       w.addEventListener('keydown', (e) => {
-        if (!e || e.target !== w || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || openNow) return;
+        if (!e || e.target !== w || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || openNow || locked()) return;
         const list = blocksIn(body);
         const k = list.indexOf(w);
         if (e.preventDefault) e.preventDefault();
@@ -513,6 +516,7 @@
       b.classList.toggle(SETTING_CLASS.compact, s.on && s.settings.compact);
       b.classList.toggle('hc-hide-suggestions', s.on && !s.settings.suggestions);
       b.classList.toggle('hc-diff-side', s.on && s.settings.diff === 'side');
+      b.classList.toggle('hc-edit-locked', s.on && s.locked === true);   // the edit gate: nothing to add or pick here
       // round 2 (R1): the drawn proposal's proposer colour (css/editor.css body[data-hc-tint])
       if (s.on) b.setAttribute('data-hc-tint', String(Number.isInteger(s.tint) ? s.tint : 0));
       else b.removeAttribute('data-hc-tint');

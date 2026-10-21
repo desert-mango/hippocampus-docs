@@ -79,7 +79,7 @@ repository.
 |---|---|---|---|
 | Admin | Admin | Nathalie, Desert Mango | Everything, including adding and removing people |
 | Maintain | Maintainer | Trusted reviewers that Nathalie names | Review, approve, request changes, merge, update from main (bring a proposal up to date with the newest main) |
-| Write | Editor | Lab members | Edit and propose changes, and upload pictures; a proposal's card shows them **Approve**, **Request changes**, **Update from main** and **Close**, but no **Merge** button. An Editor's **Approve** records their review on the proposal; it does not merge it |
+| Write | Editor | Lab members | Edit and propose changes, and upload pictures (a project's pages: only the projects they have edit access to, section 2b); a proposal's card shows them **Approve**, **Request changes**, **Update from main** and **Close**, but no **Merge** button. An Editor's **Approve** records their review on the proposal; it does not merge it |
 | Read, or none | Read-only | Everyone else | Can read the public site and look at proposals; cannot propose or review |
 
 The badge shows in the header, next to your name, once you are signed in.
@@ -364,10 +364,22 @@ project. The rule, in order:
 
 Admins and Maintainers can edit every project; the rule above is for lab members (Editors).
 
-"Edit" means: approve and merge proposals that change only that project's two files, its story
-`content/projects/<id>.md` and its facts `data/projects/<id>.json`. The list is written into
-`.github/CODEOWNERS`, and GitHub's rule on `main` (section "Who can do what") uses that file. So
-GitHub enforces it, not just the site.
+"Edit" means two things for a project's two files, its story `content/projects/<id>.md` and its
+facts `data/projects/<id>.json`:
+
+- **Change them in Editor mode.** An Editor can change only the projects they have edit access
+  to. On any other project, Editor mode shows the page but lets you change nothing: no clicking
+  a block, no "+", no new picture, no **Send for review**. The editor bubble says "You can't
+  edit this project." with the reason and a **Request edit access** button (the same one as in
+  the project's box, described below). On a project you can edit, the bubble says why in one line.
+- **Approve and merge proposals** that change only those two files. The list is written into
+  `.github/CODEOWNERS`, and GitHub's rule on `main` (section "Who can do what") uses that file.
+
+Until the site has read the list, an Editor cannot change any project. The bubble says
+"Checking who can edit this project…". If the list cannot be read, it says so, and the site
+tries again a minute later. Admins and Maintainers never wait. Pages that are not a project
+(setup, tools, the Team page, the home page) work as before: any Editor can propose a change, and
+an admin or Maintainer approves it.
 
 **What you see.** Signed in, with Editor mode off, every project page shows a small box above
 its list of repositories. Its first line says one of:
@@ -398,11 +410,14 @@ proposal (labelled "Access change") that changes the project's `add` or `remove`
 admin you can merge it right away in the Proposals tab. Removing someone keeps them off the
 project even if they have commits there; adding someone back takes them off the `remove` list.
 
-**What GitHub enforces, and what the site only shows.** GitHub enforces the approval rule: a
-proposal that changes a project's files needs an approval from someone on that project's list
-(or an admin), and a change to `data/projects.json` itself needs an admin. The site's buttons,
-the box and its words are a guide: they are drawn from the same list, but hiding a button is not
-what stops a merge, GitHub is. Two more things to know:
+**What GitHub enforces, and what the site only shows.** GitHub itself enforces only who
+**approves** and who **merges**. A proposal that changes a project's files needs an approval from
+someone on that project's list (or an admin), and a change to `data/projects.json` itself needs
+an admin. The site's editor is what stops the editing: it does not let an Editor change a project
+they have no access to. But a Write collaborator could still open a pull request on GitHub
+directly, for any file. That pull request then needs an approved editor of that project, or an
+admin, to merge it. So the site's buttons, the box and its words are a guide drawn from the same
+list; GitHub is what stops a merge. Two more things to know:
 
 - GitHub only counts a code owner who is a member of the repository with the Write role or
   higher. Someone with commits but no membership is on the list but cannot approve until an
