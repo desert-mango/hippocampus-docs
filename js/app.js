@@ -1432,10 +1432,18 @@
   }
 
   // ---------- router ----------
+  let routed = false;        // a page has been drawn (the first route() call)
   async function route() {
+    let hash = location.hash || '#/';
+    // WCAG-1: a hash that is not "#/…" is an in-page anchor (the skip link's #content), not a
+    // route: leave the page as it is. Only a first load on such a hash draws the home page.
+    if (!hash.startsWith('#/')) {
+      if (routed) return;
+      hash = '#/';
+    }
+    routed = true;
     routeEpoch += 1;
     const epoch = routeEpoch;
-    const hash = location.hash || '#/';
     const [pathPart, anchor] = hash.slice(1).split('@');
     const [path, queryStr] = pathPart.split('?');
     const seg = path.split('/').filter(Boolean);
@@ -1533,7 +1541,20 @@
 
   /* boot() is split in four (uiux plan 1b) so no function has two owners: bootEntry and bootSession
      belong to the header/sign-in code, bootData and boot to the router. */
+  /* WCAG-1: the skip link moves focus into the page itself; its #content hash would otherwise
+     reach the router (which now ignores it anyway) and change the address. */
+  function initSkipLink() {
+    const link = $('.skip-link');
+    if (!link || !content) return;
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      content.focus({ preventScroll: true });
+      content.scrollIntoView({ block: 'start' });
+    });
+  }
+
   function bootEntry() {
+    initSkipLink();
     initSearchBox();
     initEditorEntry();
     initDrawer();

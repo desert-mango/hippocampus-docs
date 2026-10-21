@@ -117,6 +117,39 @@ test('F4/F1: the header search toggle and the drawer toggle are labelled buttons
   assert.ok(INDEX_HTML.indexOf('id="sidebar-toggle"') < INDEX_HTML.indexOf('id="sidebar"'), 'the drawer toggle comes before the sidebar');
 });
 
+test('WCAG-1 skip link: #content after a route is an in-page anchor, not a route (no "Page not found")', async () => {
+  for (const start of ['#/setup/getting-started/px4-setup', '#/projects']) {
+    const site = await bootSite({ hash: start });
+    const title = String(site.title);
+    const html = String(site.content.innerHTML);
+    await site.go('#content');
+    assert.equal(String(site.title), title, `${start}: the title stays`);
+    assert.equal(String(site.content.innerHTML), html, `${start}: the page stays`);
+    assert.doesNotMatch(String(site.content.innerHTML), /Page not found/);
+  }
+});
+
+test('WCAG-1 skip link: a first load on a non-route hash still shows the home page', async () => {
+  const site = await bootSite({ hash: '#content' });
+  assert.match(String(site.content.innerHTML), /hero-search-form/);
+  assert.doesNotMatch(String(site.content.innerHTML), /Page not found/);
+});
+
+test('WCAG-1 skip link: its click moves focus to #content and scrolls to it, leaving the hash alone', async () => {
+  const site = await bootSite({ hash: '#/projects' });
+  const link = site.document.querySelector('.skip-link');
+  const handlers = link.listeners.click || [];
+  assert.equal(handlers.length, 1, 'one click handler on the skip link');
+  const calls = [];
+  site.content.focus = (o) => calls.push(['focus', o]);
+  site.content.scrollIntoView = (o) => calls.push(['scroll', o]);
+  let prevented = false;
+  handlers[0]({ preventDefault() { prevented = true; } });
+  assert.ok(prevented, 'the default hash jump is prevented');
+  assert.deepEqual(calls.map((c) => c[0]).sort(), ['focus', 'scroll']);
+  assert.equal(site.location.hash, '#/projects');
+});
+
 // ==== UNIT SETUP ====
 /* Setup pages clear #content and append (plan ground rule 9), so there is no
    view test here: the pure helpers js/app.js exports as window.HCSetup are
