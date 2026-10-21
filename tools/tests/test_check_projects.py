@@ -18,6 +18,7 @@ functions over loaded dicts; a red is proven with an in-memory fixture.
 """
 import copy
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -46,11 +47,12 @@ class AccessListsTest(unittest.TestCase):
     def setUp(self):
         self.real = json.loads((ROOT / "data" / "projects.json").read_text(encoding="utf-8"))
 
-    def test_the_real_registry_is_clean_and_adds_kyle_to_four_projects(self):
+    def test_j8_the_real_registry_is_clean_and_adds_kyle_to_three_projects(self):
+        # J8 (UI/UX grill 2026-10): the run guide merged into Learning to Swim, so its own entry is gone.
         self.assertEqual(check.check_project_access(self.real), [])
         self.assertEqual(spec_errors(self.real), [])
         added = sorted(p["id"] for p in self.real["projects"] if "kyle-nelson-berkeley" in p["add"])
-        self.assertEqual(added, ["learning-to-swim", "learning-to-swim-run-guide", "scalar-field", "underwater-localization"])
+        self.assertEqual(added, ["learning-to-swim", "scalar-field", "underwater-localization"])
         self.assertTrue(all(p["remove"] == [] for p in self.real["projects"]))
 
     def test_add_and_remove_are_required_lists_of_strings(self):
@@ -122,6 +124,52 @@ class AccessListsTest(unittest.TestCase):
 def real_facts():
     return {f"data/projects/{p.name}": json.loads(p.read_text(encoding="utf-8"))
             for p in sorted((ROOT / "data" / "projects").glob("*.json"))}
+
+
+def site_slugify(text):
+    """The heading-id rule of js/app.js `slugify` (lowercase, strip non-word, spaces and _ to `-`)."""
+    s = re.sub(r"[^\w\s-]", "", text.lower(), flags=re.ASCII).strip()
+    s = re.sub(r"[\s_]+", "-", s).strip("-")
+    return s or "section"
+
+
+def markdown_headings(text, levels=(2, 3, 4)):
+    """The h2-h4 heading texts of a Markdown file, outside fenced code (the levels `enhance` gives ids to)."""
+    out, fence = [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fence = not fence
+            continue
+        m = None if fence else re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
+        if m and len(m.group(1)) in levels:
+            out.append(m.group(2))
+    return out
+
+
+class LearningToSwimMergeTest(unittest.TestCase):
+    """J8 (UI/UX grill 2026-10): the simulation run guide is a section of the Learning to Swim page, not a project."""
+
+    def setUp(self):
+        self.text = (ROOT / "content" / "projects" / "learning-to-swim.md").read_text(encoding="utf-8")
+
+    def test_j8_merged_page_heading_slugs_are_unique_and_the_guide_anchor_exists_once(self):
+        slugs = [site_slugify(h) for h in markdown_headings(self.text)]
+        dupes = sorted({s for s in slugs if slugs.count(s) > 1})
+        self.assertEqual(dupes, [], f"duplicate heading slugs: {dupes}")
+        self.assertEqual(slugs.count("simulation-run-guide"), 1, slugs)
+
+    def test_j8_the_slug_rule_matches_the_site(self):
+        self.assertEqual(site_slugify("Run it on the robot's Raspberry Pi"), "run-it-on-the-robots-raspberry-pi")
+        self.assertEqual(site_slugify("The full check (optional)"), "the-full-check-optional")
+        self.assertEqual(site_slugify("!!!"), "section")
+
+    def test_j8_the_guide_is_no_longer_its_own_project(self):
+        self.assertFalse((ROOT / "content" / "projects" / "learning-to-swim-run-guide.md").exists())
+        self.assertFalse((ROOT / "data" / "projects" / "learning-to-swim-run-guide.json").exists())
+        facts = json.loads((ROOT / "data" / "projects" / "learning-to-swim.json").read_text(encoding="utf-8"))
+        self.assertIn({"href": "#/projects/learning-to-swim@simulation-run-guide", "label": "Simulation run guide"},
+                      facts["links"])
+        self.assertEqual(facts["hardware"], ["HippoCampus micro AUV", "BlueROV2 Heavy", "Raspberry Pi"])
 
 
 class SplitRegistryTest(unittest.TestCase):

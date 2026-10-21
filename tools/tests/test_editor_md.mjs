@@ -60,9 +60,10 @@ test('js/editor-md.js loads under node with the DOM shim and exposes the convert
   for (const f of ['renderBlock', 'serialize', 'gate', 'editorFor']) assert.equal(typeof M[f], 'function', f);
 });
 
-test('every block of every content page round-trips byte for byte or opens as the Markdown box; per-group floors hold', () => {
+test('every block of every content page round-trips byte for byte or opens as the Markdown box; per-group floors hold (J8, T1: 91 pages)', () => {
   const files = contentFiles();
-  assert.ok(files.length >= 93, `all content pages (${files.length})`);
+  // J8 merged the run guide into Learning to Swim and T1 moved the media-uploads page to docs/ (UI/UX grill 2026-10): 93 -> 91
+  assert.ok(files.length >= 91, `all content pages (${files.length})`);
   const tally = {};
   const misses = [];
   for (const f of files) {

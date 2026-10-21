@@ -6,12 +6,13 @@
  "repos": [],
  "hardware": [
   "HippoCampus micro AUV",
-  "BlueROV2 Heavy"
+  "BlueROV2 Heavy",
+  "Raspberry Pi"
  ],
  "links": [
   {
-   "href": "#/projects/learning-to-swim-run-guide",
-   "label": "Run guide: fly the heat-course simulation"
+   "href": "#/projects/learning-to-swim@simulation-run-guide",
+   "label": "Simulation run guide"
   }
  ]
 }
