@@ -1,15 +1,16 @@
 {
   "kicker": "TUHH · Institute of Mechanics and Ocean Engineering",
   "title": "What do you need to get running?",
-  "lead": "One box over 71 setup pages, 17 projects, 94 repositories' classes and functions, and the CAD part list. Ask in plain words or type a symbol name.",
+  "lead": "Setup guides, projects, code and CAD for the lab's underwater robots. Type a few words, or a symbol name.",
+  "hero": {
+    "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1790120325/hippocampus-docs/projects/ul_hero_vehicle_in_pool.jpg",
+    "alt": "The HippoCampus micro AUV, an orange four-thruster underwater robot, in the lab's water tank"
+  },
   "example_queries": [
     {"label": "flash PX4", "q": "px4"},
     {"label": "thruster mixer", "q": "mixer"},
-    {"label": "Raspberry Pi UART", "q": "uart"},
     {"label": "run the simulation", "q": "simulation"},
-    {"label": "event camera", "q": "event camera"},
-    {"label": "acoustic localization", "q": "acoustic localization"},
-    {"label": "the gantry", "q": "gantry"}
+    {"label": "acoustic localization", "q": "acoustic localization"}
   ],
   "home_cards": [
     {"href": "#/setup", "title": "Setup",
@@ -17,7 +18,7 @@
     {"href": "#/projects", "title": "Projects",
      "text": "17 projects covering all 94 repositories in the org."},
     {"href": "#/tools", "title": "Agent tools",
-     "text": "3 MCP servers: GPU compute and CAD access."},
+     "text": "MCP servers: GPU compute and CAD access."},
     {"href": "#/team", "title": "Team",
      "text": "Who is in the lab now, who was, and what the lab did on GitHub."}
   ]

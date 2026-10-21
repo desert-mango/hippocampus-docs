@@ -631,15 +631,26 @@ a.person-card:hover {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
-.hero { max-width: 52rem; margin: 0 auto; padding: 3.3rem 0 0; text-align: center; }
+.hero { max-width: 52rem; margin: 0 auto; padding: 2.4rem 0 0; text-align: center; }
 .hero .kicker {
   /* mono and muted, as mocked: on this page the accent belongs to the search
      field, and a blue kicker above a blue-ringed box competes with it. */
   font-family: var(--mono); font-weight: 400; letter-spacing: 0.09em;
   color: var(--muted); margin-bottom: 0.9rem;
 }
-.hero h1 { font-size: 2.5rem; line-height: 1.15; letter-spacing: -0.025em; margin: 0 0 0.7rem; }
-.hero .lead { font-size: 1.05rem; color: var(--body-soft); margin: 0 auto 2.2rem; max-width: 36rem; }
+.hero h1 { font-size: 2.5rem; line-height: 1.15; letter-spacing: -0.025em; margin: 0 0 0.7rem; text-wrap: balance; }
+.hero .lead { font-size: 1.05rem; color: var(--body-soft); margin: 0 auto 2.2rem; max-width: 36rem; text-wrap: pretty; }
+
+/* H5: the vehicle photo (data/site.json `hero`). One real photo, no overlay, no blur. At
+   640 px and up the ask box overlaps its lower edge by 1.5rem, so the search stays the
+   front door and the photo sits behind it; on phones the 16:9 cut sits above the box. */
+.hero .lead:has(+ .hero-pic) { margin-bottom: 1.6rem; }
+.hero-pic { display: block; }
+.hero-img {
+  display: block; width: 100%; height: auto; aspect-ratio: 21 / 9; object-fit: cover;
+  border-radius: 14px; background: var(--surface-2);
+}
+.hero-pic + .askbox { position: relative; z-index: 1; margin: -1.5rem 1.5rem 0; }
 
 /* the ask box */
 .askbox { text-align: left; }
@@ -665,8 +676,10 @@ a.person-card:hover {
 
 /* the example queries — buttons, not links: they search in place. Named apart
    from the site's existing .chip (a small mono repo pill) on purpose. */
-.ask-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
+/* H3/F5: four chips, one row (at phone width a scrollable row, below) */
+.ask-chips { display: flex; flex-wrap: nowrap; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
 .ask-chip {
+  flex: none; white-space: nowrap;
   font: inherit; font-size: 0.83rem; color: var(--body-soft);
   background: var(--surface-2); border: 1px solid var(--edge-soft);
   border-radius: 999px; padding: 0.32rem 0.8rem; cursor: pointer;
@@ -706,12 +719,15 @@ a.person-card:hover {
 /* the four sections, demoted */
 .home-sections { max-width: 64rem; margin: 0 auto; }
 .sep {
-  display: flex; align-items: center; gap: 1rem; margin: 4rem 0 1.4rem;
+  display: flex; align-items: center; gap: 1rem; margin: 2.75rem 0 1.4rem;
   color: var(--muted); font-family: var(--mono); font-size: 0.74rem;
   letter-spacing: 0.08em; text-transform: uppercase;
 }
 .sep::before, .sep::after { content: ""; height: 1px; background: var(--edge-soft); flex: 1; }
-.quietgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.75rem; }
+/* H1: four across, then 2x2, then one column; never three plus a lone card */
+.quietgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+@media (max-width: 899px) { .quietgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px) { .quietgrid { grid-template-columns: minmax(0, 1fr); } }
 .quiet {
   display: block; text-decoration: none; background: var(--bg-soft);
   border: 1px solid var(--edge-soft); border-radius: var(--radius); padding: 0.9rem 1rem;
@@ -727,6 +743,19 @@ a.person-card:hover {
   .hero h1 { font-size: 1.9rem; }
   .askbox input { font-size: 1rem; }
   .askbox kbd { display: none; }
+}
+@media (max-width: 639px) {
+  .hero-img { aspect-ratio: 16 / 9; border-radius: var(--radius); }
+  .hero-pic + .askbox { margin: 1rem 0 0; }
+  /* F5: one horizontally scrollable row; the 16px end pad keeps the last chip whole */
+  .ask-chips {
+    justify-content: flex-start; overflow-x: auto; scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain;
+    padding: 4px;   /* room for the 2px focus ring, which overflow would clip */
+  }
+  .ask-chips::after { content: ""; flex: none; width: 16px; }
+  .ask-chips::-webkit-scrollbar { display: none; }
+  .ask-chip { scroll-snap-align: start; }
 }
 /* ---- owner boundary (uiux plan 1a): H above, SHELL below ---- */
 
