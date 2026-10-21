@@ -39,8 +39,8 @@
 
    The semantic probes are excluded from it by construction: their `expect` is a
    LIST and their bar is top-N, not rank 1, so they cannot be scored on the same
-   scale — and keeping the comparison at 15 queries x 2 providers = 30 requests
-   rather than 34 matters against a 50-a-day free cap. Rank is read off the
+   scale — and keeping the comparison at 15 queries x 3 providers = 45 requests
+   rather than 51 matters against a 50-a-day free cap. Rank is read off the
    MERGED rows (pickRows + mergePicks, exactly as the client folds an answer
    into the local list), never off the raw id list, because the raw ids are not
    what anybody sees.
@@ -71,7 +71,7 @@
    function builds during a bench run is byte-for-byte the prompt it builds for
    a browser.
 
-   WHAT A COMPARISON RESULT MEANS. A winner is declared only when BOTH providers
+   WHAT A COMPARISON RESULT MEANS. A winner is declared only when EVERY provider
    answered all 15 queries error-free. Anything else prints BLOCKED and the
    default provider order stays provisional. That rule exists so a provider can
    never "win" by being the only one with a key configured: the zero-key run and
@@ -99,7 +99,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const HC = require(path.join(ROOT, 'js', 'search.js'));
 
-const PROVIDERS = ['nemotron', 'nano'];
+const PROVIDERS = ['nemotron', 'minimax', 'gemma'];   // api/librarian.js's ladder (S2)
 const KINDS = ['semantic', 'keyword'];
 const REQUEST_TIMEOUT_MS = 30000;   // above the function's own 15s ceiling
 // dev_site.mjs's own default port: probe mode is the local-first mode, so it
@@ -263,7 +263,7 @@ function buildCases(items) {
   const cases = [];
   for (const w of wanted) {
     const local = HC.searchItems(items, w.q);
-    const candidates = HC.projectCandidates(local.results);
+    const candidates = HC.librarianCandidates(local.results);
     const ids = HC.assignIds(local.results);
     const localRank = rankOf(local.results, w.expect);
     const expectId = localRank > 0 ? ids[localRank - 1] : null;
@@ -546,7 +546,7 @@ async function runProbe(base, probe, items, delay) {
   row.posted = true;
   // candidates MAY be empty — a multi-word query the keyword engine cannot
   // answer is exactly the one the walk exists for, and the client posts it.
-  const candidates = HC.projectCandidates(local.results);
+  const candidates = HC.librarianCandidates(local.results);
   measuredFrom = Date.now();   // the wall clock starts HERE: the pacing wait is over.
   const out = await ask(base, { q: trimmed, candidates });
   row.status = out.status;
@@ -667,7 +667,7 @@ try {
   process.exit(1);
 }
 const USAGE =
-  'usage: node tools/bench_librarian.mjs --base <url> [--provider nemotron|nano] [--delay <ms>]\n'
+  'usage: node tools/bench_librarian.mjs --base <url> [--provider nemotron|minimax|gemma] [--delay <ms>]\n'
   + '       node tools/bench_librarian.mjs --probes [--base <url>] [--delay <ms>]'
   + ' [--kind semantic|keyword] [--probe "<q>"]\n'
   + '  --probes runs data/search-probes.json through the real client engine and prints, per\n'
@@ -773,10 +773,10 @@ if (args.providers.length < PROVIDERS.length) {
 if (blocked.length) {
   for (const line of blocked) process.stdout.write(`BLOCKED: ${line}\n`);
   process.stdout.write(
-    '\nNo winner. A provider is only declared the winner when BOTH answered all '
+    '\nNo winner. A provider is only declared the winner when EVERY one answered all '
     + `${cases.length} queries error-free at temperature 0, so that availability can never `
-    + 'look like quality.\nThe default order in api/librarian.js (nemotron primary, nano '
-    + 'fallback) stays PROVISIONAL.\n');
+    + 'look like quality.\nThe default order in api/librarian.js (nemotron primary, then '
+    + 'minimax, then gemma) stays PROVISIONAL.\n');
 } else {
   const ranked = rows.slice().sort((a, b) =>
     b.top1 - a.top1 || b.inPicks - a.inPicks || median(a.latencies) - median(b.latencies));

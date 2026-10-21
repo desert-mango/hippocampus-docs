@@ -56,10 +56,11 @@
                one entry per ATTEMPT: a primary re-asked after a garbled or
                empty answer appears again as attempt 2 on the same hop.
      EVERY answer, the pre-body 405/403/429 included, carries
-     `x-librarian-version: 2`. It costs nothing — no body read, no model call —
-     and is the zero-quota readiness probe: the old handler answers 405 without
-     it, this one with it, so a deploy can be confirmed before a request is
-     spent against a stale deployment.
+     `x-librarian-version: 3` and `x-librarian-ladder: nemotron,minimax,gemma`
+     (the provider names, in order, built once at module load). They cost
+     nothing — no body read, no model call — and are the zero-quota readiness
+     probe: `curl -sI -X POST …/api/librarian` names the handler and the ladder
+     a deploy is running before a request is spent against a stale one.
 
    Keys live in the environment and nowhere else. They are never logged, never
    written to a file, and never put into a prompt. */
@@ -68,7 +69,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LIBRARIAN_VERSION = '2';
+const LIBRARIAN_VERSION = '3';
 
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_PICKS = 8;
@@ -90,7 +91,8 @@ const WHY_CHARS = 120;
    is 44,206. CATALOG_MAX_CHARS is the line the catalog may not cross; when the
    site grows past it the fix is to shorten the one-liners or drop a field,
    NOT to raise this number — every char here is paid on every semantic search,
-   and the 8000ms primary deadline was justified against a prompt this size. */
+   and the primary's deadline (8000ms, then 6000ms since 2026-10-21) was
+   justified against a prompt this size. */
 const CATALOG_MAX_CHARS = 45000;
 const HOP1_MESSAGE_MAX_CHARS = 48000;
 
@@ -104,24 +106,22 @@ const HOP2_MAX_NEIGHBOURS = 20;
 const MAX_OPEN_REPOS = 3;
 
 /* FREE MODELS ONLY — Kyle's decision (2026-09-04): "set and forget", no spend.
-   Both entries are `:free` variants on OpenRouter, so nothing is ever billed.
+   Every entry is a `:free` variant on OpenRouter, so nothing is ever billed.
    What free costs, plainly: OpenRouter caps free-model requests per key at
    ~20/min and, for an account that never bought $10 of credit, 50/day. A
    throttled answer is an error here and the client falls back to the local
    index, so the site never breaks — it just answers keyword-only past the cap.
 
-   ONE GATEWAY, TWO MODELS — a real trade, recorded rather than glossed over.
-   Groq's signup was inoperable and NVIDIA's own API sits behind a manual
-   verification queue, so both entries ride OpenRouter. An OpenRouter outage
-   takes both paths with it: the fallback below buys model-level resilience
-   (one model timing out, refusing, or answering unparseably), NOT gateway-
-   level resilience. The per-provider URL overrides are kept separate so one
-   path can still be broken deliberately (the fallback drill) and so either
-   entry can be repointed at a direct vendor endpoint the moment one is
-   reachable.
+   ONE GATEWAY, THREE MODELS ON THREE UPSTREAMS. Every entry rides OpenRouter,
+   so an OpenRouter outage takes all three with it: the ladder buys model- and
+   upstream-level resilience (one model 404ing, timing out, refusing, or
+   answering unparseably), NOT gateway-level resilience. The per-provider URL
+   overrides are kept separate so one path can still be broken deliberately
+   (the fallback drill) and so any entry can be repointed at a direct vendor
+   endpoint the moment one is reachable.
 
-   HOW THESE TWO WERE CHOSEN (measured 2026-09-04, 15 real queries each through
-   this handler, temperature 0, 5s deadline — see tools/bench_librarian.mjs):
+   HOW THE LADDER WAS CHOSEN. Measured 2026-09-04, 15 real queries each through
+   this handler, temperature 0, 5s deadline — see tools/bench_librarian.mjs:
      nemotron-3-super-120b-a12b:free   13/15  median 2955ms  top-1 12/15  (2 timeouts)
      nemotron-3-nano-omni-30b-a3b:free  8/15  median 1790ms  top-1  7/15  (6 empty answers)
      nemotron-3.5-lightning:free        1/15  (14 timeouts)
@@ -129,9 +129,22 @@ const MAX_OPEN_REPOS = 3;
      gemma-4-26b / gemma-4-31b :free    0/15  ("temporarily rate-limited upstream")
      glm-5.2:free                       1/15  (rate-limited upstream)
      minimax-m2.7:free                  0/15  (refuses reasoning: disabled)
-   Super is the only free model that works; nano is a different, faster model
-   for the moments Super is slow, which a retry of Super would not cover. Both
-   are hybrid Mamba-Transformer MoEs, not Llama derivatives (policy). */
+   S2 (2026-10-21): the live site answered 502 — the primary came back 404 and
+   nano, the old fallback, then timed out. Nano sat behind the SAME upstream
+   (Nvidia) as the primary, so it bought no upstream resilience, and it is
+   dropped. The ladder is now three entries on three different upstreams:
+   nemotron super (still the measured best) → minimax m3.1 flash → gemma 4 26b.
+   The two new entries carry NO `routing` pin and NO `reasoning` field (minimax
+   refused `reasoning: disabled` in the 2026-09-04 run). Their deadlines are
+   chosen so the three sum to SEARCH_BUDGET_MS exactly: nemotron's successes all
+   finished under 4718ms, so 6000 keeps them, and the room it gives up pays for
+   the two fallbacks. None is a Llama derivative (policy).
+
+   THE WALK-HOP TRADE-OFF, stated: MAX_MODEL_CALLS is 3 and the ladder is 3
+   deep, so a hop 1 that falls through the whole ladder leaves no call for hop
+   2, and a hop 1 answered by the second entry leaves one call for hop 2 with
+   no fallback behind it. Accepted: an answer from any model beats a walk
+   nobody gets to see, and the 200 body's `hops`/`partial` report it. */
 /* `routing` is OpenRouter's `provider` request field — an OpenRouter-only
    extension, sent only when an entry carries it. Repoint an entry at a direct
    vendor endpoint and drop its `routing` in the same edit: OpenAI-compatible
@@ -153,31 +166,39 @@ const PROVIDERS = [
     // Thinking on, the paid id thought past a 5s deadline on 15 of 15 real
     // queries. Off, it answers in ~3s.
     reasoning: { enabled: false },
-    // Its two failures in 15 were timeouts at 5000ms with the slowest success
-    // at 4718ms — the deadline was clipping real answers. 8s keeps those and
-    // still leaves room for the fallback below. It is a CEILING now: the real
-    // deadline of a call is min(this, what is left of the search budget).
-    timeoutMs: 8000,
+    // Its slowest measured success finished at 4718ms. 6000 keeps every one of
+    // them (S2 lowered it from 8000 to pay for the two fallbacks). It is a
+    // CEILING: the real deadline of a call is min(this, what is left of the
+    // search budget).
+    timeoutMs: 6000,
   },
   {
-    name: 'nano',
+    name: 'minimax',
     keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_NANO_URL',
+    urlEnv: 'LIBRARIAN_MINIMAX_URL',
     defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
-    model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    modelEnv: 'LIBRARIAN_NANO_MODEL',
-    routing: { order: ['Nvidia'], allow_fallbacks: true },
-    reasoning: { enabled: false },
-    timeoutMs: 5000,
+    model: 'minimax/minimax-m3.1-flash:free',
+    modelEnv: 'LIBRARIAN_MINIMAX_MODEL',
+    timeoutMs: 4000,
+  },
+  {
+    name: 'gemma',
+    keyEnv: 'OPENROUTER_API_KEY',
+    urlEnv: 'LIBRARIAN_GEMMA_URL',
+    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'google/gemma-4-26b-a4b-it:free',
+    modelEnv: 'LIBRARIAN_GEMMA_MODEL',
+    timeoutMs: 3000,
   },
 ];
 
 /* ONE budget for the whole search, not a sum of per-call deadlines. Each call
    is clamped to min(its own ceiling, what is left), so the worst case is
-   arithmetic rather than luck: a hop that times out on super (8000) and then on
-   nano (5000) spends exactly SEARCH_BUDGET_MS and still leaves TIMEOUT_SLACK_MS
-   for reading the body, the catalog and writing the answer inside the
-   function's maxDuration. A test pins every one of those relations.
+   arithmetic rather than luck: a hop that times out on nemotron (6000), then
+   minimax (4000), then gemma (3000) spends exactly SEARCH_BUDGET_MS and still
+   leaves TIMEOUT_SLACK_MS for reading the body, the catalog and writing the
+   answer inside the function's maxDuration. A test pins every one of those
+   relations.
 
    MAX_MODEL_CALLS is set by the 50-requests-a-day free cap, not by the clock:
    three 3s hops would fit the budget, but a third hop plus a per-hop fallback
@@ -190,6 +211,8 @@ const MIN_HOP_MS = 2500;    // never start a hop that cannot plausibly finish
 const WALK_THRESHOLD = 3;   // 3+ keyword hits is already a strong answer
 
 const PROVIDER_NAMES = PROVIDERS.map((p) => p.name);
+// The ladder header (S2): built once, sent on every answer — see send().
+const LIBRARIAN_LADDER = PROVIDER_NAMES.join(',');
 
 /* MEASURED 2026-09-05 against the free serving, and this prompt is the answer
    to what was measured. On its one valid reply to "ESC I2C firmware" the model
@@ -397,6 +420,7 @@ function send(res, code, payload, extraHeaders) {
     'cache-control': 'no-store',
     // On EVERY answer, including the ones that read no body and call no model.
     'x-librarian-version': LIBRARIAN_VERSION,
+    'x-librarian-ladder': LIBRARIAN_LADDER,
   }, extraHeaders || {});
   const text = JSON.stringify(payload);
   headers['content-length'] = Buffer.byteLength(text);
@@ -1212,7 +1236,22 @@ async function askProvider(cfg, messages, doFetch, deadlineMs) {
       throw err;
     }
     const doc = await response.json();
-    const choice = doc && Array.isArray(doc.choices) ? doc.choices[0] : null;
+    /* S2: OpenRouter can answer 200 and still carry a failure — `{"error":
+       {…}}` ("Provider returned error") or an empty `choices`. That is the
+       UPSTREAM failing, not the model garbling, so it is treated like an HTTP
+       error: no parseFailure flag, hence no re-ask of the same model; the
+       ladder moves to the next entry. */
+    if (!doc || typeof doc !== 'object' || doc.error
+        || !Array.isArray(doc.choices) || !doc.choices.length) {
+      const what = doc && doc.error
+        ? String((doc.error && doc.error.message) || JSON.stringify(doc.error)).slice(0, 160)
+        : 'no choices in the answer';
+      const err = new Error(`provider_error: ${what}`);
+      err.providerError = true;
+      err.status = doc && doc.error && typeof doc.error.code === 'number' ? doc.error.code : 0;
+      throw err;
+    }
+    const choice = doc.choices[0];
     const content = choice && choice.message ? choice.message.content : null;
     const parsed = parseModelJson(content);
     if (!parsed) {
@@ -1252,14 +1291,16 @@ async function runSearch(ask, ctx, cfgs, doFetch, now) {
   let promptChars = 0;
 
   /* One hop, up to three attempts and never more than the search has calls for:
-       primary → (primary again, ONLY after a parse or empty failure) → nano.
+       primary → (primary again, ONLY after a parse or empty failure) → minimax
+     → gemma.
      The retry is the 2026-09-05 measurement made into a rule. The same request,
      sent three times, garbled once and came back empty once — the free serving
      is non-deterministic, and a re-ask of the SAME model is the cheapest fix
      for that. Everything else is not: a timeout means the model is slow (a
      second deadline of its own would only spend the budget), an HTTP error
      means the upstream is unhappy, and a 429 means the quota is gone — all
-     three go straight to the other entry, which is a different model.
+     three go straight to the next entry, which is a different model (S2: a
+     200 carrying an error body or no choices counts as an HTTP error here).
      Each attempt is its own entry in `failures`, numbered, so a 502 shows the
      ladder that was actually walked rather than a collapsed one-per-entry. */
   async function askHop(hop, messages) {
@@ -1431,7 +1472,7 @@ async function handle(req, res, deps) {
 
   const order = ask.pinned
     ? PROVIDERS.filter((p) => p.name === ask.pinned)
-    : PROVIDERS;                          // primary first, then one fallback
+    : PROVIDERS;                          // primary first, then the ladder
   const cfgs = order.map((p) => providerConfig(p, env));
 
   let outcome;
@@ -1487,6 +1528,7 @@ module.exports.parseModelJson = parseModelJson;
 module.exports.ghUrl = ghUrl;
 module.exports.PROVIDERS = PROVIDERS;
 module.exports.LIBRARIAN_VERSION = LIBRARIAN_VERSION;
+module.exports.LIBRARIAN_LADDER = LIBRARIAN_LADDER;
 module.exports.FUNCTION_MAX_DURATION_MS = FUNCTION_MAX_DURATION_MS;
 module.exports.TIMEOUT_SLACK_MS = TIMEOUT_SLACK_MS;
 module.exports.SEARCH_BUDGET_MS = SEARCH_BUDGET_MS;

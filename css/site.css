@@ -970,6 +970,43 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 /* The blocks stay in this order; E is last so its theme-scoped rules win the cascade. */
 
 /* ==== UNIT S: search ==== */
+/* S6: each result row's kind badge — the home panel's .hit .kind look, no new tokens */
+.result .kind {
+  font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid var(--edge); border-radius: 5px; padding: 0.05rem 0.35rem;
+  color: var(--body-soft); margin-right: 0.5rem; white-space: nowrap; vertical-align: 0.1em;
+}
+/* S6: the query's words, marked in titles and snippets */
+mark.hl { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* S3: the tab row — real links, the current one underlined in the accent */
+.search-tabs {
+  display: flex; gap: 0.25rem; margin: 1.2rem 0 0.2rem; border-bottom: 1px solid var(--edge-soft);
+  overflow-x: auto; scrollbar-width: none;
+}
+.search-tabs a {
+  flex: none; padding: 0.5rem 0.75rem; margin-bottom: -1px; text-decoration: none; white-space: nowrap;
+  color: var(--body-soft); border-bottom: 2px solid transparent; font-size: 0.9rem;
+}
+.search-tabs a:hover { color: var(--accent); }
+.search-tabs a[aria-current="page"] { color: var(--heading); border-bottom-color: var(--accent); font-weight: 600; }
+.search-tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.search-tabs .count { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); font-weight: 400; margin-left: 0.15rem; }
+/* the librarian's picks sit above the tabs; their label needs no rule above it */
+.search-picks-label { border-top: 0; padding-top: 0; margin-top: 1.2rem; }
+/* S5: the librarian's wait, and the empty tab's suggestions */
+.search-waiting { margin: 0.6rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.search-empty { padding: 0.9rem 0 0.4rem; }
+.search-empty > p:first-child { margin-top: 0; color: var(--body); }
+.search-empty-h { margin: 1.2rem 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--heading); }
+.search-empty-tip { margin-top: 1.2rem; font-size: 0.85rem; color: var(--muted); }
+.search-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.search-chip {
+  font-size: 0.83rem; color: var(--body-soft); text-decoration: none;
+  background: var(--surface-2); border: 1px solid var(--edge-soft);
+  border-radius: 999px; padding: 0.32rem 0.8rem;
+}
+.search-chip:hover { color: var(--heading); border-color: var(--accent); background: var(--accent-soft); }
+.search-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ==== UNIT SHELL: header, sidebar, drawer, sign-in ==== */
 /* The header's icon buttons share one look: the theme toggle's quiet square. */

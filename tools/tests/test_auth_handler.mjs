@@ -543,7 +543,7 @@ test('dev_site sends vercel.json\'s every-route headers on static files, so loca
   }
 });
 
-test('dev_site routes every api/*.js: auth and librarian both answer, unknown is 404', async () => {
+test('dev_site routes every api/*.js: auth and librarian (S2: version 3) both answer, unknown is 404', async () => {
   const site = await startDevSite(['--dotenv', path.join(os.tmpdir(), 'no-such-env-file-hc')]);
   try {
     const auth = await post(site.port, '/api/auth', { app: 'viewer', code: 'x' });
@@ -562,7 +562,7 @@ test('dev_site routes every api/*.js: auth and librarian both answer, unknown is
 
     const lib = await fetch(`http://localhost:${site.port}/api/librarian`);
     assert.equal(lib.status, 405);
-    assert.equal(lib.headers.get('x-librarian-version'), '2');
+    assert.equal(lib.headers.get('x-librarian-version'), '3');
 
     const none = await fetch(`http://localhost:${site.port}/api/nope`);
     assert.equal(none.status, 404);

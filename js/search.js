@@ -7,6 +7,12 @@
    No server, no keys: shards are plain JSON fetched once on first query.
    Scoring is deliberately simple and inspectable — exact symbol/name matches
    dominate, then prefixes, then substrings, then path/heading/body hits.
+   A query is read as its WORDS minus English stopwords ("how do I flash PX4"
+   searches flash + px4). Since S1 (2026-10-21) a row no longer has to match
+   every word: rows that match ALL of them rank first, then rows that match
+   fewer (each kept only when a word of 3+ letters hit), so a phrased question
+   is never a dead end. The old AND semantics survive as the `full` flag on
+   each row, and only the full rows are shown to the librarian as candidates.
    Deep links: site hits -> hash routes (with @heading anchors when the heading
    is the better match); code/CAD/fork hits -> GitHub blob URLs (+#L<line>).
 
@@ -60,6 +66,17 @@
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter(Boolean);
+  }
+  /* S1: the words a query is searched by. tokens() is unchanged (titles use it
+     too); a query drops these English stopwords first. A query made of nothing
+     else still searches all of its words — "how to" is a fair title. */
+  const STOPWORDS = new Set(('a an and are as at be by can do for from how i in is it of on or '
+    + 'that the this to what where which with you your does did').split(' '));
+  const MAX_TERMS = 8;
+  function queryTerms(q) {
+    const all = tokens(q == null ? '' : q);
+    const kept = all.filter((t) => !STOPWORDS.has(t));
+    return (kept.length ? kept : all).slice(0, MAX_TERMS);
   }
   function ghUrl(repo, branch, path, line) {
     const p = path.split('/').map(encodeURIComponent).join('/');
@@ -138,9 +155,18 @@
 
   const KIND_BOOST = { page: 8, class: 8, cad: 4, fn: 2, file: 0, fork: -5 };
 
+  /* -> {score, matched}; score 0 means "not a hit". S1: the rank key is
+     score + matched * MATCH_WEIGHT, and searchItems sorts on `matched` first
+     anyway, so every row matching ALL terms ranks above any row matching
+     fewer, whatever the weights. A partial row is a hit only when at least one
+     word of 3+ letters matched — a two-letter hit alone is noise. */
+  const MATCH_WEIGHT = 1000;
+  const RESULT_LIMIT = 40;   // rows of any kind
+  const PAGE_TAIL = 20;      // extra page rows from below the cut (S3)
   function scoreItem(it, terms) {
     let score = 0;
     let matched = 0;
+    let strong = false;
     for (const t of terms) {
       let s = 0;
       if (it.ltitle === t) s = 120;
@@ -149,14 +175,20 @@
       else if (it.ttoks.some((k) => k.startsWith(t))) s = 26;
       else if (it.ltitle.includes(t)) s = 18;
       if (it.haystack.includes(t)) s += s ? 6 : 10;
-      if (s) matched += 1;
+      if (s) {
+        matched += 1;
+        if (t.length >= 3) strong = true;
+      }
       score += s;
     }
-    if (matched < terms.length) return 0;          // AND semantics
-    const joined = terms.join(' ');
-    if (it.ltitle === joined) score += 80;         // exact multi-word title
-    else if (it.ltitle.includes(joined)) score += 25;
-    return score + (KIND_BOOST[it.kind] || 0);
+    if (!matched) return { score: 0, matched: 0 };
+    if (matched < terms.length && !strong) return { score: 0, matched: 0 };
+    if (matched === terms.length) {
+      const joined = terms.join(' ');
+      if (it.ltitle === joined) score += 80;         // exact multi-word title
+      else if (it.ltitle.includes(joined)) score += 25;
+    }
+    return { score: score + (KIND_BOOST[it.kind] || 0) + matched * MATCH_WEIGHT, matched };
   }
 
   function bestHeadingAnchor(it, terms) {
@@ -170,22 +202,33 @@
     return it.href;
   }
 
-  /* The local engine, unchanged and pure: entries + query in, ranked hits out.
-     Anything that alters this function alters the probe record — don't. */
+  /* The local engine, changed 2026-10-21 for S1, still pure: entries + query
+     in, ranked hits out. Anything that alters this function alters the probe
+     record — tools/tests/test_search_routing.mjs pins every keyword probe at
+     rank 1. Each row carries `full`: true when it matched every query term
+     (the old AND result, always a prefix of the list), false for a partial. */
   function searchItems(list, q) {
-    const terms = tokens(q).slice(0, 8);
+    const terms = queryTerms(q);
     if (!terms.length) return { total: list.length, results: [] };
     const scored = [];
     for (const it of list) {
       const s = scoreItem(it, terms);
-      if (s > 0) scored.push([s, it]);
+      if (s.score > 0) scored.push([s, it]);
     }
-    scored.sort((a, b) => b[0] - a[0] || a[1].title.localeCompare(b[1].title));
+    scored.sort((a, b) => b[0].matched - a[0].matched || b[0].score - a[0].score
+      || a[1].title.localeCompare(b[1].title));
+    // S3: the top RESULT_LIMIT rows, then up to PAGE_TAIL more PAGE rows from
+    // below the cut — still in rank order, since every one of them ranks below
+    // the 40th row. Without the tail the Pages tab was starved by code symbols
+    // ("ros": 10 of 19 matching pages, "camera": 3 of 12).
+    const head = scored.slice(0, RESULT_LIMIT);
+    const tail = scored.slice(RESULT_LIMIT).filter(([, it]) => it.kind === 'page').slice(0, PAGE_TAIL);
     return {
       total: list.length,
-      results: scored.slice(0, 40).map(([s, it]) => ({
-        score: s, kind: it.kind, title: it.title, where: it.where,
+      results: head.concat(tail).map(([s, it]) => ({
+        score: s.score, kind: it.kind, title: it.title, where: it.where,
         href: bestHeadingAnchor(it, terms), snippet: it.snippet || '',
+        full: s.matched === terms.length,
       })),
     };
   }
@@ -204,7 +247,9 @@
   const LIBRARIAN_TIMEOUT_MS = 18000;
   const CANDIDATE_LIMIT = 25;   // how many local hits the librarian gets to see
   const PICK_LIMIT = 8;         // how many of them it may promote
-  const LIBRARIAN_NOTICE = 'Answered by the local index — the librarian is unreachable.';
+  // S2 (2026-10-21): calmer, and true for every failure it covers — a timeout
+  // or a 502 is "did not answer this time", not "unreachable".
+  const LIBRARIAN_NOTICE = 'Keyword results shown; the librarian did not answer this time.';
   // A spent free quota is not an outage, and telling the user it is invites a
   // re-try into a wall. The function says so explicitly (502 + exhausted).
   const LIBRARIAN_QUOTA_NOTICE =
@@ -249,6 +294,17 @@
     return results.slice(0, cap).map((r, i) => ({
       id: ids[i], title: r.title, kind: r.kind, where: r.where, snippet: r.snippet || '',
     }));
+  }
+
+  /* S1: what the librarian is actually sent. Only the rows that match EVERY
+     word are candidates — the old AND list, byte-identical, and always a prefix
+     of `results`, so their ids are the ids the merge assigns. Partial rows are
+     not the keyword index's answer (the hop-1 prompt promises the model that
+     each candidate "matches every query word"), and an empty list still asks
+     for the graph walk. A row with no `full` flag counts as full. */
+  function librarianCandidates(results, limit) {
+    const rows = Array.isArray(results) ? results : [];
+    return projectCandidates(rows.filter((r) => r && r.full !== false), limit);
   }
 
   /* 404/405/501 all mean the same thing: this host has no such function.
@@ -308,7 +364,7 @@
      "mavlink router" counterexample recorded in the routing test. */
   function strongLead(localResults, q) {
     if (!Array.isArray(localResults) || !localResults.length) return false;
-    const terms = tokens(q == null ? '' : q).slice(0, 8);
+    const terms = queryTerms(q);
     if (!terms.length) return false;
     const lead = localResults[0];
     const title = tokens(lead && lead.title != null ? lead.title : '');
@@ -448,7 +504,7 @@
           res = await doFetch(LIBRARIAN_URL, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ q: trimmed, candidates: projectCandidates(results) }),
+            body: JSON.stringify({ q: trimmed, candidates: librarianCandidates(results) }),
             signal: ctrl ? ctrl.signal : undefined,
           });
         } catch (e) {
@@ -564,6 +620,120 @@
     return path.split('/').filter(Boolean).length === 0;
   }
 
+  /* ---------- the results page (uiux grill 2026-10, S3–S6) ----------
+
+     Pure helpers js/app.js's viewSearch renders with, tested in
+     tools/tests/test_search_routing.mjs. */
+
+  /* S4: index snippets are raw Markdown excerpts ("**not**"). A result row
+     shows plain words: emphasis and code marks, heading marks, link and image
+     syntax and HTML tags go; whitespace collapses; the text is cut at 200
+     characters on a word boundary with "…". Underscores stay (symbol names
+     like add_mavlink_routerd carry them). The output is still TEXT — the
+     renderer escapes it. */
+  const SNIPPET_CHARS = 200;
+  function plainSnippet(text) {
+    let t = String(text == null ? '' : text);
+    t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')          // images go
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')             // [text](url) -> text
+      .replace(/<[^>]*>/g, ' ')                           // HTML tags
+      .replace(/(^|\n)\s{0,3}#{1,6}\s+/g, '$1')              // heading marks
+      .replace(/[*`]+/g, '')                              // emphasis and code marks
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (t.length <= SNIPPET_CHARS) return t;
+    const cut = t.slice(0, SNIPPET_CHARS + 1);
+    const space = cut.lastIndexOf(' ');
+    const head = space > 0 ? cut.slice(0, space) : t.slice(0, SNIPPET_CHARS);
+    return `${head.replace(/[\s.,;:–—-]+$/, '')}…`;
+  }
+
+  /* S3: the three tabs' rows, in the order the search produced them. A kind
+     no tab claims is still listed under All. */
+  const TAB_OF_KIND = { page: 'page', class: 'code', fn: 'code', file: 'code', repo: 'code',
+    cad: 'cad', fork: 'cad' };
+  const TABS = ['page', 'code', 'cad', 'all'];
+  function groupResults(results) {
+    const out = { page: [], code: [], cad: [] };
+    for (const r of (Array.isArray(results) ? results : [])) {
+      const tab = r && TAB_OF_KIND[r.kind];
+      if (tab) out[tab].push(r);
+    }
+    return out;
+  }
+
+  /* S3: which tab a #/search hash shows. An explicit kind= wins; without one
+     (or with junk), Pages when any page matched, else All. */
+  function searchTab(hash, groups) {
+    const raw = String(hash == null ? '' : hash);
+    const qs = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1).split('@')[0] : '';
+    let kind = null;
+    try { kind = new URLSearchParams(qs).get('kind'); } catch (e) { kind = null; }
+    if (TABS.includes(kind)) return kind;
+    return (groups && Array.isArray(groups.page) && groups.page.length) ? 'page' : 'all';
+  }
+
+  /* S3: a tab is a real link, so the URL holds the tab and Cmd-click works. */
+  function searchTabHref(q, kind) {
+    return `#/search?q=${encodeURIComponent(String(q == null ? '' : q))}&kind=${encodeURIComponent(kind)}`;
+  }
+
+  /* S5: what an empty tab offers instead of a dead end: up to four example
+     searches, the three nearest PAGES among whatever did match (S1's partial
+     rows), and whether the librarian is still out. */
+  function noResultsModel(res, site, waiting) {
+    const rows = (res && Array.isArray(res.results)) ? res.results : [];
+    return {
+      chips: exampleQueries(site).slice(0, 4).map((c) => ({
+        label: c.label, q: c.q, href: `#/search?q=${encodeURIComponent(c.q)}`,
+      })),
+      nearest: rows.filter((r) => r && r.kind === 'page' && r.href).slice(0, 3),
+      waiting: Boolean(waiting),
+    };
+  }
+
+  /* S6: split text into plain and matched segments so the renderer can escape
+     EACH segment and wrap only the matched ones — never innerHTML of raw text.
+     Case-insensitive, regex characters literal, the longer term first where
+     two overlap, one-letter terms ignored, adjacent hits merged. The segments
+     always join back to the input. */
+  function highlightParts(text, terms) {
+    const src = String(text == null ? '' : text);
+    if (!src) return [];
+    const words = Array.from(new Set((Array.isArray(terms) ? terms : [])
+      .map((t) => String(t == null ? '' : t).toLowerCase())
+      .filter((t) => t.length >= 2)))
+      .sort((a, b) => b.length - a.length);
+    if (!words.length) return [{ text: src, hit: false }];
+    const re = new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+    const parts = [];
+    const push = (t, hit) => {
+      if (!t) return;
+      const last = parts[parts.length - 1];
+      if (last && last.hit === hit) last.text += t;
+      else parts.push({ text: t, hit });
+    };
+    let at = 0;
+    let m;
+    while ((m = re.exec(src)) !== null) {
+      push(src.slice(at, m.index), false);
+      push(m[0], true);
+      at = m.index + m[0].length;
+    }
+    push(src.slice(at), false);
+    return parts;
+  }
+
+  /* S3: switching tabs re-routes (the tab is in the URL), and that must not
+     cost a second librarian request. The last finished answer is remembered
+     by its trimmed lower-cased query; viewSearch reuses it only for a hash
+     that names a tab, so a fresh search still asks again after a failure. */
+  let last = null;
+  function lastAnswer(q) {
+    const key = String(q == null ? '' : q).trim().toLowerCase();
+    return (last && last.key === key) ? last.res : null;
+  }
+
   /* query(q) resolves the final merged shape {total, results, librarianCount,
      notice} — that contract is unchanged.
 
@@ -589,12 +759,14 @@
       try { options.onLocal(localShape); } catch (e) { /* keep going */ }
     }
     const enriched = await librarian.enrich(q, local);
-    return {
+    const res = {
       total: local.total,
       results: enriched.results,
       librarianCount: enriched.librarianCount,
       notice: enriched.notice,
     };
+    last = { key: String(q == null ? '' : q).trim().toLowerCase(), res };
+    return res;
   }
 
   const API = {
@@ -603,9 +775,11 @@
     // tools/bench_librarian.mjs — neither of which may touch api/)
     buildItems,
     searchItems,
+    queryTerms,
     createLibrarian,
     assignIds,
     projectCandidates,
+    librarianCandidates,
     classifyStatus,
     pickIds,
     pickRows,
@@ -617,6 +791,14 @@
     heroHits,
     heroStatus,
     isHomeHash,
+    // the results page's pure helpers (S3–S6)
+    plainSnippet,
+    groupResults,
+    searchTab,
+    searchTabHref,
+    noResultsModel,
+    highlightParts,
+    lastAnswer,
     librarianLatched: () => librarian.isLatched(),
     LIBRARIAN_URL,
     LIBRARIAN_NOTICE,
