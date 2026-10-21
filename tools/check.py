@@ -23,7 +23,8 @@ Validates, failing loudly with actionable messages:
   6. content: no orphan markdown; every internal '#/...' link in content resolves
      to a real route; every relative asset reference exists; no orphan assets;
      images live on Cloudinary — content may not point at a local assets/*.png|
-     jpg|jpeg|gif|svg, every res.cloudinary.com reference must resolve to an
+     jpg|jpeg|gif|svg, every res.cloudinary.com reference (in content, index.html,
+     data/people.json, data/site.json or a data/projects/*.json facts file) must resolve to an
      entry of data/cloudinary-manifest.json (matched on public_id, so delivery
      transformations are fine), and every manifest entry must be referenced;
   6a. manifest: every entry carries source/public_id/url, a 64-hex sha256 and
@@ -601,6 +602,40 @@ def check_content_safety(root):
 # --------------------------------------------------------------------------
 MANIFEST = "data/cloudinary-manifest.json"
 MANIFEST_FOLDER = "hippocampus-docs/"
+
+
+def manifest_reference_sources(root, md_files, index_text):
+    """[(where, text)] for every file whose Cloudinary URLs 6a resolves against the manifest.
+
+    The content pages and index.html, then the registries that may carry an image URL of their
+    own: data/people.json, data/site.json and every project facts file data/projects/*.json
+    (UI/UX grill 2026-10: a URL referenced only from a registry must still have a manifest
+    entry, and still counts against "orphan asset"). A registry that does not exist is skipped.
+    """
+    root = Path(root)
+    out = [(str(Path(m).relative_to(root)), Path(m).read_text(encoding="utf-8")) for m in md_files]
+    out.append(("index.html", index_text))
+    registries = [root / "data" / "people.json", root / "data" / "site.json"]
+    registries += sorted((root / "data" / "projects").glob("*.json"))
+    for path in registries:
+        if path.is_file():
+            out.append((path.relative_to(root).as_posix(), path.read_text(encoding="utf-8")))
+    return out
+
+
+def check_manifest_references(scanned, cloud, public_ids):
+    """(messages, referenced public ids) for the Cloudinary URLs in `scanned` ([(where, text)])."""
+    msgs, referenced = [], set()
+    for where, text in scanned:
+        for url in CLOUDINARY_RE.findall(text):
+            url = url.rstrip(".,;:")
+            pid = resolve_public_id(url, cloud, public_ids)
+            if pid is None:
+                msgs.append(f"{where}: Cloudinary reference with no manifest entry: {url} "
+                            f"(upload it and re-run the manifest step)")
+            else:
+                referenced.add(pid)
+    return msgs, referenced
 
 
 def check_manifest(cloudinary, root):
@@ -2047,10 +2082,7 @@ def main():
     # ---- 6a. cloudinary manifest <-> references ----
     index_text = (ROOT / "index.html").read_text(encoding="utf-8")
     people_path = ROOT / "data" / "people.json"          # may not exist yet
-    scanned = [(str(m.relative_to(ROOT)), m.read_text(encoding="utf-8")) for m in md_files]
-    scanned.append(("index.html", index_text))
-    if people_path.exists():
-        scanned.append(("data/people.json", people_path.read_text(encoding="utf-8")))
+    scanned = manifest_reference_sources(ROOT, md_files, index_text)
 
     if not isinstance(cloudinary, dict):
         err(f"{MANIFEST}: top level must be a JSON object with cloud/assets, got "
@@ -2061,16 +2093,9 @@ def main():
     for msg in msgs:
         err(msg)
 
-    referenced_ids = set()
-    for where, text in scanned:
-        for url in CLOUDINARY_RE.findall(text):
-            url = url.rstrip(".,;:")
-            pid = resolve_public_id(url, cloud, public_ids)
-            if pid is None:
-                err(f"{where}: Cloudinary reference with no manifest entry: {url} "
-                    f"(upload it and re-run the manifest step)")
-            else:
-                referenced_ids.add(pid)
+    ref_msgs, referenced_ids = check_manifest_references(scanned, cloud, public_ids)
+    for msg in ref_msgs:
+        err(msg)
     for pid in sorted(public_ids - referenced_ids):
         err(f"orphan cloudinary asset (uploaded but nothing references it): {pid}")
 

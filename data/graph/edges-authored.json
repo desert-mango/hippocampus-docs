@@ -37,11 +37,6 @@
    "why": "listed on the Agent tools landing view"
   },
   {
-   "s": "index:tools",
-   "t": "tools/media-uploads",
-   "why": "listed on the Agent tools landing view"
-  },
-  {
    "s": "about",
    "t": "projects/docs-and-site",
    "why": "the project that builds and maintains this site"
@@ -50,16 +45,6 @@
    "s": "about",
    "t": "setup/contributing/documentation",
    "why": "About describes how the current site is built; this page is how the previous Sphinx docs were contributed to"
-  },
-  {
-   "s": "about",
-   "t": "tools/media-uploads",
-   "why": "About's 'images from a CDN' note is the hosting gap this tool page documents"
-  },
-  {
-   "s": "tools/media-uploads",
-   "t": "projects/docs-and-site",
-   "why": "media hosting for this site's pages is a docs-and-site concern"
   },
   {
    "s": "tools/onshape-mcp",

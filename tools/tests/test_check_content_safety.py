@@ -263,6 +263,47 @@ class Manifest(unittest.TestCase):
 # --------------------------------------------------------------------------
 # 7. the CMS shell — required (U7a flipped it from when-present)
 # --------------------------------------------------------------------------
+class ManifestReferences(unittest.TestCase):
+    """6a widening (UI/UX grill 2026-10, for units H and J): a Cloudinary URL that lives only in a registry —
+    data/site.json or a project facts file — is resolved against the manifest like one in a page."""
+
+    def tree(self, files):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for rel, text in files.items():
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+        return root
+
+    URL = f"https://res.cloudinary.com/{CLOUD}/image/upload/v1/hippocampus-docs/projects/x.jpg"
+
+    def test_6a_a_facts_file_with_an_unmapped_cloudinary_url_is_reported(self):
+        root = self.tree({"data/projects/x.json": json.dumps({"name": "X", "image": self.URL})})
+        scanned = check.manifest_reference_sources(root, [], "")
+        msgs, referenced = check.check_manifest_references(scanned, CLOUD, set())
+        self.assertEqual(msgs, [f"data/projects/x.json: Cloudinary reference with no manifest entry: {self.URL} "
+                                "(upload it and re-run the manifest step)"])
+        self.assertEqual(referenced, set())
+
+    def test_6a_site_json_and_people_json_are_scanned_and_a_mapped_url_counts_as_referenced(self):
+        root = self.tree({"data/site.json": json.dumps({"cards": [{"img": self.URL}]}),
+                          "data/people.json": "{}",
+                          "content/setup/a.md": "no images\n"})
+        scanned = check.manifest_reference_sources(root, [root / "content/setup/a.md"], "<html></html>")
+        self.assertEqual([w for w, _ in scanned],
+                         ["content/setup/a.md", "index.html", "data/people.json", "data/site.json"])
+        msgs, referenced = check.check_manifest_references(scanned, CLOUD, {"hippocampus-docs/projects/x"})
+        self.assertEqual(msgs, [])
+        self.assertEqual(referenced, {"hippocampus-docs/projects/x"})
+
+    def test_6a_every_facts_file_is_scanned_in_name_order(self):
+        root = self.tree({"data/projects/b.json": "{}", "data/projects/a.json": "{}"})
+        scanned = check.manifest_reference_sources(root, [], "")
+        self.assertEqual([w for w, _ in scanned], ["index.html", "data/projects/a.json", "data/projects/b.json"])
+
+
 class CmsShell(unittest.TestCase):
     def test_unterminated_or_empty_inline_script_is_caught(self):
         for body in ("<script>alert(1)", "<SCRIPT type=module>\nx", "<script></script>",

@@ -1,3 +1,5 @@
+Maintainer note (moved off the public Agent tools list, 2026-10-21)
+
 # Media uploads — a gap, documented honestly
 
 There is **no Cloudinary MCP today**. The closest existing piece is a private

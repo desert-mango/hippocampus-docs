@@ -292,10 +292,11 @@ class TestRealRoster(unittest.TestCase):
             "LorenzMeier": None,
         })
 
-    def test_map_file_shape(self):
+    def test_m3_map_file_shape_excludes_both_org_service_accounts(self):
+        # M3 (UI/UX grill 2026-10): the admin account desert-mango-robotics is excluded too, not listed as a member.
         doc = json.loads((ROOT / "data" / "github-links.json").read_text(encoding="utf-8"))
         self.assertEqual(set(doc), {"note", "links", "exclude"})
-        self.assertEqual(doc["exclude"], ["hippocampusmum"])
+        self.assertEqual(doc["exclude"], ["hippocampusmum", "desert-mango-robotics"])
         self.assertFalse(set(doc["exclude"]) & set(doc["links"]))
 
 

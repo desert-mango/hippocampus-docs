@@ -6,9 +6,6 @@
      "chips": ["GPU", "RunPod", "MCP", "public repo"]},
     {"id": "onshape-mcp", "name": "onshape-mcp", "file": "content/tools/onshape-mcp.md",
      "tagline": "CAD access for agents: read parts, assemblies, and metadata from Onshape documents.",
-     "chips": ["CAD", "Onshape", "MCP", "public repo"]},
-    {"id": "media-uploads", "name": "Media uploads (gap)", "file": "content/tools/media-uploads.md",
-     "tagline": "There is no Cloudinary MCP today — what exists, and what a future tool should do.",
-     "chips": ["Cloudinary", "gap"]}
+     "chips": ["CAD", "Onshape", "MCP", "public repo"]}
   ]
 }
