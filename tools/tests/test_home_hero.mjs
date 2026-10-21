@@ -191,10 +191,10 @@ test('isHomeHash splits a hash exactly the way the router does', () => {
 
 // ------------------------------------- the shipped chips against the real index
 
-test('every shipped example query returns local hits from the real index', () => {
+test('every shipped example query returns local hits from the real index (H3: four chips)', () => {
   const site = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'site.json'), 'utf8'));
   const chips = exampleQueries(site);
-  assert.ok(chips.length >= 5, `expected a real chip row, got ${chips.length}`);
+  assert.equal(chips.length, 4, `H3: the home ships exactly four chips, got ${chips.length}`);
 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'search', 'manifest.json'), 'utf8'));
   const shards = manifest.shards.map(
