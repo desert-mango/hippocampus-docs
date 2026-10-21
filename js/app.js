@@ -207,16 +207,43 @@
   }
 
   // ---------- sidebar ----------
-  function sidebarSetup(activeId) {
-    const parts = DATA.setup.sections.map((sec) => {
-      const links = sec.pages.map((p) =>
-        `<a href="#/setup/${p.id}" class="${p.id === activeId ? 'active' : ''}">${esc(p.title)}</a>`
-      ).join('');
-      return `<h3>${esc(sec.title)}</h3>${links}`;
+  /* The setup sidebar as data (uiux P5, P6): one entry per group, `open` only
+     for the active page's group, and a page's `label` carries " · <group>"
+     only when its title appears in more than one group ("Pre-built
+     Packages" under Getting started and under Raspberry Pi setup). Pure:
+     window.HCShell exports both for tools/tests/test_app_guest.mjs. */
+  function dupTitleSet(setup) {
+    const groupsOf = new Map();
+    for (const sec of (setup && setup.sections) || []) {
+      for (const p of sec.pages || []) {
+        if (!groupsOf.has(p.title)) groupsOf.set(p.title, new Set());
+        groupsOf.get(p.title).add(sec);
+      }
+    }
+    return new Set([...groupsOf].filter(([, g]) => g.size > 1).map(([t]) => t));
+  }
+  function sidebarModel(setup, activeId) {
+    const dups = dupTitleSet(setup);
+    return ((setup && setup.sections) || []).map((sec) => {
+      const pages = (sec.pages || []).map((p) => {
+        const suffix = dups.has(p.title) ? sec.title : null;
+        return { id: p.id, title: p.title, label: suffix ? `${p.title} · ${suffix}` : p.title, suffix, active: p.id === activeId };
+      });
+      return { title: sec.title, open: pages.some((p) => p.active), pages };
     });
-    sidebar.innerHTML = parts.join('');
+  }
+  function sidebarSetup(activeId) {
+    sidebar.innerHTML = sidebarModel(DATA.setup, activeId).map((g) => {
+      const links = g.pages.map((p) =>
+        `<a href="#/setup/${p.id}"${p.active ? ' class="active" aria-current="page"' : ''}>${esc(p.title)}${
+          p.suffix ? `<span class="sb-suffix"> · ${esc(p.suffix)}</span>` : ''}</a>`
+      ).join('');
+      return `<details class="sb-group"${g.open ? ' open' : ''}><summary>${esc(g.title)}</summary>${links}</details>`;
+    }).join('');
     const act = sidebar.querySelector('a.active');
-    if (act) act.scrollIntoView({ block: 'nearest' });
+    // only where the sidebar is its own scroller beside the page; in the phone drawer the
+    // drawer's open() brings the active link into view
+    if (act && !drawerMode()) act.scrollIntoView({ block: 'nearest' });
   }
   function sidebarList(title, items, base, activeId) {
     sidebar.innerHTML = `<h3>${esc(title)}</h3>` + items.map((it) =>
@@ -719,8 +746,9 @@
   }
 
   // ---------- the footer's Editor entry ----------
-  /* One footer link. For a guest it is "Sign in to edit" on every route
-     (the sign-in click below). Signed in, it is "Edit this page", pointed at
+  /* One footer link, for a signed-in reader only (uiux P4/H2: a guest's one
+     sign-in entry is the header's button, #signin-btn). Signed in, it is
+     "Edit this page", pointed at
      the page on screen with ?editor=changes — the Editor entry (plan D-H,
      D-I): js/editor.js reads the parameter on hashchange, turns Editor mode
      on and opens the tray's Changes tab. The page id is site-mcp's
@@ -741,14 +769,9 @@
     const link = $('#edit-page');
     if (!link) return;
     link.removeAttribute('role');
-    if (HC.preview) {
+    if (HC.preview || !editor.signedIn) {
       link.removeAttribute('href');
       link.hidden = true;
-    } else if (!editor.signedIn) {
-      link.setAttribute('href', '#');
-      link.setAttribute('role', 'button');
-      link.textContent = 'Sign in to edit';
-      link.hidden = false;
     } else if (route) {
       link.setAttribute('href', `#${route}?editor=changes`);
       link.textContent = 'Edit this page';
@@ -763,7 +786,7 @@
   /* Guests load no editor code and make no GitHub request: index.html has no
      tag for js/cms-core.js, js/editor.js or css/editor.css. This file injects
      them, and only (1) when this tab's sessionStorage holds a sign-in, or
-     (2) on the footer's "Sign in to edit" click, which opens the GitHub
+     (2) on the header's "Sign in" click (#signin-btn), which opens the GitHub
      window FIRST — synchronously inside the click, because a window opened
      after an await is blocked — then injects, then hands that window to the
      editor's sign-in. A preview frame (HC.preview) never reads storage and
@@ -783,14 +806,15 @@
     ['script', { src: 'js/cms-core.js' }],
     ['script', { src: 'js/editor.js' }],
   ];
-  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, guestDock: null, sessionKnown: false };
+  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, sessionKnown: false };
 
   function storedSession() {
     if (HC.preview) return false;
     try { return Boolean(window.sessionStorage.getItem(SESSION_KEY)); } catch (e) { return false; }
   }
 
-  /* The line beside the footer link: sign-in progress and failures, as text. */
+  /* The line beside the footer link: sign-in progress and failures, as text. It sits after the
+     link, so it shows on its own while a guest's link is hidden. */
   function footerStatus(text, kind) {
     const link = $('#edit-page');
     if (!link) return;
@@ -808,12 +832,12 @@
   /* The ?editor= bootstrap (plan D-H, D-I: /cms/'s old links land on
      #/<route>?editor=<tab>). With a session, js/editor.js is loaded at boot
      and reads (and strips) the parameter itself. A guest cannot be signed
-     in without a click, so the footer asks for one; the parameter stays in
+     in without a click, so the footer line asks for one; the parameter stays in
      the address for the editor to read once the sign-in starts. */
   function editorParamPrompt(hash) {
     const want = !HC.preview && !editor.session && !editor.signedIn && !editor.loading
       && /[?&]editor=/.test(String(hash).split('@')[0]);
-    if (want) { editor.prompt = true; footerStatus('Sign in to edit to open the Editor.'); }
+    if (want) { editor.prompt = true; footerStatus('Sign in (top right) to open the Editor.'); }
     else if (editor.prompt) { editor.prompt = false; footerStatus(''); }
   }
 
@@ -821,7 +845,7 @@
     editor.signedIn = Boolean(signedIn);
     if (!signedIn) editor.session = false;   // signed out, or the stored session ended: a guest again
     setEditLink(editRoute);
-    syncGuestDock();
+    syncSignIn();
   }
 
   /* One element into <head>, resolved when it loaded. A file that loaded
@@ -870,68 +894,50 @@
 
   function initEditorEntry() {
     const link = $('#edit-page');
-    if (!link || HC.preview) return;
-    link.addEventListener('click', signInClick);
-    guestDock();
+    if (link && !HC.preview) link.addEventListener('click', signInClick);   // signed in: a plain link
+    initSignIn();
   }
 
-  /* The guest's "Sign in" bubble (editor redesign U4a, Kyle's D1 change 3): the Editor's dock sits at the
-     bottom right once signed in; before that, the same place holds "Sign in". Its click is the footer
-     link's click (signInClick: the sign-in window opens inside the click). Its x tucks it into a tag on
-     the right edge, remembered in this browser (localStorage hc-editor-dock, the dock's own key). */
-  function guestDock() {
-    if (editor.guestDock || HC.preview || !document.body) return;
-    const signIn = document.createElement('button');
-    signIn.type = 'button';
-    signIn.className = 'hc-guest-signin';
-    signIn.textContent = 'Sign in';
-    signIn.title = 'Lab members sign in with GitHub to edit this page';
-    signIn.addEventListener('click', signInClick);
-    const x = document.createElement('button');
-    x.type = 'button';
-    x.className = 'hc-guest-x';
-    x.setAttribute('aria-label', 'Hide');
-    x.textContent = '×';
-    const box = document.createElement('div');
-    box.className = 'hc-guest-dock';
-    box.setAttribute('role', 'region');
-    box.setAttribute('aria-label', 'Sign in to edit');
-    box.appendChild(signIn);
-    box.appendChild(x);
-    const tag = document.createElement('button');
-    tag.type = 'button';
-    tag.className = 'hc-guest-tag';
-    tag.setAttribute('aria-label', 'Show "Sign in"');
-    tag.textContent = '✎';
-    const tuck = (on) => {
-      document.body.classList.toggle('hc-guest-collapsed', on);
-      try { window.localStorage.setItem('hc-editor-dock', on ? 'collapsed' : 'open'); } catch (e) { /* this page only */ }
-      syncGuestDock();
-      (on ? tag : signIn).focus();
-    };
-    x.addEventListener('click', () => tuck(true));
-    tag.addEventListener('click', () => tuck(false));
-    let collapsed = false;
-    try { collapsed = window.localStorage.getItem('hc-editor-dock') === 'collapsed'; } catch (e) { collapsed = false; }
-    if (collapsed) document.body.classList.add('hc-guest-collapsed');
-    box.hidden = true;                         // until boot() has read whether a session is stored
-    tag.hidden = true;
-    document.body.appendChild(box);
-    document.body.appendChild(tag);
-    editor.guestDock = { box, tag };
+  /* The guest's sign-in (uiux P4, F3): one quiet button, the header's last item. It shows only
+     for a guest with no stored session (never in a preview frame, never once signed in), and
+     slides out past the header's right edge while the reader scrolls down, back on any upward
+     scroll of 24 px or at the top (recedeState, pure). A focused button never recedes. The slide
+     is css/site.css's (body.hc-signin-hidden); the header clips it, so it adds no scroll width. */
+  function recedeState(prev, move) {
+    const hidden = Boolean(prev && prev.hidden);
+    const y = Number(move && move.y) || 0;
+    const dy = Number(move && move.dy) || 0;
+    if (y <= 0 || dy <= -24) return { hidden: false };
+    if (y > 80 && dy > 0) return { hidden: true };
+    return { hidden };
   }
-  function syncGuestDock() {
-    if (!editor.guestDock || !editor.sessionKnown) return;
-    const show = !HC.preview && !editor.signedIn && !editor.session;      // a stored session: the Editor's own dock comes
-    if (show) {                                // the setting is shared with the Editor's dock: read it afresh
-      let stored = false;
-      try { stored = window.localStorage.getItem('hc-editor-dock') === 'collapsed'; } catch (e) { stored = false; }
-      document.body.classList.toggle('hc-guest-collapsed', stored);
+  let recede = { hidden: false };
+  function initSignIn() {
+    const btn = $('#signin-btn');
+    if (!btn || HC.preview) return;
+    btn.addEventListener('click', signInClick);
+    let last = 0;
+    let peak = 0;                            // where the current upward run began
+    window.addEventListener('scroll', () => {
+      const y = Math.max(0, window.scrollY || 0);
+      const d = y - last;
+      last = y;
+      if (d > 0) peak = y;
+      const next = recedeState(recede, { y, dy: d > 0 ? d : y - peak });
+      if (next.hidden && document.activeElement === btn) return;   // a focused button stays
+      if (next.hidden === recede.hidden) return;
+      recede = next;
+      document.body.classList.toggle('hc-signin-hidden', recede.hidden);
+    }, { passive: true });
+  }
+  function syncSignIn() {
+    const btn = $('#signin-btn');
+    if (!btn) return;
+    btn.hidden = HC.preview || !editor.sessionKnown || editor.signedIn || editor.session;
+    if (!btn.hidden && recede.hidden) {      // a guest again (signed out) while scrolled down: show it now
+      recede = { hidden: false };
+      document.body.classList.remove('hc-signin-hidden');
     }
-    const tucked = document.body.classList.contains('hc-guest-collapsed');
-    editor.guestDock.box.hidden = !show;
-    editor.guestDock.tag.hidden = !show || !tucked;          // the tag exists only while the bubble is tucked away
-    if (tucked) editor.guestDock.box.setAttribute('inert', ''); else editor.guestDock.box.removeAttribute('inert');
   }
 
   function signInClick(e) {
@@ -948,6 +954,9 @@
     footerStatus('');
     loadEditor({ popup });
   }
+
+  // the shell's pure helpers, for tools/tests/test_app_guest.mjs (uiux P5, P6, F3)
+  window.HCShell = Object.freeze({ sidebarModel, dupTitleSet, recedeState });
 
   window.HCApp = Object.freeze({
     loadEditor(opts) {
@@ -1037,9 +1046,29 @@
 
   function initSearchBox() {
     const input = $('#search-input');
+    const toggle = $('#search-toggle');
+    /* Below 768 px the header's box is an icon button (uiux F4): the button opens the form
+       over the nav row, full width, focused; Esc, a submit, or leaving it empty closes it. */
+    const openSearch = (on) => {
+      document.body.classList.toggle('hc-search-open', on);
+      if (toggle) toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (on) input.focus();
+    };
+    if (toggle) {
+      toggle.addEventListener('click', () => openSearch(!document.body.classList.contains('hc-search-open')));
+    }
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !document.body.classList.contains('hc-search-open')) return;
+      openSearch(false);
+      if (toggle) toggle.focus();
+    });
+    input.addEventListener('blur', () => {
+      if (!input.value.trim() && document.body.classList.contains('hc-search-open')) openSearch(false);
+    });
     $('#search-form').addEventListener('submit', (e) => {
       e.preventDefault();
       if (input.value.trim()) location.hash = `#/search?q=${encodeURIComponent(input.value.trim())}`;
+      openSearch(false);
     });
     // "/" focuses whichever box is on screen: the hero's on #/, where the
     // header's own box is closed, and the header's on every other route.
@@ -1047,7 +1076,9 @@
       if (e.key === '/' && document.activeElement !== input &&
           !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
         e.preventDefault();
-        ($('#hero-search-input') || input).focus();
+        const hero = $('#hero-search-input');
+        if (!hero && drawerMode('(max-width: 767px)')) openSearch(true);   // the phone's box is closed: open it
+        else (hero || input).focus();
       }
     });
   }
@@ -1057,7 +1088,73 @@
   function bootEntry() {
     initSearchBox();
     initEditorEntry();
+    initDrawer();
     setEditLink(null);
+  }
+
+  /* The phone drawer (uiux F1). Below 900 px the sidebar is a fixed panel off the left edge;
+     #sidebar-toggle ("Contents", shown only when the sidebar has links) slides it in. Open: focus
+     moves to the active link (or the first), Tab stays inside, the page behind does not scroll,
+     and a backdrop on <body> (never inside #content: plan ground rule 10) dims it. Esc, the
+     backdrop, the toggle and any navigation close it; focus returns to the toggle. */
+  function drawerMode(query) {
+    try { return Boolean(window.matchMedia && window.matchMedia(query || '(max-width: 900px)').matches); } catch (e) { return false; }
+  }
+  function initDrawer() {
+    const toggle = $('#sidebar-toggle');
+    if (!toggle || !sidebar || !document.body) return;
+    toggle.hidden = false;                   // css/site.css decides where it shows
+    const backdrop = document.createElement('div');
+    backdrop.className = 'drawer-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(backdrop);
+    const isOpen = () => document.body.classList.contains('hc-drawer-open');
+    // a closed group's links are not reachable (Chrome keeps their boxes, so ask the details itself)
+    const focusables = () => Array.from(sidebar.querySelectorAll('a[href], summary, button'))
+      .filter((n) => (n.tagName === 'SUMMARY' || !n.closest('details:not([open])')) && n.getClientRects().length);
+    const close = (refocus) => {
+      if (!isOpen()) return;
+      const inside = sidebar.contains(document.activeElement);
+      document.body.classList.remove('hc-drawer-open');
+      toggle.setAttribute('aria-expanded', 'false');
+      sidebar.removeAttribute('role');
+      sidebar.removeAttribute('aria-modal');
+      if (refocus || inside) toggle.focus({ preventScroll: true });
+    };
+    const open = () => {
+      document.body.classList.add('hc-drawer-open');
+      toggle.setAttribute('aria-expanded', 'true');
+      sidebar.setAttribute('role', 'dialog');
+      sidebar.setAttribute('aria-modal', 'true');
+      const target = sidebar.querySelector('a.active') || focusables()[0];
+      if (target) {
+        target.scrollIntoView({ block: 'center' });
+        target.focus({ preventScroll: true });
+      }
+    };
+    toggle.addEventListener('click', () => (isOpen() ? close(true) : open()));
+    backdrop.addEventListener('click', () => close(true));
+    window.addEventListener('hashchange', () => close(false));
+    document.addEventListener('keydown', (e) => {
+      if (!isOpen()) return;
+      if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+      if (e.key !== 'Tab') return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !sidebar.contains(document.activeElement))) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !sidebar.contains(document.activeElement))) {
+        e.preventDefault(); first.focus();
+      }
+    });
+    // back to a wide window: the sidebar is a column again, so the drawer state goes
+    try {
+      const mq = window.matchMedia('(max-width: 900px)');
+      const wide = () => { if (!mq.matches) close(false); };
+      if (mq.addEventListener) mq.addEventListener('change', wide); else if (mq.addListener) mq.addListener(wide);
+    } catch (e) { /* no matchMedia: nothing to follow */ }
   }
 
   // the registries into DATA; false (after the error panel) when one could not be read
@@ -1078,10 +1175,10 @@
   function bootSession() {
     editor.session = storedSession();       // the one storage read (guarded)
     editor.sessionKnown = true;
-    syncGuestDock();
+    syncSignIn();
     // a stored session the editor turns down (expired, malformed): a guest after all, so "Sign in" shows.
     // loadEditor injects nothing before its first microtask, so the first route() still paints first.
-    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncGuestDock(); } });
+    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncSignIn(); } });
   }
 
   async function boot() {
