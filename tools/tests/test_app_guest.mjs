@@ -761,3 +761,18 @@ test('F3: recedeState hides after a down move past 80 px, shows after a 24 px up
   assert.equal(R(shown, { y: 500, dy: 0 }).hidden, false);
   assert.equal(R(null, { y: 0, dy: 0 }).hidden, false, 'no previous state: shown');
 });
+
+test('F3: signing out while scrolled down shows the sign-in button at once (no stale recede state)', async () => {
+  const app = await boot({ hash: '#/' });
+  const scroll = (y) => { app.win.scrollY = y; for (const fn of (app.listeners.scroll || []).slice()) fn({ type: 'scroll' }); };
+  scroll(400);
+  assert.equal(app.doc.body.classList.contains('hc-signin-hidden'), true, 'scrolled down: the button receded');
+  app.click();
+  await settle();
+  await app.loadAll();
+  app.starts[0].onSession(true);
+  scroll(600);
+  app.starts[0].onSession(false);
+  assert.equal(app.signIn().hidden, false);
+  assert.equal(app.doc.body.classList.contains('hc-signin-hidden'), false, 'the shown button is not slid away');
+});

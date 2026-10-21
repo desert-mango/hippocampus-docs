@@ -878,6 +878,10 @@
     const btn = $('#signin-btn');
     if (!btn) return;
     btn.hidden = HC.preview || !editor.sessionKnown || editor.signedIn || editor.session;
+    if (!btn.hidden && recede.hidden) {      // a guest again (signed out) while scrolled down: show it now
+      recede = { hidden: false };
+      document.body.classList.remove('hc-signin-hidden');
+    }
   }
 
   function signInClick(e) {
