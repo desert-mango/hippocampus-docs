@@ -166,8 +166,8 @@
         selected  a block index, or null
         overlay   [{index, mark: 'add'|'del'|'change'|'conflict'}]
         hot       a block index to light (its review card is hovered or active), or null (U5b)
-        tint      the drawn proposal's proposer colour slot, a whole number 0..5 (0: the viewer's own
-                  magenta; else 0) — round 2, R1
+        tint      the drawn proposal's proposer colour slot, a whole number 0..5 (0: the viewer's own,
+                  blue; else 0) — round 2, R1
         people    {edit, marks, focus}: on the Team page (round 2, R5), edit = the card tools are on; marks =
                   [{name, mark: add|del|move|pin|unpin|edit, group, title}] for the people a draft or a
                   proposal changes (names at most 200 characters, at most 500 marks); focus = the
@@ -389,7 +389,7 @@
         ? { index: m.open.index, md: m.open.md, kind: m.open.kind, as: m.open.as === 'markdown' ? 'markdown' : null } : null,
       hot: isIndex(m.hot) ? m.hot : null,          // U5b: the block whose review card is hovered or active
       locked: m.locked === true,                   // the edit gate: a project page this person may not edit
-      // round 2 (R1): the drawn proposal's proposer colour slot, 0 = the viewer's own magenta
+      // round 2 (R1): the drawn proposal's proposer colour slot, 0 = the viewer's own (blue)
       tint: Number.isInteger(m.tint) && m.tint >= 0 && m.tint <= MAX_TINT ? m.tint : 0,
       // round 2 (R5): on the Team page — the card tools on/off, and each changed person's mark
       people: (() => {

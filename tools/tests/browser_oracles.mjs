@@ -769,7 +769,10 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
       return ed && ro ? { ed: getComputedStyle(ed).opacity, edColor: getComputedStyle(ed).color, ro: getComputedStyle(ro).opacity, roHidden: ro.getAttribute('aria-hidden'), edHidden: ed.getAttribute('aria-hidden') } : null; })()`);
     assert.ok(title, 'the brand has both words');
     assert.equal(title.ed, '1'); assert.equal(title.ro, '0');
-    assert.equal(title.edColor, 'rgb(201, 37, 127)', '"Editor" in the edit magenta (round 2)');
+    // the light theme's blue text: color-mix(in srgb, --accent 82%, #000) = #026ca3, which Chrome reports as color(srgb …)
+    const srgb = /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(title.edColor), rgb = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(title.edColor);
+    assert.ok(srgb || rgb, `"Editor" colour ${title.edColor}`);
+    assert.deepEqual(srgb ? srgb.slice(1).map((c) => Math.round(Number(c) * 255)) : rgb.slice(1).map(Number), [2, 108, 163], '"Editor" in the Editor\'s blue text (2026-10-21)');
     assert.equal(title.roHidden, 'true'); assert.equal(title.edHidden, null);
     // 4. the bubble: top right, under the header (not in it), its right edge at the TUHH mark's, two rows
     const pos = await S(`(() => { const d = document.querySelector('.hc-dock'), hd = document.querySelector('.site-header'), t = document.querySelector('.tuhh-link');
@@ -782,10 +785,10 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
     assert.ok(await clickBlock('As a physical check'));
     await until(() => ev("(HCEditorFrame.runtime.open() || {}).editor === 'visual'", F), 'the block opens');
     await sleep(400);                                            // the line's colour transition
-    // round 2 (R1): Editor mode paints in Desert Mango magenta, the light theme's --hc-edit
-    const edit = await ev("getComputedStyle(document.documentElement).getPropertyValue('--hc-edit').trim()", F);
-    assert.equal(edit.toUpperCase(), '#C9257F');
-    assert.equal(await lineOf('.hc-block.hc-open'), 'rgb(201, 37, 127)', 'the open block has the solid magenta line');
+    // 2026-10-21: the Editor chrome is the site's blue (the light theme's --accent); magenta marks changed text only
+    const mark = await ev("getComputedStyle(document.documentElement).getPropertyValue('--hc-mark').trim()", F);
+    assert.equal(mark.toUpperCase(), '#C9257F');
+    assert.equal(await lineOf('.hc-block.hc-open'), 'rgb(2, 132, 199)', 'the open block has the solid blue line');
     assert.equal(await ev("getComputedStyle(document.querySelector('.hc-block.hc-open')).boxShadow", F), 'none', 'and no ring');
     await shot('v1-light-open');
     // 5. the format bar: Bold, Italic, inline code, Link

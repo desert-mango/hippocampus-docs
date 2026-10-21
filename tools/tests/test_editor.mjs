@@ -4381,8 +4381,9 @@ test('U4b: older tab drafts are never handed to another person, and are kept whe
   assert.equal(C.createDraftStore(local, C.draftsKey('alice')).list().length, 0, 'never alice\'s');
 });
 
-// ---- round 2, R1: the edit palette passes contrast in both themes (Kyle 2026-10-15) ----
-test('edit palette: magenta and the five proposer colours reach 4.5:1 on every page background, both themes', () => {
+// ---- the edit palette (Kyle 2026-10-21, after round 2's all-magenta): the Editor chrome is the site's blue, and
+// magenta marks changed text only; every colour passes contrast in both themes ----
+test('edit palette: blue chrome, magenta change marks and the five proposer colours pass contrast in both themes', () => {
   const site = fs.readFileSync(path.join(ROOT, 'css', 'site.css'), 'utf8');
   const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
   const block = (src, sel, marker) => {
@@ -4393,29 +4394,50 @@ test('edit palette: magenta and the five proposer colours reach 4.5:1 on every p
     for (const [, k, v] of m[1].matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)) vars[k] = v;
     return vars;
   };
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const lum = (hex) => {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    const [r, g, b] = rgb(hex).map((c) => c / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  // color-mix(in srgb, A p%, #000)
+  const darken = (hex, p) => `#${rgb(hex).map((c) => Math.round(c * p).toString(16).padStart(2, '0')).join('')}`;
+  // the chrome is the site's own blue; its text colour is the light theme's darker blue (css/site.css's highlighted titles)
+  assert.match(css, /:root\s*\{[^}]*--hc-edit:\s*var\(--accent\);[^}]*--hc-edit-ink:\s*var\(--accent\);/, '--hc-edit is the site blue');
+  assert.match(css, /\[data-theme="light"\]\s*\{\s*--hc-edit-ink:\s*color-mix\(in srgb, var\(--accent\) 82%, #000\);\s*\}/,
+    'light: the blue text is the darker blue');
   for (const [sel, theme] of [[':root', 'dark'], ['[data-theme="light"]', 'light']]) {
     const bg = block(site, sel, '--bg:');
-    const ed = block(css, sel, '--hc-edit:');
+    const ed = block(css, sel, '--hc-mark:');
     const backs = ['bg', 'bg-soft', 'surface', 'surface-2'].map((k) => bg[k]);
     assert.equal(backs.filter(Boolean).length, 4, `${theme}: four backgrounds read`);
-    const inks = ['hc-edit', 'hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5'];
-    for (const k of inks) {
+    const accent = bg.accent;
+    assert.ok(accent, `${theme}: the site's --accent is a hex colour`);
+    const ink = theme === 'light' ? darken(accent, 0.82) : accent;
+    for (const b of backs) {
+      assert.ok(ratio(ink, b) >= 4.5, `${theme}: blue text ${ink} on ${b} is ${ratio(ink, b).toFixed(2)}`);
+      assert.ok(ratio(accent, b) >= 3, `${theme}: a blue line ${accent} on ${b} is ${ratio(accent, b).toFixed(2)}`);
+    }
+    assert.ok(ratio(ed['hc-edit-on'], ink) >= 4.5, `${theme}: button text on the blue fill`);
+    for (const k of ['hc-mark', 'hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5']) {
       assert.ok(ed[k], `${theme}: --${k} is a hex colour`);
       for (const b of backs) assert.ok(ratio(ed[k], b) >= 4.5, `${theme}: --${k} ${ed[k]} on ${b} is ${ratio(ed[k], b).toFixed(2)}`);
     }
-    assert.ok(ratio(ed['hc-edit-on'], ed['hc-edit']) >= 4.5, `${theme}: button text on the magenta fill`);
   }
-  // light keeps Desert Mango's own magenta
-  assert.equal(block(css, '[data-theme="light"]', '--hc-edit:')['hc-edit'].toUpperCase(), '#C9257F');
-  // Editor chrome no longer paints with the site's blue
-  assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)|var\(--hc-accent-ink\)/g) || []).length, 0,
-    'every Editor accent is an edit token');
+  // light keeps Desert Mango's own magenta for the change marks
+  assert.equal(block(css, '[data-theme="light"]', '--hc-mark:')['hc-mark'].toUpperCase(), '#C9257F');
+  // magenta is ONLY the change marks: every rule that paints with --hc-mark is one of them, and --hc-tint (magenta for
+  // the viewer's own) only borders a change's card beside the page
+  const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
+  const using = (v) => rules.filter(([, body]) => body.includes(`var(${v})`)).map(([sel]) => sel);
+  assert.deepEqual(using('--hc-mark'), [':root', '.hc-sug-ins', '.hc-sug-del', '.hc-sug-fmt', '.hc-block.hc-removed', 'a.hc-sug-fmt'],
+    'magenta paints only the change marks');
+  assert.deepEqual(using('--hc-tint'), ['.hc-rcard.is-hot', '.hc-rcard.is-active'], 'the change card border');
+  assert.equal((css.match(/#E565A1|#C9257F/gi) || []).length, 2, 'the magenta hex lives only in its token');
+  // the site blue enters only through the edit tokens (--hc-edit, --hc-edit-ink and the light ink), and no text is
+  // painted with the raw line blue (under 4.5:1 on the light backgrounds)
+  assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)/g) || []).length, 3, 'the blue only through the edit tokens');
+  assert.equal(rules.filter(([, body]) => /(^|[;{\s])color:\s*var\(--hc-edit\)/.test(body)).length, 0, 'blue text is --hc-edit-ink');
 });
 
 // ---- round 2, R3: the editor page is one plain list of proposals (Kyle 2026-10-15, item 4) ----

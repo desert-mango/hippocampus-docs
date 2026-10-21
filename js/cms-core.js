@@ -149,8 +149,8 @@
     return open.slice().sort((a, b) => (mine(a) - mine(b)) || (b.number - a.number));
   }
 
-  /* Round 2 (Kyle, 2026-10-15): each proposer's own colour. The viewer is slot 0 (Desert Mango magenta,
-     css/editor.css --hc-edit); every other proposer gets 1..PROPOSER_SLOTS in the order of their OLDEST open
+  /* Round 2 (Kyle, 2026-10-15): each proposer's own colour. The viewer is slot 0 (the site's blue, with
+     magenta for changed words: css/editor.css --hc-hl and --hc-mark); every other proposer gets 1..PROPOSER_SLOTS in the order of their OLDEST open
      proposal (lowest number), so the proposals list and the page agree; more than PROPOSER_SLOTS others wrap.
      `extra` (merged-only proposers, for the list) come after the open ones. -> {login (lower case): slot} */
   const PROPOSER_SLOTS = 5;

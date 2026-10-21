@@ -1247,7 +1247,7 @@
       h('ol', { class: 'hc-guide' },
         step('Editor on', ' (the switch in the bubble at the top right) shows this page in a frame you can edit. Your changes stay '
           + 'a draft in this browser (even when you close the tab) until you send them for review; signing out deletes them.'),
-        step('Click a block', ' and type right in the page: new text is underlined, removed text struck through. '
+        step('Click a block', ' and type right in the page: new text is underlined in magenta, removed text struck through in magenta. '
           + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
         step('Undo and Redo', ': Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, or the two arrows in the bubble, step back and forward '
           + 'through your changes, one burst of typing at a time; the marks come back with the text. Typing done before the '
@@ -1263,7 +1263,7 @@
         step('Nothing is live', ' until someone with write access approves it. The ', link('#/', 'Proposals list'),
           ' shows who proposed what, where, when; click one to see its page with its changes; a merge can be undone on GitHub.'),
         step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"), each person in their own '
-          + 'colour (yours in magenta); removed text is struck on red, a dashed mark means main changed that block since '
+          + 'colour (yours in blue); a removed block is on red, a dashed mark means main changed that block since '
           + 'the proposal (Update from main). Click a marked block to open its card beside the page.'),
         step('View', ' holds your own settings for the page. They stay in this browser.')),
       h('p', { class: 'cms-muted', text: 'Per-line diff inside code blocks is out of v1: a changed code block is shown '
@@ -3261,7 +3261,7 @@
     if (!t) return pv;
     pv.pr = t.pull;
     pv.files = t.files;
-    // round 2 (R1): the proposer's own colour; the viewer's own proposal is magenta like their draft
+    // round 2 (R1): the proposer's own colour; the viewer's own proposal is blue like their draft
     pv.tint = C.slotOf(C.proposerSlots(all.map((x) => x.pull), state.session && state.session.login), loginOf(t.pull));
     const head = headShaOf(t.pull);
     const [ov, check] = await Promise.all([
