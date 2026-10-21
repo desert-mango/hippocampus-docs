@@ -148,7 +148,7 @@ function memoryStorage() {
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
-const settle = async () => { for (let i = 0; i < 80; i += 1) await tick(); };
+const settle = async () => { for (let i = 0; i < 80; i += 1) { await tick(); await new Promise((r) => setTimeout(r, 1)); } };
 
 // the browser's FormData, as far as the signed Cloudinary upload uses it
 class FakeFormData {

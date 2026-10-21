@@ -222,7 +222,7 @@ function memoryStorage() {
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
-const settle = async () => { for (let i = 0; i < 120; i += 1) await tick(); };
+const settle = async () => { for (let i = 0; i < 120; i += 1) { await tick(); await new Promise((r) => setTimeout(r, 1)); } };
 
 /* index.html in a vm: header, #content, #hc-frame-host; js/cms-core.js,
    js/lab.js (static on the page), then js/editor.js (injected for a session)
