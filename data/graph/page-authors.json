@@ -6,8 +6,7 @@
   2,
   3,
   4,
-  5,
-  6
+  5
  ],
  "pages": {
   "about": {
@@ -18,10 +17,6 @@
      {
       "login": null,
       "name": "kyle"
-     },
-     {
-      "login": "desert-mango-robotics",
-      "name": "Desert Mango"
      }
     ],
     "history_read": true,
@@ -173,7 +168,7 @@
      }
     ],
     "history_read": true,
-    "blob": "4634da18cd60d8f4fff9663171f5637911c2ff2d"
+    "blob": "c303f1da2258b25625a8f73a4f90583300b0cade"
    },
    "converted": null,
    "edited_here": [
@@ -181,28 +176,6 @@
      "pr": 5,
      "by": "kyle-nelson-berkeley",
      "state": "closed"
-    }
-   ]
-  },
-  "projects/learning-to-swim-run-guide": {
-   "original": {
-    "repo": "desert-mango/hippocampus-docs",
-    "path": "content/projects/learning-to-swim-run-guide.md",
-    "authors": [
-     {
-      "login": "kyle-nelson-berkeley",
-      "name": "Kyle Nelson"
-     }
-    ],
-    "history_read": true,
-    "blob": "0ef6319bd766167a52d502aae44394150dbbd207"
-   },
-   "converted": null,
-   "edited_here": [
-    {
-     "pr": 4,
-     "by": "kyle-nelson-berkeley",
-     "state": "merged"
     }
    ]
   },
@@ -1626,13 +1599,7 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": [
-    {
-     "pr": 6,
-     "by": "desert-mango-robotics",
-     "state": "closed"
-    }
-   ]
+   "edited_here": []
   },
   "setup/lab-gantry/installation": {
    "original": {
@@ -2124,22 +2091,6 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
-  },
-  "tools/media-uploads": {
-   "original": {
-    "repo": "desert-mango/hippocampus-docs",
-    "path": "content/tools/media-uploads.md",
-    "authors": [
-     {
-      "login": null,
-      "name": "kyle"
-     }
-    ],
-    "history_read": true,
-    "blob": "0ae9e73d26307fd2a6cdd1778dd0d223f907271c"
-   },
-   "converted": null,
    "edited_here": []
   },
   "tools/onshape-mcp": {

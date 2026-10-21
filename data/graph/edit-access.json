@@ -405,17 +405,6 @@
    "removed": [],
    "repos": 0
   },
-  "learning-to-swim-run-guide": {
-   "editors": [
-    {
-     "login": "kyle-nelson-berkeley",
-     "repos_with_commits": 0,
-     "why": "added"
-    }
-   ],
-   "removed": [],
-   "repos": 0
-  },
   "legacy-ros1": {
    "editors": [
     {

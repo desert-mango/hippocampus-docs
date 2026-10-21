@@ -7,8 +7,8 @@
  "shards": [
   {
    "file": "search/site.json",
-   "entries": 93,
-   "bytes": 25778
+   "entries": 91,
+   "bytes": 25327
   },
   {
    "file": "search/cad.json",

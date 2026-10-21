@@ -2,14 +2,14 @@
  "generated": "run tools/build_wiki_graph.py to regenerate",
  "note": "Index nodes (#/, #/projects, #/tools) are landing views, not content pages: they are EXCLUDED from the page-kind parity count — the same rule the search index uses (it indexes 90 pages, not landing views). Edges: 'links-to' is an explicit #/ link, 'member' a project's repository, 'mentions' a word-boundary name match in prose (code stripped; terms that spray — stoplisted, vetoed, or matching more than 15 pages — are muted), 'related' a hand-authored edge from data/graph/edges-authored.json.",
  "counts": {
-  "pages": 93,
+  "pages": 91,
   "index": 3,
   "repos": 94,
   "edges": {
-   "links-to": 63,
+   "links-to": 61,
    "member": 94,
    "mentions": 84,
-   "related": 39
+   "related": 36
   }
  },
  "nodes": [
@@ -123,15 +123,6 @@
    "where": "Project",
    "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
    "file": "content/projects/learning-to-swim.md"
-  },
-  {
-   "id": "projects/learning-to-swim-run-guide",
-   "kind": "project",
-   "title": "Learning to Swim: simulation run guide",
-   "route": "#/projects/learning-to-swim-run-guide",
-   "where": "Project",
-   "summary": "This guide runs one simulated HippoCampus flight and tells you how to see that it worked.",
-   "file": "content/projects/learning-to-swim-run-guide.md"
   },
   {
    "id": "projects/legacy-ros1",
@@ -1691,15 +1682,6 @@
    "file": "content/setup/time-sync/server.md"
   },
   {
-   "id": "tools/media-uploads",
-   "kind": "tool",
-   "title": "Media uploads (gap)",
-   "route": "#/tools/media-uploads",
-   "where": "Agent tool",
-   "summary": "There is **no Cloudinary MCP today**. The closest existing piece is a private\n`cloudinary-upload` agent skill (upload a local image or video, get back a CDN URL) that\nlives in Kyle's agent configuration, not in a lab-sha",
-   "file": "content/tools/media-uploads.md"
-  },
-  {
    "id": "tools/onshape-mcp",
    "kind": "tool",
    "title": "onshape-mcp",
@@ -1790,18 +1772,6 @@
    "t": "setup/lab-qualisys/calibration",
    "type": "links-to",
    "why": "explicit link"
-  },
-  {
-   "s": "projects/learning-to-swim",
-   "t": "projects/learning-to-swim-run-guide",
-   "type": "links-to",
-   "why": "see-also link"
-  },
-  {
-   "s": "projects/learning-to-swim-run-guide",
-   "t": "projects/learning-to-swim",
-   "type": "links-to",
-   "why": "see-also link"
   },
   {
    "s": "projects/localization",
@@ -3178,12 +3148,6 @@
    "why": "About describes how the current site is built; this page is how the previous Sphinx docs were contributed to"
   },
   {
-   "s": "about",
-   "t": "tools/media-uploads",
-   "type": "related",
-   "why": "About's 'images from a CDN' note is the hosting gap this tool page documents"
-  },
-  {
    "s": "index:home",
    "t": "about",
    "type": "related",
@@ -3212,12 +3176,6 @@
    "t": "projects/core-stack",
    "type": "related",
    "why": "the stack every other project builds on"
-  },
-  {
-   "s": "index:tools",
-   "t": "tools/media-uploads",
-   "type": "related",
-   "why": "listed on the Agent tools landing view"
   },
   {
    "s": "index:tools",
@@ -3380,12 +3338,6 @@
    "t": "setup/time-sync/client",
    "type": "related",
    "why": "server and client halves of one time-sync setup"
-  },
-  {
-   "s": "tools/media-uploads",
-   "t": "projects/docs-and-site",
-   "type": "related",
-   "why": "media hosting for this site's pages is a docs-and-site concern"
   },
   {
    "s": "tools/onshape-mcp",

@@ -54,10 +54,6 @@
    "summary": "A replication and extension of Cai, Chang, and Girdhar's published *Learning to Swim*\nreinforcement-learning pipeline for thruster-driven AUV control. The original research and\nreleased `warplab/isaac-auv-env` implementa",
    "source": "derived"
   },
-  "projects/learning-to-swim-run-guide": {
-   "summary": "This guide runs one simulated HippoCampus flight and tells you how to see that it worked.",
-   "source": "derived"
-  },
   "projects/legacy-ros1": {
    "summary": "The pre-ROS 2 HippoCampus software stack, preserved. The lab moved to ROS 2; these repos\nstay readable for anyone revisiting old experiments or wondering why something is shaped\nthe way it is.",
    "source": "derived"
@@ -372,10 +368,6 @@
   },
   "setup/time-sync/server": {
    "summary": "Besides from the highlighted lines, the following configuration for `chrony` should be equivalent to the default configuration.",
-   "source": "derived"
-  },
-  "tools/media-uploads": {
-   "summary": "There is **no Cloudinary MCP today**. The closest existing piece is a private\n`cloudinary-upload` agent skill (upload a local image or video, get back a CDN URL) that\nlives in Kyle's agent configuration, not in a lab-sha",
    "source": "derived"
   },
   "tools/onshape-mcp": {

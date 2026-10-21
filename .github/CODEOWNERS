@@ -7,47 +7,45 @@
 # project's own lab repos), and an admin's add or remove in data/projects.json always wins; the commit
 # counts are rebuilt daily. A name without Write access is ignored by GitHub. Later lines win.
 
-*                                                @desert-mango-robotics @NBauschmann
-/content/projects/acoustics.md                   @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/acoustics.json                    @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/cameras.md                     @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/cameras.json                      @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/core-stack.md                  @desert-mango-robotics @NBauschmann @DanielDuecker @Latfoo @lennartalff @VincentTUHH
-/data/projects/core-stack.json                   @desert-mango-robotics @NBauschmann @DanielDuecker @Latfoo @lennartalff @VincentTUHH
-/content/projects/dev-infrastructure.md          @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/dev-infrastructure.json           @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/docs-and-site.md               @desert-mango-robotics @NBauschmann @alexandrnikitin @andreykurenkov @artokai @bliestal @BryceMehring @carpiediem @Cazzar @clburlison @danez @DanielDuecker @denolfe @dhruvbhatia @earlew @ekremkaraca @EugenSol @fa-ribeiro @felipythondev @FinnBreu @flohw @gabor-meszaros @hbarudin @JCotton1123 @jeremyvoltz @JohTobi @josina1234 @kamilszymanski @kishore-mohan @kylemanna @lennartalff @localstatic @martinliu @maxheld83 @mmistakes @nmiglio @relu @RHochdahl @rriemann @Scot3004 @sebcachia @sid6mathur @soxyl @thoemmi @tobie @VincentTUHH @vlajos @vwchu @wilsonmar @yihangho @YNedderhoff @YuyingWu @ZenHarbinger
-/data/projects/docs-and-site.json                @desert-mango-robotics @NBauschmann @alexandrnikitin @andreykurenkov @artokai @bliestal @BryceMehring @carpiediem @Cazzar @clburlison @danez @DanielDuecker @denolfe @dhruvbhatia @earlew @ekremkaraca @EugenSol @fa-ribeiro @felipythondev @FinnBreu @flohw @gabor-meszaros @hbarudin @JCotton1123 @jeremyvoltz @JohTobi @josina1234 @kamilszymanski @kishore-mohan @kylemanna @lennartalff @localstatic @martinliu @maxheld83 @mmistakes @nmiglio @relu @RHochdahl @rriemann @Scot3004 @sebcachia @sid6mathur @soxyl @thoemmi @tobie @VincentTUHH @vlajos @vwchu @wilsonmar @yihangho @YNedderhoff @YuyingWu @ZenHarbinger
-/content/projects/hippocampus-vehicle.md         @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @VincentTUHH
-/data/projects/hippocampus-vehicle.json          @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @VincentTUHH
-/content/projects/holiday-fun.md                 @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/holiday-fun.json                  @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/lab-infrastructure.md          @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
-/data/projects/lab-infrastructure.json           @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
-/content/projects/learning-to-swim.md            @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/data/projects/learning-to-swim.json             @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/content/projects/learning-to-swim-run-guide.md  @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/data/projects/learning-to-swim-run-guide.json   @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/content/projects/legacy-ros1.md                 @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @RHochdahl @timzarhansen
-/data/projects/legacy-ros1.json                  @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @RHochdahl @timzarhansen
-/content/projects/localization.md                @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/localization.json                 @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/radio-comms.md                 @desert-mango-robotics @NBauschmann @lennartalff @LorenzMeier
-/data/projects/radio-comms.json                  @desert-mango-robotics @NBauschmann @lennartalff @LorenzMeier
-/content/projects/scalar-field.md                @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley @Latfoo @lennartalff
-/data/projects/scalar-field.json                 @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley @Latfoo @lennartalff
-/content/projects/simulation.md                  @desert-mango-robotics @NBauschmann @lennartalff
-/data/projects/simulation.json                   @desert-mango-robotics @NBauschmann @lennartalff
-/content/projects/teaching.md                    @desert-mango-robotics @NBauschmann @DanielDuecker @josina1234 @lennartalff @VincentTUHH
-/data/projects/teaching.json                     @desert-mango-robotics @NBauschmann @DanielDuecker @josina1234 @lennartalff @VincentTUHH
-/content/projects/underwater-localization.md     @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/data/projects/underwater-localization.json      @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
-/content/projects/uvms.md                        @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
-/data/projects/uvms.json                         @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
-/.github/                                        @desert-mango-robotics @NBauschmann
-/data/projects.json                              @desert-mango-robotics @NBauschmann
-/tools/                                          @desert-mango-robotics @NBauschmann
-/api/                                            @desert-mango-robotics @NBauschmann
-/js/                                             @desert-mango-robotics @NBauschmann
-/cms/                                            @desert-mango-robotics @NBauschmann
-/vercel.json                                     @desert-mango-robotics @NBauschmann
+*                                             @desert-mango-robotics @NBauschmann
+/content/projects/acoustics.md                @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/acoustics.json                 @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/cameras.md                  @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/cameras.json                   @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/core-stack.md               @desert-mango-robotics @NBauschmann @DanielDuecker @Latfoo @lennartalff @VincentTUHH
+/data/projects/core-stack.json                @desert-mango-robotics @NBauschmann @DanielDuecker @Latfoo @lennartalff @VincentTUHH
+/content/projects/dev-infrastructure.md       @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/dev-infrastructure.json        @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/docs-and-site.md            @desert-mango-robotics @NBauschmann @alexandrnikitin @andreykurenkov @artokai @bliestal @BryceMehring @carpiediem @Cazzar @clburlison @danez @DanielDuecker @denolfe @dhruvbhatia @earlew @ekremkaraca @EugenSol @fa-ribeiro @felipythondev @FinnBreu @flohw @gabor-meszaros @hbarudin @JCotton1123 @jeremyvoltz @JohTobi @josina1234 @kamilszymanski @kishore-mohan @kylemanna @lennartalff @localstatic @martinliu @maxheld83 @mmistakes @nmiglio @relu @RHochdahl @rriemann @Scot3004 @sebcachia @sid6mathur @soxyl @thoemmi @tobie @VincentTUHH @vlajos @vwchu @wilsonmar @yihangho @YNedderhoff @YuyingWu @ZenHarbinger
+/data/projects/docs-and-site.json             @desert-mango-robotics @NBauschmann @alexandrnikitin @andreykurenkov @artokai @bliestal @BryceMehring @carpiediem @Cazzar @clburlison @danez @DanielDuecker @denolfe @dhruvbhatia @earlew @ekremkaraca @EugenSol @fa-ribeiro @felipythondev @FinnBreu @flohw @gabor-meszaros @hbarudin @JCotton1123 @jeremyvoltz @JohTobi @josina1234 @kamilszymanski @kishore-mohan @kylemanna @lennartalff @localstatic @martinliu @maxheld83 @mmistakes @nmiglio @relu @RHochdahl @rriemann @Scot3004 @sebcachia @sid6mathur @soxyl @thoemmi @tobie @VincentTUHH @vlajos @vwchu @wilsonmar @yihangho @YNedderhoff @YuyingWu @ZenHarbinger
+/content/projects/hippocampus-vehicle.md      @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @VincentTUHH
+/data/projects/hippocampus-vehicle.json       @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @VincentTUHH
+/content/projects/holiday-fun.md              @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/holiday-fun.json               @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/lab-infrastructure.md       @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
+/data/projects/lab-infrastructure.json        @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
+/content/projects/learning-to-swim.md         @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
+/data/projects/learning-to-swim.json          @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
+/content/projects/legacy-ros1.md              @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @RHochdahl @timzarhansen
+/data/projects/legacy-ros1.json               @desert-mango-robotics @NBauschmann @DanielDuecker @lennartalff @RHochdahl @timzarhansen
+/content/projects/localization.md             @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/localization.json              @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/radio-comms.md              @desert-mango-robotics @NBauschmann @lennartalff @LorenzMeier
+/data/projects/radio-comms.json               @desert-mango-robotics @NBauschmann @lennartalff @LorenzMeier
+/content/projects/scalar-field.md             @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley @Latfoo @lennartalff
+/data/projects/scalar-field.json              @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley @Latfoo @lennartalff
+/content/projects/simulation.md               @desert-mango-robotics @NBauschmann @lennartalff
+/data/projects/simulation.json                @desert-mango-robotics @NBauschmann @lennartalff
+/content/projects/teaching.md                 @desert-mango-robotics @NBauschmann @DanielDuecker @josina1234 @lennartalff @VincentTUHH
+/data/projects/teaching.json                  @desert-mango-robotics @NBauschmann @DanielDuecker @josina1234 @lennartalff @VincentTUHH
+/content/projects/underwater-localization.md  @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
+/data/projects/underwater-localization.json   @desert-mango-robotics @NBauschmann @kyle-nelson-berkeley
+/content/projects/uvms.md                     @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
+/data/projects/uvms.json                      @desert-mango-robotics @NBauschmann @lennartalff @VincentTUHH
+/.github/                                     @desert-mango-robotics @NBauschmann
+/data/projects.json                           @desert-mango-robotics @NBauschmann
+/tools/                                       @desert-mango-robotics @NBauschmann
+/api/                                         @desert-mango-robotics @NBauschmann
+/js/                                          @desert-mango-robotics @NBauschmann
+/cms/                                         @desert-mango-robotics @NBauschmann
+/vercel.json                                  @desert-mango-robotics @NBauschmann
