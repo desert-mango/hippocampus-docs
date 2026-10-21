@@ -79,6 +79,15 @@ test('J12 #/projects?status=legacy lists only legacy badges and marks the Legacy
   assert.doesNotMatch(html, /<a [^>]*href="#\/projects"[^>]*aria-current="true"/);
 });
 
+test('J12 #/projects?status=archive lists only archive badges and the Archive chip is current', async () => {
+  const site = await bootSite({ hash: '#/projects?status=archive' });
+  const html = String(site.content.innerHTML);
+  const badges = html.match(/class="badge [a-z]+"/g) || [];
+  assert.ok(badges.length >= 2);
+  assert.ok(badges.every((b) => b === 'class="badge archive"'), badges.join(' '));
+  assert.match(html, /<a [^>]*href="#\/projects\?status=archive"[^>]*aria-current="true"[^>]*>Archive/);
+});
+
 test('J7 #/projects/learning-to-swim: no Repositories heading for a project without repositories', async () => {
   const site = await bootSite({ hash: '#/projects/learning-to-swim' });
   const html = String(site.content.innerHTML);

@@ -58,7 +58,7 @@ test('J12 groupProjects: a status filter keeps only that status and drops empty 
 });
 
 // -------------------------------------------------------------- statusFilter
-test('J12 statusFilter reads ?status= from the hash and accepts only the three statuses', async () => {
+test('J12 statusFilter reads ?status= from the hash and accepts the four fixed statuses (archive included)', async () => {
   const { statusFilter } = await HCP();
   assert.equal(statusFilter('#/projects'), null);
   assert.equal(statusFilter('#/projects?status=active'), 'active');
@@ -66,9 +66,32 @@ test('J12 statusFilter reads ?status= from the hash and accepts only the three s
   assert.equal(statusFilter('#/projects?editor=changes&status=legacy'), 'legacy');
   assert.equal(statusFilter('#/projects?status=legacy@anchor'), 'legacy');
   assert.equal(statusFilter('#/projects?status=bogus'), null);
-  assert.equal(statusFilter('#/projects?status=archive'), null);
+  assert.equal(statusFilter('#/projects?status=archive'), 'archive', 'J12: archive has a chip too');
   assert.equal(statusFilter(''), null);
   assert.equal(statusFilter(undefined), null);
+});
+
+test('J12 statusList: every status in the data, fixed order then alphabetical, with counts', async () => {
+  const { statusList, statusFilter } = await HCP();
+  const list = [P('a', 'fun', 'archive'), P('b', 'fun', 'zeta'), P('c', 'fun', 'active'), P('d', 'fun', 'beta'),
+    P('e', 'fun', 'legacy'), P('f', 'fun', 'active'), P('g', 'fun', 'maintained')];
+  assert.deepEqual(statusList(list), [
+    { status: 'active', count: 2 }, { status: 'maintained', count: 1 }, { status: 'legacy', count: 1 },
+    { status: 'archive', count: 1 }, { status: 'beta', count: 1 }, { status: 'zeta', count: 1 }]);
+  assert.deepEqual(statusList([P('x', 'fun', 'legacy')]), [{ status: 'legacy', count: 1 }], 'absent statuses get no chip');
+  assert.deepEqual(statusList(null), []);
+  assert.equal(statusFilter('#/projects?status=zeta', ['active', 'zeta']), 'zeta', 'a data status is accepted when listed');
+  assert.equal(statusFilter('#/projects?status=zeta'), null, 'not in the fixed four and not listed');
+});
+
+test('J12 the real registry: the chips cover all 17 projects (archive included)', async () => {
+  const { statusList } = await HCP();
+  const dir = path.join(ROOT, 'data', 'projects');
+  const projects = fs.readdirSync(dir).filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+  const chips = statusList(projects);
+  assert.equal(chips.reduce((n, c) => n + c.count, 0), projects.length);
+  assert.deepEqual(chips.map((c) => c.status).slice(0, 4), ['active', 'maintained', 'legacy', 'archive']);
 });
 
 // ------------------------------------------------------------------ keyFacts

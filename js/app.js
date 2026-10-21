@@ -361,7 +361,7 @@
     ['vehicles', 'Vehicles'], ['software', 'Software'], ['research', 'Research'],
     ['lab', 'Lab infrastructure'], ['teaching', 'Teaching'], ['fun', 'Fun'],
   ];
-  const PROJECT_STATUSES = ['active', 'maintained', 'legacy'];
+  const PROJECT_STATUSES = ['active', 'maintained', 'legacy', 'archive'];
 
   function groupProjects(projects, status) {
     const list = Array.isArray(projects) ? projects : [];
@@ -375,11 +375,26 @@
   }
 
   // '#/projects?status=legacy' -> 'legacy'; anything else -> null (All)
-  function statusFilter(hash) {
+  // allowed: the statuses the data holds (statusList); the fixed four when not given
+  function statusFilter(hash, allowed) {
     const h = typeof hash === 'string' ? hash : '';
     const q = h.split('@')[0].split('?')[1] || '';
     const s = new URLSearchParams(q).get('status');
-    return PROJECT_STATUSES.includes(s) ? s : null;
+    const ok = Array.isArray(allowed) ? allowed : PROJECT_STATUSES;
+    return s && ok.includes(s) ? s : null;
+  }
+
+  // J12: one filter chip per status the data holds: the fixed order first, any other
+  // status after them alphabetically, each with its count.
+  function statusList(projects) {
+    const counts = new Map();
+    (Array.isArray(projects) ? projects : []).forEach((p) => {
+      const s = p && typeof p.status === 'string' ? p.status : '';
+      if (s) counts.set(s, (counts.get(s) || 0) + 1);
+    });
+    const rank = (s) => { const i = PROJECT_STATUSES.indexOf(s); return i < 0 ? PROJECT_STATUSES.length : i; };
+    return [...counts.keys()].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0))
+      .map((status) => ({ status, count: counts.get(status) }));
   }
 
   // J11: the key-facts row. people: the contributors file's rows plus its
@@ -455,11 +470,12 @@
     sidebar.innerHTML = '';                 // J6: the cards are the list; no copy beside them
     setTitle(['Projects']);
     const all = DATA.projects.projects;
-    const status = statusFilter(location.hash);
-    const count = (s) => all.filter((p) => !s || p.status === s).length;
-    const chip = (s, label) => `<a class="filter-chip" href="#/projects${s ? `?status=${s}` : ''}"${
-      s === status ? ' aria-current="true"' : ''}>${label} <span class="filter-n">${count(s)}</span></a>`;
-    const filters = [chip(null, 'All'), chip('active', 'Active'), chip('maintained', 'Maintained'), chip('legacy', 'Legacy')].join('');
+    const statuses = statusList(all);
+    const status = statusFilter(location.hash, statuses.map((x) => x.status));
+    const chip = (s, label, n) => `<a class="filter-chip" href="#/projects${s ? `?status=${encodeURIComponent(s)}` : ''}"${
+      s === status ? ' aria-current="true"' : ''}>${esc(label)} <span class="filter-n">${n}</span></a>`;
+    const filters = [chip(null, 'All', all.length),
+      ...statuses.map((x) => chip(x.status, x.status.charAt(0).toUpperCase() + x.status.slice(1), x.count))].join('');
     const groups = groupProjects(all, status).map((g) => `
       <section class="project-group" aria-labelledby="pg-${g.id}">
         <h2 id="pg-${g.id}">${esc(g.title)}</h2>
@@ -559,7 +575,7 @@
   }
 
   // the projects helpers, pure (uiux unit J; tools/tests/test_projects_ui.mjs)
-  window.HCProjects = Object.freeze({ groupProjects, statusFilter, keyFacts, startHere });
+  window.HCProjects = Object.freeze({ groupProjects, statusFilter, statusList, keyFacts, startHere });
 
   function viewTools() {
     sidebarList('Agent tools', DATA.tools.tools, '/tools', null);
