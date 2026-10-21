@@ -221,17 +221,21 @@ pre {
   background: var(--code-bg); border: 1px solid var(--edge-soft);
   border-radius: var(--radius); padding: 0.9rem 1rem; overflow-x: auto;
   position: relative; line-height: 1.5;
+  /* P2: long lines wrap instead of hiding behind a sideways scroll; copying still
+     gives the logical lines (js/app.js copyText reads innerText) */
+  white-space: pre-wrap; overflow-wrap: anywhere;
 }
 pre code { background: none; border: 0; padding: 0; color: var(--body); font-size: 0.85rem; display: block; }
 .code-wrap { position: relative; }
 .copy-btn {
   position: absolute; top: 0.45rem; right: 0.45rem;
   background: var(--surface-2); color: var(--body-soft); border: 1px solid var(--edge);
-  border-radius: 6px; font-size: 0.72rem; padding: 0.2rem 0.55rem; cursor: pointer;
-  opacity: 0; transition: opacity 0.15s;
+  border-radius: 6px; font-size: 0.68rem; padding: 0.15rem 0.5rem; cursor: pointer;
+  opacity: 1;                                  /* P2: always visible, not only on hover */
 }
-.code-wrap:hover .copy-btn, .copy-btn:focus { opacity: 1; }
-.copy-btn:hover { color: var(--heading); }
+.code-wrap pre { padding-right: 4rem; }        /* wrapped text never runs under the copy button */
+.copy-btn:hover { color: var(--heading); border-color: var(--accent); }
+.copy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .math code { background: none; border: 0; font-style: italic; }
 /* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 
@@ -254,6 +258,16 @@ th { background: var(--surface-2); color: var(--heading); }
 }
 .adm-warning, .adm-attention, .adm-caution { border-left-color: var(--note-warn); }
 .adm-warning .adm-title, .adm-attention .adm-title, .adm-caution .adm-title { color: var(--note-warn); }
+/* G2: the important boxes are filled with a light tint of their title orange, both themes */
+.adm-warning, .adm-attention, .adm-caution {
+  background: color-mix(in srgb, var(--note-warn) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--note-warn) 35%, var(--edge-soft));
+  border-left-color: var(--note-warn);
+}
+/* G2, open question 1: on the light tint Kyle's #FF7F50 title is under 4.5:1, so the light title ink
+   is the same hue darkened (65 %: >= 4.5:1; tools/tests/test_views.mjs reads these rules) */
+[data-theme="light"] .adm-warning .adm-title, [data-theme="light"] .adm-attention .adm-title,
+[data-theme="light"] .adm-caution .adm-title { color: color-mix(in srgb, var(--note-warn) 65%, #000); }
 .adm-danger, .adm-error { border-left-color: var(--danger); }
 .adm-danger .adm-title, .adm-error .adm-title { color: var(--danger); }
 .adm-hint .adm-title, .adm-tip .adm-title { color: var(--ok); }
@@ -395,9 +409,23 @@ a.person-card:hover {
 /* ---- owner boundary (uiux plan 1a): S above, SETUP below ---- */
 
 /* ---------- misc ---------- */
-.page-nav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; font-size: 0.9rem; }
-.page-nav a { text-decoration: none; color: var(--body-soft); border: 1px solid var(--edge-soft); border-radius: 8px; padding: 0.5rem 0.9rem; max-width: 48%; }
-.page-nav a:hover { color: var(--accent); border-color: var(--accent); }
+/* P9: previous / next as two cards, a small label over the page title */
+.page-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 3rem; }
+.page-nav a {
+  display: flex; flex-direction: column; gap: 0.15rem; min-width: 0;
+  text-decoration: none; background: var(--surface); border: 1px solid var(--edge-soft);
+  border-radius: 8px; padding: 0.75rem 1rem;
+}
+.page-nav .page-nav-next { grid-column: 2; text-align: right; }
+.page-nav-label { font-size: 0.875rem; color: var(--body-soft); }
+.page-nav-title { color: var(--heading); font-weight: 600; line-height: 1.35; }
+.page-nav a:hover { border-color: var(--accent); }
+.page-nav a:hover .page-nav-title { color: var(--accent); }
+.page-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .page-nav { grid-template-columns: minmax(0, 1fr); }
+  .page-nav .page-nav-next { grid-column: 1; }
+}
 /* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 .site-footer {
   display: flex; gap: 1.5rem; align-items: center; justify-content: center;
@@ -990,6 +1018,36 @@ body.hc-drawer-open .drawer-backdrop { opacity: 1; visibility: visible; transiti
 }
 
 /* ==== UNIT SETUP: setup pages ==== */
+/* P1/P3: "On this page". The content box is a size container (an override of SHELL's .content rule,
+   plan 1a), and the grid is the .setup-layout wrapper inside it: a container query cannot style the
+   container itself. 27rem text + 2rem gap + 11rem list = 40rem: from a 40rem content box the list sits
+   on the right and sticks; below it, the fold-out at the top of the article shows instead. */
+.content { container-type: inline-size; container-name: content; }
+.page-toc { display: none; }
+.page-toc-fold { margin: 0 0 1.5rem; }
+.page-toc ol, .page-toc-fold ol { list-style: none; margin: 0; padding: 0; }
+.page-toc ol ol, .page-toc-fold ol ol { padding-left: 0.85rem; }
+.page-toc a, .page-toc-fold a {
+  display: block; padding: 0.2rem 0 0.2rem 0.75rem; border-left: 2px solid transparent;
+  color: var(--body-soft); text-decoration: none; font-size: 0.875rem; line-height: 1.4;
+}
+.page-toc-fold ol { margin-top: 0.5rem; }
+.page-toc a:hover, .page-toc-fold a:hover { color: var(--heading); }
+.page-toc a[aria-current="true"] { color: var(--accent); border-left-color: var(--accent); }
+.page-toc-title { font-size: 0.875rem; font-weight: 600; color: var(--heading); margin: 0 0 0.5rem; }
+@container content (min-width: 40rem) {
+  .setup-layout.has-toc { display: grid; grid-template-columns: minmax(27rem, 1fr) 11rem; column-gap: 2rem; }
+  .setup-layout.has-toc > .page-body { min-width: 0; }
+  .page-toc {
+    display: block; position: sticky; top: calc(var(--header-h) + 1.5rem); align-self: start;
+    max-height: calc(100vh - var(--header-h) - 3rem); overflow-y: auto;
+    border-left: 1px solid var(--edge-soft); padding-left: 0.25rem;
+  }
+  .page-toc a { margin-left: -0.25rem; padding-left: 0.75rem; }
+  .page-toc-fold { display: none; }
+}
+/* P10: the "Updated" line under the page title */
+.page-meta { margin: -0.5rem 0 1.25rem; font-size: 0.875rem; color: var(--body-soft); }
 
 /* ==== UNIT H: home ==== */
 
