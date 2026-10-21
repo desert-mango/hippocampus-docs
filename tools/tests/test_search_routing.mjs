@@ -444,7 +444,7 @@ test('the ten search probes still land at rank 1 in the local engine', () => {
    test spends zero quota and imports nothing from api/ — it only asks whether
    the strings are (a) real and (b) genuinely unreachable locally. The server's
    own suite proves the same strings RESOLVE through the function. */
-test('the semantic probes find nothing locally and name real targets', () => {
+test('S1: no local row matches EVERY word of a semantic probe, and the probes name real targets', () => {
   const items = realItems();
   const semantic = readProbes().filter((p) => p.kind === 'semantic');
   assert.equal(semantic.length, 2, 'both of Kyle 2026-09-04 probes are on disk');
@@ -469,9 +469,14 @@ test('the semantic probes find nothing locally and name real targets', () => {
     assert.ok(Array.isArray(probe.expect) && probe.expect.length, `${probe.q}: expect is non-empty`);
     assert.ok(Array.isArray(probe.fair || []), `${probe.q}: fair is a list`);
 
+    // S1 (2026-10-21): the engine now also lists PARTIAL matches, ranked below
+    // every all-words match. A semantic probe is still one no row answers in
+    // full — and that is what the librarian is told (its candidates are the
+    // all-words rows only), so the graph walk still runs for it.
     const { results } = searchItems(items, probe.q);
-    assert.deepEqual(results, [],
-      `${probe.q}: a semantic probe is one the AND-semantics keyword engine cannot answer`);
+    assert.deepEqual(results.filter((r) => r.full), [],
+      `${probe.q}: a semantic probe is one no keyword row matches in full`);
+    assert.ok(results.every((r) => r.full === false), `${probe.q}: every local row is marked partial`);
 
     for (const href of [].concat(probe.expect, probe.fair || [])) {
       assert.ok(/^#\//.test(href) || /^https:\/\/github\.com\//.test(href),
@@ -1047,4 +1052,102 @@ test('js/app.js paints the waiting line and always yields to the final paint', (
     'never shown on a host where the librarian is latched off');
   assert.ok(/painted\.waiting/.test(src),
     'the repaint-skip guard is bypassed after a waiting paint, on every host');
+});
+
+// =====================================================================
+//  S1 (uiux grill 2026-10): stopwords out, partial matches in, ranked below
+// =====================================================================
+
+const { queryTerms } = HC;
+
+/* A tiny site shard: enough rows to pin the ranking rule by construction. */
+function siteShard(entries) {
+  return { kind: 'site', entries: entries.map((e) => Object.assign(
+    { t: 'T', r: '#/x', w: 'Setup', h: [], x: '' }, e)) };
+}
+
+test('S1: queryTerms drops stopwords, keeps order, caps at 8, falls back when nothing is left', () => {
+  assert.deepEqual(queryTerms('how do I flash PX4'), ['flash', 'px4']);
+  assert.deepEqual(queryTerms('What is the UART configuration?'), ['uart', 'configuration']);
+  assert.deepEqual(queryTerms('how to'), ['how', 'to'], 'a stopword-only query keeps all its words');
+  assert.deepEqual(queryTerms('a b c d e f g h i j k'), ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'j']);
+  assert.deepEqual(queryTerms(''), []);
+  assert.deepEqual(queryTerms(null), []);
+});
+
+test('S1: "how do I flash PX4" returns at least one page whose title or route contains px4', () => {
+  const items = realItems();
+  const { results } = searchItems(items, 'how do I flash PX4');
+  assert.ok(results.length >= 1, 'the placeholder example returns rows');
+  const pages = results.filter((r) => r.kind === 'page'
+    && (/px4/i.test(r.title) || /px4/i.test(r.href)));
+  assert.ok(pages.length >= 1, 'a PX4 page is among them');
+});
+
+test('S1: the "flash PX4" chip returns rows', () => {
+  const { results } = searchItems(realItems(), 'flash PX4');
+  assert.ok(results.length >= 1);
+});
+
+test('S1: "PX4" alone still puts the PX4 Setup page first among pages', () => {
+  const { results } = searchItems(realItems(), 'PX4');
+  const firstPage = results.find((r) => r.kind === 'page');
+  assert.equal(firstPage && firstPage.title, 'PX4 Setup');
+});
+
+test('S1: every item matching ALL terms ranks above any item matching fewer', () => {
+  const items = buildItems([siteShard([
+    { t: 'Flash the ESC', r: '#/a', x: 'flash it' },               // 1 of 2, strong title hit
+    { t: 'Flash Flash Flash', r: '#/b', x: 'flash flash' },         // 1 of 2, many hits
+    { t: 'Notes', r: '#/c', x: 'flash the px4 board' },            // 2 of 2, weak body hits
+    { t: 'PX4', r: '#/d', x: 'autopilot' },                         // 1 of 2, exact title
+  ])]);
+  const { results } = searchItems(items, 'flash px4');
+  assert.equal(results[0].href, '#/c', 'the only all-terms row leads, however weak');
+  assert.equal(results[0].full, true);
+  assert.deepEqual(results.slice(1).map((r) => r.full), [false, false, false]);
+  assert.equal(results.length, 4, 'every partial row is listed');
+  for (let i = 1; i < results.length; i += 1) {
+    assert.ok(results[0].score > results[i].score, 'the rank key puts matched terms first');
+  }
+});
+
+test('S1: a partial match needs a hit on a term of 3+ characters', () => {
+  const items = buildItems([siteShard([
+    { t: 'Op notes', r: '#/a', x: 'op' },        // matches only "op" (2 chars)
+    { t: 'Docking', r: '#/b', x: 'docking' },     // matches only "docking"
+  ])]);
+  const { results } = searchItems(items, 'op docking');
+  assert.deepEqual(results.map((r) => r.href), ['#/b'], 'a two-letter hit alone is noise');
+});
+
+test('S1: a stopword-only query still searches', () => {
+  const items = buildItems([siteShard([{ t: 'How to', r: '#/howto', x: 'how to read this' }])]);
+  const { results } = searchItems(items, 'how to');
+  assert.deepEqual(results.map((r) => r.href), ['#/howto']);
+});
+
+test('S1: stopwords no longer block a match: "how do I install ros" finds the ROS installation page', () => {
+  const { results } = searchItems(realItems(), 'how do I install ros');
+  assert.equal(fileOf(results[0].href), fileOf(PROBE_EXPECT.get('install ros')));
+});
+
+test('S1: the librarian is shown only the all-terms rows as candidates', async () => {
+  const items = buildItems([siteShard([
+    { t: 'Notes', r: '#/c', x: 'flash the px4 board' },
+    { t: 'Flash the ESC', r: '#/a', x: 'flash it' },
+  ])]);
+  const local = searchItems(items, 'flash px4');
+  assert.equal(local.results.length, 2);
+  const fetchSpy = spyFetch(resp(200, { results: [] }));
+  await createLibrarian({ fetch: fetchSpy }).enrich('flash px4', local);
+  assert.deepEqual(bodyOf(fetchSpy.calls[0]).candidates.map((c) => c.id), ['page:#/c']);
+
+  const real = realItems();
+  for (const q of ['ESC I2C firmware', 'motor mount CAD']) {
+    const spy = spyFetch(resp(200, { results: [] }));
+    await createLibrarian({ fetch: spy }).enrich(q, searchItems(real, q));
+    assert.deepEqual(bodyOf(spy.calls[0]).candidates, [],
+      `${q}: still an empty candidate list, so the server still walks the graph`);
+  }
 });

@@ -1309,16 +1309,17 @@ test('neighbours reach hop 2 in catalog id space over in- AND out-edges', async 
   }
 });
 
-test('CATALOG_MAX_CHARS bounds the catalog and the real "install ros" hop-1 message fits 48000', async () => {
+test('CATALOG_MAX_CHARS bounds the catalog and the real "install ros" hop-1 message fits 48000 (S1 candidates)', async () => {
   assert.equal(handler.CATALOG_MAX_CHARS, 45000);
   const catalog = handler.buildCatalog(DATA);
   const chars = JSON.stringify(catalog).length;
   assert.ok(chars <= handler.CATALOG_MAX_CHARS,
     `catalog is ${chars} chars, over CATALOG_MAX_CHARS ${handler.CATALOG_MAX_CHARS}`);
 
-  // the real client candidate list, built by the client's own engine
+  // the real client candidate list, built by the client's own engine — and,
+  // since S1, filtered as the client filters it: only the all-terms rows
   const local = search.searchItems(siteItems(), 'install ros');
-  const cands = search.projectCandidates(local.results);
+  const cands = search.librarianCandidates(local.results);
   assert.ok(cands.length > 0, 'the probe still has local hits');
   const fetchStub = providerStub([{ hits: [cands[0].id], open: [] }]);
   const r = await call('POST', { q: 'install ros', candidates: cands }, { env: KEYS, fetch: fetchStub });

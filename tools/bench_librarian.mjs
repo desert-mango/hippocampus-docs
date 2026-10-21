@@ -263,7 +263,7 @@ function buildCases(items) {
   const cases = [];
   for (const w of wanted) {
     const local = HC.searchItems(items, w.q);
-    const candidates = HC.projectCandidates(local.results);
+    const candidates = HC.librarianCandidates(local.results);
     const ids = HC.assignIds(local.results);
     const localRank = rankOf(local.results, w.expect);
     const expectId = localRank > 0 ? ids[localRank - 1] : null;
@@ -546,7 +546,7 @@ async function runProbe(base, probe, items, delay) {
   row.posted = true;
   // candidates MAY be empty — a multi-word query the keyword engine cannot
   // answer is exactly the one the walk exists for, and the client posts it.
-  const candidates = HC.projectCandidates(local.results);
+  const candidates = HC.librarianCandidates(local.results);
   measuredFrom = Date.now();   // the wall clock starts HERE: the pacing wait is over.
   const out = await ask(base, { q: trimmed, candidates });
   row.status = out.status;

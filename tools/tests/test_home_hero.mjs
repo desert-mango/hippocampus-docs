@@ -211,3 +211,17 @@ test('every shipped example query returns local hits from the real index', () =>
     assert.notEqual(hitPath(res.results[0]), '');
   }
 });
+
+test('S1: every shipped chip returns hits for its LABEL too, phrased words and all', () => {
+  /* S1 (2026-10-21): the readable label ("flash PX4", "the gantry") is what a
+     reader types after seeing it, so it must not be a dead end either. */
+  const site = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'site.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'search', 'manifest.json'), 'utf8'));
+  const items = buildItems(manifest.shards.map(
+    (s) => JSON.parse(fs.readFileSync(path.join(ROOT, s.file), 'utf8'))));
+  for (const chip of exampleQueries(site)) {
+    for (const q of [chip.q, chip.label]) {
+      assert.ok(searchItems(items, q).results.length > 0, `${JSON.stringify(q)} returns local hits`);
+    }
+  }
+});

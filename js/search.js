@@ -7,6 +7,12 @@
    No server, no keys: shards are plain JSON fetched once on first query.
    Scoring is deliberately simple and inspectable — exact symbol/name matches
    dominate, then prefixes, then substrings, then path/heading/body hits.
+   A query is read as its WORDS minus English stopwords ("how do I flash PX4"
+   searches flash + px4). Since S1 (2026-10-21) a row no longer has to match
+   every word: rows that match ALL of them rank first, then rows that match
+   fewer (each kept only when a word of 3+ letters hit), so a phrased question
+   is never a dead end. The old AND semantics survive as the `full` flag on
+   each row, and only the full rows are shown to the librarian as candidates.
    Deep links: site hits -> hash routes (with @heading anchors when the heading
    is the better match); code/CAD/fork hits -> GitHub blob URLs (+#L<line>).
 
@@ -60,6 +66,17 @@
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter(Boolean);
+  }
+  /* S1: the words a query is searched by. tokens() is unchanged (titles use it
+     too); a query drops these English stopwords first. A query made of nothing
+     else still searches all of its words — "how to" is a fair title. */
+  const STOPWORDS = new Set(('a an and are as at be by can do for from how i in is it of on or '
+    + 'that the this to what where which with you your does did').split(' '));
+  const MAX_TERMS = 8;
+  function queryTerms(q) {
+    const all = tokens(q == null ? '' : q);
+    const kept = all.filter((t) => !STOPWORDS.has(t));
+    return (kept.length ? kept : all).slice(0, MAX_TERMS);
   }
   function ghUrl(repo, branch, path, line) {
     const p = path.split('/').map(encodeURIComponent).join('/');
@@ -138,9 +155,16 @@
 
   const KIND_BOOST = { page: 8, class: 8, cad: 4, fn: 2, file: 0, fork: -5 };
 
+  /* -> {score, matched}; score 0 means "not a hit". S1: the rank key is
+     score + matched * MATCH_WEIGHT, and searchItems sorts on `matched` first
+     anyway, so every row matching ALL terms ranks above any row matching
+     fewer, whatever the weights. A partial row is a hit only when at least one
+     word of 3+ letters matched — a two-letter hit alone is noise. */
+  const MATCH_WEIGHT = 1000;
   function scoreItem(it, terms) {
     let score = 0;
     let matched = 0;
+    let strong = false;
     for (const t of terms) {
       let s = 0;
       if (it.ltitle === t) s = 120;
@@ -149,14 +173,20 @@
       else if (it.ttoks.some((k) => k.startsWith(t))) s = 26;
       else if (it.ltitle.includes(t)) s = 18;
       if (it.haystack.includes(t)) s += s ? 6 : 10;
-      if (s) matched += 1;
+      if (s) {
+        matched += 1;
+        if (t.length >= 3) strong = true;
+      }
       score += s;
     }
-    if (matched < terms.length) return 0;          // AND semantics
-    const joined = terms.join(' ');
-    if (it.ltitle === joined) score += 80;         // exact multi-word title
-    else if (it.ltitle.includes(joined)) score += 25;
-    return score + (KIND_BOOST[it.kind] || 0);
+    if (!matched) return { score: 0, matched: 0 };
+    if (matched < terms.length && !strong) return { score: 0, matched: 0 };
+    if (matched === terms.length) {
+      const joined = terms.join(' ');
+      if (it.ltitle === joined) score += 80;         // exact multi-word title
+      else if (it.ltitle.includes(joined)) score += 25;
+    }
+    return { score: score + (KIND_BOOST[it.kind] || 0) + matched * MATCH_WEIGHT, matched };
   }
 
   function bestHeadingAnchor(it, terms) {
@@ -170,22 +200,27 @@
     return it.href;
   }
 
-  /* The local engine, unchanged and pure: entries + query in, ranked hits out.
-     Anything that alters this function alters the probe record — don't. */
+  /* The local engine, changed 2026-10-21 for S1, still pure: entries + query
+     in, ranked hits out. Anything that alters this function alters the probe
+     record — tools/tests/test_search_routing.mjs pins every keyword probe at
+     rank 1. Each row carries `full`: true when it matched every query term
+     (the old AND result, always a prefix of the list), false for a partial. */
   function searchItems(list, q) {
-    const terms = tokens(q).slice(0, 8);
+    const terms = queryTerms(q);
     if (!terms.length) return { total: list.length, results: [] };
     const scored = [];
     for (const it of list) {
       const s = scoreItem(it, terms);
-      if (s > 0) scored.push([s, it]);
+      if (s.score > 0) scored.push([s, it]);
     }
-    scored.sort((a, b) => b[0] - a[0] || a[1].title.localeCompare(b[1].title));
+    scored.sort((a, b) => b[0].matched - a[0].matched || b[0].score - a[0].score
+      || a[1].title.localeCompare(b[1].title));
     return {
       total: list.length,
       results: scored.slice(0, 40).map(([s, it]) => ({
-        score: s, kind: it.kind, title: it.title, where: it.where,
+        score: s.score, kind: it.kind, title: it.title, where: it.where,
         href: bestHeadingAnchor(it, terms), snippet: it.snippet || '',
+        full: s.matched === terms.length,
       })),
     };
   }
@@ -253,6 +288,17 @@
     }));
   }
 
+  /* S1: what the librarian is actually sent. Only the rows that match EVERY
+     word are candidates — the old AND list, byte-identical, and always a prefix
+     of `results`, so their ids are the ids the merge assigns. Partial rows are
+     not the keyword index's answer (the hop-1 prompt promises the model that
+     each candidate "matches every query word"), and an empty list still asks
+     for the graph walk. A row with no `full` flag counts as full. */
+  function librarianCandidates(results, limit) {
+    const rows = Array.isArray(results) ? results : [];
+    return projectCandidates(rows.filter((r) => r && r.full !== false), limit);
+  }
+
   /* 404/405/501 all mean the same thing: this host has no such function.
      GitHub Pages answers a POST to a missing path with 405. */
   function classifyStatus(status) {
@@ -310,7 +356,7 @@
      "mavlink router" counterexample recorded in the routing test. */
   function strongLead(localResults, q) {
     if (!Array.isArray(localResults) || !localResults.length) return false;
-    const terms = tokens(q == null ? '' : q).slice(0, 8);
+    const terms = queryTerms(q);
     if (!terms.length) return false;
     const lead = localResults[0];
     const title = tokens(lead && lead.title != null ? lead.title : '');
@@ -450,7 +496,7 @@
           res = await doFetch(LIBRARIAN_URL, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ q: trimmed, candidates: projectCandidates(results) }),
+            body: JSON.stringify({ q: trimmed, candidates: librarianCandidates(results) }),
             signal: ctrl ? ctrl.signal : undefined,
           });
         } catch (e) {
@@ -605,9 +651,11 @@
     // tools/bench_librarian.mjs — neither of which may touch api/)
     buildItems,
     searchItems,
+    queryTerms,
     createLibrarian,
     assignIds,
     projectCandidates,
+    librarianCandidates,
     classifyStatus,
     pickIds,
     pickRows,
