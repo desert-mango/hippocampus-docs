@@ -45,12 +45,68 @@
   function setTitle(parts) {
     document.title = [...parts, 'HippoCampus Robotics'].filter(Boolean).join(' · ');
   }
+  /* E1: the not-found view and the error panel. notFoundAdvice, isNotFound and redirectFor are pure
+     (window.HCRoute, tested under node). The serve.sh / file:// advice is for a developer running the
+     site locally, so it shows only there; the public site gets the way back instead. */
+  function notFoundAdvice(loc) {
+    if (!loc) return false;
+    return loc.protocol === 'file:' || loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+  }
+  function isNotFound(err) {
+    if (!err) return false;
+    if (err.notFound === true) return true;
+    return /^(No (setup page|project|tool)|Unknown page)/.test(String(err.message || ''));
+  }
+  // old addresses that moved (J8: the run guide is now a section of Learning to Swim)
+  const REDIRECTS = Object.freeze({
+    '/projects/learning-to-swim-run-guide': '#/projects/learning-to-swim@simulation-run-guide',
+  });
+  function redirectFor(path) {
+    const key = String(path || '');
+    return Object.prototype.hasOwnProperty.call(REDIRECTS, key) ? REDIRECTS[key] : null;
+  }
+  window.HCRoute = Object.freeze({ notFoundAdvice, isNotFound, redirectFor, REDIRECTS });
+
+  const WAY_BACK = `<a href="#/setup">Setup</a>, <a href="#/projects">Projects</a> or <a href="#/team">Team</a>`;
+
   function errorPanel(err) {
+    setTitle(['Page could not be loaded']);
+    const advice = notFoundAdvice(location)
+      ? `<p>If you are running locally, serve the site with
+       <code>./tools/serve.sh</code> (plain <code>file://</code> cannot fetch content).</p>`
+      : `<p>The page could not be loaded. Reload, or go to ${WAY_BACK}.</p>`;
     content.innerHTML =
       `<div class="error-panel"><h1>Something broke</h1>
-       <p>${esc(err.message || String(err))}</p>
-       <p>If you are running locally, serve the site with
-       <code>./tools/serve.sh</code> (plain <code>file://</code> cannot fetch content).</p></div>`;
+       <p>${esc(err && err.message ? err.message : String(err))}</p>
+       ${advice}</div>`;
+  }
+
+  function viewNotFound(path) {
+    navHighlight(null);
+    sidebar.innerHTML = '';
+    setTitle(['Page not found']);
+    content.innerHTML = `
+      <section class="not-found">
+        <p class="kicker">404</p>
+        <h1>Page not found</h1>
+        <p class="lead">There is no page at <code>${esc(path || '/')}</code>. It may have moved, or the link has a typo.</p>
+        <form class="not-found-search" role="search">
+          <label class="visually-hidden" for="not-found-input">Search the site</label>
+          <input id="not-found-input" type="search" autocomplete="off" placeholder="Search the site">
+          <button type="submit" class="hc-btn">Search</button>
+        </form>
+        <p>Or go to ${WAY_BACK}.</p>
+      </section>`;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    const form = content.querySelector('.not-found-search');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = form.querySelector('input');
+        const q = input && input.value ? input.value.trim() : '';
+        if (q) location.hash = `#/search?q=${encodeURIComponent(q)}`;
+      });
+    }
   }
 
   // ---------- markdown rendering + enhancement ----------
@@ -930,6 +986,12 @@
     editorParamPrompt(hash);
     setHeaderSearch(hash);                  // the home route hands search to the hero
     try {
+      const moved = redirectFor(path);
+      if (moved) {                          // an old address (J8), same shape as about/lab below:
+        const [to, toAnchor] = moved.split('@');   // its ?query (an old ?editor= link) comes along (codex r1)
+        location.replace(`${to}${queryStr ? `?${queryStr}` : ''}${toAnchor ? `@${toAnchor}` : ''}`);
+        return;
+      }
       if (seg.length === 0) { navHighlight(null); viewHome(); }
       else if (seg[0] === 'setup' && seg.length === 1) { navHighlight('setup'); await viewSetupIndex(); }
       else if (seg[0] === 'setup') { navHighlight('setup'); await viewSetupPage(seg.slice(1).join('/'), anchor); }
@@ -948,13 +1010,15 @@
         navHighlight(null);
         const q = new URLSearchParams(queryStr || '').get('q') || '';
         await viewSearch(q);
-      } else { throw new Error(`Unknown page: ${path}`); }
+      } else { viewNotFound(path); return; }
       // viewSearch scrolls on its own first paint, so it is excluded here —
       // otherwise this would fire only after the optional librarian round trip.
       if (!anchor && seg[0] !== 'search') window.scrollTo({ top: 0, behavior: 'instant' });
       if (epoch === routeEpoch) setEditLink(editPageId(seg) ? `/${seg.join('/')}` : null);
     } catch (err) {
-      errorPanel(err);
+      if (epoch !== routeEpoch) return;     // a later navigation owns the page now
+      if (isNotFound(err)) viewNotFound(path);
+      else errorPanel(err);
     }
   }
 
