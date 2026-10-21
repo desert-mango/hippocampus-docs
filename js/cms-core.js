@@ -2075,7 +2075,7 @@
   /* What a people.json change does, person by person (the marks on the Team page for my draft and for an
      opened people proposal): add, del (with the old group and title, so the page can show a ghost), move (the
      group changed, or the person left the order the others keep: the longest kept order stays unmarked), pin,
-     unpin, edit (title, photo, link or highlight). -> [{name, mark, group?, title?}] ([] for unreadable text) */
+     unpin, edit (title, subtitle, photo, link or highlight). -> [{name, mark, group?, title?}] ([] for unreadable text) */
   function peopleFlat(text) {
     try {
       const doc = JSON.parse(text);
@@ -2118,7 +2118,7 @@
       if (b.group !== x.group) out.push({ name, mark: 'move' });
       if (b.p.pinned !== true && x.p.pinned === true) out.push({ name, mark: 'pin' });
       if (b.p.pinned === true && x.p.pinned !== true) out.push({ name, mark: 'unpin' });
-      if (['title', 'photo', 'link', 'highlight'].some((k) => !same(b.p[k], x.p[k]))) out.push({ name, mark: 'edit' });
+      if (['title', 'subtitle', 'photo', 'link', 'highlight'].some((k) => !same(b.p[k], x.p[k]))) out.push({ name, mark: 'edit' });
     }
     return out;
   }

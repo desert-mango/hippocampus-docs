@@ -34,6 +34,7 @@
         {
           "name": "Kyle Nelson",
           "title": "Site creator",
+          "subtitle": "Guest Researcher",
           "photo": "https://res.cloudinary.com/dr76gues0/image/upload/v1792071495/hippocampus-docs/people/kyle-nelson.jpg",
           "link": "https://kyle-nelson-berkeley.vercel.app",
           "highlight": true,

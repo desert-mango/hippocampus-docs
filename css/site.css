@@ -316,7 +316,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
 .hc-team > h1 { margin-bottom: 1.2rem; }
 .hc-team .team-lab { margin-bottom: 2.8rem; }
 .hc-team .team-people > h2, .hc-lab.is-embedded > h2 { margin: 0 0 0.4rem; font-size: 1.25rem; color: var(--heading); }
-/* a highlighted title (people.json highlight: true) in the site's blue; light mode darkens it for small text */
+/* a highlighted title (people.json highlight: true) in the site's blue; a subtitle under it stays plain grey */
 .person-title.is-highlight { color: var(--accent); font-weight: 600; }
 
 /* ---------- people (the Team page) ---------- */

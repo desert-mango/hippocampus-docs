@@ -33,7 +33,8 @@ Validates, failing loudly with actionable messages:
   6b. hygiene: no credentials, key material or personal emails in content/**.md,
      data/**/*.json (the graph shards included) or .mcp.json;
   6c. people: data/people.json (when present) carries exactly name/title/photo/
-     link per person (plus the optional booleans pinned and highlight), every
+     link per person (plus the optional booleans pinned and highlight and the
+     optional string subtitle), every
      photo resolves to a manifest entry, every link is an
      http(s) URL;
   6d. content safety: no script-capable tag, on*= attribute, srcdoc or
@@ -2116,10 +2117,10 @@ def main():
                     # round 2 (R4, Kyle 2026-10-15): two optional flags an admin sets — pinned (stays on
                     # the Team page's current team without recent GitHub work) and highlight (the title
                     # in the site's accent). Booleans only: the string "false" would be truthy in js/app.js.
-                    extra = sorted(set(p) - {"name", "title", "photo", "link", "pinned", "highlight"})
+                    extra = sorted(set(p) - {"name", "title", "photo", "link", "pinned", "highlight", "subtitle"})
                     if extra:
                         err(f"{who}: unknown field(s) {extra} — a person is exactly "
-                            f"name/title/photo/link, plus optional pinned/highlight (typo?)")
+                            f"name/title/photo/link, plus optional pinned/highlight/subtitle (typo?)")
                     for flag in ("pinned", "highlight"):
                         if flag in p and not isinstance(p[flag], bool):
                             err(f"{who}: '{flag}' must be true or false (no quotes), "
@@ -2131,6 +2132,9 @@ def main():
                         err(f"{who}: 'name' must be a non-empty string")
                     if not isinstance(p.get("title"), str):
                         err(f"{who}: 'title' must be a string (\"\" is allowed)")
+                    # Kyle 2026-10-21: an optional second title line, plain grey, under the title
+                    if "subtitle" in p and not isinstance(p["subtitle"], str):
+                        err(f"{who}: 'subtitle' must be a string, got {type(p['subtitle']).__name__}")
                     photo = p.get("photo")
                     if photo is not None:
                         if not isinstance(photo, str) or not photo.startswith("https://"):

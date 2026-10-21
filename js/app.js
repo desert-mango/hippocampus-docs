@@ -472,7 +472,8 @@
     return letters.toUpperCase() || '?';
   }
   /* Round 2 (R5, Kyle 2026-10-15): the WHOLE card is the person's link — photo, name and title (the photo is
-     no longer a popover trigger). A highlighted title (people.json `highlight: true`) is in the site's accent.
+     no longer a popover trigger). A highlighted title (people.json `highlight: true`) is in the site's accent; an
+     optional `subtitle` is a second, plain title line under it (Kyle 2026-10-21).
      entry = HCLab.splitTeam's {person, linked, active, pinned} (or a bare person); the data-* attributes are
      what Editor mode's card tools read (js/editor-frame.js). */
   function personCardHTML(entry) {
@@ -486,7 +487,9 @@
     const hl = person.highlight === true ? ' is-highlight' : '';
     const title = (typeof person.title === 'string' && person.title.trim())
       ? `<span class="person-title${hl}">${esc(person.title)}</span>` : '';
-    const inner = `${media}<span class="person-name">${esc(name)}</span>${title}`;
+    const sub = (typeof person.subtitle === 'string' && person.subtitle.trim())
+      ? `<span class="person-title person-subtitle">${esc(person.subtitle)}</span>` : '';
+    const inner = `${media}<span class="person-name">${esc(name)}</span>${title}${sub}`;
     const link = safeHttpUrl(person.link);
     const flags = entry && entry.person
       ? ` data-linked="${entry.linked ? 1 : 0}" data-active="${entry.active ? 1 : 0}" data-pinned="${entry.pinned ? 1 : 0}"` : '';
