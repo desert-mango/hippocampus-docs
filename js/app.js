@@ -116,12 +116,10 @@
       btn.className = 'copy-btn';
       btn.type = 'button';
       btn.textContent = 'copy';
+      btn.setAttribute('aria-label', 'Copy code');
       btn.addEventListener('click', () => {
-        let text = pre.innerText;
-        if (/^\$ /m.test(text)) {
-          text = text.split('\n').map((l) => l.replace(/^\$ /, '')).join('\n');
-        }
-        navigator.clipboard.writeText(text.trimEnd()).then(() => {
+        // innerText keeps the logical lines: a long line wrapped on screen (P2) copies as one line
+        navigator.clipboard.writeText(copyText(pre.innerText)).then(() => {
           btn.textContent = 'copied';
           setTimeout(() => { btn.textContent = 'copy'; }, 1200);
         });
@@ -148,6 +146,157 @@
     if (!anchor) { window.scrollTo(0, 0); return; }
     const target = document.getElementById(anchor);
     if (target) target.scrollIntoView();
+  }
+
+  // ---------- setup pages: pure helpers (uiux unit SETUP; window.HCSetup, tested under node) ----------
+  const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const TOC_MIN = 3;        // fewer h2/h3 headings than this: no "On this page" list (P1)
+
+  /* [{tag, id, text}] -> [{id, text, level}] for the h2/h3 headings that have an id,
+     or [] when there are fewer than TOC_MIN of them. */
+  function tocModel(headings) {
+    const out = [];
+    (Array.isArray(headings) ? headings : []).forEach((h) => {
+      if (!h || typeof h !== 'object') return;
+      const tag = String(h.tag || '').toLowerCase();
+      const level = tag === 'h2' ? 2 : (tag === 'h3' ? 3 : 0);
+      const id = typeof h.id === 'string' ? h.id : '';
+      const text = String(h.text == null ? '' : h.text).replace(/\s+/g, ' ').trim();
+      if (level && id && text) out.push({ id, text, level });
+    });
+    return out.length >= TOC_MIN ? out : [];
+  }
+
+  /* data/graph/page-authors.json's day for one page ('setup/<id>'): pages[key].last_commit when it
+     is a plain YYYY-MM-DD (the GitHub layer writes it, unit M), else null. Every read is guarded. */
+  function pageDate(authorsDoc, pageKey) {
+    const pages = authorsDoc && typeof authorsDoc === 'object' ? authorsDoc.pages : null;
+    if (!pages || typeof pages !== 'object' || !Object.prototype.hasOwnProperty.call(pages, pageKey)) return null;
+    const entry = pages[pageKey];
+    const day = entry && typeof entry === 'object' ? entry.last_commit : null;
+    return typeof day === 'string' && DAY_RE.test(day) ? day : null;
+  }
+
+  // the setup pages in reading order, and the index of this one -> {prev, next}: {id, title, href} | null
+  function pageNavModel(flat, i) {
+    const list = Array.isArray(flat) ? flat : [];
+    const at = (j) => {
+      const p = j >= 0 && j < list.length ? list[j] : null;
+      return p ? { id: p.id, title: p.title, href: `#/setup/${p.id}` } : null;
+    };
+    return { prev: at(i - 1), next: at(i + 1) };
+  }
+
+  // what a code block's copy button copies: "$ " prompts stripped when the block has them, no trailing space
+  function copyText(text) {
+    let t = String(text == null ? '' : text);
+    if (/^\$ /m.test(t)) t = t.split('\n').map((l) => l.replace(/^\$ /, '')).join('\n');
+    return t.trimEnd();
+  }
+
+  window.HCSetup = Object.freeze({ tocModel, pageDate, pageNavModel, copyText });
+
+  // ---------- setup pages: the "On this page" list (P1/P3), the date (P10), prev/next (P9) ----------
+  function tocList(entries, pageId) {
+    const ol = document.createElement('ol');
+    let sub = null;
+    entries.forEach((e) => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = `#/setup/${pageId}@${e.id}`;
+      a.textContent = e.text;
+      a.setAttribute('data-toc-id', e.id);
+      li.appendChild(a);
+      const parent = ol.lastElementChild;
+      if (e.level === 3 && parent) {
+        if (!sub || sub.parentNode !== parent) { sub = document.createElement('ol'); parent.appendChild(sub); }
+        sub.appendChild(li);
+      } else {
+        ol.appendChild(li);
+        sub = null;
+      }
+    });
+    return ol;
+  }
+
+  /* The side list (nav.page-toc) and the fold-out (details.page-toc-fold) from the rendered body's
+     headings; CSS shows one of them by the content box's width. null when the page is too short.
+     Headings inside tabs or a <details> are left out: a link to a hidden heading goes nowhere. */
+  function buildToc(body, pageId) {
+    const heads = Array.from(body.querySelectorAll('h2, h3'))
+      .filter((h) => !(h.closest && h.closest('.tabs, details')))
+      .map((h) => {
+        const c = h.cloneNode(true);
+        c.querySelectorAll('.heading-anchor').forEach((a) => a.remove());
+        return { tag: h.tagName, id: h.id, text: c.textContent };
+      });
+    const entries = tocModel(heads);
+    if (!entries.length) return null;
+    const nav = document.createElement('nav');
+    nav.className = 'page-toc';
+    nav.setAttribute('aria-label', 'On this page');
+    const title = document.createElement('p');
+    title.className = 'page-toc-title';
+    title.textContent = 'On this page';
+    nav.append(title, tocList(entries, pageId));
+    const fold = document.createElement('details');
+    fold.className = 'page-toc-fold';
+    const summary = document.createElement('summary');
+    summary.textContent = 'On this page';
+    fold.append(summary, tocList(entries, pageId));
+    return { nav, fold, entries };
+  }
+
+  /* Marks the link of the heading being read (aria-current="true"): the last heading whose top has
+     passed the top 30 % of the window under the header. The observer (and scrollend) only say WHEN to
+     look again; none passed yet (the page top) marks nothing. Both stop once the route moves on. */
+  function watchToc(root, entries, epoch) {
+    if (typeof IntersectionObserver !== 'function') return;
+    const heads = entries.map((e) => document.getElementById(e.id)).filter(Boolean);
+    if (!heads.length) return;
+    const links = Array.from(root.querySelectorAll('a[data-toc-id]'));
+    const header = document.querySelector('.site-header');
+    const top = Math.round((header && header.offsetHeight) || 56);
+    const update = () => {
+      const line = top + (window.innerHeight - top) * 0.3;
+      let id = null;
+      heads.forEach((h) => { if (h.getBoundingClientRect().top <= line) id = h.id; });
+      links.forEach((a) => {
+        if (id && a.getAttribute('data-toc-id') === id) a.setAttribute('aria-current', 'true');
+        else a.removeAttribute('aria-current');
+      });
+    };
+    // a smooth scroll can end after the observer's last report: look once more when it settles
+    const settle = () => { if (epoch !== routeEpoch || !root.isConnected) stop(); else update(); };
+    const io = new IntersectionObserver(settle, { rootMargin: `-${top}px 0px -70% 0px` });
+    function stop() { io.disconnect(); window.removeEventListener('scrollend', settle); }
+    window.addEventListener('scrollend', settle, { passive: true });
+    heads.forEach((h) => io.observe(h));
+  }
+
+  let authorsDocP = null;   // data/graph/page-authors.json, read once per session (null when unreadable)
+  function showPageDate(body, pageId, epoch) {
+    authorsDocP = authorsDocP || Promise.resolve().then(() => fetchJSON('data/graph/page-authors.json')).catch(() => null);
+    return authorsDocP.then((doc) => {
+      if (epoch !== routeEpoch || !body.isConnected || body.querySelector('.page-meta')) return;
+      const day = pageDate(doc, `setup/${pageId}`);
+      const h1 = body.querySelector('h1');
+      if (!day || !h1) return;
+      const p = document.createElement('p');
+      p.className = 'page-meta';
+      const time = document.createElement('time');
+      time.setAttribute('datetime', day);
+      time.textContent = day;
+      p.append('Updated ', time);
+      h1.after(p);
+    });
+  }
+
+  function pageNavHTML(model) {
+    const card = (p, rel) => (p ? `<a class="page-nav-${rel}" href="${esc(p.href)}" rel="${rel}">
+        <span class="page-nav-label">${rel === 'prev' ? '← Previous' : 'Next →'}</span>
+        <span class="page-nav-title">${esc(p.title)}</span></a>` : '<span></span>');
+    return card(model.prev, 'prev') + card(model.next, 'next');
   }
 
   // ---------- sidebar ----------
@@ -337,16 +486,27 @@
     if (epoch !== routeEpoch) return;
     content.innerHTML = '';
     const body = renderMarkdown(md);
-    // prev / next
-    const i = flat.indexOf(page);
+    // prev / next as two cards (P9)
     const nav = document.createElement('nav');
     nav.className = 'page-nav';
-    nav.innerHTML =
-      (i > 0 ? `<a href="#/setup/${flat[i - 1].id}">← ${esc(flat[i - 1].title)}</a>` : '<span></span>') +
-      (i < flat.length - 1 ? `<a href="#/setup/${flat[i + 1].id}" style="text-align:right">${esc(flat[i + 1].title)} →</a>` : '<span></span>');
+    nav.setAttribute('aria-label', 'Previous and next page');
+    nav.innerHTML = pageNavHTML(pageNavModel(flat, flat.indexOf(page)));
     body.appendChild(nav);
-    content.appendChild(body);
+    // the article, then the side "On this page" list; the fold-out copy is the article's first child,
+    // ahead of the Markdown's first block (the Editor frame groups blocks from there on)
+    const layout = document.createElement('div');
+    layout.className = 'setup-layout';
+    layout.appendChild(body);
+    const toc = buildToc(body, page.id);
+    if (toc) {
+      layout.classList.add('has-toc');
+      body.insertBefore(toc.fold, body.firstChild);
+      layout.appendChild(toc.nav);
+    }
+    content.appendChild(layout);
     if (window.HCLab) HCLab.renderAuthors(body, `setup/${page.id}`);
+    showPageDate(body, page.id, epoch);
+    if (toc) watchToc(layout, toc.entries, epoch);
     scrollToAnchor(anchor);
   }
 
