@@ -836,11 +836,11 @@
    "stars": 2,
    "forks": 1,
    "open_issues": 0,
-   "pushed_at": "2026-10-20",
+   "pushed_at": "2026-10-21",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 88,
+   "commits_365d": 89,
    "html_url": "https://github.com/HippoCampusRobotics/ipp_rig"
   },
   "ipp_rviz_visuals": {

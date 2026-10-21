@@ -5,7 +5,7 @@
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 195,
+  "commits_365d": 196,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -643,7 +643,7 @@
    "days": [
     4,
     1,
-    0,
+    1,
     null,
     null,
     null,
@@ -652,6 +652,12 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "ipp_rig",
+   "sha": "db97e2c",
+   "date": "2026-10-21",
+   "msg": "update authors, delete deprecated and unused pre-commit-config"
+  },
   {
    "repo": "ipp_rig",
    "sha": "6fcef02",
@@ -795,20 +801,14 @@
    "sha": "0eba667",
    "date": "2026-08-27",
    "msg": "Add instruction for enabling motors and checking status"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "5bf8fa6",
-   "date": "2026-08-26",
-   "msg": "Improve move_to_start service timeout behaviour"
   }
  ],
  "most_active_repos": [
   {
    "name": "ipp_rig",
-   "commits": 88,
+   "commits": 89,
    "language": "Python",
-   "pushed_at": "2026-10-20"
+   "pushed_at": "2026-10-21"
   },
   {
    "name": "fav_docs",
