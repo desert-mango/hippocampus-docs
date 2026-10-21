@@ -1247,7 +1247,7 @@
       h('ol', { class: 'hc-guide' },
         step('Editor on', ' (the switch in the bubble at the top right) shows this page in a frame you can edit. Your changes stay '
           + 'a draft in this browser (even when you close the tab) until you send them for review; signing out deletes them.'),
-        step('Click a block', ' and type right in the page: new text is underlined in magenta, removed text struck through in magenta. '
+        step('Click a block', ' and type right in the page: new text is underlined and removed text struck through, in orange (yellow in dark mode). '
           + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
         step('Undo and Redo', ': Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, or the two arrows in the bubble, step back and forward '
           + 'through your changes, one burst of typing at a time; the marks come back with the text. Typing done before the '

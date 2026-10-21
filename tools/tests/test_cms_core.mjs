@@ -1699,7 +1699,7 @@ test('proposerSlots: the viewer is 0; others get 1..5 by their oldest open propo
   const pulls = [pr(9, 'Zed'), pr(3, 'amy'), pr(4, 'Kyle'), pr(7, 'bob'), pr(5, 'AMY'),
     pr(11, 'c1'), pr(12, 'c2'), pr(13, 'c3'), pr(14, 'c4')];
   const s = C.proposerSlots(pulls, 'kyle');
-  assert.equal(s.kyle, 0, 'the viewer: magenta, whatever the order');
+  assert.equal(s.kyle, 0, 'the viewer: slot 0, whatever the order');
   assert.equal(s.amy, 1, 'amy opened #3, the oldest of the others');
   assert.equal(s.bob, 2);
   assert.equal(s.zed, 3);

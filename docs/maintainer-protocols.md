@@ -130,7 +130,7 @@ Editor mode on, on the page itself. The bubble at the top right holds your pictu
 and role, a small **Proposals N** link, the **Editor** switch, and below them the change count
 and **Send for review**. **Proposals N** opens the list of proposals: who, which page, when,
 status; click one to see its page with its changes marked, each person in their own colour (your
-own are blue). The words you add or strike out while you edit are magenta. **×** tucks the bubble into a tag on the right edge.
+own are blue). The words you add or strike out while you edit are orange (yellow in dark mode). **×** tucks the bubble into a tag on the right edge.
 
 **Change a block.**
 

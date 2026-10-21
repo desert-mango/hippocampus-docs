@@ -17,27 +17,27 @@
 }
 [data-theme="light"] { --hc-add: #1a7f37; --hc-del: #cf222e; }
 /* The edit palette (Kyle 2026-10-21, after round 2's all-magenta of 2026-10-15): the Editor chrome is the site's
-   own blue, and Desert Mango magenta means changed text only.
-   --hc-mark (magenta): the struck-out words, the new words, a format change, a removed block, and the border of
-   the viewer's own change card beside the page (--hc-tint). Nothing else.
+   own blue, and the change colour means changed text only.
+   --hc-mark (the change colour: yellow #FFD166 in dark, orange #FF7F50 in light, Kyle's exact values): the
+   struck-out words, the new words, a format change, a removed block, and the border of the viewer's own change
+   card beside the page (--hc-tint). Nothing else.
    --hc-edit (the site's --accent): every Editor line, outline, fill and switch; --hc-edit-ink is its text colour
-   (the light theme's darker blue, as css/site.css's highlighted titles, because --accent is under 4.5:1 there);
-   --hc-edit-on is text on an --hc-edit-ink fill.
+   (the same blue: Kyle asked for the exact colours, so light-theme blue and orange text sit near 3:1 and 2.4:1 on
+   white, his call); --hc-edit-on is text on an --hc-edit-ink fill (dark text in both themes: it reaches 4.5:1).
    --hc-p1..--hc-p5 are the other proposers, one colour each (HCCore.proposerSlots), same lightness per theme, hues
-   apart. --hc-hl is the drawn proposal's highlight (its blocks' line and wash, the page bar): blue for the viewer's
-   own, the proposer's colour for anyone else's. --hc-mark and every proposer colour reach 4.5:1 as text on --bg,
-   --bg-soft, --surface and --surface-2 in its theme (tools/tests/test_editor.mjs computes the ratios from this block). */
-:root { --hc-mark: #E565A1; --hc-edit-on: #0a0a0a; --hc-p1: #B995F6; --hc-p2: #ED914C; --hc-p3: #00C5C6; --hc-p4: #8CA4FF; --hc-p5: #6EC272; }
-[data-theme="light"] { --hc-mark: #C9257F; --hc-edit-on: #ffffff; --hc-p1: #724AAB; --hc-p2: #A14400; --hc-p3: #007B7E; --hc-p4: #4759B7; --hc-p5: #107823; }
+   apart. --hc-hl is the drawn proposal's highlight (its blocks' line and wash, the page bar; --hc-hl-on is text on it): blue
+   for the viewer's own, the proposer's colour for anyone else's. Every proposer colour, and the dark theme's --hc-mark, reach 4.5:1 as
+   text on --bg, --bg-soft, --surface and --surface-2 (tools/tests/test_editor.mjs computes the ratios from this block). */
+:root { --hc-mark: #FFD166; --hc-edit-on: #0a0a0a; --hc-p1: #B995F6; --hc-p2: #ED914C; --hc-p3: #00C5C6; --hc-p4: #8CA4FF; --hc-p5: #6EC272; }
+[data-theme="light"] { --hc-mark: #FF7F50; --hc-edit-on: #0a0a0a; --hc-p1: #724AAB; --hc-p2: #A14400; --hc-p3: #007B7E; --hc-p4: #4759B7; --hc-p5: #107823; }
 :root { --hc-edit: var(--accent); --hc-edit-ink: var(--accent); --hc-edit-soft: color-mix(in srgb, var(--hc-edit) 13%, transparent);
-  --hc-tint: var(--hc-mark); --hc-hl: var(--hc-edit-ink); }
-[data-theme="light"] { --hc-edit-ink: color-mix(in srgb, var(--accent) 82%, #000); }
+  --hc-tint: var(--hc-mark); --hc-hl: var(--hc-edit-ink); --hc-hl-on: var(--hc-edit-on); }
 /* the drawn proposal's proposer (the frame's body, and the parent's while a proposal is drawn) */
-body[data-hc-tint="1"] { --hc-tint: var(--hc-p1); --hc-hl: var(--hc-p1); }
-body[data-hc-tint="2"] { --hc-tint: var(--hc-p2); --hc-hl: var(--hc-p2); }
-body[data-hc-tint="3"] { --hc-tint: var(--hc-p3); --hc-hl: var(--hc-p3); }
-body[data-hc-tint="4"] { --hc-tint: var(--hc-p4); --hc-hl: var(--hc-p4); }
-body[data-hc-tint="5"] { --hc-tint: var(--hc-p5); --hc-hl: var(--hc-p5); }
+body[data-hc-tint="1"] { --hc-tint: var(--hc-p1); --hc-hl: var(--hc-p1); --hc-hl-on: var(--bg); }
+body[data-hc-tint="2"] { --hc-tint: var(--hc-p2); --hc-hl: var(--hc-p2); --hc-hl-on: var(--bg); }
+body[data-hc-tint="3"] { --hc-tint: var(--hc-p3); --hc-hl: var(--hc-p3); --hc-hl-on: var(--bg); }
+body[data-hc-tint="4"] { --hc-tint: var(--hc-p4); --hc-hl: var(--hc-p4); --hc-hl-on: var(--bg); }
+body[data-hc-tint="5"] { --hc-tint: var(--hc-p5); --hc-hl: var(--hc-p5); --hc-hl-on: var(--bg); }
 
 /* the title's "Editor" word (css/site.css slides it in): the Editor's blue text */
 .brand-editor { color: var(--hc-edit-ink); }
@@ -95,8 +95,8 @@ body.hc-edit-on .page-body > .hc-block[data-hc-image]:active { cursor: grabbing;
 .hc-drop-line[hidden] { display: none; }
 
 /* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout; the
-   left line (blue) says where the caret is. Suggestions (js/editor-type.js): new text in magenta (--hc-mark),
-   underlined; removed text struck through in magenta; a format change dotted in magenta. */
+   left line (blue) says where the caret is. Suggestions (js/editor-type.js): new text in the change colour
+   (--hc-mark), underlined; removed text struck through in it; a format change dotted in it. */
 body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-edit-root [contenteditable] { outline: none; caret-color: var(--hc-edit); cursor: text; }
 .hc-sug-ins { color: var(--hc-mark); background: none; text-decoration: underline; text-decoration-color: var(--hc-mark);
@@ -220,7 +220,7 @@ body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb
 /* what my draft or an opened proposal changes, card by card: the highlight (--hc-hl; blue for mine) */
 .person-card[data-hc-badge] { position: relative; outline: 2px solid var(--hc-hl); outline-offset: 2px; }
 .person-card[data-hc-badge]::after { content: attr(data-hc-badge); position: absolute; top: -.55rem; left: 50%; transform: translateX(-50%);
-  padding: 0 .45rem; border-radius: 999px; background: var(--hc-hl); color: var(--bg); font: 700 .66rem/1.25rem var(--sans);
+  padding: 0 .45rem; border-radius: 999px; background: var(--hc-hl); color: var(--hc-hl-on); font: 700 .66rem/1.25rem var(--sans);
   white-space: nowrap; }
 .person-card.hc-pghost { opacity: .55; outline-style: dashed; }
 .person-card.hc-pghost .person-name { text-decoration: line-through; }
@@ -800,7 +800,7 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
   border: 1px solid var(--edge); color: var(--body); font-size: .8rem; line-height: 1.45; cursor: pointer;
   transition: border-color .15s ease-out, box-shadow .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1); }
 .hc-rcard:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
-/* the card's border is the change's own colour (--hc-tint): magenta for mine (Kyle 2026-10-21: it stays) */
+/* the card's border is the change's own colour (--hc-tint): the change colour for mine (Kyle 2026-10-21: it stays) */
 .hc-rcard.is-hot { border-color: color-mix(in srgb, var(--hc-tint) 55%, var(--edge)); }
 .hc-rcard.is-active { border-color: color-mix(in srgb, var(--hc-tint) 70%, var(--edge)); cursor: default;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .28); transform: translateX(-8px); }

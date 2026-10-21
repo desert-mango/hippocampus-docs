@@ -3461,7 +3461,7 @@ test('js/editor.js the proposals list: newest first, who, which page, when, stat
   assert.ok(rows.indexOf('6') < rows.indexOf('5'), 'newest first');
   assert.match(row(6).textContent, /^BProposal 6bob \(you\)·(About|Team)Open.*opened 3 days ago$/);
   assert.match(row(5).textContent, /^A<script>alert\(1\)<\/script> fix the navalice·code and data only.*opened 3 days ago$/);
-  assert.equal(row(6).attrs['data-slot'], '0', 'mine: magenta');
+  assert.equal(row(6).attrs['data-slot'], '0', 'mine: slot 0');
   assert.equal(page.all((e) => e.tagName === 'SCRIPT').length, 0, 'the title is text');
   assert.deepEqual(ghWrites(page), []);
   assert.ok(page.calls.some((c) => c.url === `${REPO_API}/pulls/5/files?per_page=100&page=1`));
@@ -4382,8 +4382,9 @@ test('U4b: older tab drafts are never handed to another person, and are kept whe
 });
 
 // ---- the edit palette (Kyle 2026-10-21, after round 2's all-magenta): the Editor chrome is the site's blue, and
-// magenta marks changed text only; every colour passes contrast in both themes ----
-test('edit palette: blue chrome, magenta change marks and the five proposer colours pass contrast in both themes', () => {
+// the change colour (yellow in dark, orange in light) marks changed text only. Contrast holds wherever Kyle did not
+// choose exact colours over it: his light-theme blue #2391FF and orange #FF7F50 are pinned instead ----
+test('edit palette: blue chrome, the change colour only on change marks, Kyle\'s exact colours, contrast elsewhere', () => {
   const site = fs.readFileSync(path.join(ROOT, 'css', 'site.css'), 'utf8');
   const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
   const block = (src, sel, marker) => {
@@ -4400,12 +4401,19 @@ test('edit palette: blue chrome, magenta change marks and the five proposer colo
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-  // color-mix(in srgb, A p%, #000)
-  const darken = (hex, p) => `#${rgb(hex).map((c) => Math.round(c * p).toString(16).padStart(2, '0')).join('')}`;
-  // the chrome is the site's own blue; its text colour is the light theme's darker blue (css/site.css's highlighted titles)
+  // the chrome and its text are the site's own blue, in both themes (no darker text shade: Kyle's exact colours)
   assert.match(css, /:root\s*\{[^}]*--hc-edit:\s*var\(--accent\);[^}]*--hc-edit-ink:\s*var\(--accent\);/, '--hc-edit is the site blue');
-  assert.match(css, /\[data-theme="light"\]\s*\{\s*--hc-edit-ink:\s*color-mix\(in srgb, var\(--accent\) 82%, #000\);\s*\}/,
-    'light: the blue text is the darker blue');
+  assert.doesNotMatch(css, /--hc-edit-ink:\s*color-mix/, 'no darker blue for text');
+  // Kyle's exact values (2026-10-21)
+  assert.equal(block(site, '[data-theme="light"]', '--bg:').accent.toUpperCase(), '#2391FF', 'light: the site blue');
+  assert.equal(block(site, ':root', '--bg:').accent.toLowerCase(), '#38bdf8', 'dark: the site blue is unchanged');
+  assert.equal(block(css, ':root', '--hc-mark:')['hc-mark'].toUpperCase(), '#FFD166', 'dark: the change colour is yellow');
+  assert.equal(block(css, '[data-theme="light"]', '--hc-mark:')['hc-mark'].toUpperCase(), '#FF7F50', 'light: the change colour is orange');
+  assert.equal(block(site, ':root', '--bg:').active.toUpperCase(), '#06D6A0', 'the "active" badge green');
+  assert.match(site, /\.badge\.active\s*\{\s*color:\s*var\(--active\);/, 'the "active" badge uses it');
+  assert.match(css, /--hc-hl-on:\s*var\(--hc-edit-on\)/, 'text on my highlight is the button text');
+  for (let n = 1; n <= 5; n++) assert.match(css, new RegExp(`body\\[data-hc-tint="${n}"\\]\\s*\\{[^}]*--hc-hl-on:\\s*var\\(--bg\\)`), `slot ${n}: text on its highlight`);
+  assert.match(css, /\.person-card\[data-hc-badge\]::after\s*\{[^}]*color:\s*var\(--hc-hl-on\)/, 'the card badge text');
   for (const [sel, theme] of [[':root', 'dark'], ['[data-theme="light"]', 'light']]) {
     const bg = block(site, sel, '--bg:');
     const ed = block(css, sel, '--hc-mark:');
@@ -4413,30 +4421,29 @@ test('edit palette: blue chrome, magenta change marks and the five proposer colo
     assert.equal(backs.filter(Boolean).length, 4, `${theme}: four backgrounds read`);
     const accent = bg.accent;
     assert.ok(accent, `${theme}: the site's --accent is a hex colour`);
-    const ink = theme === 'light' ? darken(accent, 0.82) : accent;
-    for (const b of backs) {
-      assert.ok(ratio(ink, b) >= 4.5, `${theme}: blue text ${ink} on ${b} is ${ratio(ink, b).toFixed(2)}`);
-      assert.ok(ratio(accent, b) >= 3, `${theme}: a blue line ${accent} on ${b} is ${ratio(accent, b).toFixed(2)}`);
-    }
+    const ink = accent;
+    // dark: the blue passes as text; light: Kyle's exact #2391FF (pinned above) is near 3:1, his call
+    if (theme === 'dark') for (const b of backs) assert.ok(ratio(ink, b) >= 4.5, `${theme}: blue text ${ink} on ${b} is ${ratio(ink, b).toFixed(2)}`);
     assert.ok(ratio(ed['hc-edit-on'], ink) >= 4.5, `${theme}: button text on the blue fill`);
-    for (const k of ['hc-mark', 'hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5']) {
+    // a highlight badge's text: --hc-edit-on on the viewer's blue, --bg on each proposer colour
+    for (const k of ['hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5']) assert.ok(ratio(bg.bg, ed[k]) >= 4.5, `${theme}: badge text on --${k}`);
+    // the change colour passes as text in dark; light's orange is Kyle's exact #FF7F50 (pinned above)
+    for (const k of theme === 'dark' ? ['hc-mark', 'hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5'] : ['hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5']) {
       assert.ok(ed[k], `${theme}: --${k} is a hex colour`);
       for (const b of backs) assert.ok(ratio(ed[k], b) >= 4.5, `${theme}: --${k} ${ed[k]} on ${b} is ${ratio(ed[k], b).toFixed(2)}`);
     }
   }
-  // light keeps Desert Mango's own magenta for the change marks
-  assert.equal(block(css, '[data-theme="light"]', '--hc-mark:')['hc-mark'].toUpperCase(), '#C9257F');
-  // magenta is ONLY the change marks: every rule that paints with --hc-mark is one of them, and --hc-tint (magenta for
-  // the viewer's own) only borders a change's card beside the page
+  // the change colour is ONLY the change marks: every rule that paints with --hc-mark is one of them, and --hc-tint
+  // (the change colour for the viewer's own) only borders a change's card beside the page
   const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
   const using = (v) => rules.filter(([, body]) => body.includes(`var(${v})`)).map(([sel]) => sel);
   assert.deepEqual(using('--hc-mark'), [':root', '.hc-sug-ins', '.hc-sug-del', '.hc-sug-fmt', '.hc-block.hc-removed', 'a.hc-sug-fmt'],
-    'magenta paints only the change marks');
+    'the change colour paints only the change marks');
   assert.deepEqual(using('--hc-tint'), ['.hc-rcard.is-hot', '.hc-rcard.is-active'], 'the change card border');
-  assert.equal((css.match(/#E565A1|#C9257F/gi) || []).length, 2, 'the magenta hex lives only in its token');
-  // the site blue enters only through the edit tokens (--hc-edit, --hc-edit-ink and the light ink), and no text is
-  // painted with the raw line blue (under 4.5:1 on the light backgrounds)
-  assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)/g) || []).length, 3, 'the blue only through the edit tokens');
+  assert.equal((css.replace(/\/\*[\s\S]*?\*\//g, '').match(/#FFD166|#FF7F50/gi) || []).length, 2, 'the change colour hex lives only in its token');
+  assert.equal((css + site).match(/#E565A1|#C9257F/gi), null, 'no magenta left');
+  // the site blue enters only through the edit tokens (--hc-edit, --hc-edit-ink), and text takes --hc-edit-ink
+  assert.equal((css.match(/var\(--accent\)|var\(--accent-soft\)/g) || []).length, 2, 'the blue only through the edit tokens');
   assert.equal(rules.filter(([, body]) => /(^|[;{\s])color:\s*var\(--hc-edit\)/.test(body)).length, 0, 'blue text is --hc-edit-ink');
 });
 

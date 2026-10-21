@@ -19,6 +19,7 @@
   --scroll-thumb-hover: #4a4a4f;
   color-scheme: dark;
   --ok: #5affc5;
+  --active: #06D6A0;                       /* the project "active" badge, both themes (Kyle 2026-10-21) */
   --warn: #ffb347;
   --danger: #ff6b6b;
   --code-bg: #111418;
@@ -48,8 +49,8 @@
   --body: #3f3f46;
   --body-soft: #52525b;
   --muted: #8a8a93;
-  --accent: #0284c7;
-  --accent-soft: rgba(2, 132, 199, 0.10);
+  --accent: #2391FF;                       /* Kyle's light-mode blue (2026-10-21), used exactly as given */
+  --accent-soft: rgba(35, 145, 255, 0.10);
   /* the status colours, darkened for a light page: the dark theme's (#ffb347 warning, #5affc5 ok) are under
      2:1 on white, so note-box titles and role labels were near invisible (audit 2026-10-14, all >= 5:1 here) */
   --ok: #0f7b55;
@@ -288,7 +289,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
   font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700;
   padding: 0.14rem 0.5rem; border-radius: 999px; border: 1px solid var(--edge);
 }
-.badge.active { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.badge.active { color: var(--active); border-color: color-mix(in srgb, var(--active) 40%, transparent); }
 .badge.maintained { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .badge.legacy { color: var(--muted); }
 .badge.archive { color: var(--muted); border-style: dashed; }
@@ -315,7 +316,6 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
 .hc-team .team-people > h2, .hc-lab.is-embedded > h2 { margin: 0 0 0.4rem; font-size: 1.25rem; color: var(--heading); }
 /* a highlighted title (people.json highlight: true) in the site's blue; light mode darkens it for small text */
 .person-title.is-highlight { color: var(--accent); font-weight: 600; }
-[data-theme="light"] .person-title.is-highlight { color: color-mix(in srgb, var(--accent) 82%, #000); }
 
 /* ---------- people (the Team page) ---------- */
 .people-group h3 {
