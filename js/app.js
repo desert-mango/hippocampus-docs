@@ -454,9 +454,9 @@
   // data/people.json stores canonical Cloudinary manifest URLs (the rule for editors is
   // "paste the manifest url"); cards are ~160px wide, so ask the CDN for a card-sized
   // rendition instead of the original asset. Non-Cloudinary and already-transformed URLs
-  // pass through untouched.
-  const CARD_PHOTO_TX = 'w_320,f_auto,q_auto';
-  function cardPhotoUrl(url) {
+  // pass through untouched. cloudinaryTx(url, tx) puts the transformation `tx` in front of
+  // the asset; people cards ask for 'w_320,f_auto,q_auto'.
+  function cloudinaryTx(url, tx) {
     const m = /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.+)$/.exec(url);
     if (!m) return url;
     const first = m[2].split('/')[0];
@@ -464,7 +464,7 @@
     // and anything ending in a file extension is a public_id, not a transform.
     const transformed = !/^v\d+$/.test(first) && /^[a-z]+_[^/]+$/.test(first)
       && !/\.[a-z0-9]{2,4}$/i.test(first);
-    return transformed ? url : `${m[1]}${CARD_PHOTO_TX}/${m[2]}`;
+    return transformed ? url : `${m[1]}${tx}/${m[2]}`;
   }
   function initials(name) {
     const letters = name.trim().split(/\s+/).slice(0, 2)
@@ -482,7 +482,7 @@
     if (!name) return '';
     const photo = safeHttpUrl(person.photo);
     const media = photo
-      ? `<img class="person-photo" src="${esc(cardPhotoUrl(photo))}" alt="" loading="lazy">`
+      ? `<img class="person-photo" src="${esc(cloudinaryTx(photo, 'w_320,f_auto,q_auto'))}" alt="" loading="lazy">`
       : `<div class="person-initials" aria-hidden="true">${esc(initials(name))}</div>`;
     const hl = person.highlight === true ? ' is-highlight' : '';
     const title = (typeof person.title === 'string' && person.title.trim())
@@ -988,28 +988,45 @@
     });
   }
 
-  async function boot() {
-    initTheme();
+  /* boot() is split in four (uiux plan 1b) so no function has two owners: bootEntry and bootSession
+     belong to the header/sign-in code, bootData and boot to the router. */
+  function bootEntry() {
     initSearchBox();
     initEditorEntry();
     setEditLink(null);
+  }
+
+  // the registries into DATA; false (after the error panel) when one could not be read
+  async function bootData() {
     try {
       const [site, setup, projects, tools] = await Promise.all([
         fetchJSON('data/site.json'), fetchJSON('data/setup.json'),
         HC.fetchProjects(), fetchJSON('data/tools.json'),   // the project index + each project's facts file
       ]);
       Object.assign(DATA, { site, setup, projects, tools });
+      return true;
     } catch (err) {
       errorPanel(err);
-      return;
+      return false;
     }
+  }
+
+  function bootSession() {
     editor.session = storedSession();       // the one storage read (guarded)
     editor.sessionKnown = true;
     syncGuestDock();
+    // a stored session the editor turns down (expired, malformed): a guest after all, so "Sign in" shows.
+    // loadEditor injects nothing before its first microtask, so the first route() still paints first.
+    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncGuestDock(); } });
+  }
+
+  async function boot() {
+    initTheme();
+    bootEntry();
+    if (!(await bootData())) return;
+    bootSession();
     window.addEventListener('hashchange', route);
     route();
-    // a stored session the editor turns down (expired, malformed): a guest after all, so "Sign in" shows
-    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncGuestDock(); } });
   }
 
   boot();

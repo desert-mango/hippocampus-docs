@@ -63,6 +63,7 @@
   color-scheme: light;
   --code-bg: #f1f3f5;
 }
+/* ---- owner boundary (uiux plan 1a): E above, nobody below ---- */
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -90,6 +91,7 @@ body {
   background: var(--accent); color: #06121a; padding: 0.5rem 1rem; border-radius: 0 0 8px 0;
 }
 .skip-link:focus { left: 0; }
+/* ---- owner boundary (uiux plan 1a): nobody above, SHELL below ---- */
 
 /* ---------- header ---------- */
 .site-header {
@@ -175,6 +177,7 @@ body.hc-editor-on .brand-editor { opacity: 1; transform: none; }
 .sidebar a.active { color: var(--accent); background: var(--accent-soft); }
 .content { padding: 2.2rem 3rem 5rem; min-width: 0; }
 .content:focus { outline: none; }
+/* ---- owner boundary (uiux plan 1a): SHELL above, nobody below ---- */
 
 /* ---------- typography ---------- */
 h1, h2, h3, h4 { color: var(--heading); line-height: 1.25; scroll-margin-top: calc(var(--header-h) + 1rem); }
@@ -194,6 +197,7 @@ img { max-width: 100%; height: auto; border-radius: 8px; }
 .lead { font-size: 1.12rem; color: var(--body); }
 .heading-anchor { opacity: 0; margin-left: 0.4rem; font-size: 0.85em; text-decoration: none; }
 h2:hover .heading-anchor, h3:hover .heading-anchor, h4:hover .heading-anchor { opacity: 0.7; }
+/* ---- owner boundary (uiux plan 1a): nobody above, SETUP below ---- */
 
 /* ---------- code ---------- */
 code {
@@ -218,12 +222,14 @@ pre code { background: none; border: 0; padding: 0; color: var(--body); font-siz
 .code-wrap:hover .copy-btn, .copy-btn:focus { opacity: 1; }
 .copy-btn:hover { color: var(--heading); }
 .math code { background: none; border: 0; font-style: italic; }
+/* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 
 /* ---------- tables ---------- */
 .table-wrap { overflow-x: auto; margin: 1rem 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
 th, td { border: 1px solid var(--edge); padding: 0.45rem 0.7rem; text-align: left; vertical-align: top; }
 th { background: var(--surface-2); color: var(--heading); }
+/* ---- owner boundary (uiux plan 1a): nobody above, SETUP below ---- */
 
 /* ---------- admonitions ---------- */
 .adm {
@@ -242,6 +248,7 @@ th { background: var(--surface-2); color: var(--heading); }
 .adm-hint .adm-title, .adm-tip .adm-title { color: var(--ok); }
 .adm-hint, .adm-tip { border-left-color: var(--ok); }
 .adm-todo { opacity: 0.75; border-left-style: dashed; }
+/* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 
 /* ---------- tabs ---------- */
 .tabs { border: 1px solid var(--edge); border-radius: var(--radius); margin: 1.1rem 0; overflow: hidden; }
@@ -262,6 +269,7 @@ details summary { cursor: pointer; color: var(--heading); font-weight: 600; }
 
 .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem; margin: 1rem 0; }
 .img-grid p { margin: 0; }
+/* ---- owner boundary (uiux plan 1a): nobody above, J below ---- */
 
 /* ---------- cards (home, projects, tools) ---------- */
 /* min(19rem, 100%) rather than a bare 19rem: a 304px track floor is wider than
@@ -311,6 +319,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
 .aside-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; font-size: 0.88rem; }
 .repo-row { display: flex; align-items: baseline; gap: 0.5rem; }
 .repo-row .role { color: var(--muted); font-size: 0.75rem; }
+/* ---- owner boundary (uiux plan 1a): J above, M below ---- */
 
 /* ---------- the Team page (round 2, R5): lab activity, then the people ---------- */
 .hc-team > h1 { margin-bottom: 1.2rem; }
@@ -360,6 +369,7 @@ a.person-card:hover {
 .people-grid.compact .person-initials { font-size: 1.15rem; margin-bottom: 0.45rem; }
 .people-grid.compact .person-name { font-size: 0.8rem; }
 .people-grid.compact .person-title { font-size: 0.7rem; }
+/* ---- owner boundary (uiux plan 1a): M above, S below ---- */
 
 /* ---------- search ---------- */
 .result { padding: 0.8rem 0; border-bottom: 1px solid var(--edge-soft); }
@@ -371,18 +381,20 @@ a.person-card:hover {
    .hit .p already breaks for the same reason on the home panel. */
 .result p { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--body-soft); overflow-wrap: anywhere; }
 .result .why { color: var(--muted); font-size: 0.8rem; font-style: italic; }
+/* ---- owner boundary (uiux plan 1a): S above, SETUP below ---- */
 
 /* ---------- misc ---------- */
 .page-nav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; font-size: 0.9rem; }
 .page-nav a { text-decoration: none; color: var(--body-soft); border: 1px solid var(--edge-soft); border-radius: 8px; padding: 0.5rem 0.9rem; max-width: 48%; }
 .page-nav a:hover { color: var(--accent); border-color: var(--accent); }
-.error-panel { border: 1px solid var(--danger); border-radius: var(--radius); padding: 1rem 1.2rem; background: color-mix(in srgb, var(--danger) 7%, var(--bg)); }
+/* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 .site-footer {
   display: flex; gap: 1.5rem; align-items: center; justify-content: center;
   border-top: 1px solid var(--edge-soft); color: var(--muted); font-size: 0.82rem;
   padding: 1rem; flex-wrap: wrap;
 }
 .site-footer a { color: var(--body-soft); }
+/* ---- owner boundary (uiux plan 1a): nobody above, SHELL below ---- */
 
 @media (max-width: 900px) {
   .layout { width: 100%; grid-template-columns: minmax(0, 1fr); }
@@ -435,6 +447,7 @@ a.person-card:hover {
      comes back at 768. */
   .tuhh-link { display: none; }
 }
+/* ---- owner boundary (uiux plan 1a): SHELL above, nobody below ---- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   /* a.person-card:hover is listed verbatim: a bare .person-card:hover would lose the
@@ -468,6 +481,7 @@ a.person-card:hover {
   background: var(--accent-soft);
   border-radius: 3px;
 }
+/* ---- owner boundary (uiux plan 1a): nobody above, M below ---- */
 
 .hc-popover {
   position: fixed; z-index: 60; max-width: 22rem; min-width: 13rem;
@@ -490,6 +504,7 @@ a.person-card:hover {
   font-size: 0.82rem; text-decoration: none; color: var(--accent);
 }
 .hc-pop-open:hover { text-decoration: underline; }
+/* ---- owner boundary (uiux plan 1a): M above, nobody below ---- */
 
 .hc-modal-backdrop {
   position: fixed; inset: 0; z-index: 80;
@@ -519,6 +534,7 @@ a.person-card:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .hc-btn-primary:hover { color: var(--accent); border-color: var(--accent); }
+/* ---- owner boundary (uiux plan 1a): nobody above, J below ---- */
 
 /* Sits inside .aside-box, so it inherits that box's <h3> and <ul> rules. */
 .hc-contributors .contrib-row { display: flex; align-items: baseline; gap: 0.5rem; }
@@ -534,6 +550,7 @@ a.person-card:hover {
 }
 .contrib-link:hover { color: var(--accent); text-decoration: underline; }
 .contrib-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+/* ---- owner boundary (uiux plan 1a): J above, S below ---- */
 
 /* ---- search: the librarian's picks vs the plain local index (js/search.js) ----
    Both rules are inert on a host without the function: no picks means no
@@ -544,6 +561,7 @@ a.person-card:hover {
   border-top: 1px solid var(--edge-soft); padding-top: 0.9rem;
 }
 .search-notice { margin-top: 1.4rem; font-size: 0.82rem; color: var(--muted); }
+/* ---- owner boundary (uiux plan 1a): S above, H below ---- */
 
 /* ---- home: search as the front door (js/app.js viewHome) ----
    Direction A. The page's own search field is the biggest thing on it, the four
@@ -651,6 +669,7 @@ a.person-card:hover {
   .askbox input { font-size: 1rem; }
   .askbox kbd { display: none; }
 }
+/* ---- owner boundary (uiux plan 1a): H above, SHELL below ---- */
 
 /* ---- the header search box, which the home route hands to the hero ----
    On #/ the page itself is the search box, so the header's own field closes into
@@ -678,6 +697,7 @@ body.hc-anim.hc-hero-search #search-form {
               margin-right var(--hc-sweep) cubic-bezier(0.4, 0, 0.2, 1),
               visibility 0s linear var(--hc-sweep);
 }
+/* ---- owner boundary (uiux plan 1a): SHELL above, M below ---- */
 
 /* ---- the public GitHub layer (js/lab.js): Lab page, repo cards, person popover,
    who wrote this. The mockup's mk-* styles, renamed hc-*. Every string inside is
@@ -751,6 +771,7 @@ body.hc-anim.hc-hero-search #search-form {
 .hc-person-row .nm { color: var(--heading); font-weight: 600; overflow-wrap: anywhere; }
 .hc-person-row .sub { color: var(--muted); font-size: 0.72rem; font-family: var(--mono); overflow-wrap: anywhere; }
 .hc-prov { margin-top: 1.2rem; }
+/* ---- owner boundary (uiux plan 1a): M above, J below ---- */
 
 /* repo cards: replace the plain repository rows in a project's aside */
 .aside-box ul .hc-repo-item { display: block; }
@@ -774,6 +795,7 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 .hc-lang[data-lang="Shell"] { background: #89e051; }
 .hc-lang[data-lang="C"] { background: #555555; }
 .hc-lang[data-lang="JavaScript"] { background: #f1e05a; }
+/* ---- owner boundary (uiux plan 1a): J above, M below ---- */
 
 /* who wrote this */
 .hc-authors { margin-top: 2.2rem; padding-top: 1rem; border-top: 1px solid var(--edge-soft); font-size: 0.82rem; color: var(--body-soft); }
@@ -815,6 +837,7 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 @media (max-width: 900px) {
   .hc-cols { grid-template-columns: minmax(0, 1fr); }
 }
+/* ---- owner boundary (uiux plan 1a): M above, SHELL below ---- */
 
 /* ---- the guest's "Sign in" bubble (js/app.js; editor redesign U4a, Kyle's D1 change 3) ----
    The place the Editor's dock takes once signed in (css/editor.css): top right, just under the header,
@@ -841,3 +864,24 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 body.hc-guest-collapsed .hc-guest-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
 body.hc-guest-collapsed .hc-guest-tag { transform: none; }
 @media (prefers-reduced-motion: reduce) { .hc-guest-dock, .hc-guest-tag { transition: none; } }
+
+/* ==== the uiux build's unit blocks (plan 1a; the scaffold, unit 0) ==== */
+/* Each unit edits only its own sections above and its own block below. */
+/* To change the effect of a rule another unit owns, write an override in your own block: same selector, later in the cascade. */
+/* Never edit another unit's lines; theme- or media-scoped overrides go in your block too. */
+/* The blocks stay in this order; E is last so its theme-scoped rules win the cascade. */
+
+/* ==== UNIT S: search ==== */
+
+/* ==== UNIT SHELL: header, sidebar, drawer, sign-in ==== */
+
+/* ==== UNIT SETUP: setup pages ==== */
+
+/* ==== UNIT H: home ==== */
+
+/* ==== UNIT J: projects ==== */
+
+/* ==== UNIT M: team and the GitHub layer ==== */
+
+/* ==== UNIT E: not-found page and light-theme depth (last: its theme-scoped rules win the cascade) ==== */
+.error-panel { border: 1px solid var(--danger); border-radius: var(--radius); padding: 1rem 1.2rem; background: color-mix(in srgb, var(--danger) 7%, var(--bg)); }

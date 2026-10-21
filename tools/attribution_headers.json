@@ -1150,6 +1150,36 @@
         "purpose": "Test the edit-access rule (commits first, admin add and remove win) and its fail-safe writer."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/test_views.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "a804130b20854874fa4f2edd35ab9ac2efc24b7127bcf067b762154ec0c9ce4e",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "View tests for the public site's string-written views over the vm harness, one marked section per uiux unit."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/view_harness.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "4c653846646eed431323a5345bb7ce9c8531479c885b5c99a61fe2414736cb29",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "affiliation": "TUHH HippoCampus Robotics",
+        "author": "Kyle Nelson",
+        "last_substantive_modification": "21 October 2026",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "purpose": "Boot the public site's scripts in a vm over a fake DOM for view tests, and parse the theme tokens for contrast tests."
+      },
+      "reason": "First-party site, tool, or test implementation verified from source history and provenance."
     }
   },
   "schema_version": 1
