@@ -33,12 +33,12 @@ test('contrastPairs: dark --body on --bg is 10.09:1 (hand-computed from #b9b9b9 
   assert.equal(cp.ratio(cp.dark['--body'], cp.dark['--bg']).toFixed(2), '10.09');
 });
 
-test('contrastPairs: light --body on the error panel, color-mix(in srgb, --danger 7%, --bg), is 8.98:1', () => {
+test('contrastPairs: light --body on the error panel, color-mix(in srgb, --danger 7%, --bg), is 8.62:1 (E2: light --bg #f5f5f7)', () => {
   const cp = contrastPairs(SITE_CSS);
-  // #c62828 7% into #fafafa: (246.36, 235.3, 235.3) by hand
+  // #c62828 7% into #f5f5f7: (241.71, 230.65, 232.51) by hand
   const panel = cp.mix(cp.light['--danger'], cp.light['--bg'], 7);
-  assert.equal(panel, 'rgba(246.36, 235.3, 235.3, 1)');
-  assert.equal(cp.ratio(cp.light['--body'], panel).toFixed(2), '8.98');
+  assert.equal(panel, 'rgba(241.71, 230.65, 232.51, 1)');
+  assert.equal(cp.ratio(cp.light['--body'], panel).toFixed(2), '8.62');
   // the light block overlays :root; a token it does not set is inherited, a var() resolved
   assert.equal(cp.light['--active'], cp.dark['--active']);
   assert.equal(cp.dark['--note-warn'], cp.dark['--warn']);
@@ -142,4 +142,53 @@ test('J8: HCRoute.redirectFor maps only the frozen old ids', async () => {
   assert.equal(R.redirectFor('/toString'), null, 'no prototype keys');
   assert.equal(R.redirectFor(undefined), null);
   assert.ok(Object.isFrozen(R.REDIRECTS));
+});
+
+test('E2: light mode has a real step between page and card, and a card shadow; dark has none', () => {
+  const cp = contrastPairs(SITE_CSS);
+  assert.notEqual(cp.light['--bg'], cp.light['--surface']);
+  assert.ok(cp.ratio(cp.light['--surface'], cp.light['--bg']) >= 1.05, 'surface vs page step');
+  assert.ok(cp.ratio(cp.light['--surface'], cp.light['--bg-soft']) > cp.ratio(cp.light['--surface'], cp.light['--bg']));
+  assert.equal(cp.dark['--card-shadow'], 'none');
+  assert.notEqual(cp.light['--card-shadow'], 'none');
+  assert.match(cp.light['--card-shadow'], /rgba\(0, ?0, ?0/);
+  const block = SITE_CSS.slice(SITE_CSS.indexOf('/* ==== UNIT E')).replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...block.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    sels: m[1].split(',').map((x) => x.trim().replace(/\s+/g, ' ')), body: m[2] }));
+  for (const sel of ['.card', '.quiet', '.person-card', '.hc-tile', '.hc-col', '.hc-heat', '.askbox form']) {
+    const want = `[data-theme="light"] ${sel}`;
+    assert.ok(rules.some((r) => r.sels.includes(want) && /box-shadow:\s*var\(--card-shadow\)/.test(r.body)),
+      `${want} gets box-shadow: var(--card-shadow) in the UNIT E block`);
+  }
+});
+
+test('E2: text contrast pairs, parsed from css/site.css (WCAG 1.4.3)', () => {
+  const cp = contrastPairs(SITE_CSS);
+  const L = cp.light;
+  const D = cp.dark;
+  const at = (t, fg, bg, min) => {
+    const r = cp.ratio(t[fg] || fg, t[bg] || bg);
+    assert.ok(r >= min, `${fg} on ${bg}: ${r.toFixed(2)} < ${min}`);
+  };
+  for (const t of [L, D]) {
+    at(t, '--body', '--surface', 7);
+    at(t, '--body', '--bg', 7);
+    at(t, '--heading', '--surface', 7);
+    at(t, '--body-soft', '--surface', 4.5);
+    at(t, '--body-soft', '--bg', 4.5);
+  }
+  // --muted is darkened in light mode (E2); the dark theme's --muted is not E2's to change
+  for (const bg of ['--surface', '--bg', '--surface-2', '--bg-soft']) at(L, '--muted', bg, 4.5);
+  // the G2 note boxes, the tint the way unit SETUP's step 6 defines it:
+  // color-mix(in srgb, var(--note-warn) 14%, var(--surface)). Body ink on it in both themes, and the dark
+  // title (--note-warn). The LIGHT title ink is SETUP's rule and SETUP's test: the plan's
+  // color-mix(--note-warn 70%, #000) measures 4.22:1 here, under 4.5 (unit E report, section 7).
+  for (const [name, t] of [['light', L], ['dark', D]]) {
+    const tint = cp.mix(t['--note-warn'], t['--surface'], 14);
+    const body = cp.ratio(t['--body'], tint);
+    assert.ok(body >= 4.5, `${name} body on the note tint: ${body.toFixed(2)}`);
+  }
+  const darkTint = cp.mix(D['--note-warn'], D['--surface'], 14);
+  const darkTitle = cp.ratio(D['--note-warn'], darkTint);
+  assert.ok(darkTitle >= 4.5, `dark title on the note tint: ${darkTitle.toFixed(2)}`);
 });

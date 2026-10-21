@@ -15,6 +15,7 @@
   --muted: #6b6b6b;
   --accent: #38bdf8;
   --accent-soft: rgba(56, 189, 248, 0.12);
+  --card-shadow: none;                     /* E2: cards float only in light mode */
   --scroll-thumb: #333336;
   --scroll-thumb-hover: #4a4a4f;
   color-scheme: dark;
@@ -40,16 +41,19 @@
   --hc-search-max: 34vw;
 }
 [data-theme="light"] {
-  --bg: #fafafa;
-  --bg-soft: #f2f2f2;
+  /* E2 (uiux 2026-10): a real step in tone between the page (--bg) and a card (--surface), firmer edges,
+     and a soft shadow on cards (--card-shadow), so light mode has the depth dark mode has */
+  --bg: #f5f5f7;
+  --bg-soft: #f1f1f4;                      /* not darker: the editor's proposer colours (css/editor.css --hc-p3 #007B7E) need >= 4.5:1 on it */
   --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --edge: rgba(0, 0, 0, 0.12);
-  --edge-soft: rgba(0, 0, 0, 0.06);
+  --surface-2: #f1f1f4;
+  --edge: rgba(0, 0, 0, 0.14);
+  --edge-soft: rgba(0, 0, 0, 0.08);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px -8px rgba(0, 0, 0, 0.12);
   --heading: #18181b;
   --body: #3f3f46;
   --body-soft: #52525b;
-  --muted: #8a8a93;
+  --muted: #6b6b75;                        /* E2: >= 4.5:1 on --bg, --surface and --surface-2 (was #8a8a93, 3.4:1 on white) */
   --accent: #2391FF;                       /* Kyle's light-mode blue (2026-10-21), used exactly as given */
   --accent-soft: rgba(35, 145, 255, 0.10);
   /* the status colours, darkened for a light page: the dark theme's (#ffb347 warning, #5affc5 ok) are under
@@ -885,3 +889,30 @@ body.hc-guest-collapsed .hc-guest-tag { transform: none; }
 
 /* ==== UNIT E: not-found page and light-theme depth (last: its theme-scoped rules win the cascade) ==== */
 .error-panel { border: 1px solid var(--danger); border-radius: var(--radius); padding: 1rem 1.2rem; background: color-mix(in srgb, var(--danger) 7%, var(--bg)); }
+
+/* E1: the not-found view (js/app.js viewNotFound) */
+.not-found { max-width: 40rem; padding: 1.5rem 0 2rem; }
+.not-found .lead code { overflow-wrap: anywhere; }
+.not-found-search { display: flex; gap: 0.5rem; max-width: 28rem; margin: 1.4rem 0 1rem; }
+.not-found-search input {
+  flex: 1; min-width: 0; font: inherit; font-size: 0.95rem;
+  background: var(--surface); color: var(--heading);
+  border: 1px solid var(--edge); border-radius: 8px; padding: 0.42rem 0.75rem;
+}
+.not-found-search input::placeholder { color: var(--muted); }
+.not-found-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-color: var(--accent); }
+
+/* E2: light-theme depth. Cards and panels float on the page with --card-shadow (none in dark mode);
+   dialogs and drawers keep their own stronger shadows. */
+[data-theme="light"] .card,
+[data-theme="light"] .quiet,
+[data-theme="light"] .person-card,
+[data-theme="light"] .hc-tile,
+[data-theme="light"] .hc-col,
+[data-theme="light"] .hc-heat,
+[data-theme="light"] .askbox form { box-shadow: var(--card-shadow); }
+[data-theme="light"] .askbox form:focus-within { box-shadow: 0 0 0 3px var(--accent-soft), var(--card-shadow); }
+[data-theme="light"] .site-nav a.active { background: var(--accent-soft); }
+[data-theme="light"] .page-body a:hover,
+[data-theme="light"] .not-found a:hover,
+[data-theme="light"] .error-panel a:hover { text-decoration: underline; text-decoration-thickness: 2px; }
