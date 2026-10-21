@@ -987,7 +987,11 @@
     setHeaderSearch(hash);                  // the home route hands search to the hero
     try {
       const moved = redirectFor(path);
-      if (moved) { location.replace(moved); return; }   // an old address (J8), same shape as about/lab below
+      if (moved) {                          // an old address (J8), same shape as about/lab below:
+        const [to, toAnchor] = moved.split('@');   // its ?query (an old ?editor= link) comes along (codex r1)
+        location.replace(`${to}${queryStr ? `?${queryStr}` : ''}${toAnchor ? `@${toAnchor}` : ''}`);
+        return;
+      }
       if (seg.length === 0) { navHighlight(null); viewHome(); }
       else if (seg[0] === 'setup' && seg.length === 1) { navHighlight('setup'); await viewSetupIndex(); }
       else if (seg[0] === 'setup') { navHighlight('setup'); await viewSetupPage(seg.slice(1).join('/'), anchor); }

@@ -112,6 +112,12 @@ test('J8: the old run-guide route redirects to the guide heading on the Learning
   assert.equal(site.replaced[0], '#/projects/learning-to-swim@simulation-run-guide');
 });
 
+test('J8: the old run-guide redirect keeps a ?query (an old ?editor= link), before the guide anchor (codex r1)', async () => {
+  const site = await bootSite({ hash: '#/' });
+  await site.go('#/projects/learning-to-swim-run-guide?editor=changes');
+  assert.equal(site.replaced[0], '#/projects/learning-to-swim?editor=changes@simulation-run-guide');
+});
+
 test('E1: HCRoute.notFoundAdvice is true only for file:, localhost and 127.0.0.1', async () => {
   const site = await bootSite({ hash: '#/' });
   const R = site.win.HCRoute;
