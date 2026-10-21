@@ -8,12 +8,16 @@
    Four surfaces, all drawn from COMMITTED same-origin JSON (tools/build_github_data.py
    writes them under data/graph/ when the site's derived data is rebuilt):
 
-     1. the Lab page (#/lab): totals, a 53-week heatmap, recent commits (no authors),
-        the most active repositories, releases and the people on GitHub (names only);
-     2. repo cards that replace the plain repository rows in a project's aside;
-     3. a person popover on People cards, contributor names, "who wrote this" names
-        and Lab-page rows (one at a time, Esc closes);
-     4. the "who wrote this" footer under a page: names and committed avatars only.
+     1. the Team page's Lab activity: three totals, a 53-week heatmap (one tab stop, a
+        site tooltip), the ten newest commits with their authors, the most active
+        repositories, releases and the people on GitHub (names only, the ten most
+        active first);
+     2. quiet repo cards that replace the plain repository rows in a project's aside;
+     3. ONE dialog (uiux 2026-10, M17): a person's profile (People cards, contributor
+        names, "who wrote this" names, Lab rows), a commit, a repository — an anchored
+        popover on a wide screen, a bottom sheet on a phone; one at a time, focus
+        trapped, Esc closes;
+     4. the "who wrote this" line under a page: names and committed avatars only.
 
    Rules this file keeps (plan D-B, D-B2, D-C, D-J, D-L, D-M):
    - A guest's browser makes NO request to GitHub: every read goes through HC.fetchJSON
@@ -37,7 +41,7 @@
                                 data-hc-slot="lab-people";
      data-hc-surface="authors"  a "who wrote this" box, with data-hc-page=<page key>;
      data-hc-surface="people"   the About page root wirePeople() wired;
-     data-hc-surface="popover"  an open person popover, with data-hc-login when it has a
+     data-hc-surface="popover"  an open person dialog, with data-hc-login when it has a
                                 GitHub login.
    onRender(fn) -> unsubscribe: fn(surface, element) runs once the element is in the page.
    A throwing listener is ignored; a guest page has no listener at all.
@@ -55,6 +59,8 @@
     authors: 'data/graph/page-authors.json',
     people: 'data/graph/people-public.json',
     roster: 'data/people.json',
+    contrib: 'data/graph/contributors.json',   // M5 projects in the profile, M13 the people column's order
+    wiki: 'data/graph/wiki.json',              // M12 the setup pages that mention a repository
   };
   const SOURCES = Object.freeze(Object.keys(SRC).map((k) => SRC[k]));
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -63,6 +69,11 @@
   const SHA_RE = /^[0-9a-f]{7,40}$/;
   const NOT_BUILT = 'GitHub data not built yet. This part fills in once the site’s derived data is rebuilt.';
   const NOT_LOADED = 'GitHub data could not be loaded. Reload the page to try again.';
+  const ORG_URL = 'https://github.com/HippoCampusRobotics';
+  // M9: the org's open issues on GitHub (works signed out; a signed-in lab member also sees private repositories')
+  const OPEN_ISSUES_URL = 'https://github.com/search?q=org%3AHippoCampusRobotics+is%3Aissue+is%3Aopen&type=issues';
+  const PEOPLE_SHOWN = 10;               // M13: the most active contributors shown before "Show all"
+  const SHEET_BELOW = 768;               // M17: under this width the dialog is a bottom sheet
 
   // ==================================================================
   //  pure helpers (unit-tested under node; no DOM, no globals)
@@ -241,6 +252,7 @@
       link: person ? safeHttpUrl(person.link) : null,
       roster: rosterName,
       github: github,
+      subtitle: person ? (str(person.subtitle).trim() || null) : null,
     };
   }
 
@@ -358,6 +370,159 @@
     return { team: team.concat(promoted), alumni: demoted.concat(alumni) };
   }
 
+  /* ---- the uiux build (unit M, October 2026) ---- */
+
+  // M5 (R1-4, R2-5): does this event on a person card open the profile dialog? A plain primary click (no
+  // modifier: cmd/ctrl/shift/alt-click still opens the personal page in a new tab), or Enter/Space on a
+  // link-less card (role="button"); never once something else handled it, and never in Editor mode.
+  function cardClickOpensDialog(e, bodyClassList) {
+    if (!e || e.defaultPrevented) return false;
+    const cl = bodyClassList;
+    if (cl && typeof cl.contains === 'function' && (cl.contains('hc-editor-on') || cl.contains('hc-people-edit'))) return false;
+    if (e.type === 'click') {
+      return (e.button === 0 || e.button === undefined) && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+    }
+    if (e.type === 'keydown') return e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar';
+    return false;
+  }
+
+  // M17: an anchored popover on a wide screen, a bottom sheet on a phone
+  function dialogMode(innerWidth) {
+    const w = Number(innerWidth);
+    return (isFinite(w) && w > 0 && w < SHEET_BELOW) ? 'sheet' : 'pop';
+  }
+
+  // login -> summed public commit counts over every project (contributors.json)
+  function commitTotals(contributorsDoc) {
+    const totals = new Map();
+    const projects = contributorsDoc && typeof contributorsDoc === 'object' ? contributorsDoc.projects : null;
+    if (!projects || typeof projects !== 'object') return totals;
+    Object.keys(projects).forEach((id) => {
+      const list = projects[id] && Array.isArray(projects[id].contributors) ? projects[id].contributors : [];
+      list.forEach((c) => {
+        const login = str(c && c.login).trim();
+        const n = num(c && c.contributions);
+        if (login && n !== null && n > 0) totals.set(login, (totals.get(login) || 0) + n);
+      });
+    });
+    return totals;
+  }
+
+  // M13: models (personModel with a github login) by summed commits, most first; ties and logins missing
+  // from contributors.json (they sort last) by name.
+  function rankPeople(models, contributorsDoc) {
+    const totals = commitTotals(contributorsDoc);
+    const score = (m) => {
+      const login = m && m.github ? m.github.login : '';
+      return totals.has(login) ? totals.get(login) : -1;
+    };
+    return (Array.isArray(models) ? models : []).slice().sort((a, b) => (score(b) - score(a))
+      || str(a && a.name).localeCompare(str(b && b.name)));
+  }
+
+  // M5: the project ids a login has public commits in (contributors.json), in the file's order
+  function loginProjects(contributorsDoc, login) {
+    const projects = contributorsDoc && typeof contributorsDoc === 'object' ? contributorsDoc.projects : null;
+    const want = str(login).trim();
+    if (!want || !projects || typeof projects !== 'object') return [];
+    return Object.keys(projects).filter((id) => {
+      const list = projects[id] && Array.isArray(projects[id].contributors) ? projects[id].contributors : [];
+      return list.some((c) => c && str(c.login).trim() === want);
+    });
+  }
+
+  function projectRows(projects) {
+    const rows = Array.isArray(projects) ? projects
+      : (projects && Array.isArray(projects.projects) ? projects.projects : []);
+    return rows.filter((p) => p && typeof p === 'object' && str(p.id));
+  }
+
+  // id -> name, for the project links of every dialog
+  function projectNames(projects) {
+    const map = new Map();
+    projectRows(projects).forEach((p) => map.set(p.id, str(p.name).trim() || p.id));
+    return map;
+  }
+
+  // M11/M12: repository name -> {id, name} of the project that lists it (the coverage rule puts every org
+  // repository in exactly one project; the first one wins if a registry ever breaks that)
+  function repoProjectMap(projects) {
+    const map = new Map();
+    projectRows(projects).forEach((p) => {
+      (Array.isArray(p.repos) ? p.repos : []).forEach((r) => {
+        const name = typeof r === 'string' ? r : str(r && r.name);
+        if (name && !map.has(name)) map.set(name, { id: p.id, name: str(p.name).trim() || p.id });
+      });
+    });
+    return map;
+  }
+
+  // M12: the setup pages next to repo:<name> in data/graph/wiki.json, at most five, each {id, title, route}
+  function repoPages(wiki, repo) {
+    const nodes = wiki && Array.isArray(wiki.nodes) ? wiki.nodes : [];
+    const edges = wiki && Array.isArray(wiki.edges) ? wiki.edges : [];
+    const key = 'repo:' + str(repo);
+    const byId = new Map();
+    nodes.forEach((n) => { if (n && typeof n === 'object' && str(n.id)) byId.set(n.id, n); });
+    const out = [];
+    const seen = new Set();
+    edges.forEach((e) => {
+      if (!e || typeof e !== 'object' || out.length >= 5) return;
+      const other = e.t === key ? e.s : (e.s === key ? e.t : null);
+      const n = other ? byId.get(other) : null;
+      if (!n || n.kind !== 'setup' || seen.has(n.id)) return;
+      seen.add(n.id);
+      const route = /^#\/setup\/[A-Za-z0-9_/-]+$/.test(str(n.route)) ? n.route : '#/' + n.id;
+      out.push({ id: n.id, title: str(n.title).trim() || n.id, route: route });
+    });
+    return out;
+  }
+
+  // P10: a page entry's last_commit day (page-authors.json), or null — read with a guard
+  function lastCommitDay(entry) {
+    const v = entry && typeof entry === 'object' ? entry.last_commit : null;
+    return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  }
+
+  // M10: the heatmap's spoken summary
+  function heatSummary(lay) {
+    let total = 0;
+    let best = null;
+    (lay && Array.isArray(lay.cells) ? lay.cells : []).forEach((c) => {
+      total += c.n;
+      if (c.n > 0 && (!best || c.n > best.n)) best = c;
+    });
+    return 'Commits per day, last 53 weeks: ' + total + ' commit' + (total === 1 ? '' : 's')
+      + (best ? ', busiest day ' + best.date + ' with ' + best.n : '');
+  }
+  function cellText(c) {
+    return (c.date ? c.date + ' · ' : '') + c.n + ' commit' + (c.n === 1 ? '' : 's');
+  }
+
+  // J9/P10: the one quiet "Written by" line: the original authors, then whoever had a pull request MERGED
+  // here, each once (a login, else the git name). Open or closed proposals and the conversion are not authors.
+  function authorPeople(entry, idx) {
+    if (!entry || typeof entry !== 'object') return [];
+    const out = [];
+    const seen = new Set();
+    const add = (login, name) => {
+      const t = personToken(idx, login, name);
+      if (!t) return;
+      const k = t.person.login ? 'l:' + t.person.login : 'n:' + t.person.name.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(t);
+    };
+    const orig = entry.original;
+    if (orig && typeof orig === 'object' && orig.history_read === true && Array.isArray(orig.authors)) {
+      orig.authors.forEach((a) => { if (a && typeof a === 'object') add(a.login, a.name); });
+    }
+    (Array.isArray(entry.edited_here) ? entry.edited_here : []).forEach((e) => {
+      if (e && typeof e === 'object' && e.state === 'merged' && str(e.by)) add(e.by, null);
+    });
+    return out;
+  }
+
   function repoIndex(file) {
     const map = new Map();
     const repos = file && file.repos;
@@ -381,10 +546,9 @@
     const doc = env && env.doc;
     const win = (env && env.win) || {};
     const fetchJSON = env && env.fetchJSON;
+    const fetchProjects = env && env.fetchProjects;   // the merged project registry (HC.fetchProjects)
     const loads = {};
     let lastOp = Promise.resolve();
-    let pop = null;
-    let popAnchor = null;
     let seq = 0;
     const listeners = [];
 
@@ -464,44 +628,153 @@
     }
     function failNote(status) { return h('p', 'hc-empty', status === 404 ? NOT_BUILT : NOT_LOADED); }
 
-    // ---------- popover ----------
+    // ---------- the one dialog (M17) ----------
+    /* Every overlay of the GitHub layer — a person's profile (M5), a commit (M11), a repository (M12) — is
+       this one component: role="dialog", aria-modal, a label, a close button first in the tab order, Tab
+       and Shift-Tab wrap inside it, Esc and a click on the backdrop close it, and focus goes back to what
+       opened it. Wide screens get a popover anchored to the trigger; a phone (dialogMode) a bottom sheet.
+       The dialog and its backdrop are children of document.body, never of #content (plan ground rule 10:
+       .content is a CSS container, which would capture a fixed layer). One at a time. */
+    let dlg = null;              // {box, backdrop, anchor, mode}
+    const payloads = new WeakMap();   // a commit row / repository bar -> what its dialog shows
 
-    function closePerson() {
-      if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-      pop = null;
-      popAnchor = null;
+    function inside(el, root) {
+      for (let c = el; c; c = c.parentNode) if (c === root) return true;
+      return false;
+    }
+    function focusables(root) {
+      return Array.prototype.slice.call(root.querySelectorAll('a[href], button, [tabindex="0"]'))
+        .filter((el) => !el.hasAttribute('disabled') && !el.hasAttribute('hidden'));
+    }
+    function nextFrame(fn) {
+      if (typeof win.requestAnimationFrame === 'function') {
+        win.requestAnimationFrame(() => win.requestAnimationFrame(fn));
+      } else {
+        fn();
+      }
     }
 
-    function position() {
-      if (!pop || !popAnchor || typeof popAnchor.getBoundingClientRect !== 'function') return;
-      const r = popAnchor.getBoundingClientRect();
-      const w = pop.offsetWidth || 300;
-      const ht = pop.offsetHeight || 180;
+    function closeDialog(restore) {
+      if (!dlg) return;
+      const d = dlg;
+      dlg = null;
+      [d.box, d.backdrop].forEach((el) => { if (el && el.parentNode) el.parentNode.removeChild(el); });
+      if (restore && d.anchor && typeof d.anchor.focus === 'function' && connected(d.anchor)) {
+        try { d.anchor.focus(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    // the popover's place: below the trigger (above when there is no room), inside the viewport, growing
+    // out of the trigger (transform-origin). A sheet is placed by its CSS.
+    function placeDialog() {
+      if (!dlg || dlg.mode !== 'pop') return;
+      const box = dlg.box;
+      const w = box.offsetWidth || 320;
+      const ht = box.offsetHeight || 200;
       const vw = win.innerWidth || 0;
       const vh = win.innerHeight || 0;
       const pad = 8;
-      let left = r.left;
-      if (left + w + pad > vw) left = vw - w - pad;
-      if (left < pad) left = pad;
-      let top = r.bottom + 6;
-      if (top + ht + pad > vh) {
-        const above = r.top - ht - 6;
-        top = (above >= pad) ? above : Math.max(pad, vh - ht - pad);
+      const a = dlg.anchor && typeof dlg.anchor.getBoundingClientRect === 'function'
+        ? dlg.anchor.getBoundingClientRect() : null;
+      let left;
+      let top;
+      let below = true;
+      if (a) {
+        left = Math.min(a.left, vw - w - pad);
+        top = a.bottom + 6;
+        if (top + ht + pad > vh) {
+          const above = a.top - ht - 6;
+          below = false;
+          top = above >= pad ? above : Math.max(pad, vh - ht - pad);
+        }
+      } else {
+        left = (vw - w) / 2;
+        top = Math.max(pad, (vh - ht) / 3);
       }
-      pop.style.left = Math.round(left) + 'px';
-      pop.style.top = Math.round(top) + 'px';
+      left = Math.max(pad, left);
+      box.style.left = Math.round(left) + 'px';
+      box.style.top = Math.round(top) + 'px';
+      const ox = a ? Math.round(Math.min(Math.max(a.left + a.width / 2 - left, 0), w)) : Math.round(w / 2);
+      box.style.transformOrigin = ox + 'px ' + (below ? '0' : Math.round(ht) + 'px');
     }
 
-    function buildPopover(model) {
-      const box = h('div', 'hc-popover hc-person-pop');
+    function openDialog(o) {
+      closeDialog(false);
+      try { if (win.HCGraph && typeof win.HCGraph.closePopover === 'function') win.HCGraph.closePopover(); } catch (e) { /* ignore */ }
+      const mode = dialogMode(win.innerWidth);
+      const backdrop = h('div', 'hc-dialog-backdrop is-' + mode);
+      backdrop.setAttribute('aria-hidden', 'true');
+      backdrop.addEventListener('click', () => closeDialog(true));
+      const box = h('div', 'hc-popover hc-dialog is-' + mode + ' is-entering' + (o.cls ? ' ' + o.cls : ''));
       box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-label', model.name);
+      box.setAttribute('aria-modal', 'true');
+      box.setAttribute('aria-label', o.label || 'Details');
+      box.setAttribute('tabindex', '-1');
+      const x = h('button', 'hc-dialog-close', '×');
+      x.setAttribute('type', 'button');
+      x.setAttribute('aria-label', 'Close');
+      x.addEventListener('click', () => closeDialog(true));
+      box.appendChild(x);
+      o.build(box);
+      doc.body.appendChild(backdrop);
+      doc.body.appendChild(box);
+      dlg = { box: box, backdrop: backdrop, anchor: o.anchor || null, mode: mode };
+      placeDialog();
+      try { box.focus(); } catch (e) { /* ignore */ }
+      nextFrame(() => box.classList.remove('is-entering'));
+      return box;
+    }
+
+    // Tab and Shift-Tab wrap inside the open dialog; Esc closes it and focus goes back to the trigger
+    function onDialogKey(e) {
+      if (!dlg) return;
+      if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+        closeDialog(true);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const list = focusables(dlg.box);
+      e.preventDefault();
+      if (!list.length) return;
+      const at = list.indexOf(doc.activeElement);
+      let next;
+      if (at < 0) next = e.shiftKey ? list[list.length - 1] : list[0];
+      else next = list[(at + (e.shiftKey ? -1 : 1) + list.length) % list.length];
+      try { next.focus(); } catch (err) { /* ignore */ }
+    }
+
+    let projectsLoad = null;
+    function projectsDoc() {
+      if (!projectsLoad) {
+        projectsLoad = typeof fetchProjects === 'function'
+          ? Promise.resolve().then(() => fetchProjects()).catch(() => null) : Promise.resolve(null);
+      }
+      return projectsLoad;
+    }
+    function photoUrl(url) {
+      const team = win.HCTeam;
+      return team && typeof team.cloudinaryTx === 'function' ? team.cloudinaryTx(url, 'w_320,f_auto,q_auto') : url;
+    }
+    function projectLink(p) { return link('#/projects/' + p.id, 'hc-pp-project', p.name); }
+    function factRow(dl, label, value) {
+      if (value == null || value === '') return;
+      dl.appendChild(h('dt', '', label));
+      const dd = h('dd');
+      if (typeof value === 'string') dd.textContent = value; else dd.appendChild(value);
+      dl.appendChild(dd);
+    }
+
+    // ---------- the person dialog (M5) ----------
+
+    function personBody(box, model, projects) {
       const head = h('div', 'hc-pp-head');
       let media;
       if (model.photo) {
         media = h('img', 'hc-pp-media');
-        media.setAttribute('src', model.photo);
+        media.setAttribute('src', photoUrl(model.photo));
         media.setAttribute('alt', '');
+        media.setAttribute('width', '96');
+        media.setAttribute('height', '96');
       } else {
         media = h('div', 'hc-pp-media hc-pp-initials', model.initials);
         media.setAttribute('aria-hidden', 'true');
@@ -509,12 +782,16 @@
       const who = h('div', 'hc-pp-who');
       who.appendChild(h('p', 'hc-pop-title', model.name));
       if (model.title) who.appendChild(h('p', 'hc-pp-title', model.title));
+      if (model.subtitle) who.appendChild(h('p', 'hc-pp-title hc-pp-sub', model.subtitle));
       head.appendChild(media);
       head.appendChild(who);
       box.appendChild(head);
-      if (model.link) {
-        const row = h('p', 'hc-pp-links');
-        row.appendChild(link(model.link, 'hc-pop-open', 'Personal page →'));
+      if (projects.length) {
+        const row = h('div', 'hc-pp-projects');
+        row.appendChild(h('p', 'hc-pop-kind', 'Projects'));
+        const list = h('p', 'hc-pp-plist');
+        joinNames(projects).forEach((t) => list.appendChild(typeof t === 'string' ? doc.createTextNode(t) : projectLink(t)));
+        row.appendChild(list);
         box.appendChild(row);
       }
       if (model.github) {
@@ -524,42 +801,134 @@
         gh.appendChild(model.github.url ? link(model.github.url, 'hc-pp-gh-link', label) : h('span', '', label));
         box.appendChild(gh);
       }
-      return box;
+      if (model.link) {
+        const row = h('p', 'hc-pp-links');
+        row.appendChild(link(model.link, 'hc-pop-open', 'Personal page →'));
+        box.appendChild(row);
+      }
     }
 
     function openPerson(anchor, q) {
       if (!doc) return Promise.resolve();
       const mine = (seq += 1);
-      closePerson();
+      closeDialog(false);
       try { if (win.HCGraph && typeof win.HCGraph.closePopover === 'function') win.HCGraph.closePopover(); } catch (e) { /* ignore */ }
-      lastOp = need(['people', 'roster']).then((d) => {
+      lastOp = Promise.all([need(['people', 'roster', 'contrib']), projectsDoc()]).then((r) => {
+        const d = r[0];
         if (mine !== seq) return;
         const model = personModel(indexOf(d), q);
         if (!model.name) return;
-        if (q && q.roster && !model.link && !model.github) return;   // nothing to show
-        closePerson();
-        pop = buildPopover(model);
-        pop.setAttribute('data-hc-surface', 'popover');
-        if (model.github && LOGIN_RE.test(model.github.login)) pop.setAttribute('data-hc-login', model.github.login);
-        popAnchor = anchor || null;
-        doc.body.appendChild(pop);
-        position();
-        announce('popover', pop);
-      }).catch(() => { closePerson(); });
+        const names = projectNames(r[1]);
+        const projects = (model.github ? loginProjects(d.contrib.value, model.github.login) : [])
+          .filter((id) => names.has(id)).map((id) => ({ id: id, name: names.get(id) }));
+        const box = openDialog({ anchor: anchor, label: model.name, cls: 'hc-person-pop',
+          build: (b) => personBody(b, model, projects) });
+        box.setAttribute('data-hc-surface', 'popover');
+        if (model.github && LOGIN_RE.test(model.github.login)) box.setAttribute('data-hc-login', model.github.login);
+        announce('popover', box);
+      }).catch(() => { closeDialog(false); });
       return lastOp;
     }
 
-    // One delegated handler per root: a People card's photo/initials (data-hc-person)
-    // or any GitHub-derived name (data-hc-login). preventDefault keeps a linked card
-    // from also navigating (D-M).
+    // ---------- the commit dialog (M11) and the repository dialog (M12) ----------
+
+    function projectValue(p) { return p ? projectLink(p) : 'Not in a project'; }
+
+    function openCommit(anchor, c) {
+      const mine = (seq += 1);
+      closeDialog(false);
+      lastOp = Promise.all([need(['people', 'roster']), projectsDoc()]).then((r) => {
+        if (mine !== seq) return;
+        const idx = indexOf(r[0]);
+        const repo = REPO_RE.test(str(c.repo)) ? c.repo : '';
+        const sha = SHA_RE.test(str(c.sha)) ? c.sha.slice(0, 7) : '';
+        openDialog({ anchor: anchor, label: 'Commit' + (sha ? ' ' + sha : ''), cls: 'hc-commit-pop', build: (b) => {
+          b.appendChild(h('p', 'hc-pop-kind', 'Commit'));
+          b.appendChild(h('p', 'hc-pop-title hc-cd-msg', str(c.msg)));
+          const dl = h('dl', 'hc-facts');
+          const login = str(c.author).trim();
+          if (login && LOGIN_RE.test(login)) {
+            const m = personModel(idx, { login: login });
+            const who = h('span', 'hc-cd-who');
+            if (m.github && m.github.avatar) who.appendChild(avatarImg(m.github.avatar, 'xs'));
+            who.appendChild(h('span', 'hc-person-name', m.name));
+            if (m.github && m.github.url) {
+              who.appendChild(doc.createTextNode(' '));
+              who.appendChild(link(m.github.url, 'hc-mono', '@' + login));
+            }
+            factRow(dl, 'Author', who);
+          }
+          if (repo) factRow(dl, 'Repository', link(ORG_URL + '/' + repo, 'hc-mono', repo));
+          factRow(dl, 'Project', projectValue(repoProjectMap(r[1]).get(repo)));
+          factRow(dl, 'Date', readAtDay(c.date));
+          if (repo && sha) factRow(dl, 'Commit', link(ORG_URL + '/' + repo + '/commit/' + sha, 'hc-mono', sha));
+          b.appendChild(dl);
+        } });
+      }).catch(() => { closeDialog(false); });
+      return lastOp;
+    }
+
+    function openRepo(anchor, bar) {
+      const mine = (seq += 1);
+      closeDialog(false);
+      const name = str(bar.name);
+      lastOp = Promise.all([need(['repos', 'wiki']), projectsDoc()]).then((r) => {
+        if (mine !== seq) return;
+        const card = r[0].repos.ok ? (repoIndex(r[0].repos.value).get(name) || null) : null;
+        openDialog({ anchor: anchor, label: 'Repository ' + name, cls: 'hc-repo-pop', build: (b) => {
+          b.appendChild(h('p', 'hc-pop-kind', 'Repository'));
+          const title = h('p', 'hc-pop-title');
+          const href = (card && githubRepoUrl(card.html_url)) || (REPO_RE.test(name) ? ORG_URL + '/' + name : null);
+          title.appendChild(href ? link(href, 'hc-mono', name) : h('span', 'hc-mono', name));
+          b.appendChild(title);
+          const desc = card ? str(card.description).trim() : '';
+          if (desc) b.appendChild(h('p', 'hc-pop-summary', desc));
+          const dl = h('dl', 'hc-facts');
+          factRow(dl, 'Project', projectValue(repoProjectMap(r[1]).get(name)));
+          const n = num(bar.commits);
+          if (n !== null) factRow(dl, 'Last 365 days', n + ' commit' + (n === 1 ? '' : 's'));
+          b.appendChild(dl);
+          const pages = r[0].wiki.ok ? repoPages(r[0].wiki.value, name) : [];
+          if (pages.length) {
+            b.appendChild(h('p', 'hc-pop-kind hc-rd-kind', 'Setup pages that mention it'));
+            const ul = h('ul', 'hc-rd-pages');
+            pages.forEach((p) => {
+              const li = h('li');
+              li.appendChild(link(p.route, '', p.title));
+              ul.appendChild(li);
+            });
+            b.appendChild(ul);
+          }
+        } });
+      }).catch(() => { closeDialog(false); });
+      return lastOp;
+    }
+
+    // One delegated handler per root. A People card (data-hc-person) opens the profile on a plain click,
+    // or on Enter/Space when it is a link-less card (cardClickOpensDialog); a modifier click on a linked card
+    // is left to the browser (a new tab). Any GitHub-derived name (data-hc-login) opens that person; a
+    // commit row or a repository bar (data-hc-open) its own dialog. Nothing happens in Editor mode or when
+    // something else already handled the event (js/editor-frame.js wireCard preventDefaults).
     function onTrigger(e) {
-      const t = e && e.target && typeof e.target.closest === 'function'
-        ? e.target.closest('[data-hc-person], [data-hc-login]') : null;
+      if (!e || e.defaultPrevented) return;
+      const cl = doc.body && doc.body.classList;
+      if (cl && (cl.contains('hc-editor-on') || cl.contains('hc-people-edit'))) return;
+      const t = e.target && typeof e.target.closest === 'function'
+        ? e.target.closest('[data-hc-person], [data-hc-login], [data-hc-open]') : null;
       if (!t) return;
-      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+      if (t.hasAttribute('data-hc-person')) {
+        if (e.type === 'keydown' && t.localName === 'a') return;     // Enter on a link: the browser's click follows
+        if (!cardClickOpensDialog(e, cl)) return;
+        e.preventDefault();
+        openPerson(t, { roster: t.getAttribute('data-hc-person') });
+        return;
+      }
+      if (e.type !== 'click') return;                                // a button turns Enter/Space into a click
       e.preventDefault();
-      const login = t.getAttribute('data-hc-login');
-      openPerson(t, login ? { login: login } : { roster: t.getAttribute('data-hc-person') });
+      const payload = payloads.get(t);
+      if (payload && payload.kind === 'commit') openCommit(t, payload.value);
+      else if (payload && payload.kind === 'repo') openRepo(t, payload.value);
+      else if (t.getAttribute('data-hc-login')) openPerson(t, { login: t.getAttribute('data-hc-login') });
     }
     function wire(root) {
       if (!root || root.getAttribute('data-hc-wired') === '1') return;
@@ -568,26 +937,17 @@
       root.addEventListener('keydown', onTrigger);
     }
 
-    // The About page: app.js marks every card's photo/initials; a card with nothing to
-    // show (no link, no GitHub match, or a name people.json no longer has) loses the mark.
+    // The Team page's people: every card (js/app.js personCardHTML marks it data-hc-person) opens a profile.
     function wirePeople(root) {
       if (!doc || !root) return Promise.resolve();
       wire(root);
-      return need(['people', 'roster']).then((d) => {
-        const idx = indexOf(d);
-        root.querySelectorAll('[data-hc-person]').forEach((el) => {
-          const name = el.getAttribute('data-hc-person');
-          const model = idx.rosterByName.has(name) ? personModel(idx, { roster: name }) : null;
-          if (model && (model.link || model.github)) return;
-          ['data-hc-person', 'role', 'tabindex', 'aria-label'].forEach((a) => el.removeAttribute(a));
-          el.classList.remove('hc-pp-trigger');
-        });
+      return need(['people', 'roster']).then(() => {
         root.setAttribute('data-hc-surface', 'people');
         if (connected(root)) announce('people', root);
       });
     }
 
-    // ---------- who wrote this ----------
+    // ---------- who wrote this (J9, P10: one quiet line) ----------
 
     function renderAuthors(body, pageId) {
       if (!doc || !body || typeof pageId !== 'string') return Promise.resolve();
@@ -597,56 +957,45 @@
         const entry = has(pages, pageId) ? pages[pageId] : null;
         if (!entry || typeof entry !== 'object') return;
         if (!connected(body) || body.querySelector('.hc-authors')) return;
-        const lines = authorParts(entry, indexOf(d));
-        if (!lines.length) return;
+        const people = authorPeople(entry, indexOf(d));
+        if (!people.length) return;
         const box = h('section', 'hc-authors');
         box.setAttribute('aria-label', 'Who wrote this');
         box.setAttribute('data-hc-surface', 'authors');
         box.setAttribute('data-hc-page', pageId);
-        box.appendChild(h('h4', '', 'Who wrote this'));
-        lines.forEach((line, i) => {
-          const row = h('p', 'hc-authors-line');
-          const people = line.filter((t) => typeof t !== 'string');
-          const faces = (i === 0 ? people : people.slice(0, 1))
-            .map((t) => t.person.avatar).filter(Boolean);
-          if (faces.length) {
-            const stack = h('span', 'hc-stack');
-            faces.forEach((src) => stack.appendChild(avatarImg(src, 'xs')));
-            row.appendChild(stack);
-          }
-          line.forEach((t) => {
-            row.appendChild(typeof t === 'string' ? doc.createTextNode(t) : personButton(t));
-          });
-          box.appendChild(row);
+        const row = h('p', 'hc-authors-line');
+        const faces = people.map((t) => t.person.avatar).filter(Boolean).slice(0, 3);
+        if (faces.length) {
+          const stack = h('span', 'hc-stack');
+          stack.setAttribute('aria-hidden', 'true');
+          faces.forEach((src) => stack.appendChild(avatarImg(src, 'xs')));
+          row.appendChild(stack);
+        }
+        ['Written by '].concat(joinNames(people), ['.']).forEach((t) => {
+          row.appendChild(typeof t === 'string' ? doc.createTextNode(t) : personButton(t));
         });
-        box.appendChild(h('p', 'hc-authors-note',
-          'From git history: the old docs repository (following the 2025-03-10 folder move) and '
-          + 'this one. Names as GitHub publishes them; updated when the site’s derived data is rebuilt.'));
+        box.appendChild(row);
         wire(box);
         body.appendChild(box);
         announce('authors', box);
       });
     }
 
-    // ---------- repo cards ----------
+    // ---------- repo cards (J5: name, one-line purpose; the facts in the title) ----------
 
     function repoCard(name, role, fallbackHref, r) {
       const href = (r && githubRepoUrl(r.html_url)) || safeHttpUrl(fallbackHref);
       const card = href ? link(href, 'hc-repo') : h('div', 'hc-repo');
       const nm = h('span', 'nm');
       const dot = h('span', 'hc-lang');
+      dot.setAttribute('aria-hidden', 'true');
       if (r && str(r.language)) dot.setAttribute('data-lang', str(r.language));
       nm.appendChild(dot);
       nm.appendChild(h('span', 'hc-repo-name', name));
-      if (!r) nm.appendChild(h('span', 'ext', 'not in the org snapshot'));
       card.appendChild(nm);
-      if (role) card.appendChild(h('span', 'role', role));
-      if (r && str(r.description).trim()) card.appendChild(h('p', 'desc', str(r.description).trim()));
-      if (r) {
-        const facts = h('span', 'facts');
-        repoCardFacts(r).forEach((f) => facts.appendChild(h('span', 'f-' + f.key, f.text)));
-        card.appendChild(facts);
-      }
+      const purpose = str(role).trim() || (r ? str(r.description).trim() : '');
+      if (purpose) card.appendChild(h('span', 'hc-repo-purpose', purpose));
+      if (r) card.setAttribute('title', repoCardFacts(r).map((f) => f.text).join(' · '));
       return card;
     }
 
@@ -668,7 +1017,32 @@
       });
     }
 
-    // ---------- the Lab page ----------
+    // ---------- the Lab activity section ----------
+
+    // M10: one site-styled tooltip for the heatmap, on document.body (ground rule 10)
+    let tip = null;
+    function showTip(target, text) {
+      if (!doc.body) return;
+      if (!tip) {
+        tip = h('div', 'hc-tip');
+        tip.setAttribute('role', 'tooltip');
+        tip.setAttribute('id', 'hc-heat-tip');
+      }
+      if (tip.parentNode !== doc.body) doc.body.appendChild(tip);
+      tip.textContent = text;
+      tip.classList.add('is-on');
+      const r = typeof target.getBoundingClientRect === 'function' ? target.getBoundingClientRect() : null;
+      if (!r) return;
+      const w = tip.offsetWidth || 120;
+      const ht = tip.offsetHeight || 24;
+      const vw = win.innerWidth || 0;
+      const left = Math.max(4, Math.min(r.left + r.width / 2 - w / 2, vw - w - 4));
+      let top = r.top - ht - 6;
+      if (top < 4) top = r.bottom + 6;
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.top = Math.round(top) + 'px';
+    }
+    function hideTip() { if (tip) tip.classList.remove('is-on'); }
 
     function heatmap(weeks) {
       const lay = weekLayout(weeks);
@@ -683,24 +1057,79 @@
       hd.appendChild(h('h3', '', 'Commits per day, last 53 weeks'));
       hd.appendChild(h('span', 'hc-muted', 'public repositories, forks excluded'));
       box.appendChild(hd);
+      const summary = heatSummary(lay);
       const wrap = h('div', 'hc-heat-scroll');
-      const root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img',
-        'aria-label': 'Commits per day over the last 53 weeks' });
+      // M10 (R1-11): the SVG is the ONE tab stop; Arrow keys move a focus ring over the days
+      const root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': summary,
+        tabindex: 0, class: 'hc-heat-svg' });
       lay.months.forEach((m) => {
         root.appendChild(svg('text', { x: left + m.col * (cell + gap), y: 11, class: 'hc-heat-label' }, m.label));
       });
       [['Mon', 0], ['Wed', 2], ['Fri', 4]].forEach((d) => {
         root.appendChild(svg('text', { x: 0, y: top + d[1] * (cell + gap) + 10, class: 'hc-heat-label' }, d[0]));
       });
-      lay.cells.forEach((c) => {
+      const rects = [];
+      const at = new Map();
+      lay.cells.forEach((c, i) => {
         const rect = svg('rect', { x: left + c.col * (cell + gap), y: top + c.row * (cell + gap),
-          width: cell, height: cell, rx: 2, class: 'hc-l' + c.level });
-        rect.appendChild(svg('title', {}, (c.date ? c.date + ': ' : '') + c.n + ' commit' + (c.n === 1 ? '' : 's')));
+          width: cell, height: cell, rx: 2, class: 'hc-l' + c.level, 'data-i': i });
+        rects.push(rect);
+        at.set(c.col * 7 + c.row, i);
         root.appendChild(rect);
       });
+      const ring = svg('rect', { class: 'hc-focus', width: cell + 2, height: cell + 2, rx: 3, x: -99, y: -99,
+        'aria-hidden': 'true' });
+      root.appendChild(ring);
+      const live = h('p', 'hc-sr-only');
+      live.setAttribute('aria-live', 'polite');
+      let current = -1;
+      const cellOf = (t) => {
+        const i = t && typeof t.getAttribute === 'function' ? Number(t.getAttribute('data-i')) : NaN;
+        return Number.isInteger(i) && i >= 0 && i < rects.length ? i : -1;
+      };
+      const focusCell = (i) => {
+        current = i;
+        const c = lay.cells[i];
+        ring.setAttribute('x', String(left + c.col * (cell + gap) - 1));
+        ring.setAttribute('y', String(top + c.row * (cell + gap) - 1));
+        ring.classList.add('is-on');
+        showTip(rects[i], cellText(c));
+        live.textContent = cellText(c);
+      };
+      root.addEventListener('pointerover', (e) => {
+        const i = cellOf(e.target);
+        if (i >= 0) showTip(rects[i], cellText(lay.cells[i]));
+      });
+      root.addEventListener('pointerout', (e) => { if (cellOf(e.target) >= 0) hideTip(); });
+      root.addEventListener('keydown', (e) => {
+        if (!rects.length) return;
+        if (e.key === 'Escape' || e.key === 'Esc') {
+          if (tip && tip.classList.contains('is-on')) { hideTip(); e.stopPropagation(); }
+          return;
+        }
+        const move = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key];
+        let next = -1;
+        if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = rects.length - 1;
+        else if (move) {
+          if (current < 0) next = rects.length - 1;
+          else {
+            const c = lay.cells[current];
+            const k = (c.col + move[0]) * 7 + (c.row + move[1]);
+            next = (c.row + move[1] >= 0 && c.row + move[1] < 7 && at.has(k)) ? at.get(k) : current;
+          }
+        } else return;
+        e.preventDefault();
+        focusCell(next);
+      });
+      root.addEventListener('blur', () => { ring.classList.remove('is-on'); hideTip(); });
       wrap.appendChild(root);
       box.appendChild(wrap);
+      const sr = h('p', 'hc-sr-only', summary + '.');
+      box.appendChild(sr);
+      box.appendChild(live);
       const legend = h('div', 'legend');
+      legend.setAttribute('aria-hidden', 'true');
       legend.appendChild(doc.createTextNode('less '));
       [0, 1, 2, 3, 4].forEach((l) => legend.appendChild(h('i', 'hc-l' + l)));
       legend.appendChild(doc.createTextNode(' more'));
@@ -714,28 +1143,48 @@
       return col;
     }
 
-    function recentCommits(list) {
+    // M11: the ten newest commits; each row names its author and opens the commit dialog
+    function recentCommits(list, idx) {
       const col = column('Recent commits');
       const rows = (Array.isArray(list) ? list : []).filter((c) => c && typeof c === 'object').slice(0, 10);
       if (!rows.length) col.appendChild(h('p', 'hc-empty', 'No commits in the last 365 days.'));
       rows.forEach((c) => {
-        const row = h('div', 'hc-commit');
+        const row = h('button', 'hc-commit');
+        row.setAttribute('type', 'button');
+        row.setAttribute('data-hc-open', 'commit');
+        row.setAttribute('aria-haspopup', 'dialog');
         if (REPO_RE.test(str(c.repo)) && SHA_RE.test(str(c.sha))) {
           row.setAttribute('data-hc-repo', c.repo);
           row.setAttribute('data-hc-sha', c.sha.slice(0, 7));
         }
-        row.appendChild(h('div', 'm', str(c.msg)));
-        const s = h('div', 's');
+        payloads.set(row, { kind: 'commit', value: c });
+        const main = h('span', 'hc-commit-main');
+        main.appendChild(h('span', 'm', str(c.msg)));
+        const s = h('span', 's');
         if (str(c.repo)) s.appendChild(h('span', 'repo', str(c.repo)));
         const day = readAtDay(c.date);
         if (day) s.appendChild(h('span', '', day));
-        if (/^[0-9a-f]{7,40}$/.test(str(c.sha))) s.appendChild(h('span', 'hc-mono', c.sha.slice(0, 7)));
-        row.appendChild(s);
+        main.appendChild(s);
+        row.appendChild(main);
+        const login = str(c.author).trim();
+        if (login && LOGIN_RE.test(login)) {
+          const m = personModel(idx, { login: login });
+          const who = h('span', 'hc-commit-who');
+          if (m.github && m.github.avatar) who.appendChild(avatarImg(m.github.avatar, 'xs'));
+          else {
+            const ini = h('span', 'hc-avatar xs hc-avatar-empty', m.initials);
+            ini.setAttribute('aria-hidden', 'true');
+            who.appendChild(ini);
+          }
+          who.appendChild(h('span', 'nm', m.name));
+          row.appendChild(who);
+        }
         col.appendChild(row);
       });
       return col;
     }
 
+    // M2/M12: a repository name never breaks (CSS); each bar opens the repository dialog; no language label
     function activeRepos(list, releases) {
       const col = column('Most active repositories');
       const rows = (Array.isArray(list) ? list : []).filter((r) => r && str(r.name));
@@ -743,10 +1192,17 @@
       if (!rows.length) col.appendChild(h('p', 'hc-empty', 'No commits in the last 365 days.'));
       rows.forEach((r) => {
         const n = num(r.commits) || 0;
-        const bar = h('div', 'hc-bar');
-        bar.appendChild(h('span', 'name', r.name));
-        bar.appendChild(h('span', 'n', n + ' commit' + (n === 1 ? '' : 's') + ' · ' + (str(r.language) || '—')));
+        const bar = h('button', 'hc-bar');
+        bar.setAttribute('type', 'button');
+        bar.setAttribute('data-hc-open', 'repo');
+        bar.setAttribute('aria-haspopup', 'dialog');
+        payloads.set(bar, { kind: 'repo', value: r });
+        const nm = h('span', 'name', r.name);
+        nm.setAttribute('title', r.name);
+        bar.appendChild(nm);
+        bar.appendChild(h('span', 'n', n + ' commit' + (n === 1 ? '' : 's')));
         const track = h('span', 'track');
+        track.setAttribute('aria-hidden', 'true');
         const fill = h('i');
         fill.style.width = Math.round((n / max) * 100) + '%';
         track.appendChild(fill);
@@ -768,6 +1224,21 @@
       return col;
     }
 
+    function personRow(m) {
+      const row = h('button', 'hc-person-row');
+      row.setAttribute('type', 'button');
+      row.setAttribute('data-hc-login', m.github.login);
+      row.setAttribute('aria-haspopup', 'dialog');
+      if (m.github.avatar) row.appendChild(avatarImg(m.github.avatar, 'md'));
+      else row.appendChild(h('span', 'hc-avatar md hc-avatar-empty', m.initials));
+      const txt = h('span', 'who');
+      txt.appendChild(h('span', 'nm', m.name));
+      txt.appendChild(h('span', 'sub', '@' + m.github.login));
+      row.appendChild(txt);
+      return row;
+    }
+
+    // M13: the ten most active contributors (public commit counts, never drawn); the rest folded away
     function peopleColumn(d) {
       const col = column('People on GitHub');
       col.setAttribute('data-hc-slot', 'lab-people');
@@ -776,74 +1247,63 @@
       const models = [];
       idx.byLogin.forEach((e, login) => {
         const m = personModel(idx, { login: login });
-        if (m.name) models.push(m);
+        if (m.name && m.github) models.push(m);
       });
-      models.sort((a, b) => a.name.localeCompare(b.name));
-      models.forEach((m) => {
-        const row = h('button', 'hc-person-row');
-        row.setAttribute('type', 'button');
-        row.setAttribute('data-hc-login', m.github.login);
-        if (m.github.avatar) row.appendChild(avatarImg(m.github.avatar, 'md'));
-        else row.appendChild(h('span', 'hc-avatar md hc-avatar-empty', m.initials));
-        const txt = h('span', 'who');
-        txt.appendChild(h('span', 'nm', m.name));
-        txt.appendChild(h('span', 'sub', '@' + m.github.login));
-        row.appendChild(txt);
-        col.appendChild(row);
-      });
-      col.appendChild(h('p', 'hc-muted hc-col-note', 'Everyone who has committed to a non-fork org repository or '
-        + 'to a page of this site, by the name GitHub publishes. No e-mail, location or company is read or stored.'));
+      const ranked = rankPeople(models, d.contrib && d.contrib.value);
+      ranked.slice(0, PEOPLE_SHOWN).forEach((m) => col.appendChild(personRow(m)));
+      if (ranked.length > PEOPLE_SHOWN) {
+        const more = h('details', 'hc-more');
+        more.appendChild(h('summary', '', 'Show all ' + ranked.length));
+        ranked.slice(PEOPLE_SHOWN).forEach((m) => more.appendChild(personRow(m)));
+        col.appendChild(more);
+      }
       return col;
     }
 
-    /* opts.embedded (round 2, R5): a section of the Team page — an h2, no kicker, no page frame of its own. */
+    /* opts.embedded (round 2, R5): a section of the Team page, whose heading and "GitHub data as of" line
+       js/app.js draws (M6/M7); the plain form keeps its own h1 and as-of line. */
     function renderLab(container, isCurrent, opts) {
       if (!doc || !container) return Promise.resolve();
       const embedded = Boolean(opts && opts.embedded);
-      return need(['activity', 'people', 'roster']).then((d) => {
+      return need(['activity', 'people', 'roster', 'contrib']).then((d) => {
         if (typeof isCurrent === 'function' && !isCurrent()) return;
         clear(container);
         const root = h('div', embedded ? 'hc-lab is-embedded' : 'page-body hc-lab');
         root.setAttribute('data-hc-surface', 'lab');
-        if (!embedded) root.appendChild(h('p', 'kicker', 'HippoCampusRobotics on GitHub'));
-        root.appendChild(h(embedded ? 'h2' : 'h1', '', 'Lab activity'));
         const act = d.activity.ok && d.activity.value && typeof d.activity.value === 'object'
           ? d.activity.value : null;
+        if (!embedded) {
+          root.appendChild(h('h1', '', 'Lab activity'));
+          if (act) root.appendChild(h('p', 'hc-asof', 'GitHub data as of ' + (readAtDay(act.read_at) || 'an unknown date')));
+        }
         if (!act) {
           root.appendChild(failNote(d.activity.status));
           container.appendChild(root);
           return;
         }
         const t = (act.totals && typeof act.totals === 'object') ? act.totals : {};
-        const repos = num(t.public_repos);
-        root.appendChild(h('p', 'lead', 'What the lab’s ' + (repos === null ? '' : repos + ' ')
-          + 'public repositories did in the last 365 days, from public GitHub data read when the site rebuilds.'));
-        root.appendChild(h('p', 'hc-asof', 'GitHub data as of ' + (readAtDay(act.read_at) || 'an unknown date')));
+        // M4/M8/M9: three tiles; the open issues open GitHub's issue search for the org
         const tiles = h('div', 'hc-tiles');
-        [['commits_365d', 'commits, last 365 days'], ['authors_365d', 'authors, last 365 days'],
-          ['repos_touched_365d', 'repositories touched'], ['public_repos', 'public repositories'],
-          ['stars', 'stars, all repositories'], ['open_issues', 'open issues'], ['releases', 'releases']]
-          .forEach((pair) => {
-            const n = num(t[pair[0]]);
-            if (n === null) return;
-            const tile = h('div', 'hc-tile');
-            tile.appendChild(h('div', 'n', String(n)));
-            tile.appendChild(h('div', 'l', pair[1]));
-            tiles.appendChild(tile);
-          });
+        [['commits_365d', 'commits, last 365 days', null], ['public_repos', 'public repositories', null],
+          ['open_issues', 'open issues', OPEN_ISSUES_URL]].forEach((x) => {
+          const n = num(t[x[0]]);
+          if (n === null) return;
+          const tile = x[2] ? link(x[2], 'hc-tile is-link') : h('div', 'hc-tile');
+          if (x[2]) tile.setAttribute('aria-label', n + ' ' + x[1] + ' on GitHub (opens in a new tab)');
+          tile.appendChild(h('span', 'n', String(n)));
+          tile.appendChild(h('span', 'l', x[1] + (x[2] ? ' ↗' : '')));
+          tiles.appendChild(tile);
+        });
         root.appendChild(tiles);
         const weeks = Array.isArray(act.weeks) ? act.weeks
           : (act.heatmap && Array.isArray(act.heatmap.weeks)) ? act.heatmap.weeks
             : (Array.isArray(act.heatmap) ? act.heatmap : []);
         root.appendChild(heatmap(weeks));
         const cols = h('div', 'hc-cols');
-        cols.appendChild(recentCommits(act.recent_commits));
+        cols.appendChild(recentCommits(act.recent_commits, indexOf(d)));
         cols.appendChild(activeRepos(act.most_active_repos, act.releases));
         cols.appendChild(peopleColumn(d));
         root.appendChild(cols);
-        root.appendChild(h('p', 'provenance hc-prov', 'Source: public GitHub REST API reads made by '
-          + 'tools/build_github_data.py when the site rebuilds, committed under data/graph/. '
-          + 'Your browser makes no request to GitHub.'));
         wire(root);
         container.appendChild(root);
         announce('lab', root);
@@ -851,23 +1311,14 @@
     }
 
     if (doc && typeof doc.addEventListener === 'function') {
-      doc.addEventListener('keydown', (e) => {
-        if (pop && (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27)) {
-          const back = popAnchor;
-          closePerson();
-          try { if (back && typeof back.focus === 'function') back.focus(); } catch (err) { /* ignore */ }
-        }
-      });
-      doc.addEventListener('click', (e) => {
-        const t = e && e.target;
-        if (t && typeof t.closest === 'function' && t.closest('.hc-person-pop')) return;
-        closePerson();
-      });
+      doc.addEventListener('keydown', onDialogKey);
     }
     if (typeof win.addEventListener === 'function') {
-      win.addEventListener('hashchange', closePerson);
-      win.addEventListener('resize', position);
-      win.addEventListener('scroll', position, true);
+      win.addEventListener('hashchange', () => { closeDialog(false); hideTip(); });
+      win.addEventListener('resize', () => {
+        if (dlg && dialogMode(win.innerWidth) !== dlg.mode) closeDialog(false); else placeDialog();
+      });
+      win.addEventListener('scroll', placeDialog, true);
     }
 
     // Page-local extras never take a page down: a failure is logged and dropped. The
@@ -886,7 +1337,7 @@
       renderRepoCards: quiet(renderRepoCards),
       wirePeople: quiet(wirePeople),
       openPerson: openPerson,
-      closePerson: closePerson,
+      closePerson: () => closeDialog(false),
       whenReady: () => lastOp,
       onRender: onRender,
     };
@@ -896,6 +1347,8 @@
     doc: document,
     win: window,
     fetchJSON: (path) => (window.HC ? window.HC.fetchJSON(path) : Promise.reject(new Error('HC missing'))),
+    fetchProjects: () => (window.HC && typeof window.HC.fetchProjects === 'function'
+      ? window.HC.fetchProjects() : Promise.reject(new Error('HC missing'))),
   } : {});
 
   const API = Object.freeze(Object.assign({
@@ -913,6 +1366,15 @@
     readAtDay: readAtDay,
     splitTeam: splitTeam,
     ACTIVE_DAYS: ACTIVE_DAYS,
+    cardClickOpensDialog: cardClickOpensDialog,
+    dialogMode: dialogMode,
+    rankPeople: rankPeople,
+    loginProjects: loginProjects,
+    repoProjectMap: repoProjectMap,
+    repoPages: repoPages,
+    lastCommitDay: lastCommitDay,
+    heatSummary: heatSummary,
+    authorPeople: authorPeople,
     createLab: createLab,
   }, runtime));
 

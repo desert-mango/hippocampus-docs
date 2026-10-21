@@ -471,9 +471,12 @@
       .map((word) => Array.from(word)[0] || '').join('');
     return letters.toUpperCase() || '?';
   }
-  /* Round 2 (R5, Kyle 2026-10-15): the WHOLE card is the person's link — photo, name and title (the photo is
-     no longer a popover trigger). A highlighted title (people.json `highlight: true`) is in the site's accent; an
-     optional `subtitle` is a second, plain title line under it (Kyle 2026-10-21).
+  /* Round 2 (R5, Kyle 2026-10-15): the WHOLE card is the person's link — photo, name and title. A highlighted
+     title (people.json `highlight: true`) is in the site's accent; an optional `subtitle` is a second, plain
+     title line under it (Kyle 2026-10-21).
+     M5 (uiux 2026-10, R1-4): a plain click opens the person's profile dialog (js/lab.js), which holds the link;
+     a linked card stays an <a href> (cmd/ctrl/middle click still open the page in a new tab, and Editor mode's
+     wireCard reads the href); a link-less card is a focusable role="button" div. Both carry data-hc-person.
      entry = HCLab.splitTeam's {person, linked, active, pinned} (or a bare person); the data-* attributes are
      what Editor mode's card tools read (js/editor-frame.js). */
   function personCardHTML(entry) {
@@ -493,18 +496,17 @@
     const link = safeHttpUrl(person.link);
     const flags = entry && entry.person
       ? ` data-linked="${entry.linked ? 1 : 0}" data-active="${entry.active ? 1 : 0}" data-pinned="${entry.pinned ? 1 : 0}"` : '';
-    const data = ` data-hc-name="${esc(name)}" data-link="${link ? 1 : 0}"${flags}`;
+    const data = ` data-hc-name="${esc(name)}" data-link="${link ? 1 : 0}"${flags} data-hc-person="${esc(name)}" aria-haspopup="dialog"`;
     return link
       ? `<a class="person-card" href="${esc(link)}" target="_blank" rel="noopener"${data}>${inner}</a>`
-      : `<div class="person-card is-static"${data}>${inner}</div>`;
+      : `<div class="person-card is-static" role="button" tabindex="0"${data}>${inner}</div>`;
   }
-  // Fills the `<div id="people-root">` mount that content/about.md declares. Throws on a
-  // malformed roster so the caller can warn and leave the rest of the page intact.
   /* Round 2 (R5): two lists, the current team and the alumni, sorted by js/lab.js splitTeam (GitHub work in the
      last 30 days or an admin's pin; unlinked people where an admin put them). Without the GitHub layer (or
-     lab.js) the registry's own groups stand. */
+     lab.js) the registry's own groups stand. Throws on a malformed roster. */
   const today = () => new Date().toISOString().slice(0, 10);
   function teamLists(data, pub) {
+    if (!data || !Array.isArray(data.groups)) throw new Error('data/people.json is malformed');
     if (window.HCLab && typeof HCLab.splitTeam === 'function') {
       const s = HCLab.splitTeam(data, pub, today());
       return [['team', 'Current team', s.team], ['alumni', 'Alumni', s.alumni]];
@@ -512,60 +514,74 @@
     return data.groups.map((g) => [g.id === 'active' ? 'team' : 'alumni', g.id === 'active' ? 'Current team' : (g.title || 'Alumni'),
       (Array.isArray(g.people) ? g.people : []).map((person) => ({ person }))]);
   }
-  function mountPeople(body, data, pub) {
-    const root = body.querySelector('#people-root');
-    if (!root) return;
-    if (!data || !Array.isArray(data.groups)) throw new Error('data/people.json is malformed');
-    const html = teamLists(data, pub).map(([id, title, list]) => {
-      const cards = list.map(personCardHTML).join('');
-      const compact = id === 'team' ? '' : ' compact';
+  /* M1/M6/M7/M14/M15/M16 (uiux 2026-10): the Team page, as ONE string — the h1, the people first (the current
+     team, then the alumni, each an h2 over cards of one size), then "Lab activity" with "· GitHub data as of
+     <day>" on its line. lists: teamLists' [[id, title, entries]] (null: no roster, no people mount); asOf: the
+     GitHub layer's read_at day, or null. viewTeam writes exactly this, then puts the rendered about.md around the
+     people mount and the Lab activity body into .team-lab-body. */
+  function teamSkeleton(lists, asOf) {
+    const groups = Array.isArray(lists) ? lists.map(([id, title, list]) => {
       // an empty list keeps its place: Editor mode adds people to it
-      return `<div class="people-group" data-hc-list="${id}">
-        <h3>${esc(title)}</h3>
-        <div class="people-grid${compact}">${cards}</div>
+      return `<div class="people-group" data-hc-list="${esc(id)}">
+        <h2>${esc(title)}</h2>
+        <div class="people-grid">${list.map(personCardHTML).join('')}</div>
       </div>`;
-    }).join('');
-    root.appendChild(el(html));
+    }).join('') : null;
+    const day = typeof asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : null;
+    return `<div class="page-body hc-team">
+      <h1>Team</h1>
+      <section class="team-people" aria-label="People">${groups === null ? '' : `<div id="people-root">${groups}</div>`}</section>
+      <section class="team-lab" aria-labelledby="team-lab-h">
+        <div class="hc-lab-head"><h2 id="team-lab-h">Lab activity</h2>${day ? ` <span class="hc-asof-inline">· GitHub data as of ${day}</span>` : ''}</div>
+        <div class="team-lab-body"></div>
+      </section>
+    </div>`;
   }
 
-  /* Round 2 (R5, Kyle 2026-10-15): #/team replaces About and Lab (both redirect here). Lab activity first, then
-     the people: the current team, then the alumni. content/about.md now holds only the people mount. */
+  /* Round 2 (R5, Kyle 2026-10-15): #/team replaces About and Lab (both redirect here). M1/M16 (uiux 2026-10): the
+     people first — the current team, then the alumni — then Lab activity. content/about.md holds only the people
+     mount (the "Who can edit what" rule is docs/maintainer-protocols.md §2b). No "who wrote this" here (M15). */
   async function viewTeam(anchor) {
     sidebar.innerHTML = '';
     setTitle(['Team']);
     const epoch = routeEpoch;
     // The roster and the GitHub layer are page-local extras: never let a failure take the page down.
-    const [md, people, pub] = await Promise.all([
+    const [md, people, pub, act] = await Promise.all([
       fetchMD('content/about.md').catch(() => '<div id="people-root"></div>\n'),
       fetchJSON('data/people.json').catch((err) => err),
       fetchJSON('data/graph/people-public.json').catch(() => null),
+      fetchJSON('data/graph/org-activity.json').catch(() => null),
     ]);
     if (epoch !== routeEpoch) return;
-    content.innerHTML = '';
-    const page = el(`<div class="page-body hc-team">
-      <h1>Team</h1>
-      <section class="team-lab" aria-label="Lab activity"></section>
-      <section class="team-people" aria-labelledby="team-people-h"><h2 id="team-people-h">People</h2></section>
-    </div>`).firstElementChild;              // the element, not the fragment: it is used after it is appended
-    const body = renderMarkdown(md);
+    let lists = null;
     try {
       if (people instanceof Error) throw people;
-      mountPeople(body, people, pub);
+      lists = teamLists(people, pub);
     } catch (err) {
       console.warn('People section skipped —', err.message || err);
-      const root = body.querySelector('#people-root');
-      if (root) root.remove();
     }
-    page.querySelector('.team-people').appendChild(body);
+    const asOf = act && typeof act === 'object' && typeof act.read_at === 'string' ? act.read_at.slice(0, 10) : null;
+    content.innerHTML = '';
+    const page = el(teamSkeleton(lists, asOf)).firstElementChild;   // the element: it is used after it is appended
+    // about.md's own text, if it ever has any, sits around the people: its mount is replaced by the filled one
+    const body = renderMarkdown(md);
+    const mount = body && body.querySelector('#people-root');
+    const filled = page.querySelector('#people-root');
+    if (mount) mount.replaceWith(filled || document.createComment('people'));
+    const people_ = page.querySelector('.team-people');
+    if (body && (mount || body.textContent.trim())) people_.appendChild(body);
     content.appendChild(page);
     if (window.HCLab) {
-      HCLab.renderLab(page.querySelector('.team-lab'), () => epoch === routeEpoch, { embedded: true })
+      HCLab.renderLab(page.querySelector('.team-lab-body'), () => epoch === routeEpoch, { embedded: true })
         .catch((err) => console.warn('Lab activity skipped —', (err && err.message) || err));
-      HCLab.wirePeople(body);
-      HCLab.renderAuthors(page, 'about');
+      HCLab.wirePeople(body && body.isConnected ? body : people_);
     }
     scrollToAnchor(anchor);
   }
+
+  // the Team page's string builders, read by tools/tests/test_views.mjs; cloudinaryTx also sizes js/lab.js's
+  // profile photo
+  window.HCTeam = Object.freeze({ teamSkeleton, personCardHTML, cloudinaryTx });
 
   function viewSetupIndex() {
     // #/setup routes to the "start" landing page
