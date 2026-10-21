@@ -473,16 +473,17 @@ function serveStatic(req, res, urlPath) {
    its base URL from the environment at request time, but pointing it at a
    server that does not exist yet would be a race worth avoiding.
 
-   BOTH entries are redirected, not just the primary. The handler tries every
-   provider in turn on a failing hop, so leaving the nano URL pointing at the
+   Every entry is redirected, not just the primary. The handler tries every
+   provider in turn on a failing hop, so leaving a fallback URL pointing at the
    real gateway meant a keyless drill failed there with "no key is not set" —
    which is NOT an upstream 429, so the 502's `exhausted` came back false and
-   the quota drill silently proved the wrong notice. With both mocked, a quota
-   run produces exactly two hop-1 failures, both HTTP 429, and exhausted: true. */
+   the quota drill silently proved the wrong notice. With every entry mocked, a
+   quota run produces one hop-1 failure per entry, each HTTP 429, and exhausted: true. */
 if (args.mock) {
   const mockUrl = `http://127.0.0.1:${args.port}${MOCK_ROUTE}`;
   process.env.LIBRARIAN_NEMOTRON_URL = mockUrl;
-  process.env.LIBRARIAN_NANO_URL = mockUrl;
+  process.env.LIBRARIAN_MINIMAX_URL = mockUrl;
+  process.env.LIBRARIAN_GEMMA_URL = mockUrl;
   process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'dev-site-mock-not-a-real-key';
 }
 

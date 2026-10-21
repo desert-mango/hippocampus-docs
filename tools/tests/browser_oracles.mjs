@@ -732,8 +732,10 @@ test('U4a walk: the dock (top right since V1) in a real Chrome (switch, avatar, 
       child.kill('SIGKILL'); server.closeAllConnections?.(); server.close();
       return { out, close() {} };
     })();
-    assert.match(W.out, /<div class="hc-guest-dock" role="region" aria-label="Sign in to edit"><button type="button" class="hc-guest-signin"[^>]*>Sign in<\/button>/, 'the guest bubble with "Sign in"');
-    console.log('U4a walk: dock bottom right with switch + avatar + count + Send; guest bubble "Sign in"');
+    // SHELL (U4a re-pinned): the guest's "Sign in" is the header's #signin-btn, shown (no `hidden`) once the session is known
+    assert.match(W.out, /<button id="signin-btn" class="hc-signin" type="button" aria-label="Sign in to edit">[\s\S]*?<span class="hc-signin-label">Sign in<\/span>\s*<\/button>/, 'the header\'s "Sign in" button, shown to a guest');
+    assert.doesNotMatch(W.out, /class="hc-guest-dock"/, 'no old guest bubble');
+    console.log('U4a walk: dock bottom right with switch + avatar + count + Send; header "Sign in" button for a guest');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });
