@@ -52,6 +52,81 @@ test('contrastPairs: light --body on the error panel, color-mix(in srgb, --dange
 
 // ==== UNIT H ====
 
+const H_PHONE = (q) => q === '(max-width: 639px)';
+const H_SITE = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'site.json'), 'utf8'));
+const hSiteWith = (patch) => ({ 'data/site.json': JSON.stringify({ ...H_SITE, ...patch }) });
+const hCount = (html, needle) => html.split(needle).length - 1;
+
+test('H F4: the hero placeholder is the long example on a wide screen', async () => {
+  const site = await bootSite({ hash: '#/' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /placeholder="e\.g\. how do I flash PX4 on the HippoCampus\?"/);
+  assert.doesNotMatch(html, /placeholder="Search the docs…"/);
+});
+
+test('H F4: the hero placeholder is "Search the docs…" when (max-width: 639px) matches', async () => {
+  const site = await bootSite({ hash: '#/', media: H_PHONE });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /placeholder="Search the docs…"/);
+  assert.doesNotMatch(html, /how do I flash PX4/);
+  assert.ok(site.mediaListeners.length >= 1, 'wireHero listens for the width change');
+});
+
+test('H H5: the hero image is a 21:9 Cloudinary rendition 1200x514, with alt, not lazy', async () => {
+  const site = await bootSite({ hash: '#/' });
+  const html = String(site.content.innerHTML);
+  const img = /<img class="hero-img"[^>]*>/.exec(html);
+  assert.ok(img, 'img.hero-img is rendered');
+  const tag = img[0];
+  assert.match(tag, /src="https:\/\/res\.cloudinary\.com\/dr76gues0\/image\/upload\/w_1200,c_fill,ar_21:9,g_auto,f_auto,q_auto\/v1790120325\/hippocampus-docs\/projects\/ul_hero_vehicle_in_pool\.jpg"/);
+  assert.match(tag, /width="1200"/);
+  assert.match(tag, /height="514"/);
+  assert.match(tag, /alt="The HippoCampus micro AUV, an orange four-thruster underwater robot, in the lab&#39;s water tank"|alt="The HippoCampus micro AUV, an orange four-thruster underwater robot, in the lab's water tank"/);
+  assert.doesNotMatch(tag, /loading="lazy"/);
+  // phones get the 16:9 rendition
+  assert.match(html, /<source media="\(max-width: 639px\)" srcset="https:\/\/res\.cloudinary\.com\/dr76gues0\/image\/upload\/w_750,c_fill,ar_16:9,g_auto,f_auto,q_auto\/v1790120325\/[^"]+" width="750" height="422">/);
+  // the image sits between the lead and the ask box
+  assert.ok(html.indexOf('class="lead"') < html.indexOf('hero-img'));
+  assert.ok(html.indexOf('hero-img') < html.indexOf('class="askbox'));
+});
+
+test('H H5: no hero image when site.json has no usable hero (guarded read)', async () => {
+  for (const hero of [undefined, null, 'x', { alt: 'no image' }, { image: 'http://insecure/x.jpg', alt: 'a' }, { image: 42 }]) {
+    const site = await bootSite({ hash: '#/', files: hSiteWith({ hero }) });
+    assert.deepEqual(site.errors, []);
+    const html = String(site.content.innerHTML);
+    assert.match(html, /hero-search-form/, `home still renders for hero=${JSON.stringify(hero)}`);
+    assert.doesNotMatch(html, /hero-img/, `no image for hero=${JSON.stringify(hero)}`);
+  }
+});
+
+test('H H3/F5: exactly four example chips', async () => {
+  const site = await bootSite({ hash: '#/' });
+  const html = String(site.content.innerHTML);
+  assert.equal(hCount(html, 'class="ask-chip"'), 4);
+  for (const label of ['flash PX4', 'thruster mixer', 'run the simulation', 'acoustic localization']) {
+    assert.ok(html.includes(`>${label}</button>`), label);
+  }
+});
+
+test('H H4: the shorter lead, no counts; the tools card no longer says "3 MCP servers"', async () => {
+  const site = await bootSite({ hash: '#/' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /<p class="lead">Setup guides, projects, code and CAD for the lab&#39;s underwater robots\. Type a few words, or a symbol name\.<\/p>|<p class="lead">Setup guides, projects, code and CAD for the lab's underwater robots\. Type a few words, or a symbol name\.<\/p>/);
+  assert.doesNotMatch(html, /3 MCP servers/);
+  assert.match(html, /MCP servers: GPU compute and CAD access\./);
+  assert.equal(hCount(html, 'class="quiet"'), 4);
+});
+
+test('H H4: the card counts match the registries (setup pages, projects)', async () => {
+  const setup = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'setup.json'), 'utf8'));
+  const projects = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'projects.json'), 'utf8'));
+  const pages = setup.sections.reduce((n, s) => n + s.pages.length, 0);
+  const cards = Object.fromEntries(H_SITE.home_cards.map((c) => [c.href, c.text]));
+  assert.match(cards['#/setup'], new RegExp(`^${pages} pages`));
+  assert.match(cards['#/projects'], new RegExp(`^${projects.projects.length} projects`));
+});
+
 // ==== UNIT J ====
 
 // ==== UNIT M ====

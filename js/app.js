@@ -189,6 +189,46 @@
      already knows where they are going clicks past the box. */
   const HERO_LIMIT = 6;          // rows in the hero panel before "see all"
   const HERO_DEBOUNCE_MS = 180;  // one query per pause, not one per keystroke
+  // F4: below 640 px the long example placeholder is cut off, so phones get a short one.
+  const HERO_PHONE_QUERY = '(max-width: 639px)';
+
+  /* Pure helpers (uiux H5, F4), exported as window.HCHome.
+     heroPlaceholder(narrow) -> the placeholder for a phone (narrow) or a wider screen.
+     heroImage(site, narrow) -> {src, width, height, alt} | null: the vehicle photo of
+       data/site.json `hero` (a guarded read: no hero, or an image that is not an https
+       URL, gives null), as a Cloudinary rendition cut for the width: 21:9 at 1200 px wide,
+       16:9 at 750 px for phones. width/height are the rendition's own, so the page does
+       not jump when the photo arrives. */
+  const heroPlaceholder = (narrow) => (narrow ? 'Search the docs…'
+    : 'e.g. how do I flash PX4 on the HippoCampus?');
+  function heroImage(site, narrow) {
+    const hero = site && typeof site === 'object' ? site.hero : null;
+    if (!hero || typeof hero !== 'object') return null;
+    const image = typeof hero.image === 'string' ? hero.image.trim() : '';
+    if (!/^https:\/\/[^\s"<>]+$/i.test(image)) return null;
+    const cut = narrow
+      ? { tx: 'w_750,c_fill,ar_16:9,g_auto,f_auto,q_auto', width: 750, height: 422 }
+      : { tx: 'w_1200,c_fill,ar_21:9,g_auto,f_auto,q_auto', width: 1200, height: 514 };
+    return {
+      src: cloudinaryTx(image, cut.tx), width: cut.width, height: cut.height,
+      alt: typeof hero.alt === 'string' ? hero.alt : '',
+    };
+  }
+  const isPhoneWidth = () => typeof window.matchMedia === 'function'
+    && window.matchMedia(HERO_PHONE_QUERY).matches;
+  // The picture: phones take the 16:9 source, every wider screen the 21:9 img. Above the
+  // fold, so never lazy.
+  function heroPictureHTML(site) {
+    const wide = heroImage(site, false);
+    if (!wide) return '';
+    const narrow = heroImage(site, true);
+    return `
+        <picture class="hero-pic">
+          <source media="${HERO_PHONE_QUERY}" srcset="${esc(narrow.src)}" width="${narrow.width}" height="${narrow.height}">
+          <img class="hero-img" src="${esc(wide.src)}" width="${wide.width}" height="${wide.height}"
+               alt="${esc(wide.alt)}" fetchpriority="high" decoding="async">
+        </picture>`;
+  }
 
   const heroHitRow = (r) => `
         <a class="hit" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>
@@ -205,7 +245,7 @@
       <section class="hero">
         <p class="kicker">${esc(s.kicker)}</p>
         <h1>${esc(s.title)}</h1>
-        <p class="lead">${esc(s.lead)}</p>
+        <p class="lead">${esc(s.lead)}</p>${heroPictureHTML(s)}
         <div class="askbox">
           <form id="hero-search-form" role="search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -213,7 +253,7 @@
             <label class="visually-hidden" for="hero-search-input">Search the lab documentation</label>
             <input id="hero-search-input" type="search" autocomplete="off"
                    aria-describedby="hero-search-status"
-                   placeholder="e.g. how do I flash PX4 on the HippoCampus?">
+                   placeholder="${esc(heroPlaceholder(isPhoneWidth()))}">
             <kbd aria-hidden="true">/</kbd>
           </form>${chips.length ? `
           <div class="ask-chips" role="group" aria-label="Example searches">
@@ -253,6 +293,20 @@
     const epoch = routeEpoch;
     let token = 0;
     let timer = null;
+
+    // F4: the placeholder follows the width. The media query outlives this markup, so the
+    // listener drops itself on the first change after the reader has left this hero.
+    if (typeof window.matchMedia === 'function') {
+      const mql = window.matchMedia(HERO_PHONE_QUERY);
+      const onWidth = (e) => {
+        if (epoch !== routeEpoch) {
+          if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onWidth);
+          return;
+        }
+        input.placeholder = heroPlaceholder(Boolean(e && e.matches));
+      };
+      if (typeof mql.addEventListener === 'function') mql.addEventListener('change', onWidth);
+    }
 
     const paint = (mine, query, res) => {
       if (mine !== token || epoch !== routeEpoch) return;
@@ -325,6 +379,8 @@
       });
     });
   }
+
+  window.HCHome = Object.freeze({ heroPlaceholder, heroImage });
 
   async function viewSetupPage(pageId, anchor) {
     const flat = DATA.setup.sections.flatMap((s) => s.pages);
