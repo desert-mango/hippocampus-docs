@@ -483,7 +483,7 @@
     const item = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
     return `<dl class="key-facts">
       ${item('Status', statusBadge(f.status || 'unknown'))}
-      ${f.people !== null ? item('People', String(f.people)) : ''}
+      ${f.people ? item('People', String(f.people)) : ''}
       ${f.repos ? item('Repositories', String(f.repos)) : ''}
       ${f.lastActivity ? item('Last activity', `<time datetime="${esc(f.lastActivity)}">${esc(f.lastActivity)}</time>`) : ''}
     </dl>`;

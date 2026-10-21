@@ -108,6 +108,14 @@ test('J10 a project without an image gets no hero', async () => {
   assert.doesNotMatch(html, /class="project-hero"/);
 });
 
+test('J11 the key-facts row leaves out a zero People count (underwater-localization: no contributors)', async () => {
+  const site = await bootSite({ hash: '#/projects/underwater-localization' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /class="key-facts"/);
+  assert.doesNotMatch(html, /<dt>People<\/dt>/);
+  assert.match(html, /class="project-hero"/);
+});
+
 // ==== UNIT M ====
 
 // ==== UNIT E ====
