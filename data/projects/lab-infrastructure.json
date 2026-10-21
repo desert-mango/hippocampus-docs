@@ -2,6 +2,8 @@
  "name": "Lab & tank infrastructure",
  "status": "active",
  "tagline": "Everything around the water: Qualisys motion capture, the gantry over the tank, and the physical button boxes.",
+ "group": "lab",
+ "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1788428897/hippocampus-docs/setup/gantry_reference_frame_annotation.jpg",
  "file": "content/projects/lab-infrastructure.md",
  "repos": [
   {
@@ -82,5 +84,14 @@
   "Tank gantry",
   "Emergency/utility button boxes"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/lab-qualisys/calibration",
+   "label": "Calibration"
+  },
+  {
+   "href": "#/setup/lab-gantry/general-information",
+   "label": "General Information"
+  }
+ ]
 }

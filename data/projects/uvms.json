@@ -2,6 +2,7 @@
  "name": "UVMS — BlueROV2 + Alpha arm",
  "status": "maintained",
  "tagline": "Underwater vehicle-manipulator system: end-effector trajectory tracking with a BlueROV2 Heavy carrying a Reach Robotics Alpha 5 arm.",
+ "group": "research",
  "file": "content/projects/uvms.md",
  "repos": [
   {
@@ -36,5 +37,14 @@
   "BlueROV2 Heavy",
   "Reach Robotics Alpha 5 manipulator"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/bluerov/alpha-arm",
+   "label": "Alpha Arm"
+  },
+  {
+   "href": "#/setup/bluerov/full-uvms-setup",
+   "label": "Full UVMS Setup"
+  }
+ ]
 }

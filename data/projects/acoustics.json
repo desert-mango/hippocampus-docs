@@ -2,6 +2,7 @@
  "name": "Acoustics & DVL",
  "status": "maintained",
  "tagline": "Acoustic ranging, modems, and the doppler velocity log driver.",
+ "group": "research",
  "file": "content/projects/acoustics.md",
  "repos": [
   {
@@ -45,5 +46,14 @@
   "Water-linked / lab DVL",
   "Acoustic modems"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/bluerov/dvl",
+   "label": "DVL"
+  },
+  {
+   "href": "#/setup/hardware/acoustic-modems",
+   "label": "Acoustic Modems"
+  }
+ ]
 }

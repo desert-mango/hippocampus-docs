@@ -2,6 +2,7 @@
  "name": "Cameras",
  "status": "maintained",
  "tagline": "Getting image streams into ROS: USB MJPEG cameras and event cameras.",
+ "group": "research",
  "file": "content/projects/cameras.md",
  "repos": [
   {
@@ -36,5 +37,18 @@
   "USB cameras",
   "Event camera (collaboration)"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/lab-cameras/event-cameras",
+   "label": "Event Cameras"
+  },
+  {
+   "href": "#/setup/lab-cameras/event-camera-collaboration",
+   "label": "Event Camera Collaboration"
+  },
+  {
+   "href": "#/setup/lab-cameras/usb-cameras",
+   "label": "USB Cameras"
+  }
+ ]
 }

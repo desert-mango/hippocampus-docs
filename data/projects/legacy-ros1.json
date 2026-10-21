@@ -2,6 +2,7 @@
  "name": "Legacy ROS 1 stack",
  "status": "archive",
  "tagline": "The pre-ROS 2 HippoCampus software, kept for history and for reading old experiments.",
+ "group": "software",
  "file": "content/projects/legacy-ros1.md",
  "repos": [
   {

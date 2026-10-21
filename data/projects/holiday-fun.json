@@ -2,6 +2,7 @@
  "name": "Holiday fun",
  "status": "archive",
  "tagline": "hippo-christmas: the lab's holiday hardware humor, preserved.",
+ "group": "fun",
  "file": "content/projects/holiday-fun.md",
  "repos": [
   {

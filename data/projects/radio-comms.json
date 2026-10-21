@@ -2,6 +2,7 @@
  "name": "Radio & communications",
  "status": "legacy",
  "tagline": "Radio links for vehicles at and under the surface: HippoLink telemetry over Si1000 radios, MAVLink plumbing, and software-defined radio experiments.",
+ "group": "research",
  "file": "content/projects/radio-comms.md",
  "repos": [
   {
@@ -99,5 +100,14 @@
   "Si1000-based telemetry radios",
   "DVB-T SDR sticks"
  ],
- "links": []
+ "links": [
+  {
+   "href": "#/setup/guides/dvb-t",
+   "label": "DVB-T Stick"
+  },
+  {
+   "href": "#/setup/hardware/rf-modules",
+   "label": "RF Modules"
+  }
+ ]
 }

@@ -2,6 +2,8 @@
  "name": "Underwater localization & temperature exploration",
  "status": "active",
  "tagline": "Known-map localization, change mapping, and temperature-guided exploration tested in the measured HippoCampus pool simulation.",
+ "group": "research",
+ "image": "https://res.cloudinary.com/dr76gues0/image/upload/v1790120325/hippocampus-docs/projects/ul_hero_vehicle_in_pool.jpg",
  "file": "content/projects/underwater-localization.md",
  "repos": [],
  "hardware": [
