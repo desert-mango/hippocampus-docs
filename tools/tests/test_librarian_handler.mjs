@@ -140,8 +140,8 @@ function providerStub(answers) {
   return fn;
 }
 
-/* Both provider entries read the SAME variable now — they are two models behind
-   one gateway, not two vendors. The name says "KEYS" in the plural only because
+/* All three provider entries read the SAME variable — they are three models
+   behind one gateway (S2), not three vendors. The name says "KEYS" in the plural only because
    it is the whole key environment a call needs. */
 const KEYS = { OPENROUTER_API_KEY: 'openrouter-test-key' };
 
@@ -361,7 +361,7 @@ test('an answer that stops one closer short is repaired, not rejected', async ()
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
 });
 
-test('a provider that answers 200 with unusable content twice falls through', async () => {
+test('a provider that answers 200 with unusable content twice falls through (S2: to minimax)', async () => {
   /* STRICTLY STRONGER than the version this replaces. That one stubbed ONE
      unusable answer and asserted only that the OTHER entry answered on call 2.
      A parse or empty failure now buys the primary one retry of itself first
@@ -373,7 +373,7 @@ test('a provider that answers 200 with unusable content twice falls through', as
   const fetchStub = providerStub(['I cannot help with that.', 'still not JSON', [id]]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nano');
+  assert.equal(r.json.provider, 'minimax');
   assert.equal(fetchStub.calls.length, 3);
   assert.equal(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'call 2 is the SAME entry retried, not the fallback');
@@ -383,33 +383,37 @@ test('a provider that answers 200 with unusable content twice falls through', as
 
 // ------------------------------------------------------------ the fallback --
 
-test('a failing primary falls back to the other provider', async () => {
+test('S2: a failing primary falls back to minimax, which carries no Nvidia pin', async () => {
   const id = ASK.candidates[4].id;
   const fetchStub = providerStub([{ status: 503, text: 'nvidia is down' }, [id]]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nano');
+  assert.equal(r.json.provider, 'minimax');
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
   assert.equal(fetchStub.calls.length, 2, 'exactly one retry, on the OTHER provider');
   assert.equal(fetchStub.calls[0].url, fetchStub.calls[1].url,
     'same gateway by construction — see the PROVIDERS note in api/librarian.js');
   assert.notEqual(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'the retry used the OTHER entry: same endpoint, different model');
-  assert.equal(fetchStub.calls[1].body.model, 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free');
+  assert.equal(fetchStub.calls[1].body.model, 'minimax/minimax-m3.1-flash:free');
   assert.ok(fetchStub.calls[1].body.model.endsWith(':free'), 'the fallback is free too');
-  assert.deepEqual(fetchStub.calls[1].body.provider.order, ['Nvidia'],
-    'the fallback entry carries its own upstream pin');
-  assert.deepEqual(fetchStub.calls[1].body.reasoning, { enabled: false },
+  assert.equal(fetchStub.calls[1].body.provider, undefined,
+    'minimax is a different upstream: no Nvidia routing pin rides along');
+  assert.equal(fetchStub.calls[1].body.reasoning, undefined,
+    'minimax refuses `reasoning: disabled` (measured 2026-09-04), so none is sent');
+  assert.deepEqual(fetchStub.calls[0].body.provider.order, ['Nvidia'], 'the primary keeps its pin');
+  assert.deepEqual(fetchStub.calls[0].body.reasoning, { enabled: false },
     'nemotron thinks past the deadline unless told not to');
 });
 
-test('both providers failing is a 502 that says why', async () => {
+test('S2: all three providers failing is a 502 that says why', async () => {
   const fetchStub = providerStub([{ status: 500, text: 'boom' }]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
-  assert.equal(fetchStub.calls.length, 2);
+  assert.equal(fetchStub.calls.length, 3);
   assert.ok(Array.isArray(r.json.providers));
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'nano']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  assert.equal(r.json.exhausted, false);
   for (const p of r.json.providers) assert.ok(p.reason, 'each failure carries a reason');
 });
 
@@ -433,17 +437,16 @@ test('no keys at all is a 502 naming the missing environment variables', async (
    called. The coupling is asserted directly rather than left implicit — it is
    the cost recorded in the PROVIDERS note, and splitting back into two vendors
    should have to change this line on purpose. */
-test('both entries share one key, so a missing key skips every provider', async () => {
+test('S2: all three entries share one key, so a missing key skips every provider', async () => {
   const providers = handler.PROVIDERS;
-  assert.equal(providers.length, 2);
-  assert.equal(providers[0].keyEnv, 'OPENROUTER_API_KEY');
-  assert.equal(providers[1].keyEnv, 'OPENROUTER_API_KEY');
+  assert.equal(providers.length, 3);
+  for (const p of providers) assert.equal(p.keyEnv, 'OPENROUTER_API_KEY');
 
   const fetchStub = providerStub([[ASK.candidates[1].id]]);
   const r = await call('POST', ASK, { env: {}, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'no key means no provider call at all');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'nano']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
   for (const p of r.json.providers) assert.match(p.reason, /OPENROUTER_API_KEY/);
 });
 
@@ -481,7 +484,7 @@ test('a Llama-family model override is refused, not forwarded', async () => {
   const stub2 = providerStub([[ASK.candidates[0].id]]);
   const r2 = await call('POST', ASK, { env, fetch: stub2 });
   assert.equal(r2.code, 200);
-  assert.equal(r2.json.provider, 'nano');
+  assert.equal(r2.json.provider, 'minimax');
   assert.equal(stub2.calls.length, 1, 'the forbidden primary was never called');
 });
 
@@ -491,12 +494,13 @@ test('a paid model override is refused, so a stale env var cannot start billing'
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
   const env = Object.assign({}, KEYS, {
     LIBRARIAN_NEMOTRON_MODEL: 'nvidia/nemotron-3-super-120b-a12b',
-    LIBRARIAN_NANO_MODEL: 'openai/gpt-oss-120b',
+    LIBRARIAN_MINIMAX_MODEL: 'minimax/minimax-m3.1-flash',
+    LIBRARIAN_GEMMA_MODEL: 'openai/gpt-oss-120b',
   });
   const r = await call('POST', ASK, { env, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'no paid model is ever sent upstream');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'nano']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
   for (const p of r.json.providers) assert.match(p.reason, /paid model; only :free variants/);
 });
 
@@ -511,14 +515,28 @@ test('the primary base URL is environment-overridable (this is what dev_site moc
 
 // ------------------------------------------------------- free-only policy --
 
-test('every provider is a free variant and the deadlines fit the function', () => {
-  // Kyle, 2026-09-04: free models only, set and forget. The budget is now one
-  // SEARCH budget rather than a sum of two calls: every call is clamped to what
-  // is left of SEARCH_BUDGET_MS, and that budget plus slack sits under
-  // maxDuration: 15. The double-timeout path (super 8000 then nano 5000) has to
-  // fit inside the budget by CONSTANTS alone, with no appeal to runtime luck.
+test('S2: every provider is a free variant, three entries, and the deadlines sum to the budget', () => {
+  // Kyle, 2026-09-04: free models only, set and forget. The budget is one
+  // SEARCH budget: every call is clamped to what is left of SEARCH_BUDGET_MS,
+  // and that budget plus slack sits under maxDuration: 15. S2 (2026-10-21): the
+  // ladder is three models on three upstreams — nemotron 6000, minimax 4000,
+  // gemma 3000 — and a hop that times out on all three spends EXACTLY the
+  // budget, by constants alone, with no appeal to runtime luck.
   const providers = handler.PROVIDERS;
-  assert.equal(providers.length, 2);
+  assert.deepEqual(providers.map((p) => p.name), ['nemotron', 'minimax', 'gemma']);
+  assert.deepEqual(providers.map((p) => p.timeoutMs), [6000, 4000, 3000]);
+  assert.deepEqual(providers.map((p) => p.model), [
+    'nvidia/nemotron-3-super-120b-a12b:free',
+    'minimax/minimax-m3.1-flash:free',
+    'google/gemma-4-26b-a4b-it:free',
+  ]);
+  assert.deepEqual(providers[0].routing && providers[0].routing.order, ['Nvidia']);
+  assert.ok(!providers[1].routing && !providers[2].routing, 'only nemotron is pinned to an upstream');
+  assert.deepEqual(providers.map((p) => [p.modelEnv, p.urlEnv]), [
+    ['LIBRARIAN_NEMOTRON_MODEL', 'LIBRARIAN_NEMOTRON_URL'],
+    ['LIBRARIAN_MINIMAX_MODEL', 'LIBRARIAN_MINIMAX_URL'],
+    ['LIBRARIAN_GEMMA_MODEL', 'LIBRARIAN_GEMMA_URL'],
+  ]);
   for (const p of providers) {
     assert.ok(p.model.endsWith(':free'), `${p.name} must be a free model, got ${p.model}`);
     assert.ok(!/llama/i.test(p.model), `${p.name} must not be a Llama-family model`);
@@ -529,8 +547,9 @@ test('every provider is a free variant and the deadlines fit the function', () =
   assert.ok(handler.SEARCH_BUDGET_MS + handler.TIMEOUT_SLACK_MS <= handler.FUNCTION_MAX_DURATION_MS,
     'the search budget plus slack must sit under the function ceiling');
   const ceilings = providers.reduce((n, p) => n + p.timeoutMs, 0);
-  assert.ok(ceilings <= handler.SEARCH_BUDGET_MS,
-    `a hop that times out on both entries costs ${ceilings}ms — over the budget`);
+  assert.equal(ceilings, handler.SEARCH_BUDGET_MS,
+    `a hop that times out on every entry costs ${ceilings}ms — the budget exactly`);
+  assert.equal(handler.SEARCH_BUDGET_MS, 13000);
   assert.equal(handler.MAX_MODEL_CALLS, 3, 'at most three model calls per search');
   assert.ok(handler.MIN_HOP_MS > 0 && handler.MIN_HOP_MS < handler.SEARCH_BUDGET_MS);
   const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
@@ -543,8 +562,8 @@ test('every provider is a free variant and the deadlines fit the function', () =
 });
 
 test('each provider is aborted at its own deadline, and the message says which', async () => {
-  // A stub that never resolves until aborted; the primary (8000ms) must be
-  // cut at 8000, the fallback (5000ms) at 5000, and the reasons must name it.
+  // A stub that never resolves until aborted; S2: the primary is cut at 6000,
+  // minimax at 4000, gemma at 3000, and the reasons must name each one.
   const timers = [];
   const hanging = (url, init) => new Promise((resolve, reject) => {
     init.signal.addEventListener('abort', () => {
@@ -557,8 +576,8 @@ test('each provider is aborted at its own deadline, and the message says which',
     const r = await call('POST', ASK, { env: KEYS, fetch: hanging });
     assert.equal(r.code, 502);
     assert.deepEqual(r.json.providers.map((p) => p.reason),
-      ['timed out after 8000ms', 'timed out after 5000ms']);
-    assert.ok(timers.includes(8000) && timers.includes(5000), 'both deadlines were armed');
+      ['timed out after 6000ms', 'timed out after 4000ms', 'timed out after 3000ms']);
+    assert.ok([6000, 4000, 3000].every((ms) => timers.includes(ms)), 'all three deadlines were armed');
   } finally {
     global.setTimeout = realSetTimeout;
   }
@@ -916,7 +935,7 @@ test('a hop 2 that fails 503 then 503 still answers 200 with partial: true after
   assert.deepEqual(r.json.results.map((x) => x.href), [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('nano takes hop 1 and super takes hop 2 in three calls — the stub throws on call 4', async () => {
+test('S2: minimax takes hop 1 and nemotron takes hop 2 in three calls — the stub throws on call 4', async () => {
   let extra = false;
   const fetchStub = providerStub([
     { status: 503, text: 'super is down' },
@@ -939,7 +958,7 @@ test('the 3-call cap skips the hop-2 fallback rather than spending a fourth call
   let extra = false;
   const fetchStub = providerStub([
     { status: 503, text: 'super is down' },              // hop 1, call 1
-    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },      // hop 1, call 2 (nano)
+    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },      // hop 1, call 2 (minimax)
     { status: 503, text: 'super is down again' },        // hop 2, call 3
     (n) => { extra = true; throw new Error(`MAX_MODEL_CALLS is 3, not ${n}`); },
   ]);
@@ -950,7 +969,7 @@ test('the 3-call cap skips the hop-2 fallback rather than spending a fourth call
   assert.equal(r.json.calls, 3);
   assert.equal(r.json.hops, 2, 'hop 2 was attempted, and failed');
   assert.equal(r.json.partial, true);
-  assert.equal(r.json.provider, 'nano', 'the last hop that answered was hop 1, on nano');
+  assert.equal(r.json.provider, 'minimax', 'the last hop that answered was hop 1, on minimax');
   assert.equal(r.json.results.length, 2);
 });
 
@@ -991,7 +1010,7 @@ test('two parse failures spend the retry and then the fallback — three calls, 
   assert.equal(r.code, 200);
   assert.equal(extra, false, 'the retry never buys a fourth call');
   assert.equal(r.json.calls, 3);
-  assert.equal(r.json.provider, 'nano');
+  assert.equal(r.json.provider, 'minimax');
   assert.equal(r.json.hops, 1, 'the 3-call cap left nothing for the walk');
   assert.equal(r.json.partial, true, 'a non-empty open that was never walked is partial');
   assert.equal(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model, 'call 2 was the retry');
@@ -1013,7 +1032,7 @@ test('a primary TIMEOUT is not retried — it goes straight to the other entry',
     assert.equal(r.code, 200);
     assert.equal(n, 2, 'a slow model does not get a second deadline of its own');
     assert.equal(r.json.calls, 2);
-    assert.equal(r.json.provider, 'nano');
+    assert.equal(r.json.provider, 'minimax');
   } finally {
     global.setTimeout = realSetTimeout;
   }
@@ -1025,15 +1044,15 @@ test('an HTTP 429 goes straight to the fallback, and all-429 still reports exhau
     { env: KEYS, fetch: one429 });
   assert.equal(r.code, 200);
   assert.equal(one429.calls.length, 2, 'a quota refusal is not a garble — no retry of the same entry');
-  assert.equal(r.json.provider, 'nano');
+  assert.equal(r.json.provider, 'minimax');
 
   const all429 = providerStub([{ status: 429, text: 'rate limit exceeded' }]);
   const r2 = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: all429 });
   assert.equal(r2.code, 502);
-  assert.equal(all429.calls.length, 2, 'still exactly one attempt per entry');
+  assert.equal(all429.calls.length, 3, 'still exactly one attempt per entry (S2: three entries)');
   assert.equal(r2.json.exhausted, true);
-  assert.deepEqual(r2.json.providers.map((p) => p.attempt), [1, 1]);
+  assert.deepEqual(r2.json.providers.map((p) => p.attempt), [1, 1, 1]);
 });
 
 test('every 502 provider entry names its attempt, and the retry is attempt 2', async () => {
@@ -1043,7 +1062,7 @@ test('every 502 provider entry names its attempt, and the retry is attempt 2', a
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 3, 'primary, primary retry, fallback — and then the cap');
   assert.deepEqual(r.json.providers.map((p) => [p.provider, p.hop, p.attempt]),
-    [['nemotron', 1, 1], ['nemotron', 1, 2], ['nano', 1, 1]]);
+    [['nemotron', 1, 1], ['nemotron', 1, 2], ['minimax', 1, 1]]);
   assert.equal(r.json.exhausted, false, 'a garble is not a quota problem');
 });
 
@@ -1090,13 +1109,13 @@ test('the hop-1 prompt pulls the documenting page and the implementing repo toge
     `the hop-1 system prompt is ${system.length} chars — every char is paid on every search`);
 });
 
-test('all-429 failures report exhausted; a 429/503 mix does not', async () => {
+test('all-429 failures report exhausted; a 429/503 mix does not (S2: three hop-1 entries)', async () => {
   const all429 = providerStub([{ status: 429, text: 'rate limit exceeded' }]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: all429 });
   assert.equal(r.code, 502);
   assert.equal(r.json.exhausted, true, 'every failure was an upstream 429');
-  assert.deepEqual(r.json.providers.map((p) => p.hop), [1, 1]);
+  assert.deepEqual(r.json.providers.map((p) => p.hop), [1, 1, 1]);
   const mixed = providerStub([{ status: 429, text: 'rate limit exceeded' }, { status: 503, text: 'down' }]);
   const r2 = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: mixed });
@@ -1215,9 +1234,9 @@ test('orderPicks moves graph rows behind the first candidate the model kept', as
     [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('hop 2 inherits what the clock left — armed at 6100ms — and MIN_HOP_MS skips it', async () => {
-  // (a) hop 1 answers at t = 6900, so hop 2 gets 13000 - 6900 = 6100ms, not the
-  // 8000ms ceiling, and the abort there is reported as `timed out after 6100ms`.
+test('hop 2 inherits what the clock left — armed at 5100ms (S2) — and MIN_HOP_MS skips it', async () => {
+  // (a) hop 1 answers at t = 7900, so hop 2 gets 13000 - 7900 = 5100ms, not the
+  // 6000ms ceiling, and the abort there is reported as `timed out after 5100ms`.
   let t = 0;
   const now = () => t;
   const timers = [];
@@ -1228,7 +1247,7 @@ test('hop 2 inherits what the clock left — armed at 6100ms — and MIN_HOP_MS 
     let n = 0;
     const doFetch = async (url, init) => {
       n += 1;
-      if (n === 1) { t = 6900; return modelReply(hopDoc({ hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] })); }
+      if (n === 1) { t = 7900; return modelReply(hopDoc({ hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] })); }
       return hanging(url, init);
     };
     const cfgs = handler.PROVIDERS.map((p) => handler.providerConfig(p, KEYS));
@@ -1240,10 +1259,11 @@ test('hop 2 inherits what the clock left — armed at 6100ms — and MIN_HOP_MS 
   assert.equal(out.ok, true);
   assert.equal(out.hops, 2);
   assert.equal(out.partial, true);
-  assert.ok(timers.includes(6100), `hop 2 was armed at 6100ms; saw ${timers.join(', ')}`);
+  assert.ok(timers.includes(5100), `hop 2 was armed at 5100ms; saw ${timers.join(', ')}`);
   assert.equal(out.failures[0].hop, 2);
-  assert.equal(out.failures[0].reason, 'timed out after 6100ms');
-  assert.equal(out.failures[1].reason, 'timed out after 5000ms', 'the fallback keeps its own ceiling');
+  assert.equal(out.failures[0].reason, 'timed out after 5100ms');
+  assert.equal(out.failures[1].reason, 'timed out after 4000ms', 'the fallback keeps its own ceiling');
+  assert.equal(out.failures.length, 2, 'the 3-call cap leaves gemma out of hop 2');
   assert.ok(out.ms <= handler.SEARCH_BUDGET_MS, 'the simulated wall stayed inside the budget');
 
   // (b) MIN_HOP_MS: hop 1 answers at t = 11000, leaving 2000ms — less than the
@@ -1420,7 +1440,7 @@ test('a repaired document whose hits array is empty is a parse failure, not an e
   return call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: fetchStub })
     .then((r) => {
       assert.equal(r.code, 200);
-      assert.equal(r.json.provider, 'nano', 'the truncated empty answer did not win');
+      assert.equal(r.json.provider, 'minimax', 'the truncated empty answer did not win');
       assert.equal(fetchStub.calls.length, 3, 'primary, primary retry, then the fallback');
     });
 });
@@ -1478,17 +1498,116 @@ test('a salvaged hop 1 answers the search instead of spending the fallback call'
     [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('every response carries x-librarian-version: 2 — the zero-quota readiness probe', async () => {
+test('S2: version 3 and the ladder header on every response — the zero-quota readiness probe', async () => {
+  const LADDER = 'nemotron,minimax,gemma';
+  assert.equal(handler.LIBRARIAN_VERSION, '3');
   const r405 = await call('GET', undefined, { env: KEYS });
   assert.equal(r405.code, 405);
-  assert.equal(r405.headers['x-librarian-version'], '2',
+  assert.equal(r405.headers['x-librarian-version'], '3',
     'the pre-body 405 is what tells a deploy check which handler is live');
+  assert.equal(r405.headers['x-librarian-ladder'], LADDER, 'and which ladder it walks');
   const ok = await call('POST', ASK, { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]) });
   assert.equal(ok.code, 200);
-  assert.equal(ok.headers['x-librarian-version'], '2');
+  assert.equal(ok.headers['x-librarian-version'], '3');
+  assert.equal(ok.headers['x-librarian-ladder'], LADDER);
   const r403 = await call('POST', ASK, { env: KEYS }, false,
     { headers: { origin: 'https://evil.example', host: 'docs.example.org' } });
-  assert.equal(r403.headers['x-librarian-version'], '2');
+  assert.equal(r403.code, 403);
+  assert.equal(r403.headers['x-librarian-version'], '3');
+  assert.equal(r403.headers['x-librarian-ladder'], LADDER);
+  const limiter = handler.createLimiter({ perKey: 1, global: 1000 });
+  const wire = { headers: { 'x-forwarded-for': '203.0.113.9' } };
+  const deps = { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]), limiter };
+  assert.equal((await call('POST', ASK, deps, false, wire)).code, 200);
+  const r429 = await call('POST', ASK, deps, false, wire);
+  assert.equal(r429.code, 429);
+  assert.equal(r429.headers['x-librarian-version'], '3');
+  assert.equal(r429.headers['x-librarian-ladder'], LADDER);
+  const r502 = await call('POST', ASK, { env: {}, fetch: providerStub([[ASK.candidates[0].id]]) });
+  assert.equal(r502.code, 502);
+  assert.equal(r502.headers['x-librarian-ladder'], LADDER);
+});
+
+test('S2: a primary HTTP 404 goes to minimax, then gemma, in one hop', async () => {
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = (fn, ms, ...a) => realSetTimeout(fn, 0, ...a);
+  let n = 0;
+  const models = [];
+  try {
+    const doFetch = async (url, init) => {
+      n += 1;
+      models.push(JSON.parse(init.body).model);
+      if (n === 1) {
+        return { ok: false, status: 404, json: async () => ({}), text: async () => 'No endpoints found' };
+      }
+      if (n === 2) return hanging(url, init);
+      return modelReply(hopDoc({ hits: [ESC_REPO, AFRO_PAGE], open: [] }));
+    };
+    const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: doFetch });
+    assert.equal(r.code, 200);
+    assert.equal(n, 3, 'one call per entry: the 404 is not retried, the timeout is not retried');
+    assert.deepEqual(models, ['nvidia/nemotron-3-super-120b-a12b:free',
+      'minimax/minimax-m3.1-flash:free', 'google/gemma-4-26b-a4b-it:free']);
+    assert.equal(r.json.provider, 'gemma');
+    assert.equal(r.json.model, 'google/gemma-4-26b-a4b-it:free');
+    assert.equal(r.json.hops, 1);
+    assert.equal(r.json.calls, 3);
+    assert.deepEqual(r.json.results.map((x) => x.href), [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
+  } finally {
+    global.setTimeout = realSetTimeout;
+  }
+});
+
+test('S2: a 200 with an error body is a provider error and moves on, with no retry of the same model', async () => {
+  const errorBody = {
+    ok: true, status: 200,
+    json: async () => ({ error: { code: 502, message: 'Provider returned error' } }),
+    text: async () => '{"error":{"message":"Provider returned error"}}',
+  };
+  const emptyChoices = {
+    ok: true, status: 200, json: async () => ({ choices: [] }), text: async () => '{"choices":[]}',
+  };
+  for (const [label, first] of [['an error body', errorBody], ['empty choices', emptyChoices]]) {
+    const fetchStub = providerStub([() => first, { hits: [ESC_REPO], open: [] }]);
+    const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: fetchStub });
+    assert.equal(r.code, 200, label);
+    assert.equal(fetchStub.calls.length, 2, `${label}: straight to the next entry, no re-ask`);
+    assert.equal(r.json.provider, 'minimax', label);
+  }
+  const allErr = providerStub([() => errorBody]);
+  const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: allErr });
+  assert.equal(r.code, 502);
+  assert.equal(allErr.calls.length, 3);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  for (const p of r.json.providers) assert.match(p.reason, /^provider_error/);
+  assert.equal(r.json.exhausted, false);
+});
+
+test('S2: no Llama, no paid id, for the new env names', async () => {
+  for (const name of ['LIBRARIAN_MINIMAX_MODEL', 'LIBRARIAN_GEMMA_MODEL']) {
+    const llama = providerStub([[ASK.candidates[0].id]]);
+    const pin = name.includes('MINIMAX') ? 'minimax' : 'gemma';
+    const env = Object.assign({}, KEYS, { [name]: 'meta-llama/llama-4-scout:free' });
+    const r = await call('POST', Object.assign({ provider: pin }, ASK), { env, fetch: llama });
+    assert.equal(r.code, 502, name);
+    assert.equal(llama.calls.length, 0, `${name}: a Llama id never goes upstream`);
+    assert.match(r.json.providers[0].reason, /Llama-family model, which policy forbids/);
+
+    const paid = providerStub([[ASK.candidates[0].id]]);
+    const env2 = Object.assign({}, KEYS, { [name]: 'anthropic/some-paid-model' });
+    const r2 = await call('POST', Object.assign({ provider: pin }, ASK), { env: env2, fetch: paid });
+    assert.equal(r2.code, 502, name);
+    assert.equal(paid.calls.length, 0, `${name}: a paid id never goes upstream`);
+    assert.match(r2.json.providers[0].reason, /paid model; only :free variants/);
+
+    const ok = providerStub([[ASK.candidates[0].id]]);
+    const urlName = name.replace('_MODEL', '_URL');
+    const env3 = Object.assign({}, KEYS, { [name]: 'some/other-model:free', [urlName]: 'http://127.0.0.1:9/m' });
+    const r3 = await call('POST', Object.assign({ provider: pin }, ASK), { env: env3, fetch: ok });
+    assert.equal(r3.code, 200, name);
+    assert.equal(ok.calls[0].body.model, 'some/other-model:free');
+    assert.equal(ok.calls[0].url, 'http://127.0.0.1:9/m');
+  }
 });
 
 test('every row the walk can emit satisfies the client href allowlist', () => {

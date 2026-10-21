@@ -204,7 +204,9 @@
   const LIBRARIAN_TIMEOUT_MS = 18000;
   const CANDIDATE_LIMIT = 25;   // how many local hits the librarian gets to see
   const PICK_LIMIT = 8;         // how many of them it may promote
-  const LIBRARIAN_NOTICE = 'Answered by the local index — the librarian is unreachable.';
+  // S2 (2026-10-21): calmer, and true for every failure it covers — a timeout
+  // or a 502 is "did not answer this time", not "unreachable".
+  const LIBRARIAN_NOTICE = 'Keyword results shown; the librarian did not answer this time.';
   // A spent free quota is not an outage, and telling the user it is invites a
   // re-try into a wall. The function says so explicitly (502 + exhausted).
   const LIBRARIAN_QUOTA_NOTICE =

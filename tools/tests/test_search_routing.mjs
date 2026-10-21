@@ -243,8 +243,8 @@ for (const [label, make] of Object.entries(failures)) {
   });
 }
 
-test('the notice string is exactly the agreed wording', () => {
-  assert.equal(LIBRARIAN_NOTICE, 'Answered by the local index — the librarian is unreachable.');
+test('S2: the notice string is exactly the agreed, calmer wording', () => {
+  assert.equal(LIBRARIAN_NOTICE, 'Keyword results shown; the librarian did not answer this time.');
 });
 
 // ------------------------------------------------------------- the 200 path --
