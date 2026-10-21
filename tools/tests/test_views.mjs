@@ -46,6 +46,31 @@ test('contrastPairs: light --body on the error panel, color-mix(in srgb, --dange
 
 // ==== UNIT S ====
 
+test('S1/S3/S6: #/search for "how do I flash PX4" renders result rows, the tab links and highlights', async () => {
+  const site = await bootSite({ hash: '#/search?q=how%20do%20I%20flash%20PX4' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /class="result"/, 'a phrased question is no longer a dead end');
+  assert.match(html, /kind=code/, 'the Code tab is a real link');
+  assert.match(html, /href="#\/search\?q=how%20do%20I%20flash%20PX4&amp;kind=page"/);
+  assert.match(html, /aria-current="page"[^>]*>Pages|>Pages[^<]*<span class="count">/);
+  assert.match(html, /<mark class="hl">/i, 'matched words are marked');
+  assert.match(html, /<span class="kind">/, 'every row carries a kind badge');
+  assert.doesNotMatch(html, /\*\*/, 'no raw Markdown emphasis in a snippet');
+});
+
+test('S5: #/search?q=zzqq shows the suggestions block with example-search chips', async () => {
+  const site = await bootSite({ hash: '#/search?q=zzqq' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /class="search-empty"/);
+  assert.match(html, /class="search-chip" href="#\/search\?q=/);
+});
+
+test('S3: kind=cad shows the CAD tab as current', async () => {
+  const site = await bootSite({ hash: '#/search?q=PX4&kind=cad' });
+  const html = String(site.content.innerHTML);
+  assert.match(html, /<a [^>]*href="#\/search\?q=PX4&amp;kind=cad"[^>]*aria-current="page"/);
+});
+
 // ==== UNIT SHELL ====
 
 // ==== UNIT SETUP ====

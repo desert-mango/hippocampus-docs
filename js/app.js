@@ -575,16 +575,25 @@
   // ---------- search (precomputed static index; see js/search.js) ----------
   const KIND_LABEL = { page: 'page', class: 'class', fn: 'function', file: 'file', cad: 'CAD part', fork: 'fork file', repo: 'repository' };
 
-  /* `why` is the librarian's one-line reason for a row: MODEL-authored text
-     about a user-controlled, URL-shareable query, so it is the least trusted
-     string on this page and goes through esc() like every other field. */
-  const searchRow = (r) => `
+  /* One result row (S4, S6): a kind badge, the title and the plain-text
+     snippet with the query's words marked. highlightParts splits the text
+     into segments and EACH segment goes through esc(), so a <mark> is the
+     only markup this row adds to model- or index-authored text. `why` is the
+     librarian's one-line reason for a row: MODEL-authored text about a
+     user-controlled, URL-shareable query, so it is the least trusted string
+     on this page and goes through esc() like every other field. */
+  function searchRow(r, terms) {
+    const hl = (text) => HCSearch.highlightParts(text, terms)
+      .map((p) => (p.hit ? `<mark class="hl">${esc(p.text)}</mark>` : esc(p.text))).join('');
+    const snippet = HCSearch.plainSnippet(r.snippet);
+    return `
       <div class="result">
-        <a class="title" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(r.title)}</a>
-        <span class="where">${esc(r.where)} · ${esc(KIND_LABEL[r.kind] || r.kind)}</span>
-        <p>${esc(r.snippet)}</p>${r.why ? `
+        <span class="kind">${esc(KIND_LABEL[r.kind] || r.kind)}</span><a class="title" href="${esc(r.href)}"${r.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${hl(r.title)}</a>
+        ${r.where ? `<span class="where">${esc(r.where)}</span>` : ''}${snippet ? `
+        <p>${hl(snippet)}</p>` : ''}${r.why ? `
         <p class="why">${esc(r.why)}</p>` : ''}
       </div>`;
+  }
 
   /* Two paints, one view. The local ranking lands the moment it exists, so a
      search is as instant as it has always been; if the librarian answers, the
@@ -592,66 +601,106 @@
      the route epoch, and the repaint is skipped when nothing actually changed
      (a single-word query, or a host with no librarian at all).
 
-     The one exception is the WAITING paint: a multi-word query the keyword
-     index answered with nothing is still out with the librarian, so the first
-     paint says so instead of announcing "No results" for a search that has not
-     finished. That paint must ALWAYS be replaced — including on a host with no
-     function at all, where the final answer is the same empty array by
-     reference and the skip guard would otherwise leave the waiting line up
-     forever — so a waiting paint bypasses the guard. */
+     The one exception is the WAITING paint: every multi-word query is still
+     out with the librarian after the local paint, so that paint says so (S5:
+     "The librarian is still looking…", above the rows or inside the empty
+     block). It must ALWAYS be replaced — including on a host with no function
+     at all, where the final answer is the same array by reference and the
+     skip guard would otherwise leave the waiting line up forever — so a
+     waiting paint bypasses the guard.
+
+     S3: the librarian's picks lead; below them a tab row (Pages / Code / CAD /
+     All, with counts) splits the local rows. The tabs are real links, so the
+     URL holds the tab; switching re-routes, and a hash that names a tab reuses
+     the last finished answer for the same query instead of asking again. */
   async function viewSearch(query) {
     sidebar.innerHTML = '';
     setTitle([`Search: ${query}`]);
+    const hash = location.hash || '';
+    const tabbed = /[?&]kind=/.test(hash);   // a tab link, not a fresh search
     content.innerHTML = '<div class="search-results"><h1>Search</h1><p class="lead">Searching…</p></div>';
     const epoch = routeEpoch;
+    const terms = HCSearch.queryTerms(query);
+    const TAB_NAMES = { page: 'Pages', code: 'Code', cad: 'CAD', all: 'All' };
+    const TAB_EMPTY = { page: 'No pages', code: 'No code', cad: 'No CAD parts', all: 'No results' };
     let painted = null;
 
-    const paint = (res) => {
+    const paint = (res, opts) => {
       if (epoch !== routeEpoch) return;             // a newer navigation owns the view
       if (painted && !painted.waiting
           && painted.results === res.results
           && painted.librarianCount === res.librarianCount
           && painted.notice === res.notice) return;  // nothing changed: no repaint
       const first = !painted;
-      // Zero keyword hits on a multi-word query, with a librarian that has not
-      // latched off: the search is still running, so say that, not "No results".
-      const waiting = first && !res.results.length && /\s/.test(String(query).trim())
+      // A multi-word query is still out with the librarian after the local
+      // paint, unless the librarian has latched off on this host.
+      const waiting = first && !(opts && opts.final) && /\s/.test(String(query).trim())
         && !HCSearch.librarianLatched();
       painted = {
         results: res.results, librarianCount: res.librarianCount,
         notice: res.notice, waiting,
       };
-      // The librarian's picks lead; the divider marks where the plain local
-      // index takes over. Both are absent on a host with no function, which is
-      // what the GitHub Pages copy looks like — and it looks unchanged.
       const picks = res.librarianCount > 0 ? res.results.slice(0, res.librarianCount) : [];
       const rest = res.results.slice(picks.length);
-      // The divider is a boundary, not a heading: it only earns its place when
-      // there is actually something on the far side of it. A narrow query where
-      // the librarian picked every local hit gets no divider at all.
-      const divider = (picks.length && rest.length)
-        ? '<p class="result-divider">More from the local index</p>' : '';
+      const groups = HCSearch.groupResults(rest);
+      const tab = HCSearch.searchTab(hash, groups);
+      const shown = tab === 'all' ? rest : groups[tab];
+      const count = { page: groups.page.length, code: groups.code.length, cad: groups.cad.length, all: rest.length };
+      const tabs = `
+        <nav class="search-tabs" aria-label="Result types">${['page', 'code', 'cad', 'all'].map((k) => `
+          <a href="${esc(HCSearch.searchTabHref(query, k))}"${k === tab ? ' aria-current="page"' : ''}>${TAB_NAMES[k]} <span class="count">${count[k]}</span></a>`).join('')}
+        </nav>`;
+      const pickBlock = picks.length ? `
+        <section class="search-picks" aria-label="Librarian picks">
+          <p class="result-divider search-picks-label">Librarian picks</p>
+          ${picks.map((r) => searchRow(r, terms)).join('')}
+        </section>` : '';
+      const waitLine = waiting
+        ? '<p class="search-waiting" role="status" aria-live="polite">The librarian is still looking…</p>' : '';
+      let body;
+      if (shown.length) {
+        body = shown.map((r) => searchRow(r, terms)).join('');
+      } else {
+        const m = HCSearch.noResultsModel({ results: rest }, DATA.site, waiting);
+        body = `
+        <div class="search-empty">
+          <p>${TAB_EMPTY[tab]} for “${esc(query)}”${tab === 'all' ? '' : ` — <a href="${esc(HCSearch.searchTabHref(query, 'all'))}">see all results</a>`}.</p>${m.chips.length ? `
+          <p class="search-empty-h">Try an example search</p>
+          <div class="search-chips">
+            ${m.chips.map((c) => `<a class="search-chip" href="${esc(c.href)}">${esc(c.label)}</a>`).join('')}
+          </div>` : ''}${m.nearest.length ? `
+          <p class="search-empty-h">Nearest pages</p>
+          ${m.nearest.map((r) => searchRow(r, terms)).join('')}` : ''}
+          <p class="search-empty-tip">Try a symbol name, a part name, a setup topic, or a project.</p>
+        </div>`;
+      }
       const notice = res.notice ? `<p class="search-notice">${esc(res.notice)}</p>` : '';
-      const rows = picks.map(searchRow).join('') + divider + rest.map(searchRow).join('');
-      content.innerHTML = waiting ? `
-      <div class="search-results">
-        <h1>Search</h1>
-        <p class="lead">No keyword matches — asking the librarian…</p>
-      </div>` : `
+      content.innerHTML = `
       <div class="search-results">
         <h1>Search</h1>
         <p class="lead">${res.results.length ? res.results.length : 'No'} result${res.results.length === 1 ? '' : 's'} for
         “${esc(query)}” across ${res.total.toLocaleString()} indexed pages, code symbols, CAD parts, and files.</p>
-        ${res.results.length ? rows : '<p>Try a symbol name, a part name, a setup topic, or a project.</p>'}
+        ${waitLine}${pickBlock}${tabs}
+        <div class="search-tabpanel">${body}</div>
         ${notice}
       </div>`;
       // This view owns its own scroll (route() skips the search route): the
       // jump to the top belongs to the FIRST paint, so a slow librarian cannot
       // leave fresh results sitting at the old offset — and the later repaint
-      // must NOT yank a reader who has already scrolled into the list.
-      if (first) window.scrollTo({ top: 0, behavior: 'instant' });
+      // must NOT yank a reader who has already scrolled into the list. A tab
+      // switch keeps keyboard focus on the tab row instead.
+      if (first) {
+        if (opts && opts.fromTab) {
+          const current = content.querySelector('.search-tabs [aria-current="page"]');
+          if (current && current.focus) current.focus();
+        } else {
+          window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+      }
     };
 
+    const memo = tabbed ? HCSearch.lastAnswer(query) : null;
+    if (memo) { paint(memo, { final: true, fromTab: true }); return; }
     let res;
     try {
       res = await HCSearch.query(query, { onLocal: paint });

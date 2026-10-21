@@ -486,12 +486,13 @@ test('S1: no local row matches EVERY word of a semantic probe, and the probes na
   }
 });
 
-test('searchItems still returns the shape the librarian layer wraps', () => {
+test('searchItems still returns the shape the librarian layer wraps (S3: 40 rows plus up to 20 pages)', () => {
   const items = realItems();
   const out = searchItems(items, 'thruster model');
   assert.equal(out.total, items.length);
   assert.ok(out.results.length > 0);
-  assert.ok(out.results.length <= 40);
+  assert.ok(out.results.length <= 60);
+  assert.ok(out.results.slice(40).every((r) => r.kind === 'page'), 'only pages ride past the 40th row');
   for (const r of out.results.slice(0, 3)) {
     for (const k of ['score', 'kind', 'title', 'where', 'href', 'snippet']) {
       assert.ok(k in r, `result carries ${k}`);
@@ -1044,10 +1045,10 @@ test('js/app.js escapes the librarian why line like every other field', () => {
   assert.ok(!/\$\{\s*r\.why\s*\}/.test(src), 'and is never interpolated raw');
 });
 
-test('js/app.js paints the waiting line and always yields to the final paint', () => {
+test('js/app.js paints the waiting line (S5 wording) and always yields to the final paint', () => {
   const src = fs.readFileSync(APP_JS, 'utf8');
   assert.ok(src.includes("repo: 'repository'"), 'a repository row needs a label of its own');
-  assert.ok(src.includes('No keyword matches — asking the librarian…'), 'the waiting line');
+  assert.ok(src.includes('The librarian is still looking…'), 'the waiting line');
   assert.ok(src.includes('HCSearch.librarianLatched()'),
     'never shown on a host where the librarian is latched off');
   assert.ok(/painted\.waiting/.test(src),
@@ -1150,4 +1151,134 @@ test('S1: the librarian is shown only the all-terms rows as candidates', async (
     assert.deepEqual(bodyOf(spy.calls[0]).candidates, [],
       `${q}: still an empty candidate list, so the server still walks the graph`);
   }
+});
+
+// =====================================================================
+//  S3–S6 (uiux grill 2026-10): the results page's pure helpers
+// =====================================================================
+
+const { plainSnippet, groupResults, searchTab, searchTabHref, noResultsModel,
+  highlightParts, lastAnswer } = HC;
+
+test('S4: plainSnippet strips Markdown and HTML and never leaves **', () => {
+  assert.equal(plainSnippet('This is **not** a *drill* and `code` too'),
+    'This is not a drill and code too');
+  assert.equal(plainSnippet('## Heading\nSee [the guide](#/setup/x) and ![alt](a.png) here'),
+    'Heading See the guide and here');
+  assert.equal(plainSnippet('<div class="adm adm-note">Note: <b>bold</b></div>  spaced\n\nout'),
+    'Note: bold spaced out');
+  assert.equal(plainSnippet('include/hippo/vec3.h:L74'), 'include/hippo/vec3.h:L74', 'a path is untouched');
+  assert.equal(plainSnippet('snake_case_name stays'), 'snake_case_name stays');
+  assert.equal(plainSnippet(null), '');
+  assert.equal(plainSnippet(42), '42');
+});
+
+test('S4: plainSnippet cuts at 200 characters on a word boundary with …', () => {
+  const long = Array.from({ length: 60 }, (_, i) => `word${i}`).join(' ');
+  const out = plainSnippet(long);
+  assert.ok(out.length <= 201, `at most 200 chars plus the ellipsis, got ${out.length}`);
+  assert.ok(out.endsWith('…'));
+  assert.ok(long.startsWith(out.slice(0, -1)), 'a prefix of the text');
+  assert.ok(/word\d+…$/.test(out), 'cut between words, never inside one');
+  const unbroken = 'x'.repeat(300);
+  assert.equal(plainSnippet(unbroken), `${'x'.repeat(200)}…`, 'no space at all: a hard cut');
+  assert.equal(plainSnippet('short'), 'short');
+});
+
+test('S3: groupResults splits pages, code and CAD, keeping order', () => {
+  const rows = ['page', 'class', 'cad', 'fn', 'page', 'file', 'fork', 'repo', 'odd']
+    .map((kind, i) => hit({ kind, title: `t${i}` }));
+  const g = groupResults(rows);
+  assert.deepEqual(g.page.map((r) => r.title), ['t0', 't4']);
+  assert.deepEqual(g.code.map((r) => r.title), ['t1', 't3', 't5', 't7']);
+  assert.deepEqual(g.cad.map((r) => r.title), ['t2', 't6']);
+  assert.deepEqual(groupResults(null), { page: [], code: [], cad: [] });
+});
+
+test('S3: searchTab reads kind= from the hash, defaulting to Pages when any page matched', () => {
+  const some = { page: [hit()], code: [], cad: [] };
+  const none = { page: [], code: [hit({ kind: 'fn' })], cad: [] };
+  assert.equal(searchTab('#/search?q=px4&kind=code'), 'code');
+  assert.equal(searchTab('#/search?kind=cad&q=px4'), 'cad');
+  assert.equal(searchTab('#/search?q=px4&kind=page', none), 'page', 'an explicit tab wins');
+  assert.equal(searchTab('#/search?q=px4&kind=all', some), 'all');
+  assert.equal(searchTab('#/search?q=px4', some), 'page');
+  assert.equal(searchTab('#/search?q=px4', none), 'all');
+  assert.equal(searchTab('#/search?q=px4&kind=bogus', some), 'page', 'junk is the default');
+  assert.equal(searchTab('#/search?q=px4'), 'all', 'no groups: All');
+  assert.equal(searchTab(null), 'all');
+});
+
+test('S3: searchTabHref builds a real link that keeps the query', () => {
+  assert.equal(searchTabHref('how do I flash PX4', 'code'),
+    '#/search?q=how%20do%20I%20flash%20PX4&kind=code');
+  assert.equal(searchTab(searchTabHref('a&b', 'cad')), 'cad');
+  assert.equal(new URLSearchParams(searchTabHref('a&b=c', 'page').split('?')[1]).get('q'), 'a&b=c');
+});
+
+test('S5: noResultsModel offers up to four chips, the three nearest pages, and the waiting flag', () => {
+  const site = { example_queries: [
+    { label: 'flash PX4', q: 'px4' }, { label: 'mixer', q: 'mixer' }, { label: 'uart', q: 'uart' },
+    { label: 'sim', q: 'simulation' }, { label: 'fifth', q: 'fifth' },
+  ] };
+  const res = { results: [
+    hit({ kind: 'fn', title: 'f' }), hit({ kind: 'page', title: 'p1', href: '#/p1' }),
+    hit({ kind: 'page', title: 'p2', href: '#/p2' }), hit({ kind: 'cad', title: 'c' }),
+    hit({ kind: 'page', title: 'p3', href: '#/p3' }), hit({ kind: 'page', title: 'p4', href: '#/p4' }),
+  ] };
+  const m = noResultsModel(res, site, true);
+  assert.deepEqual(m.chips.map((c) => c.label), ['flash PX4', 'mixer', 'uart', 'sim']);
+  assert.equal(m.chips[0].href, '#/search?q=px4');
+  assert.deepEqual(m.nearest.map((r) => r.title), ['p1', 'p2', 'p3']);
+  assert.equal(m.waiting, true);
+  const empty = noResultsModel({ results: [] }, null, false);
+  assert.deepEqual(empty, { chips: [], nearest: [], waiting: false });
+  assert.deepEqual(noResultsModel(null, site, 0).nearest, []);
+});
+
+test('S6: highlightParts marks every query term, case-insensitively, in order', () => {
+  assert.deepEqual(highlightParts('Flash the PX4 firmware', ['flash', 'px4']), [
+    { text: 'Flash', hit: true }, { text: ' the ', hit: false },
+    { text: 'PX4', hit: true }, { text: ' firmware', hit: false },
+  ]);
+  assert.deepEqual(highlightParts('no match here', ['zz']), [{ text: 'no match here', hit: false }]);
+  assert.deepEqual(highlightParts('', ['a']), []);
+  assert.deepEqual(highlightParts('px4px4', ['px4']), [{ text: 'px4px4', hit: true }], 'adjacent hits merge');
+  // the longer term wins where two overlap; a one-letter term marks nothing
+  assert.deepEqual(highlightParts('setup set', ['set', 'setup', 'p']), [
+    { text: 'setup', hit: true }, { text: ' ', hit: false }, { text: 'set', hit: true },
+  ]);
+  // regex characters in a term are literal
+  assert.deepEqual(highlightParts('a.b axb', ['a.b']), [
+    { text: 'a.b', hit: true }, { text: ' axb', hit: false },
+  ]);
+  // the parts always join back to the input
+  const text = '<script>PX4</script> & "flash"';
+  assert.equal(highlightParts(text, ['px4', 'flash']).map((p) => p.text).join(''), text);
+});
+
+test('S3: lastAnswer remembers only the latest finished query, by its trimmed lower-cased text', async () => {
+  assert.equal(typeof lastAnswer, 'function');
+  assert.equal(lastAnswer('never asked'), null);
+});
+
+test('S6: js/app.js escapes every highlighted segment and never raw snippet text', () => {
+  const src = fs.readFileSync(APP_JS, 'utf8');
+  assert.ok(src.includes('HCSearch.highlightParts('), 'rows are highlighted through the pure helper');
+  assert.ok(/<mark class="hl">\$\{esc\(p\.text\)\}<\/mark>/.test(src), 'a marked segment is escaped');
+  assert.ok(src.includes('HCSearch.plainSnippet(r.snippet)'), 'S4: snippets are plain text');
+});
+
+test('S3: pages below the 40-row cut still reach the Pages tab, in rank order', () => {
+  const rows = [];
+  for (let i = 0; i < 50; i += 1) rows.push({ t: `Ros symbol ${i}`, r: `#/c${i}`, x: 'ros' });
+  const items = buildItems([siteShard(rows)]).map((it) => Object.assign(it, { kind: 'class' }));
+  const pages = buildItems([siteShard([
+    { t: 'Notes A', r: '#/pa', x: 'mentions ros once' },
+    { t: 'Notes B', r: '#/pb', x: 'ros again' },
+  ])]);
+  const { results } = searchItems(items.concat(pages), 'ros');
+  assert.equal(results.length, 42);
+  assert.deepEqual(results.slice(40).map((r) => r.href), ['#/pa', '#/pb']);
+  for (let i = 1; i < results.length; i += 1) assert.ok(results[i - 1].score >= results[i].score);
 });
