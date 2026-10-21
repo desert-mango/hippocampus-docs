@@ -5,17 +5,18 @@
 // Purpose: Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click.
 /* Plan D-C: guests load zero editor code and make zero GitHub requests.
    js/app.js injects js/cms-core.js, js/editor.js and css/editor.css ONLY
-   when this tab's sessionStorage holds a sign-in, or on the footer's
-   "Sign in to edit" click, which opens the GitHub window synchronously
-   inside the click, before any await.
+   when this tab's sessionStorage holds a sign-in, or on the header's
+   "Sign in" button's click (uiux P4: it replaced the footer entry and the
+   floating bubble), which opens the GitHub window synchronously inside the
+   click, before any await.
 
    These tests run index.html's scripts, in index.html's order, in a vm
    over a permissive fake DOM (any property this file does not model is
    an inert sink), with the repository's files as the network:
 
      - a guest boot creates no script or stylesheet element and fetches only
-       content/ data/ search/ same-origin paths; the footer offers
-       "Sign in to edit";
+       content/ data/ search/ same-origin paths; the header offers
+       "Sign in" and the footer offers nothing;
      - a throwing sessionStorage (a sandboxed frame, a privacy mode) breaks
        neither a preview frame nor a normal page; a preview frame never even
        reads storage and never loads the editor;
@@ -26,7 +27,9 @@
        injection closes it and the footer says so;
      - window.HCApp = frozen {loadEditor}; its fake session is never written;
      - app.js's literals equal HCCore's (SESSION_KEY exported; the popup's
-       name and features read from HCCore.createSignIn's own call).
+       name and features read from HCCore.createSignIn's own call);
+     - window.HCShell's pure helpers: the sidebar model (P5, P6) and the
+       sign-in button's recede rule (F3).
 
      node --test tools/tests/test_app_guest.mjs
 */
@@ -138,10 +141,11 @@ function makeDocument() {
   const head = makeNode('head', doc);
   const body = makeNode('body', doc);
   const html = makeNode('html', doc);
-  // index.html's footer link starts hidden
+  // index.html's footer link and header sign-in button start hidden
   const edit = doc.memo('#edit-page');
   edit.hidden = true;
   edit.textContent = 'Edit this page';
+  doc.memo('#signin-btn').hidden = true;
   const api = {
     head, body, documentElement: html, activeElement: body, title: '',
     querySelector: (sel) => doc.memo(sel),
@@ -318,6 +322,7 @@ function openApp(opts) {
   const app = {
     win, doc, fetches, opens, listeners, location, storage, storageTouches, errors, parentPosts,
     editLink: () => doc.memo('#edit-page'),
+    signIn: () => doc.memo('#signin-btn'),
     status: () => {
       const a = doc.after.find((x) => x.ref === doc.memo('#edit-page'));
       return a ? a.child : null;
@@ -325,9 +330,14 @@ function openApp(opts) {
     injected: () => doc.appended.filter((x) => x.parent === doc.head).map((x) => x.child),
     injectedNames: () => app.injected().map((n) => n.attrs.src || n.attrs.href),
     scriptsOrLinks: () => doc.created.filter((n) => n.tagName === 'SCRIPT' || n.tagName === 'LINK'),
-    // the footer link, clicked: the dispatch is synchronous, and `clicking`
-    // is true only while the listeners run
+    // the header's sign-in button (P4), clicked: the dispatch is synchronous,
+    // and `clicking` is true only while the listeners run
     click() {
+      clicking.now = true;
+      try { return app.signIn().fire('click'); } finally { clicking.now = false; }
+    },
+    // the footer link (signed in: "Edit this page"), clicked the same way
+    clickLink() {
       clicking.now = true;
       try { return app.editLink().fire('click'); } finally { clicking.now = false; }
     },
@@ -383,13 +393,18 @@ test('a guest boot creates no script or stylesheet element and fetches only cont
   assert.deepEqual(app.storage.log, [['get', C.SESSION_KEY]]);
 });
 
-test('a guest sees "Sign in to edit" in the footer on every route', async () => {
+test('P4: a guest sees the header sign-in button and no footer entry, on every route', async () => {
   const app = await boot({ hash: '#/' });
-  assert.equal(app.editLink().hidden, false);
-  assert.equal(app.editLink().textContent, 'Sign in to edit');
+  assert.equal(app.signIn().hidden, false, 'the header button shows');
+  assert.equal(app.editLink().hidden, true, 'the footer has no sign-in entry (H2: one entry)');
   await app.go('#/projects');
-  assert.equal(app.editLink().hidden, false);
-  assert.equal(app.editLink().textContent, 'Sign in to edit');
+  assert.equal(app.signIn().hidden, false);
+  assert.equal(app.editLink().hidden, true);
+  await app.go(`#${SETUP_ROUTE}`);
+  assert.equal(app.signIn().hidden, false);
+  assert.equal(app.editLink().hidden, true);
+  // the guest code no longer keeps the old bubble's tuck setting
+  assert.ok(!app.win.localStorage.log.some((x) => x[1] === 'hc-editor-dock'), 'hc-editor-dock is never read or written');
 });
 
 // ------------------------------------------------ storage that throws ---
@@ -402,6 +417,7 @@ test('a preview frame whose sessionStorage throws still renders, never reads sto
   assert.match(String(app.doc.memo('#content').innerHTML), /class="hero"/, 'the page rendered');
   assert.ok(app.parentPosts.some((m) => m.type === 'hc-fetch' && m.path === 'data/site.json'));
   assert.equal(app.editLink().hidden, true, 'a preview frame shows no footer entry');
+  assert.equal(app.signIn().hidden, true, 'a preview frame shows no sign-in button (P4)');
   assert.equal(app.scriptsOrLinks().length, 0);
   assert.equal(await app.win.HCApp.loadEditor({}), false, 'the editor is never loaded inside a frame');
   assert.equal(app.scriptsOrLinks().length, 0);
@@ -413,7 +429,7 @@ test('a normal page whose sessionStorage throws boots as a guest', async () => {
   assert.deepEqual(app.errors, []);
   assert.equal(app.storageTouches.n, 1, 'the one guarded read');
   assert.match(String(app.doc.memo('#content').innerHTML), /class="hero"/);
-  assert.equal(app.editLink().textContent, 'Sign in to edit');
+  assert.equal(app.signIn().hidden, false, 'P4: the header sign-in button shows');
   assert.equal(app.scriptsOrLinks().length, 0);
 });
 
@@ -449,7 +465,8 @@ test('signed in: the footer entry is "Edit this page" -> the page with ?editor=c
   assert.equal(app.editLink().textContent, 'Edit this page');
   assert.equal(app.editLink().hidden, false);
   assert.equal(app.editLink().attrs.href, `#${SETUP_ROUTE}?editor=changes`);
-  const e = app.click();
+  assert.equal(app.signIn().hidden, true, 'P4: signed in, no sign-in button');
+  const e = app.clickLink();
   assert.equal(e.defaultPrevented, false, 'a plain link: js/editor.js reads the parameter');
   assert.equal(app.opens.length, 0);
   // (round 2, R5: #/about now redirects to #/team, which this fake DOM cannot draw; the Team page is tested in a
@@ -457,8 +474,8 @@ test('signed in: the footer entry is "Edit this page" -> the page with ?editor=c
   await app.go('#/projects');
   assert.equal(app.editLink().hidden, true);
   app.starts[0].onSession(false);
-  assert.equal(app.editLink().hidden, false);
-  assert.equal(app.editLink().textContent, 'Sign in to edit');
+  assert.equal(app.editLink().hidden, true, 'P4: signed out, the footer offers nothing');
+  assert.equal(app.signIn().hidden, false, 'P4: signed out, the header button is back');
 });
 
 // --------------------------------------------------- the sign-in click ---
@@ -578,8 +595,8 @@ test('a guest on a ?editor= link (the /cms/ redirect, D-I) loads nothing and is 
   assert.deepEqual(app.errors, []);
   assert.equal(app.scriptsOrLinks().length, 0, 'no editor code without a sign-in');
   assert.match(String(app.doc.memo('#content').innerHTML), /class="hero"/, 'the page under the parameter rendered');
-  assert.equal(app.editLink().textContent, 'Sign in to edit');
-  assert.match(app.status().textContent, /Sign in to edit/);
+  assert.equal(app.signIn().hidden, false, 'P4: the header button is the way in');
+  assert.match(app.status().textContent, /Sign in/);
   assert.equal(app.status().hidden, false);
   assert.equal(app.location.hash, '#/?editor=proposals&pr=1', 'the parameter stays for the editor to read after the sign-in');
   // a later navigation without the parameter clears the line
@@ -644,35 +661,103 @@ test('an outside link opens in a new tab whatever its scheme\'s case (never insi
   assert.ok(inside.target !== '_blank', 'a site link stays in the page');
 });
 
-// ------------------------------------- the guest's "Sign in" bubble (editor redesign U4a, D1 change 3) --
-test('U4a: a guest sees "Sign in" in the bubble (top right since V1); its click is the footer\'s sign-in (window opened inside the click)', async () => {
+// ------------------------------------- the header's sign-in button (uiux P4/F3: the bubble is gone) --
+test('P4: no guest bubble exists; the header button\'s click is the sign-in (window opened inside the click)', async () => {
   const app = await boot({ hash: '#/' });
-  const dock = app.doc.created.find((n) => n.className === 'hc-guest-dock');
-  assert.ok(dock, 'the bubble');
-  assert.equal(dock.hidden, false);
-  const btn = app.doc.created.find((n) => n.className === 'hc-guest-signin');
-  assert.equal(btn.textContent, 'Sign in');
-  assert.equal(app.doc.created.find((n) => n.className === 'hc-guest-tag').hidden, true, 'no hidden tag in the tab order');
-  const e = btn.fire('click');
+  const old = app.doc.created.filter((n) => /hc-guest/.test(n.className));
+  assert.deepEqual(old, [], 'no hc-guest-* element is created');
+  assert.equal(app.signIn().hidden, false);
+  const e = app.click();
   assert.equal(e.defaultPrevented, true);
   assert.equal(app.opens.length, 1, 'the sign-in window opens');
   assert.equal(app.opens[0].url, 'about:blank');
+  assert.equal(app.opens[0].inClick, true);
   assert.equal(app.scriptsOrLinks().length, 0, 'still nothing loaded before the click handled it');
 });
 
-test('U4a: a session boot never shows the guest bubble (the Editor\'s own dock comes)', async () => {
+test('P4: a session boot never shows the sign-in button (the Editor\'s own dock comes)', async () => {
   const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
   const app = await boot({ hash: '#/', storage });
-  const dock = app.doc.created.find((n) => n.className === 'hc-guest-dock');
-  assert.ok(!dock || dock.hidden, 'no guest bubble when signed in');
+  assert.equal(app.signIn().hidden, true, 'no sign-in button with a stored session');
+  assert.deepEqual(app.doc.created.filter((n) => /hc-guest/.test(n.className)), []);
 });
 
-test('U4a: a stored session the editor turns down (expired) leaves a guest, and the "Sign in" bubble shows', async () => {
+test('P4: a stored session the editor turns down (expired) leaves a guest, and the sign-in button shows', async () => {
   const storage = memoryStorage({ [C.SESSION_KEY]: 'not a session' });
   const app = await boot({ hash: '#/', storage, startAnswer: false });
-  const dock = () => app.doc.created.find((n) => n.className === 'hc-guest-dock');
-  assert.equal(dock().hidden, true, 'a stored session: the bubble waits');
+  assert.equal(app.signIn().hidden, true, 'a stored session: the button waits');
   await app.loadAll();
   await new Promise((r) => setTimeout(r, 10));
-  assert.equal(dock().hidden, false, 'the editor turned the session down: "Sign in" shows');
+  assert.equal(app.signIn().hidden, false, 'the editor turned the session down: "Sign in" shows');
+});
+
+// ---------------------------------------------- window.HCShell: pure helpers --
+const SETUP_FIXTURE = { sections: [
+  { id: 'a', title: 'Getting started', pages: [{ id: 'a/one', title: 'One' }, { id: 'a/pkg', title: 'Pre-built Packages' }] },
+  { id: 'b', title: 'Raspberry Pi setup', pages: [{ id: 'b/qol', title: 'Quality-of-Life Features' }, { id: 'b/pkg', title: 'Pre-built Packages' }] },
+  { id: 'c', title: 'Guides', pages: [{ id: 'c/qol', title: 'Quality-of-Life Features' }, { id: 'c/two', title: 'Two' }] },
+] };
+
+test('HCShell is a frozen object of pure helpers', async () => {
+  const app = await boot({ hash: '#/' });
+  const S = app.win.HCShell;
+  assert.ok(S && Object.isFrozen(S));
+  for (const k of ['sidebarModel', 'dupTitleSet', 'recedeState']) assert.equal(typeof S[k], 'function', k);
+});
+
+test('P6: dupTitleSet holds exactly the titles that appear in more than one group', async () => {
+  const { HCShell } = (await boot({ hash: '#/' })).win;
+  assert.deepEqual([...HCShell.dupTitleSet(SETUP_FIXTURE)].sort(), ['Pre-built Packages', 'Quality-of-Life Features']);
+  assert.equal(HCShell.dupTitleSet({ sections: [] }).size, 0);
+  assert.equal(HCShell.dupTitleSet(null).size, 0, 'a missing registry is no duplicates, not a crash');
+  // the same title twice inside ONE group is not ambiguous across groups
+  assert.equal(HCShell.dupTitleSet({ sections: [{ title: 'G', pages: [{ id: 'x', title: 'T' }, { id: 'y', title: 'T' }] }] }).size, 0);
+});
+
+test('P5/P6: sidebarModel opens only the active page\'s group and suffixes only duplicate titles', async () => {
+  const { HCShell } = (await boot({ hash: '#/' })).win;
+  const m = HCShell.sidebarModel(SETUP_FIXTURE, 'b/pkg');
+  assert.deepEqual(m.map((g) => g.title), ['Getting started', 'Raspberry Pi setup', 'Guides']);
+  assert.deepEqual(m.map((g) => g.open), [false, true, false], 'exactly one open group: the active page\'s');
+  assert.deepEqual(m[1].pages.map((p) => p.active), [false, true]);
+  const labels = m.flatMap((g) => g.pages.map((p) => p.label));
+  assert.deepEqual(labels, ['One', 'Pre-built Packages · Getting started', 'Quality-of-Life Features · Raspberry Pi setup',
+    'Pre-built Packages · Raspberry Pi setup', 'Quality-of-Life Features · Guides', 'Two']);
+  assert.equal(m[0].pages[0].suffix, null, 'a unique title has no suffix');
+  assert.equal(m[0].pages[1].suffix, 'Getting started');
+  assert.deepEqual(HCShell.sidebarModel(SETUP_FIXTURE, null).map((g) => g.open), [false, false, false]);
+  assert.deepEqual(HCShell.sidebarModel(SETUP_FIXTURE, 'no/such').map((g) => g.open), [false, false, false]);
+});
+
+test('P5/P6: on the real registry, one group is open and the duplicate titles carry their group', async () => {
+  const { HCShell } = (await boot({ hash: '#/' })).win;
+  const setup = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'setup.json'), 'utf8'));
+  const m = HCShell.sidebarModel(setup, 'getting-started/px4-setup');
+  assert.equal(m.filter((g) => g.open).length, 1);
+  assert.equal(m.find((g) => g.open).title, 'Getting started');
+  const dups = HCShell.dupTitleSet(setup);
+  for (const t of ['Pre-built Packages', 'Quality-of-Life Features']) assert.ok(dups.has(t), t);
+  for (const g of m) {
+    for (const p of g.pages) {
+      const title = setup.sections.find((s) => s.title === g.title).pages.find((x) => x.id === p.id).title;
+      assert.equal(p.label, dups.has(title) ? `${title} · ${g.title}` : title);
+    }
+  }
+});
+
+test('F3: recedeState hides after a down move past 80 px, shows after a 24 px up move or at the top', async () => {
+  const { HCShell } = (await boot({ hash: '#/' })).win;
+  const R = HCShell.recedeState;
+  const shown = { hidden: false };
+  const hidden = { hidden: true };
+  assert.equal(R(shown, { y: 400, dy: 400 }).hidden, true, 'a jump down past 80');
+  assert.equal(R(shown, { y: 81, dy: 1 }).hidden, true);
+  assert.equal(R(shown, { y: 80, dy: 10 }).hidden, false, 'not past 80 yet');
+  assert.equal(R(hidden, { y: 300, dy: -23 }).hidden, true, 'a small move up keeps it away');
+  assert.equal(R(hidden, { y: 300, dy: -24 }).hidden, false, '24 px up brings it back');
+  assert.equal(R(hidden, { y: 0, dy: -5 }).hidden, false, 'the top always shows it');
+  assert.equal(R(hidden, { y: 0, dy: 0 }).hidden, false);
+  assert.equal(R(hidden, { y: 500, dy: 0 }).hidden, true, 'no move: no change');
+  assert.equal(R(shown, { y: 500, dy: 0 }).hidden, false);
+  assert.equal(R(null, { y: 0, dy: 0 }).hidden, false, 'no previous state: shown');
 });

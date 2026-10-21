@@ -24,6 +24,9 @@
       <a href="#/team" data-nav="team">Team</a>
     </nav>
     <div class="header-actions">
+      <button id="search-toggle" class="search-toggle" type="button" aria-label="Search" aria-expanded="false" aria-controls="search-form">
+        <svg class="hc-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
       <form id="search-form" role="search">
         <input id="search-input" type="search" placeholder="Search… ( / )"
                autocomplete="off" aria-label="Search the site">
@@ -34,9 +37,17 @@
         <img class="tuhh-mark tuhh-mark-dark" src="https://res.cloudinary.com/dr76gues0/image/upload/v1788448120/hippocampus-docs/brand/tuhh-white.png" alt="TUHH" width="64" height="18">
         <img class="tuhh-mark tuhh-mark-light" src="https://res.cloudinary.com/dr76gues0/image/upload/v1788462821/hippocampus-docs/brand/tuhh-black.png" alt="TUHH" width="64" height="18">
       </a>
+      <button id="signin-btn" class="hc-signin" type="button" hidden aria-label="Sign in to edit">
+        <svg class="hc-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="hc-signin-label">Sign in</span>
+      </button>
     </div>
   </header>
   <div class="layout">
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" hidden>
+      <svg class="hc-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Contents</span>
+    </button>
     <aside id="sidebar" class="sidebar" aria-label="Section navigation"></aside>
     <main id="content" class="content" tabindex="-1">
       <noscript>
@@ -48,7 +59,7 @@
     <div id="hc-frame-host" class="hc-frame-host" hidden></div>
   </div>
   <footer class="site-footer">
-    <span>HippoCampusRobotics lab documentation · staging</span>
+    <span>HippoCampus Robotics lab documentation</span>
     <a id="edit-page" hidden>Edit this page</a>
     <a href="https://github.com/HippoCampusRobotics" rel="noopener">GitHub org</a>
     <a href="#/team">Team and lab activity</a>
