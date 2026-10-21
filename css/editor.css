@@ -118,7 +118,7 @@ body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-box-remove { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--body-soft); cursor: pointer; font: inherit; }
 .hc-chev { color: var(--body-soft); font-size: .7rem; }
 .hc-box-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--hc-edit); }
-.hc-dot-tip { background: var(--ok); } .hc-dot-warning { background: var(--warn); } .hc-dot-danger { background: var(--danger); }
+.hc-dot-tip { background: var(--ok); } .hc-dot-warning { background: var(--note-warn); } .hc-dot-danger { background: var(--danger); }
 .hc-boxmenu { position: absolute; top: 32px; right: 0; z-index: 6; width: 170px; padding: 5px; border-radius: 10px; background: var(--surface);
   border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
 .hc-boxmenu .hc-pm-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px;

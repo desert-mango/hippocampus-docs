@@ -21,6 +21,7 @@
   --ok: #5affc5;
   --active: #06D6A0;                       /* the project "active" badge, both themes (Kyle 2026-10-21) */
   --warn: #ffb347;
+  --note-warn: var(--warn);                /* warning / attention / caution note boxes */
   --danger: #ff6b6b;
   --code-bg: #111418;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -55,6 +56,7 @@
      2:1 on white, so note-box titles and role labels were near invisible (audit 2026-10-14, all >= 5:1 here) */
   --ok: #0f7b55;
   --warn: #a35a00;
+  --note-warn: #FF7F50;                    /* Kyle's orange (2026-10-21), the note boxes only, as given */
   --danger: #c62828;
   --scroll-thumb: #c4c4ca;
   --scroll-thumb-hover: #a1a1aa;
@@ -233,8 +235,8 @@ th { background: var(--surface-2); color: var(--heading); }
   font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.12em;
   font-weight: 700; color: var(--accent); margin: 0.7rem 0 0.2rem;
 }
-.adm-warning, .adm-attention, .adm-caution { border-left-color: var(--warn); }
-.adm-warning .adm-title, .adm-attention .adm-title, .adm-caution .adm-title { color: var(--warn); }
+.adm-warning, .adm-attention, .adm-caution { border-left-color: var(--note-warn); }
+.adm-warning .adm-title, .adm-attention .adm-title, .adm-caution .adm-title { color: var(--note-warn); }
 .adm-danger, .adm-error { border-left-color: var(--danger); }
 .adm-danger .adm-title, .adm-error .adm-title { color: var(--danger); }
 .adm-hint .adm-title, .adm-tip .adm-title { color: var(--ok); }

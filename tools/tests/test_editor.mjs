@@ -4411,6 +4411,9 @@ test('edit palette: blue chrome, the change colour only on change marks, Kyle\'s
   assert.equal(block(css, '[data-theme="light"]', '--hc-mark:')['hc-mark'].toUpperCase(), '#FF7F50', 'light: the change colour is orange');
   assert.equal(block(site, ':root', '--bg:').active.toUpperCase(), '#06D6A0', 'the "active" badge green');
   assert.match(site, /\.badge\.active\s*\{\s*color:\s*var\(--active\);/, 'the "active" badge uses it');
+  assert.match(site, /\[data-theme="light"\]\s*\{[^}]*--note-warn:\s*#FF7F50;/, 'light: the warning note boxes are Kyle\'s orange');
+  assert.match(site, /:root\s*\{[^}]*--note-warn:\s*var\(--warn\);/, 'dark: the note boxes keep the warning amber');
+  assert.match(site, /\.adm-warning \.adm-title, \.adm-attention \.adm-title, \.adm-caution \.adm-title \{ color: var\(--note-warn\); \}/, 'the note titles use it');
   assert.match(css, /--hc-hl-on:\s*var\(--hc-edit-on\)/, 'text on my highlight is the button text');
   for (let n = 1; n <= 5; n++) assert.match(css, new RegExp(`body\\[data-hc-tint="${n}"\\]\\s*\\{[^}]*--hc-hl-on:\\s*var\\(--bg\\)`), `slot ${n}: text on its highlight`);
   assert.match(css, /\.person-card\[data-hc-badge\]::after\s*\{[^}]*color:\s*var\(--hc-hl-on\)/, 'the card badge text');
