@@ -52,7 +52,7 @@ def valid_docs():
                        "open_issues": 0, "releases": 1},
             "weeks": [{"week": "2026-09-28", "days": [1, 1, None, None, None, None, None]}],
             "recent_commits": [{"repo": "docs", "sha": "abcdef0", "date": "2026-09-29",
-                                "msg": "Add a page"}],
+                                "msg": "Add a page", "author": "NBauschmann"}],
             "most_active_repos": [{"name": "docs", "commits": 2, "language": "Python",
                                    "pushed_at": "2026-09-29"}],
             "releases": [{"repo": "docs", "tag": "v1", "name": "One", "date": "2026-09-01"}],
@@ -76,12 +76,14 @@ def valid_docs():
                                  "authors": [{"login": "NBauschmann", "name": "Nathalie Bauschmann"},
                                              {"login": None, "name": "nat"}],
                                  "history_read": True, "blob": None},
+                    "last_commit": "2026-08-28", "last_commit_blob": BLOB,
                     "converted": {"date": "2026-08-28", "by": "kyle-nelson-berkeley",
                                   "tool": "tools/rst_convert.py", "commit": "b40ade4"},
                     "edited_here": [{"pr": 1, "by": "kyle-nelson-berkeley", "state": "open"}]},
                 "about": {
                     "original": {"repo": rules.THIS_REPO, "path": "content/about.md",
                                  "authors": [], "history_read": True, "blob": BLOB},
+                    "last_commit": None, "last_commit_blob": None,
                     "converted": None, "edited_here": []},
             },
         },
@@ -240,6 +242,48 @@ class Section11Hard(unittest.TestCase):
         docs = valid_docs()
         docs["page-authors"]["pages"]["about"]["original"]["repo"] = "someone/else"
         self.assertTrue(any("original.repo" in m for m in self.run_rules(docs)))
+
+    # M11 / P10 (uiux 2026-10): a recent commit names its author's login (or null); every page carries the
+    # day of its newest commit here (last_commit) and the blob that day was read at (last_commit_blob)
+    def test_m11_recent_commit_author_is_a_login_or_null(self):
+        docs = valid_docs()
+        docs["org-activity"]["recent_commits"][0]["author"] = None
+        self.assertEqual(self.run_rules(docs), [])
+        del docs["org-activity"]["recent_commits"][0]["author"]
+        self.assertTrue(any("missing" in m and "author" in m for m in self.run_rules(docs)))
+        for bad in ("not a login!", 3, "a" * 40 + "-x"):
+            docs = valid_docs()
+            docs["org-activity"]["recent_commits"][0]["author"] = bad
+            with self.subTest(bad=bad):
+                self.assertTrue(any("author" in m for m in self.run_rules(docs)))
+
+    def test_p10_last_commit_and_its_blob_are_exact_keys(self):
+        for key in ("last_commit", "last_commit_blob"):
+            docs = valid_docs()
+            del docs["page-authors"]["pages"]["about"][key]
+            with self.subTest(key=key):
+                self.assertTrue(any("missing" in m and key in m for m in self.run_rules(docs)))
+
+    def test_p10_last_commit_shapes(self):
+        docs = valid_docs()
+        docs["page-authors"]["pages"]["about"]["last_commit"] = "2026-10-21T10:00:00Z"
+        self.assertTrue(any("last_commit" in m for m in self.run_rules(docs)))
+        docs = valid_docs()
+        docs["page-authors"]["pages"]["about"]["last_commit_blob"] = "abc"
+        self.assertTrue(any("last_commit_blob" in m for m in self.run_rules(docs)))
+        docs = valid_docs()
+        docs["page-authors"]["pages"]["about"]["last_commit"] = "2026-10-21"
+        self.assertEqual(self.run_rules(docs), [], "a date without a cached blob is fine (an unpushed HEAD)")
+
+    def test_p10_the_checker_never_ties_last_commit_blob_to_original_blob(self):
+        docs = valid_docs()
+        page = docs["page-authors"]["pages"]["setup/raspberry-pi/ethernet"]
+        self.assertIsNone(page["original"]["blob"])
+        self.assertEqual(page["last_commit_blob"], BLOB)
+        self.assertEqual(self.run_rules(docs), [])
+        docs["page-authors"]["pages"]["about"]["last_commit_blob"] = BLOB
+        docs["page-authors"]["pages"]["about"]["original"]["blob"] = BLOB
+        self.assertEqual(self.run_rules(docs), [])
 
     def test_edit_state(self):
         docs = valid_docs()

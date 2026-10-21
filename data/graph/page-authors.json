@@ -1,7 +1,7 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
  "read_at": "2026-10-21",
- "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository",
+ "note": "who wrote each page: names only, no counts and no dates; 'original' follows a setup page across the old docs repository's 2025-03-10 folder move; 'blob' is the cache key of pages whose history lives in this repository; 'last_commit' is the day of the page file's newest commit on this repository's main, cached by 'last_commit_blob'",
  "prs_read": [
   2,
   3,
@@ -17,13 +17,19 @@
      {
       "login": null,
       "name": "kyle"
+     },
+     {
+      "login": "kyle-nelson-berkeley",
+      "name": "Kyle Nelson"
      }
     ],
     "history_read": true,
-    "blob": "cb189ab56a390421b1c0893232d012c42d98c8d3"
+    "blob": "c97d66f30f3e4ddbdfd9078dda9a654281540c0d"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-10-19",
+   "last_commit_blob": null
   },
   "projects/acoustics": {
    "original": {
@@ -39,7 +45,9 @@
     "blob": "59a96f81b7111d9275b5dd38a10a9682a8183c95"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/cameras": {
    "original": {
@@ -55,7 +63,9 @@
     "blob": "5e82a4622d090c7115cd65c9d88763e9f9d17e86"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/core-stack": {
    "original": {
@@ -71,7 +81,9 @@
     "blob": "b04b15c65184ac06e774763a38f4a026dcb1f53b"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/dev-infrastructure": {
    "original": {
@@ -87,7 +99,9 @@
     "blob": "d0f574cb9e70d7d8b11def7dc502b1ef69fc9456"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/docs-and-site": {
    "original": {
@@ -107,7 +121,9 @@
     "blob": "a505ffd48372be3e868a0d79146c12c72b9caf7c"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-17",
+   "last_commit_blob": null
   },
   "projects/hippocampus-vehicle": {
    "original": {
@@ -123,7 +139,9 @@
     "blob": "d00703bbd81e6e5e803064edf377ab9bdb3d1223"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/holiday-fun": {
    "original": {
@@ -139,7 +157,9 @@
     "blob": "e1d68235e38a0f616437ea551a48f5009a66caa2"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/lab-infrastructure": {
    "original": {
@@ -155,7 +175,9 @@
     "blob": "496441699427aa4efdc6e59d3fe7d044f3960b69"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/learning-to-swim": {
    "original": {
@@ -177,7 +199,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "closed"
     }
-   ]
+   ],
+   "last_commit": "2026-10-15",
+   "last_commit_blob": null
   },
   "projects/legacy-ros1": {
    "original": {
@@ -193,7 +217,9 @@
     "blob": "924d274240eee21f70fa0f6bd917a9f99dff1000"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/localization": {
    "original": {
@@ -209,7 +235,9 @@
     "blob": "ad3ee8958734ff116018196cf59c1f7fe4266563"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/radio-comms": {
    "original": {
@@ -225,7 +253,9 @@
     "blob": "ecac5bb23f5ae6ad8b7ca4b58f05f1f43f8c41f4"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/scalar-field": {
    "original": {
@@ -241,7 +271,9 @@
     "blob": "1e912aa2fc2c701caa0b189a03cf4b932781891a"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/simulation": {
    "original": {
@@ -257,7 +289,9 @@
     "blob": "4f20b392698e81a19049053a6f2b729535204e4b"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/teaching": {
    "original": {
@@ -273,7 +307,9 @@
     "blob": "c157d7cf20b19342a5360d6ae220ef6d845c0748"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "projects/underwater-localization": {
    "original": {
@@ -293,7 +329,9 @@
     "blob": "7db2f3e68042f93c7a7e60dafec735788b9ebb07"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "projects/uvms": {
    "original": {
@@ -309,7 +347,9 @@
     "blob": "7e84ba47128892851a8fc0000937b5ff732d5784"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/bluerov/alpha-arm": {
    "original": {
@@ -334,7 +374,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/bluerov/build-and-flash": {
    "original": {
@@ -365,7 +407,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/bluerov/deploy": {
    "original": {
@@ -396,7 +440,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/bluerov/dvl": {
    "original": {
@@ -421,7 +467,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/bluerov/full-uvms-setup": {
    "original": {
@@ -442,7 +490,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/bluerov/servo-and-light": {
    "original": {
@@ -467,7 +517,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/concepts/colcon": {
    "original": {
@@ -503,7 +555,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/concepts/deployment": {
    "original": {
@@ -528,7 +582,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/concepts/pre-built-packages": {
    "original": {
@@ -564,7 +620,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/concepts/ros2-repositories": {
    "original": {
@@ -589,7 +647,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/concepts/ros2-workspace": {
    "original": {
@@ -620,7 +680,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/contributing/debian-packages": {
    "original": {
@@ -651,7 +713,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/contributing/documentation": {
    "original": {
@@ -676,7 +740,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/contributing/hippocampus": {
    "original": {
@@ -701,7 +767,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/apriltag-localization": {
    "original": {
@@ -722,7 +790,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/deploying-hippocampus": {
    "original": {
@@ -747,7 +817,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/getting-started/installing-qgc": {
    "original": {
@@ -776,7 +848,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/pre-built-packages": {
    "original": {
@@ -801,7 +875,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/px4-setup": {
    "original": {
@@ -832,7 +908,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/getting-started/ros-installation": {
    "original": {
@@ -863,7 +941,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/starting-gazebo-simulation": {
    "original": {
@@ -896,7 +976,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/getting-started/workspace-setup": {
    "original": {
@@ -921,7 +1003,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/getting-started/workstation-quality-of-life": {
    "original": {
@@ -942,7 +1026,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/apriltag": {
    "original": {
@@ -967,7 +1053,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/buttons": {
    "original": {
@@ -992,7 +1080,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/guides/camera-calibration": {
    "original": {
@@ -1019,7 +1109,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/guides/dvb-t": {
    "original": {
@@ -1040,7 +1132,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/informative-path-planning": {
    "original": {
@@ -1061,7 +1155,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/install-source-dependencies": {
    "original": {
@@ -1082,7 +1178,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/misc-notes": {
    "original": {
@@ -1103,7 +1201,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/mixers": {
    "original": {
@@ -1124,7 +1224,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/path-follower": {
    "original": {
@@ -1145,7 +1247,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/path-follower-concept": {
    "original": {
@@ -1170,7 +1274,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/ros2-cheatsheet": {
    "original": {
@@ -1191,7 +1297,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/guides/ros2-misc": {
    "original": {
@@ -1216,7 +1324,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/acoustic-modems": {
    "original": {
@@ -1237,7 +1347,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/bluerov": {
    "original": {
@@ -1258,7 +1370,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/buttons": {
    "original": {
@@ -1279,7 +1393,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/cameras": {
    "original": {
@@ -1300,7 +1416,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/gantry": {
    "original": {
@@ -1321,7 +1439,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/hippocampus": {
    "original": {
@@ -1342,7 +1462,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/marker": {
    "original": {
@@ -1363,7 +1485,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/qualisys": {
    "original": {
@@ -1384,7 +1508,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hardware/rf-modules": {
    "original": {
@@ -1405,7 +1531,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hippocampus-bringup/afro-esc": {
    "original": {
@@ -1426,7 +1554,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hippocampus-bringup/fcu-firmware": {
    "original": {
@@ -1447,7 +1577,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/hippocampus-bringup/motor-configuration": {
    "original": {
@@ -1468,7 +1600,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-cameras/event-camera-collaboration": {
    "original": {
@@ -1493,7 +1627,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-cameras/event-cameras": {
    "original": {
@@ -1524,7 +1660,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-cameras/ip-cameras": {
    "original": {
@@ -1549,7 +1687,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-cameras/usb-cameras": {
    "original": {
@@ -1574,7 +1714,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-gantry/general-information": {
    "original": {
@@ -1599,7 +1741,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-gantry/installation": {
    "original": {
@@ -1624,7 +1768,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-gantry/motor-node": {
    "original": {
@@ -1649,7 +1795,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-gantry/raspi-setup": {
    "original": {
@@ -1674,7 +1822,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-gantry/usage": {
    "original": {
@@ -1699,7 +1849,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-marker/design": {
    "original": {
@@ -1720,7 +1872,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-marker/fabrication": {
    "original": {
@@ -1741,7 +1895,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-qualisys/calibration": {
    "original": {
@@ -1762,7 +1918,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/lab-qualisys/camera-settings": {
    "original": {
@@ -1783,7 +1941,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/lab-qualisys/defining-bodies": {
    "original": {
@@ -1804,7 +1964,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/ethernet": {
    "original": {
@@ -1839,7 +2001,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/pinout": {
    "original": {
@@ -1868,7 +2032,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-03",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/quality-of-life": {
    "original": {
@@ -1893,7 +2059,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/uart-configuration": {
    "original": {
@@ -1929,7 +2097,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "merged"
     }
-   ]
+   ],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/ubuntu-24-04-server": {
    "original": {
@@ -1960,7 +2130,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/raspberry-pi/usb-configuration": {
    "original": {
@@ -1991,7 +2163,9 @@
      "by": "kyle-nelson-berkeley",
      "state": "open"
     }
-   ]
+   ],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/start/index": {
    "original": {
@@ -2020,7 +2194,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-09-22",
+   "last_commit_blob": null
   },
   "setup/time-sync/client": {
    "original": {
@@ -2045,7 +2221,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/time-sync/overview": {
    "original": {
@@ -2066,7 +2244,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "setup/time-sync/server": {
    "original": {
@@ -2091,7 +2271,9 @@
     "tool": "tools/rst_convert.py",
     "commit": "b40ade4"
    },
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-27",
+   "last_commit_blob": null
   },
   "tools/onshape-mcp": {
    "original": {
@@ -2107,7 +2289,9 @@
     "blob": "fa9de631bff5af003697e511484a6cbaabf94a7b"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-28",
+   "last_commit_blob": null
   },
   "tools/runpod-mcp": {
    "original": {
@@ -2123,7 +2307,9 @@
     "blob": "3b913d38483d90c356acbaac930b44ddced27464"
    },
    "converted": null,
-   "edited_here": []
+   "edited_here": [],
+   "last_commit": "2026-08-28",
+   "last_commit_blob": null
   }
  }
 }

@@ -656,151 +656,176 @@
    "repo": "ipp_rig",
    "sha": "db97e2c",
    "date": "2026-10-21",
-   "msg": "update authors, delete deprecated and unused pre-commit-config"
+   "msg": "update authors, delete deprecated and unused pre-commit-config",
+   "author": "NBauschmann"
   },
   {
    "repo": "ipp_rig",
    "sha": "6fcef02",
    "date": "2026-10-20",
-   "msg": "refactor(config): delete leftover scenarios not needed"
+   "msg": "refactor(config): delete leftover scenarios not needed",
+   "author": "NBauschmann"
   },
   {
    "repo": "hippo_sim",
    "sha": "597eee8",
    "date": "2026-10-19",
-   "msg": "fix(hippo_sim): correct shutdown action and skip vehicle removal on exit to speed up shutdown"
+   "msg": "fix(hippo_sim): correct shutdown action and skip vehicle removal on exit to speed up shutdown",
+   "author": "NBauschmann"
   },
   {
    "repo": "ipp_rig",
    "sha": "295cdf0",
    "date": "2026-10-19",
-   "msg": "fix(ipp): correct planner cancellation and recovery, bound ir buffer"
+   "msg": "fix(ipp): correct planner cancellation and recovery, bound ir buffer",
+   "author": "NBauschmann"
   },
   {
    "repo": "ipp_rig",
    "sha": "f09e98c",
    "date": "2026-10-19",
-   "msg": "refactor(ipp): clean up formatting and node shutdown"
+   "msg": "refactor(ipp): clean up formatting and node shutdown",
+   "author": "NBauschmann"
   },
   {
    "repo": "ipp_rig",
    "sha": "a49210e",
    "date": "2026-10-19",
-   "msg": "Update repository URLs in README.md"
+   "msg": "Update repository URLs in README.md",
+   "author": "NBauschmann"
   },
   {
    "repo": "hippo_common",
    "sha": "67f6063",
    "date": "2026-10-16",
-   "msg": "fix(tf_publisher): preserve incoming pose timestamps"
+   "msg": "fix(tf_publisher): preserve incoming pose timestamps",
+   "author": "NBauschmann"
   },
   {
    "repo": "hippo_common",
    "sha": "d8bfc25",
    "date": "2026-10-16",
-   "msg": "refactor(tf_publisher): generalize pose parameter helper"
+   "msg": "refactor(tf_publisher): generalize pose parameter helper",
+   "author": "NBauschmann"
   },
   {
    "repo": "scalar_field_sim",
    "sha": "da0b968",
    "date": "2026-10-16",
-   "msg": "Merge pull request #2 from Latfoo/main"
+   "msg": "Merge pull request #2 from Latfoo/main",
+   "author": "NBauschmann"
   },
   {
    "repo": "ipp_rig",
    "sha": "fb48508",
    "date": "2026-10-15",
-   "msg": "fix: wrong obstacle publisher executable in launch file"
+   "msg": "fix: wrong obstacle publisher executable in launch file",
+   "author": "Latfoo"
   },
   {
    "repo": "ipp_rig",
    "sha": "ec7688e",
    "date": "2026-10-15",
-   "msg": "Declare workspace repo dependencies"
+   "msg": "Declare workspace repo dependencies",
+   "author": "Latfoo"
   },
   {
    "repo": "ipp_rig",
    "sha": "2af8431",
    "date": "2026-10-15",
-   "msg": "Slim down README"
+   "msg": "Slim down README",
+   "author": "Latfoo"
   },
   {
    "repo": "scalar_field_sim",
    "sha": "282ea6a",
    "date": "2026-10-15",
-   "msg": "Restore simple_field_1.toml used by the launch file defaults"
+   "msg": "Restore simple_field_1.toml used by the launch file defaults",
+   "author": "Latfoo"
   },
   {
    "repo": "scalar_field_sim",
    "sha": "8e88ea7",
    "date": "2026-10-15",
-   "msg": "Raise clip_max to 0.05 for experiment_02 fields"
+   "msg": "Raise clip_max to 0.05 for experiment_02 fields",
+   "author": "Latfoo"
   },
   {
    "repo": "scalar_field_belief",
    "sha": "5e3a404",
    "date": "2026-10-15",
-   "msg": "Merge pull request #2 from Latfoo/further_b_thesis_changes"
+   "msg": "Merge pull request #2 from Latfoo/further_b_thesis_changes",
+   "author": "NBauschmann"
   },
   {
    "repo": "scalar_field_interfaces",
    "sha": "8a0760e",
    "date": "2026-10-15",
-   "msg": "Merge pull request #2 from Latfoo/main"
+   "msg": "Merge pull request #2 from Latfoo/main",
+   "author": "NBauschmann"
   },
   {
    "repo": "ir_field_hardware",
    "sha": "a6e80a4",
    "date": "2026-09-17",
-   "msg": "add circuit diagram for sensor"
+   "msg": "add circuit diagram for sensor",
+   "author": "NBauschmann"
   },
   {
    "repo": "ir_field_hardware",
    "sha": "e736e06",
    "date": "2026-09-16",
-   "msg": "add cad files"
+   "msg": "add cad files",
+   "author": "NBauschmann"
   },
   {
    "repo": "docs",
    "sha": "1063769",
    "date": "2026-09-11",
-   "msg": "updated pinout colors"
+   "msg": "updated pinout colors",
+   "author": "FinnBreu"
   },
   {
    "repo": "ipp_rig",
    "sha": "58264ef",
    "date": "2026-09-01",
-   "msg": "Add correct sim params to launch file"
+   "msg": "Add correct sim params to launch file",
+   "author": "Latfoo"
   },
   {
    "repo": "docs",
    "sha": "0b28923",
    "date": "2026-09-01",
-   "msg": "added new pinout for uuv02"
+   "msg": "added new pinout for uuv02",
+   "author": "FinnBreu"
   },
   {
    "repo": "ipp_interfaces",
    "sha": "49c43fc",
    "date": "2026-09-01",
-   "msg": "Add README"
+   "msg": "Add README",
+   "author": "Latfoo"
   },
   {
    "repo": "ipp_rviz_visuals",
    "sha": "973fc24",
    "date": "2026-09-01",
-   "msg": "Add README"
+   "msg": "Add README",
+   "author": "Latfoo"
   },
   {
    "repo": "ipp_rig",
    "sha": "0a0622f",
    "date": "2026-09-01",
-   "msg": "Add dependency and clean up documentation"
+   "msg": "Add dependency and clean up documentation",
+   "author": "Latfoo"
   },
   {
    "repo": "docs",
    "sha": "0eba667",
    "date": "2026-08-27",
-   "msg": "Add instruction for enabling motors and checking status"
+   "msg": "Add instruction for enabling motors and checking status",
+   "author": "NBauschmann"
   }
  ],
  "most_active_repos": [

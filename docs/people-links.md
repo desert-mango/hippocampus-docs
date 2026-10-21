@@ -8,6 +8,9 @@ shows TUHH/HippoCampus affiliation; otherwise no link. LinkedIn/ResearchGate/Sch
 profiles are deliberately never linked (login walls, instability); found ones are listed as
 candidates. `tools/check_urls.py` probes every non-null link for liveness.*
 
+On the Team page the whole card is the link; a plain click opens the profile, which holds the link
+(a cmd/ctrl-click or middle click opens the link itself in a new tab; uiux 2026-10, M5).
+
 ## Active
 
 | Person | Resolution | Link |

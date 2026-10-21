@@ -356,6 +356,60 @@ test('J11 the key-facts row leaves out a zero People count (underwater-localizat
 });
 
 // ==== UNIT M ====
+/* viewTeam clears #content and appends (ground rule 9, R2-1), so the Team page is tested as the string
+   builder it writes, window.HCTeam.teamSkeleton, read off the booted window (site.win), and the file. */
+async function team() {
+  const site = await bootSite({ hash: '#/' });
+  assert.ok(site.win.HCTeam && Object.isFrozen(site.win.HCTeam), 'window.HCTeam is exported and frozen');
+  return site.win.HCTeam;
+}
+const P = (name, extra) => Object.assign({ name, title: 'Student', photo: null, link: null }, extra);
+
+test('M1/M6/M7/M15: teamSkeleton: h1 Team, Current team, Alumni, then Lab activity with "GitHub data as of"', async () => {
+  const T = await team();
+  const html = T.teamSkeleton([['team', 'Current team', [{ person: P('Ada', { link: 'https://example.org/ada' }) }]],
+    ['alumni', 'Alumni', [{ person: P('Bo') }]]], '2026-10-21');
+  assert.equal((html.match(/<h1[ >]/g) || []).length, 1, 'one h1');
+  assert.match(html, /<h1[^>]*>Team<\/h1>/);
+  const at = (re) => html.search(re);
+  assert.ok(at(/>Current team</) > 0 && at(/>Current team</) < at(/>Alumni</) && at(/>Alumni</) < at(/>Lab activity</),
+    'people first, then the activity');
+  assert.match(html, /<h2[^>]*>Current team<\/h2>/);
+  assert.match(html, /<h2[^>]*>Alumni<\/h2>/);
+  assert.match(html, /<h2[^>]*>Lab activity<\/h2>\s*<span class="hc-asof-inline">· GitHub data as of 2026-10-21<\/span>/);
+  assert.ok(!/hc-authors|>People<|compact|What the lab|Source: public GitHub/.test(html));
+  assert.match(html, /id="people-root"/);
+  assert.match(html, /class="team-lab-body"/);
+  // no date: no span; no roster: no people mount
+  const bare = T.teamSkeleton(null, null);
+  assert.ok(!/GitHub data as of|people-root/.test(bare));
+  assert.match(bare, />Lab activity</);
+  // a hostile name is escaped
+  assert.ok(!T.teamSkeleton([['team', 'Current team', [{ person: P('<img src=x onerror=alert(1)>') }]]], '2026-10-21').includes('<img src=x'));
+});
+
+test('M5: personCardHTML: a linked card stays an <a> with data-hc-person; a link-less card is a focusable role="button" div', async () => {
+  const T = await team();
+  const linked = T.personCardHTML({ person: P('Ada Lovelace', { link: 'https://example.org/ada' }), linked: true, active: true, pinned: false });
+  assert.match(linked, /^<a class="person-card" href="https:\/\/example\.org\/ada" target="_blank" rel="noopener"/);
+  assert.match(linked, /data-hc-person="Ada Lovelace"/);
+  assert.match(linked, /data-hc-name="Ada Lovelace" data-link="1" data-linked="1" data-active="1" data-pinned="0"/);
+  assert.match(linked, /aria-haspopup="dialog"/);
+  assert.ok(!/role="button"|tabindex/.test(linked));
+  const plain = T.personCardHTML({ person: P('Bo') });
+  assert.match(plain, /^<div class="person-card is-static"/);
+  assert.match(plain, /role="button"/);
+  assert.match(plain, /tabindex="0"/);
+  assert.match(plain, /data-hc-person="Bo"/);
+  assert.match(plain, /data-hc-name="Bo" data-link="0"/);
+  assert.equal(T.personCardHTML({ person: P('') }), '');
+});
+
+test('M1: content/about.md is only the people mount, and no "Who can edit"', () => {
+  const md = fs.readFileSync(path.join(ROOT, 'content', 'about.md'), 'utf8');
+  assert.equal(md.trim(), '<div id="people-root"></div>');
+  assert.ok(!/Who can edit/.test(md));
+});
 
 // ==== UNIT E ====
 /* E1 (not-found view, errorPanel advice only on local hosts), the J8 redirect, E2 (light-theme

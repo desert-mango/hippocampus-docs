@@ -530,7 +530,7 @@ test('push role: the popover gains counts, projects, five recent commits and las
   assertNoHostileElement(site.doc);
 });
 
-test('push role: who wrote this gains per-author counts and date ranges, across the folder move', async () => {
+test('push role: who wrote this gains per-author counts and date ranges, across the folder move (J9: after the one quiet line)', async () => {
   const site = await member();
   const box = await site.page(UBUNTU);
   const m = box.querySelector('.hc-m-authors');
@@ -548,9 +548,11 @@ test('push role: who wrote this gains per-author counts and date ranges, across 
   assert.equal(lines[0], 'Original, in HippoCampusRobotics/docs: Nathalie Bauschmann — 2 commits, 2025-03-10; '
     + 'Thies Lennart Alff — 2 commits, 2024-08-02 to 2024-08-05.');
   assert.equal(lines[1], 'On this site: no commits found.');
-  // the box sits above the public footnote
+  // J9 (uiux 2026-10): the public box is one quiet line with no footnote; the members' box follows that line
+  assert.equal(box.querySelector('.hc-authors-note'), null);
   const kids = box.children;
-  assert.ok(kids.indexOf(m) < kids.indexOf(box.querySelector('.hc-authors-note')));
+  assert.equal(m.parentNode, box);
+  assert.ok(kids.indexOf(box.querySelector('.hc-authors-line')) < kids.indexOf(m));
 });
 
 // ------------------------------------------------------------------ the reader's wiring
