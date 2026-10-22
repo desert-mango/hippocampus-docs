@@ -1093,6 +1093,8 @@
         ring.setAttribute('x', String(left + c.col * (cell + gap) - 1));
         ring.setAttribute('y', String(top + c.row * (cell + gap) - 1));
         ring.classList.add('is-on');
+        // WCAG-5: a narrow scroller follows the cursor (at 375 px the newest weeks start off-screen)
+        if (typeof rects[i].scrollIntoView === 'function') rects[i].scrollIntoView({ block: 'nearest', inline: 'nearest' });
         showTip(rects[i], cellText(c));
         live.textContent = cellText(c);
       };
@@ -1121,6 +1123,10 @@
         } else return;
         e.preventDefault();
         focusCell(next);
+      });
+      // WCAG-5: focus arriving shows the cursor at once (the newest day, or where it was left)
+      root.addEventListener('focus', () => {
+        if (rects.length) focusCell(current >= 0 ? current : rects.length - 1);
       });
       root.addEventListener('blur', () => { ring.classList.remove('is-on'); hideTip(); });
       wrap.appendChild(root);

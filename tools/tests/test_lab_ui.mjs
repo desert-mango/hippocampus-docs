@@ -156,11 +156,12 @@ function makeDoc() {
     querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
     getBoundingClientRect() { return { left: 10, top: 10, right: 40, bottom: 40, width: 30, height: 30 }; }
     focus() { doc.activeElement = this; }
+    scrollIntoView(opts) { doc.scrolls.push({ el: this, opts }); }
     get offsetWidth() { return 300; }
     get offsetHeight() { return 160; }
   }
   const doc = {
-    created, htmlWrites,
+    created, htmlWrites, scrolls: [],
     createElement: (t) => new El(t),
     createElementNS: (ns, t) => new El(t, ns),
     createTextNode: (v) => new Text(v),
@@ -824,6 +825,37 @@ test('M10: the heatmap SVG is the one tab stop; no <title>; Arrow keys show a si
   assert.match(tip.textContent, / · 4 commits$/);
   doc.dispatch(rect, 'pointerout');
   assert.equal(tip.classList.contains('is-on'), false);
+});
+
+test('WCAG-5 heatmap focus: focus with no cursor puts it on the newest day with its tooltip; ArrowLeft moves it and scrolls it into view', async () => {
+  const { doc, lab } = setup();
+  const root = doc.createElement('main');
+  doc.body.appendChild(root);
+  await lab.renderLab(root, () => true, { embedded: true });
+  const svgEl = root.querySelector('.hc-heat svg');
+  const ring = svgEl.querySelector('.hc-focus');
+  const cells = svgEl.querySelectorAll('rect').filter((r) => !r.classList.contains('hc-focus'));
+  const newest = cells[cells.length - 1];
+  svgEl.focus();
+  doc.dispatch(svgEl, 'focus');
+  assert.ok(ring.classList.contains('is-on'), 'the cursor shows on focus');
+  assert.equal(Number(ring.getAttribute('x')), Number(newest.getAttribute('x')) - 1, 'on the newest cell');
+  assert.equal(Number(ring.getAttribute('y')), Number(newest.getAttribute('y')) - 1);
+  const tip = doc.body.querySelector('.hc-tip');
+  assert.ok(tip && tip.classList.contains('is-on'), 'its tooltip shows');
+  const x0 = ring.getAttribute('x');
+  doc.scrolls.length = 0;
+  doc.dispatch(svgEl, 'keydown', { key: 'ArrowLeft' });
+  assert.notEqual(ring.getAttribute('x'), x0, 'ArrowLeft moves the cursor a week back');
+  const last = doc.scrolls[doc.scrolls.length - 1];
+  assert.ok(last, 'scrollIntoView was called after the move');
+  assert.equal(last.el.localName, 'rect');
+  assert.equal(Number(last.el.getAttribute('x')), Number(ring.getAttribute('x')) + 1, 'on the cursor cell');
+  assert.deepEqual({ ...last.opts }, { block: 'nearest', inline: 'nearest' });
+  // a second focus keeps the cursor where it is
+  doc.dispatch(svgEl, 'blur');
+  doc.dispatch(svgEl, 'focus');
+  assert.equal(Number(ring.getAttribute('x')), Number(last.el.getAttribute('x')) - 1);
 });
 
 test('M11: recent commits: ten rows at most, each a button naming its author, opening a commit dialog with the project', async () => {
