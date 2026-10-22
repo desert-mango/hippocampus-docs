@@ -1334,15 +1334,3 @@ button.hc-face:focus-visible { outline: 2px solid var(--accent); outline-offset:
 [data-theme="light"] .page-body a:hover,
 [data-theme="light"] .not-found a:hover,
 [data-theme="light"] .error-panel a:hover { text-decoration: underline; text-decoration-thickness: 2px; }
-/* WCAG-2/3/4 (review 2026-10-21): small coloured text that is NOT a link gets a darker ink of the same hue in
-   light mode (>= 4.5:1 on --surface, --bg and the --accent-soft tint; tools/tests/test_views.mjs reads these
-   rules). Borders, dots and links keep the tokens as given; dark mode is unchanged. */
-[data-theme="light"] .badge.active { color: color-mix(in srgb, var(--active) 45%, #000); }
-[data-theme="light"] .badge.maintained,
-[data-theme="light"] .adm-note .adm-title,
-[data-theme="light"] .adm-important .adm-title,
-[data-theme="light"] .adm-seealso .adm-title,
-[data-theme="light"] .adm-todo .adm-title,
-[data-theme="light"] .tabbar button[aria-selected="true"],
-[data-theme="light"] #sidebar a.active,
-[data-theme="light"] .filter-chip[aria-current="true"] { color: color-mix(in srgb, var(--accent) 70%, #000); }
