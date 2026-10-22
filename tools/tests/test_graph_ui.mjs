@@ -435,3 +435,32 @@ test('J11 buildFacesBlock: <= 5 faces; data-hc-login only where a login exists; 
   assert.ok(imgs.every((i) => i.getAttribute('alt') === '' && i.getAttribute('width') === '40'));
   assert.equal(buildFacesBlock([], doc, () => {}), null);
 });
+
+// Nielsen 1.3: "Who to ask" puts the current team first and marks alumni. Who is current comes from
+// js/lab.js splitTeam (the Team page's own rule), handed in; graph.js never recomputes it.
+test('Nielsen-1.3 faces: current team first, alumni after with an "alumni" line; the rule is lab.js splitTeam', () => {
+  const LAB = require(new URL('../../js/lab.js', import.meta.url).pathname);
+  const people = { groups: [
+    { id: 'active', people: [{ name: 'Cora Current', title: 'PhD', photo: null, link: 'https://example.org/c' }] },
+    { id: 'alumni', people: [{ name: 'Al Umnus', title: 'Former PhD', photo: null, link: 'https://example.org/a' }] },
+  ] };
+  const pub = { people: {
+    alum: { login: 'alum', name: 'Al Umnus', avatar: null, roster: 'Al Umnus', last_active: '2025-01-01' },
+    cora: { login: 'cora', name: 'Cora Current', avatar: null, roster: 'Cora Current', last_active: '2026-10-15' },
+  } };
+  const split = LAB.splitTeam(people, pub, '2026-10-21');
+  // contribution order puts the alumnus first
+  const rows = [{ login: 'alum', label: 'Al Umnus' }, { login: 'cora', label: 'Cora Current' }];
+  const faces = faceModels(rows, people, pub, split);
+  assert.deepEqual(faces.map((f) => f.login), ['cora', 'alum'], 'current first');
+  assert.deepEqual(faces.map((f) => f.alumni), [false, true]);
+  const doc = fakeDoc();
+  const nodes = walk(buildFacesBlock(faces, doc, () => {}));
+  const items = nodes.filter((n) => /(^| )hc-face( |$)/.test(n.className));
+  const tags = (item) => walk(item).filter((n) => n.className === 'hc-face-tag');
+  assert.equal(tags(items[0]).length, 0, 'no tag on the current face');
+  assert.equal(tags(items[1]).length, 1, 'the alumni face has its tag');
+  assert.equal(tags(items[1])[0].textContent, 'alumni');
+  // without the split (lab.js absent), nothing is reordered or tagged
+  assert.deepEqual(faceModels(rows, people, pub).map((f) => [f.login, f.alumni]), [['alum', false], ['cora', false]]);
+});

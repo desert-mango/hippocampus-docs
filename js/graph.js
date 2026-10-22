@@ -209,8 +209,11 @@
     const words = String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
     return (words.map(function (w) { return Array.from(w)[0]; }).join('') || '?').toUpperCase();
   }
-  function faceModels(rows, people, peoplePublic) {
-    const list = Array.isArray(rows) ? rows.slice(0, FACES_MAX) : [];
+  // split (optional, Nielsen 1.3): js/lab.js splitTeam's {team, alumni} — the Team page's own 30-day rule,
+  // never recomputed here. With it, the current team comes first, then people not on the roster, then
+  // alumni (each marked alumni: true), in contribution order within each; the first five are kept.
+  function faceModels(rows, people, peoplePublic, split) {
+    let list = Array.isArray(rows) ? rows.slice() : [];
     if (!list.length) return [];
     const photos = new Map();
     const groups = (people && Array.isArray(people.groups)) ? people.groups : [];
@@ -230,15 +233,28 @@
         byLogin.set(e.login.trim(), e);
       }
     });
-    return list.map(function (row) {
+    const status = new Map();             // roster name -> 0 current, 2 alumni
+    const names = function (xs) {
+      return (Array.isArray(xs) ? xs : []).map(function (e) { return e && e.person && typeof e.person.name === 'string' ? e.person.name.trim() : ''; });
+    };
+    if (split && typeof split === 'object') {
+      names(split.alumni).forEach(function (n) { if (n) status.set(n, 2); });
+      names(split.team).forEach(function (n) { if (n) status.set(n, 0); });
+    }
+    const faces = list.map(function (row) {
       const login = row && typeof row.login === 'string' && row.login.trim() ? row.login.trim() : null;
       const label = (row && row.label) || login || '';
       const pub = login ? byLogin.get(login) : null;
       const roster = pub && typeof pub.roster === 'string' ? pub.roster.trim() : '';
       const rosterPhoto = roster ? photos.get(roster) : null;
       const photo = rosterPhoto ? faceTx(rosterPhoto) : faceAvatar(pub && pub.avatar);
-      return { login: login, label: label, photo: photo || null, initials: faceInitials(label) };
+      const rank = roster && status.has(roster) ? status.get(roster) : 1;
+      return { login: login, label: label, photo: photo || null, initials: faceInitials(label), alumni: rank === 2, rank: rank };
     });
+    const ordered = faces.map(function (f, i) { return { f: f, i: i }; })
+      .sort(function (a, b) { return (a.f.rank - b.f.rank) || (a.i - b.i); })
+      .map(function (x) { delete x.f.rank; return x.f; });
+    return ordered.slice(0, FACES_MAX);
   }
 
   // GitHub profile URLs are deliberately never used as the row's link.
@@ -814,6 +830,12 @@
       name.className = 'hc-face-name';
       name.textContent = f.label;
       face.appendChild(name);
+      if (f.alumni) {                       // Nielsen 1.3: the reader sees who has left the lab
+        const tag = doc.createElement('span');
+        tag.className = 'hc-face-tag';
+        tag.textContent = 'alumni';
+        face.appendChild(tag);
+      }
       li.appendChild(face);
       ul.appendChild(li);
     });
@@ -842,7 +864,9 @@
         asideBox.appendChild(buildContributorsBlock(rows, entry.truncated));
         if (facesSlot && isConnected(facesSlot) && !facesSlot.querySelector('.hc-faces')) {
           const lab = (window.HCLab && typeof window.HCLab.openPerson === 'function') ? window.HCLab : null;
-          const block = buildFacesBlock(faceModels(rows, parts[0], parts[1]), document,
+          const split = (window.HCLab && typeof window.HCLab.splitTeam === 'function')
+            ? window.HCLab.splitTeam(parts[0], parts[1], new Date().toISOString().slice(0, 10)) : null;
+          const block = buildFacesBlock(faceModels(rows, parts[0], parts[1], split), document,
             lab ? function (btn, login) { lab.openPerson(btn, { login: login }); } : null);
           if (block) facesSlot.appendChild(block);
         }

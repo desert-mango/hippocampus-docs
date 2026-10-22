@@ -1216,6 +1216,8 @@ button.hc-face:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .hc-face-pic { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--surface-2); flex: none; }
 .hc-face-ini { display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600; color: var(--body-soft); }
 .hc-face-name { font-size: 0.8rem; line-height: 1.25; overflow-wrap: anywhere; }
+/* Nielsen 1.3: a small muted line under an alumnus's name (js/graph.js buildFacesBlock) */
+.hc-face-tag { font-size: 0.7rem; line-height: 1.2; color: var(--muted); margin-top: -0.2rem; }
 .start-here { margin: 1.6rem 0 0; }
 .start-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(14rem, 100%), 1fr)); gap: 0.7rem; }
 .start-card {
