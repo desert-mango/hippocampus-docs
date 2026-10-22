@@ -56,7 +56,7 @@
                one entry per ATTEMPT: a primary re-asked after a garbled or
                empty answer appears again as attempt 2 on the same hop.
      EVERY answer, the pre-body 405/403/429 included, carries
-     `x-librarian-version: 5` and `x-librarian-ladder: flint,laguna,dots,gemma`
+     `x-librarian-version: 6` and `x-librarian-ladder: dots,laguna,flint,gemma`
      (the provider names, in order, built once at module load). They cost
      nothing — no body read, no model call — and are the zero-quota readiness
      probe: `curl -sI -X POST …/api/librarian` names the handler and the ladder
@@ -69,7 +69,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LIBRARIAN_VERSION = '5';
+const LIBRARIAN_VERSION = '6';
 
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_PICKS = 8;
@@ -173,6 +173,13 @@ const MAX_OPEN_REPOS = 3;
    The hop-1 prompt is ~45k chars (~12.8k tokens: the whole catalog of 94
    pages, 94 repositories and 90 CAD parts); every rung serves 256k context.
 
+   S5 (2026-10-22, same day): with thinking off, five live probes answered
+   5 of 5 in 4.4-5.6s — dots on 4, laguna on 1 (a hop 2) — but each spent 3-4
+   calls, because flint and usually laguna failed fast first, and the 4-call
+   cap then cut 3 of the 5 walks short (`partial`). dots is the rung that
+   actually answers, so it leads: a search goes back to ~1 call of the 50/day
+   free cap. Order: dots → laguna → flint → gemma.
+
    THE WALK-HOP TRADE-OFF, stated: MAX_MODEL_CALLS is 4 and the ladder is 4
    deep, so a hop 1 that falls through the whole ladder leaves no call for hop
    2. Accepted: an answer from any model beats a walk nobody gets to see, and
@@ -187,15 +194,15 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const NO_THINKING = Object.freeze({ enabled: false });
 const PROVIDERS = [
   {
-    name: 'flint',
+    name: 'dots',
     keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_FLINT_URL',
+    urlEnv: 'LIBRARIAN_DOTS_URL',
     defaultUrl: OPENROUTER_URL,
     // POLICY, NOT BENCHMARK: a Llama-family model is forbidden here — at any
     // tier, in any role, fallback included. providerConfig() refuses an
     // override that names one.
-    model: 'recursive/flint-v1.0:free',
-    modelEnv: 'LIBRARIAN_FLINT_MODEL',
+    model: 'dots-studio/dots-3-note-preview:free',
+    modelEnv: 'LIBRARIAN_DOTS_MODEL',
     reasoning: NO_THINKING,
   },
   {
@@ -208,12 +215,12 @@ const PROVIDERS = [
     reasoning: NO_THINKING,
   },
   {
-    name: 'dots',
+    name: 'flint',
     keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_DOTS_URL',
+    urlEnv: 'LIBRARIAN_FLINT_URL',
     defaultUrl: OPENROUTER_URL,
-    model: 'dots-studio/dots-3-note-preview:free',
-    modelEnv: 'LIBRARIAN_DOTS_MODEL',
+    model: 'recursive/flint-v1.0:free',
+    modelEnv: 'LIBRARIAN_FLINT_MODEL',
     reasoning: NO_THINKING,
   },
   {
@@ -1347,7 +1354,7 @@ async function runSearch(ask, ctx, cfgs, doFetch, now) {
 
   /* One hop, one attempt per rung and never more than the search has calls for:
        primary → (primary again, ONLY after a parse or empty failure) → laguna
-     → dots → gemma.
+     → flint → gemma.
      The retry is the 2026-09-05 measurement made into a rule. The same request,
      sent three times, garbled once and came back empty once — the free serving
      is non-deterministic, and a re-ask of the SAME model is the cheapest fix
