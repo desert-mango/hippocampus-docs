@@ -737,7 +737,11 @@
     if (!projectGraph) {
       const soft = (path) => fetchJSON(path).catch(() => null);
       projectGraph = Promise.all([soft('data/graph/contributors.json'), soft('data/graph/github-repos.json')])
-        .then(([contributors, repos]) => ({ contributors, repos }));
+        .then(([contributors, repos]) => {
+          // review J advisory: cache only a result where a file loaded, so a blip is retried on the next visit
+          if (!contributors && !repos) projectGraph = null;
+          return { contributors, repos };
+        });
     }
     return projectGraph;
   }
@@ -1143,7 +1147,7 @@
           ${picks.map((r) => searchRow(r, terms)).join('')}
         </section>` : '';
       const waitLine = waiting
-        ? '<p class="search-waiting" role="status" aria-live="polite">The librarian is still looking…</p>' : '';
+        ? '<p class="search-waiting">The librarian is still looking…</p>' : '';   // the news is in the one status line
       let body;
       if (shown.length) {
         body = shown.map((r) => searchRow(r, terms)).join('');
@@ -1165,9 +1169,10 @@
       const all = HCSearch.groupResults(res.results);
       const byKind = [[all.page.length, 'page', 'pages'], [all.code.length, 'code', 'code'], [all.cad.length, 'CAD', 'CAD']]
         .filter((k) => k[0] > 0).map((k) => `${k[0]} ${k[0] === 1 ? k[1] : k[2]}`).join(', ');
-      const statusText = res.results.length
+      const statusText = (res.results.length
         ? `${res.results.length} result${res.results.length === 1 ? '' : 's'} for “${query}”${byKind ? `: ${byKind}` : ''}.`
-        : `No results for “${query}”.`;
+        : `No results for “${query}”.`)
+        + (waiting ? ' The librarian is still looking…' : '');
       content.innerHTML = `
       <div class="search-results">
         <h1>Search</h1>

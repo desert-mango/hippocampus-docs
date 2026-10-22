@@ -89,6 +89,26 @@ test('WCAG-6 search status: a query with results says how many, by type', async 
   assert.match(m[1], /^\d+ results? for “px4”: \d+ pages?/);
 });
 
+test('review S advisory: the waiting paint has exactly one role="status", and it says the librarian is still looking', async () => {
+  const site = await bootSite({ hash: '#/' });
+  const realFetch = site.win.fetch;
+  let release;
+  const held = new Promise((r) => { release = r; });
+  site.win.fetch = (url, init) => (/librarian/.test(String(url))
+    ? held.then(() => ({ ok: false, status: 404, headers: { get: () => null }, text: async () => '', json: async () => ({}) }))
+    : realFetch(url, init));
+  await site.go('#/search?q=thruster%20model');
+  const html = String(site.content.innerHTML);
+  assert.match(html, /class="search-waiting"/, 'this is the waiting paint');
+  const live = html.match(/role="status"/g) || [];
+  assert.equal(live.length, 1, 'one live region on the waiting paint');
+  assert.doesNotMatch(/<p class="search-waiting"[^>]*>/.exec(html)[0], /role=|aria-live/);
+  const st = /<p [^>]*search-status[^>]*>([^<]*)<\/p>/.exec(html);
+  assert.ok(st, 'the hidden status line is the one region');
+  assert.match(st[1], /The librarian is still looking…/, 'the waiting news is in the hidden status text');
+  release();
+});
+
 // ==== UNIT SHELL ====
 
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -398,6 +418,22 @@ test('H H4: the card counts match the registries (setup pages, projects)', async
 });
 
 // ==== UNIT J ====
+
+test('review J advisory: a project page whose two GitHub-layer reads both failed reads them again on the next visit', async () => {
+  // the project page's own loader is the only reader of contributors.json on these routes
+  const reads = (site) => site.fetches.filter((f) => /data\/graph\/contributors\.json/.test(f.url)).length;
+  const failed = await bootSite({ hash: '#/', files: { 'data/graph/contributors.json': null, 'data/graph/github-repos.json': null } });
+  await failed.go('#/projects/core-stack');
+  assert.equal(reads(failed), 1);
+  await failed.go('#/projects');
+  await failed.go('#/projects/simulation');
+  assert.equal(reads(failed), 2, 'an all-failed result is not cached: asked again');
+  const good = await bootSite({ hash: '#/' });
+  await good.go('#/projects/core-stack');
+  await good.go('#/projects');
+  await good.go('#/projects/simulation');
+  assert.equal(reads(good), 1, 'a loaded result is cached for the session');
+});
 
 test('J12/J6 #/projects: group headings in the fixed order, no repo chips, All is current, no sidebar list', async () => {
   const site = await bootSite({ hash: '#/projects' });

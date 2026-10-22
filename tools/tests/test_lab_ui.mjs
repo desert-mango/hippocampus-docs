@@ -993,6 +993,17 @@ test('M13/M11/M12/P10: rankPeople, loginProjects, repoProjectMap, repoPages, las
   assert.equal(heatSummary(weekLayout([])), 'Commits per day, last 53 weeks: 0 commits');
 });
 
+test('review M advisory: logins compare lowercased in rankPeople and loginProjects (the edit-access rule)', () => {
+  const m = (login, name) => ({ name, github: { login } });
+  const mixed = { projects: {
+    a: { contributors: [{ login: 'NBauschmann', contributions: 5 }] },
+    b: { contributors: [{ login: 'nbauschmann', contributions: 4 }, { login: 'Zed', contributions: 6 }] },
+  } };
+  assert.deepEqual(loginProjects(mixed, 'nBAUSCHMANN'), ['a', 'b'], 'a login differing only by case still counts');
+  assert.deepEqual(rankPeople([m('zed', 'Zed'), m('NBAUSCHMANN', 'Nathalie')], mixed).map((x) => x.name),
+    ['Nathalie', 'Zed'], '5 + 4 under one login outranks 6');
+});
+
 test('404 on the GitHub files: the Lab page says "GitHub data not built yet"; footers and cards stay quiet', async () => {
   const { doc, lab, calls } = setup({ 'data/people.json': PEOPLE });
   const root = doc.createElement('main');

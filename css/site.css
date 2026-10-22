@@ -1243,6 +1243,8 @@ button.hc-face:focus-visible { outline: 2px solid var(--accent); outline-offset:
 @container detail (width < 47rem) {
   .aside-box { grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); column-gap: 2rem; }
 }
+/* review J advisory: the Editor's rights panel (js/editor.js puts it first in the box) spans the whole row */
+.aside-box > .hc-access { grid-column: 1 / -1; }
 
 /* ==== UNIT M: team and the GitHub layer ==== */
 /* M17: the one dialog of the GitHub layer (js/lab.js openDialog): a popover anchored to its trigger from

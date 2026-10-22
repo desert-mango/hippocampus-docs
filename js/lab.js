@@ -400,7 +400,7 @@
     Object.keys(projects).forEach((id) => {
       const list = projects[id] && Array.isArray(projects[id].contributors) ? projects[id].contributors : [];
       list.forEach((c) => {
-        const login = str(c && c.login).trim();
+        const login = str(c && c.login).trim().toLowerCase();   // review M: the edit-access rule's lowercased compare
         const n = num(c && c.contributions);
         if (login && n !== null && n > 0) totals.set(login, (totals.get(login) || 0) + n);
       });
@@ -413,7 +413,7 @@
   function rankPeople(models, contributorsDoc) {
     const totals = commitTotals(contributorsDoc);
     const score = (m) => {
-      const login = m && m.github ? m.github.login : '';
+      const login = m && m.github ? str(m.github.login).trim().toLowerCase() : '';
       return totals.has(login) ? totals.get(login) : -1;
     };
     return (Array.isArray(models) ? models : []).slice().sort((a, b) => (score(b) - score(a))
@@ -423,11 +423,11 @@
   // M5: the project ids a login has public commits in (contributors.json), in the file's order
   function loginProjects(contributorsDoc, login) {
     const projects = contributorsDoc && typeof contributorsDoc === 'object' ? contributorsDoc.projects : null;
-    const want = str(login).trim();
+    const want = str(login).trim().toLowerCase();
     if (!want || !projects || typeof projects !== 'object') return [];
     return Object.keys(projects).filter((id) => {
       const list = projects[id] && Array.isArray(projects[id].contributors) ? projects[id].contributors : [];
-      return list.some((c) => c && str(c.login).trim() === want);
+      return list.some((c) => c && str(c.login).trim().toLowerCase() === want);
     });
   }
 
