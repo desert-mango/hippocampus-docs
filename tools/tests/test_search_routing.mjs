@@ -1282,3 +1282,40 @@ test('S3: pages below the 40-row cut still reach the Pages tab, in rank order', 
   assert.deepEqual(results.slice(40).map((r) => r.href), ['#/pa', '#/pb']);
   for (let i = 1; i < results.length; i += 1) assert.ok(results[i - 1].score >= results[i].score);
 });
+
+// ------------------------------------------------- review S-1: in-flight dedupe --
+
+test('review S-1: two concurrent enrich calls for one query make exactly one request', async () => {
+  const local = mixedLocal(8);
+  const ids = assignIds(local.results);
+  let calls = 0;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const fetchCounting = async () => {
+    calls += 1;
+    await gate;
+    return resp(200, { results: [{ id: ids[3], why: 'w' }] });
+  };
+  const lib = createLibrarian({ fetch: fetchCounting });
+  const a = lib.enrich('thruster model', local);
+  const b = lib.enrich('  Thruster Model ', local);     // the same trimmed lower-cased key
+  await new Promise((r) => setTimeout(r, 0));
+  release();
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.equal(calls, 1, 'the second call awaits the first request');
+  assert.equal(ra.librarianCount, 1);
+  assert.equal(rb.librarianCount, 1);
+  assert.deepEqual(rb.results.map((r) => r.title), ra.results.map((r) => r.title));
+});
+
+test('review S-1: a failed in-flight request is not remembered: the next call asks again', async () => {
+  let calls = 0;
+  const lib = createLibrarian({ fetch: async () => { calls += 1; throw new Error('blip'); } });
+  const local = mixedLocal(4);
+  const [x, y] = await Promise.all([lib.enrich('thruster model', local), lib.enrich('thruster model', local)]);
+  assert.equal(calls, 1);
+  assert.equal(x.notice, LIBRARIAN_NOTICE);
+  assert.equal(y.notice, LIBRARIAN_NOTICE);
+  await lib.enrich('thruster model', local);
+  assert.equal(calls, 2, 'the entry was dropped in finally');
+});

@@ -471,6 +471,7 @@
     });
     let absent = false;
     const answers = new Map();
+    const inflight = new Map();     // key -> promise of one request's outcome (review S-1)
 
     function remember(key, rows) {
       answers.delete(key);            // re-insert: Map keeps insertion order
@@ -481,7 +482,6 @@
     async function enrich(q, local) {
       const results = (local && local.results) || [];
       const plain = { results, librarianCount: 0, notice: null };
-      const failed = { results, librarianCount: 0, notice: LIBRARIAN_NOTICE };
 
       const trimmed = String(q == null ? '' : q).trim();
       const answered = (rows) => {
@@ -496,6 +496,26 @@
       const key = trimmed.toLowerCase();
       if (answers.has(key)) return answered(answers.get(key));
 
+      // review S-1: one request per query while it is in flight. A second
+      // enrich for the same key (a tab click during the wait) awaits the
+      // first one's outcome instead of POSTing again; the entry goes in
+      // finally, so a failure is still retried next time.
+      let pending = inflight.get(key);
+      if (!pending) {
+        pending = ask(trimmed, results).finally(() => { inflight.delete(key); });
+        inflight.set(key, pending);
+      }
+      const out = await pending;
+      if (out.rows) return answered(out.rows);
+      if (out.plain) return plain;
+      return { results, librarianCount: 0, notice: out.notice };
+    }
+
+    /* One librarian request. Its outcome is independent of the caller's
+       result list, so concurrent callers can share it: { rows } for an
+       answer, { plain: true } once the librarian is absent, else { notice }. */
+    async function ask(trimmed, results) {
+      const key = trimmed.toLowerCase();
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
       const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
       try {
@@ -508,10 +528,10 @@
             signal: ctrl ? ctrl.signal : undefined,
           });
         } catch (e) {
-          return failed;                       // network error, abort, timeout
+          return { notice: LIBRARIAN_NOTICE };     // network error, abort, timeout
         }
         const verdict = classifyStatus(res && res.status);
-        if (verdict === 'absent') { absent = true; return plain; }
+        if (verdict === 'absent') { absent = true; return { plain: true }; }
         if (verdict !== 'ok') {
           // One body read decides WHICH truth the notice tells. A spent free
           // quota is not an unreachable librarian, and saying so keeps the
@@ -519,22 +539,19 @@
           let body = null;
           try { body = await res.json(); } catch (e) { body = null; }
           const spent = Boolean(body && typeof body === 'object' && body.exhausted === true);
-          return {
-            results, librarianCount: 0,
-            notice: spent ? LIBRARIAN_QUOTA_NOTICE : LIBRARIAN_NOTICE,
-          };
+          return { notice: spent ? LIBRARIAN_QUOTA_NOTICE : LIBRARIAN_NOTICE };
         }
 
         let payload;
         try {
           payload = await res.json();
         } catch (e) {
-          return failed;                       // malformed body
+          return { notice: LIBRARIAN_NOTICE };     // malformed body
         }
         const rows = pickRows(payload);
-        if (!rows) return failed;              // schema-invalid body
+        if (!rows) return { notice: LIBRARIAN_NOTICE };   // schema-invalid body
         remember(key, rows);
-        return answered(rows);
+        return { rows };
       } finally {
         if (timer) clearTimeout(timer);
       }

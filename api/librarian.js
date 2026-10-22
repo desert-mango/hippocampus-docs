@@ -1101,7 +1101,7 @@ function salvageModelJson(text) {
 /* Models wrap JSON in fences and reasoning models prepend a think block; strip
    both, then parse strictly. Anything that still will not parse is handed to
    the closer repair and then to the salvage above; only when BOTH give up is it
-   a provider failure, so the other provider gets its turn. Returns the whole
+   a provider failure, so the next entry in the ladder gets its turn. Returns the whole
    hop document ({hits, open?}), because the walk needs `open` as well as
    `hits`. An EMPTY answer has nothing to read and stays a failure. */
 function parseModelJson(content) {
@@ -1119,7 +1119,7 @@ function parseModelJson(content) {
     // `{"hits":[{...}]` with finish_reason "stop" — on a third of queries.
     // Append the closers the text is missing and try once more. Only missing
     // closers are repaired; anything else that will not parse falls to the
-    // salvage, which recovers ids or gives the other entry its turn.
+    // salvage, which recovers ids or gives the next entry in the ladder its turn.
     const patched = closeOpenBrackets(text);
     if (patched === null) return salvageModelJson(text);
     try {
