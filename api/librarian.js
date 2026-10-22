@@ -56,7 +56,7 @@
                one entry per ATTEMPT: a primary re-asked after a garbled or
                empty answer appears again as attempt 2 on the same hop.
      EVERY answer, the pre-body 405/403/429 included, carries
-     `x-librarian-version: 4` and `x-librarian-ladder: inkling,flint,laguna,gemma`
+     `x-librarian-version: 5` and `x-librarian-ladder: flint,laguna,dots,gemma`
      (the provider names, in order, built once at module load). They cost
      nothing — no body read, no model call — and are the zero-quota readiness
      probe: `curl -sI -X POST …/api/librarian` names the handler and the ladder
@@ -69,7 +69,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LIBRARIAN_VERSION = '4';
+const LIBRARIAN_VERSION = '5';
 
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_PICKS = 8;
@@ -155,6 +155,24 @@ const MAX_OPEN_REPOS = 3;
    field (a model that cannot turn thinking off answers 400 to one, as minimax
    m2.7 did). None is a Llama derivative (policy).
 
+   S4 (2026-10-22, same day): five live probes of S3 answered 0 of 5.
+   inkling-small :free answered HTTP 403 every time — "only available on
+   agentic harnesses", a gate the public API does not show — so it is gone.
+   flint timed out 5 of 5 at its ~8.8s share and laguna-xs 3 of 5 at 4s (the
+   other 2 were 429s): far past what ~350 answer tokens cost at their measured
+   speed, which is the signature of hidden thinking before the answer. So
+   every rung now sends `reasoning: {enabled: false}` — the switch that took
+   nemotron from 15/15 timeouts to ~3s answers on 2026-09-04. A model that
+   cannot turn thinking off answers 400 at once, and the shared budget hands
+   its time to the next rung. dots-3-note (AtlasCloud, 98.0%, 60 tok/s) fills
+   the fourth slot; order is still availability x throughput.
+     flint-v1.0 :free      (Recursive)          99.5%  101 tok/s
+     laguna-xs-2.1 :free   (Poolside)           95.8%   76 tok/s
+     dots-3-note :free     (AtlasCloud)         98.0%   60 tok/s
+     gemma-4-26b :free     (Google AI Studio)   98.0%   43 tok/s
+   The hop-1 prompt is ~45k chars (~12.8k tokens: the whole catalog of 94
+   pages, 94 repositories and 90 CAD parts); every rung serves 256k context.
+
    THE WALK-HOP TRADE-OFF, stated: MAX_MODEL_CALLS is 4 and the ladder is 4
    deep, so a hop 1 that falls through the whole ladder leaves no call for hop
    2. Accepted: an answer from any model beats a walk nobody gets to see, and
@@ -165,25 +183,20 @@ const MAX_OPEN_REPOS = 3;
    servers usually ignore unknown fields, but that is a habit, not a contract.
    No entry has a fixed timeout: see SEARCH_BUDGET_MS and rungDeadline(). */
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// S4: thinking off on every rung — see the S4 note above.
+const NO_THINKING = Object.freeze({ enabled: false });
 const PROVIDERS = [
-  {
-    name: 'inkling',
-    keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_INKLING_URL',
-    defaultUrl: OPENROUTER_URL,
-    // POLICY, NOT BENCHMARK: a Llama-family model is forbidden here — at any
-    // tier, in any role, fallback included. providerConfig() refuses an
-    // override that names one.
-    model: 'thinkingmachines/inkling-small:free',
-    modelEnv: 'LIBRARIAN_INKLING_MODEL',
-  },
   {
     name: 'flint',
     keyEnv: 'OPENROUTER_API_KEY',
     urlEnv: 'LIBRARIAN_FLINT_URL',
     defaultUrl: OPENROUTER_URL,
+    // POLICY, NOT BENCHMARK: a Llama-family model is forbidden here — at any
+    // tier, in any role, fallback included. providerConfig() refuses an
+    // override that names one.
     model: 'recursive/flint-v1.0:free',
     modelEnv: 'LIBRARIAN_FLINT_MODEL',
+    reasoning: NO_THINKING,
   },
   {
     name: 'laguna',
@@ -192,6 +205,16 @@ const PROVIDERS = [
     defaultUrl: OPENROUTER_URL,
     model: 'poolside/laguna-xs-2.1:free',
     modelEnv: 'LIBRARIAN_LAGUNA_MODEL',
+    reasoning: NO_THINKING,
+  },
+  {
+    name: 'dots',
+    keyEnv: 'OPENROUTER_API_KEY',
+    urlEnv: 'LIBRARIAN_DOTS_URL',
+    defaultUrl: OPENROUTER_URL,
+    model: 'dots-studio/dots-3-note-preview:free',
+    modelEnv: 'LIBRARIAN_DOTS_MODEL',
+    reasoning: NO_THINKING,
   },
   {
     name: 'gemma',
@@ -200,6 +223,7 @@ const PROVIDERS = [
     defaultUrl: OPENROUTER_URL,
     model: 'google/gemma-4-26b-a4b-it:free',
     modelEnv: 'LIBRARIAN_GEMMA_MODEL',
+    reasoning: NO_THINKING,
   },
 ];
 
@@ -225,9 +249,8 @@ const FUNCTION_MAX_DURATION_MS = 15000;   // mirrors vercel.json maxDuration: 15
 const MAX_MODEL_CALLS = 4;
 const MIN_HOP_MS = 2500;    // never start a hop that cannot plausibly finish
 // Held back for the next rung while one remains: ~350 tokens at the slowest
-// rung's 43 tok/s is ~8s, but at the 76-107 tok/s of the first three it is
-// 3.5-4.5s, and 4000 is what keeps the primary's own share at 9000 — above
-// inkling's measured e2e p90 of 8.6s.
+// rung's 43 tok/s is ~8s, but at the 60-101 tok/s of the first three it is
+// 3.5-6s, and 4000 is what keeps the primary's own share at 9000.
 const FALLBACK_RESERVE_MS = 4000;
 const WALK_THRESHOLD = 3;   // 3+ keyword hits is already a strong answer
 
@@ -1323,8 +1346,8 @@ async function runSearch(ask, ctx, cfgs, doFetch, now) {
   let promptChars = 0;
 
   /* One hop, one attempt per rung and never more than the search has calls for:
-       primary → (primary again, ONLY after a parse or empty failure) → flint
-     → laguna → gemma.
+       primary → (primary again, ONLY after a parse or empty failure) → laguna
+     → dots → gemma.
      The retry is the 2026-09-05 measurement made into a rule. The same request,
      sent three times, garbled once and came back empty once — the free serving
      is non-deterministic, and a re-ask of the SAME model is the cheapest fix

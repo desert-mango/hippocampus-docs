@@ -769,7 +769,7 @@ test('an exhausted 502 shows the quota notice, not the unreachable one', async (
   const spent = createLibrarian({
     fetch: spyFetch(resp(502, {
       error: 'no provider answered',
-      providers: [{ provider: 'inkling', hop: 1, reason: 'HTTP 429: rate limited' }],
+      providers: [{ provider: 'flint', hop: 1, reason: 'HTTP 429: rate limited' }],
       exhausted: true,
     })),
   });

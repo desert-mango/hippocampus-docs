@@ -34,7 +34,7 @@
    PROVIDER-COMPARISON MODE — which model answers better, on the KEYWORD probes:
 
      node tools/bench_librarian.mjs --base http://127.0.0.1:8131
-     node tools/bench_librarian.mjs --base https://<deployment> --provider inkling
+     node tools/bench_librarian.mjs --base https://<deployment> --provider flint
      node tools/bench_librarian.mjs --base https://<deployment> --delay 12000
 
    The semantic probes are excluded from it by construction: their `expect` is a
@@ -99,7 +99,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const HC = require(path.join(ROOT, 'js', 'search.js'));
 
-const PROVIDERS = ['inkling', 'flint', 'laguna', 'gemma'];   // api/librarian.js's ladder (S3)
+const PROVIDERS = ['flint', 'laguna', 'dots', 'gemma'];   // api/librarian.js's ladder (S4)
 const KINDS = ['semantic', 'keyword'];
 const REQUEST_TIMEOUT_MS = 30000;   // above the function's own 15s ceiling
 // dev_site.mjs's own default port: probe mode is the local-first mode, so it
@@ -667,7 +667,7 @@ try {
   process.exit(1);
 }
 const USAGE =
-  'usage: node tools/bench_librarian.mjs --base <url> [--provider inkling|flint|laguna|gemma] [--delay <ms>]\n'
+  'usage: node tools/bench_librarian.mjs --base <url> [--provider flint|laguna|dots|gemma] [--delay <ms>]\n'
   + '       node tools/bench_librarian.mjs --probes [--base <url>] [--delay <ms>]'
   + ' [--kind semantic|keyword] [--probe "<q>"]\n'
   + '  --probes runs data/search-probes.json through the real client engine and prints, per\n'
@@ -775,8 +775,8 @@ if (blocked.length) {
   process.stdout.write(
     '\nNo winner. A provider is only declared the winner when EVERY one answered all '
     + `${cases.length} queries error-free at temperature 0, so that availability can never `
-    + 'look like quality.\nThe default order in api/librarian.js (inkling primary, then '
-    + 'flint, laguna, gemma) stays PROVISIONAL.\n');
+    + 'look like quality.\nThe default order in api/librarian.js (flint primary, then '
+    + 'laguna, dots, gemma) stays PROVISIONAL.\n');
 } else {
   const ranked = rows.slice().sort((a, b) =>
     b.top1 - a.top1 || b.inPicks - a.inPicks || median(a.latencies) - median(b.latencies));
