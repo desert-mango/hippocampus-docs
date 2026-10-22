@@ -46,7 +46,7 @@
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "5 September 2026",
+        "last_substantive_modification": "22 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Answer documentation queries through a bounded serverless search of the site's graphs."
       },

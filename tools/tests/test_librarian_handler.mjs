@@ -140,7 +140,7 @@ function providerStub(answers) {
   return fn;
 }
 
-/* All three provider entries read the SAME variable — they are three models
+/* All four provider entries read the SAME variable — they are four models
    behind one gateway (S2), not three vendors. The name says "KEYS" in the plural only because
    it is the whole key environment a call needs. */
 const KEYS = { OPENROUTER_API_KEY: 'openrouter-test-key' };
@@ -284,7 +284,7 @@ test('a good provider answer is validated, filtered and capped at 8', async () =
   }]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nemotron', 'nemotron super is the primary');
+  assert.equal(r.json.provider, 'inkling', 'inkling small is the primary');
   assert.ok(Array.isArray(r.json.results));
   assert.equal(r.json.results.length, 8, 'capped at 8');
   assert.equal(r.json.results[0].id, known[5]);
@@ -311,11 +311,10 @@ test('the outgoing provider request is temperature 0 and carries the candidates'
   assert.equal(r.code, 200);
   const sent = fetchStub.calls[0];
   assert.equal(sent.body.temperature, 0);
-  assert.equal(sent.body.model, 'nvidia/nemotron-3-super-120b-a12b:free');
+  assert.equal(sent.body.model, 'thinkingmachines/inkling-small:free');
   assert.ok(sent.body.model.endsWith(':free'), 'free models only — Kyle, 2026-09-04');
-  assert.deepEqual(sent.body.provider, { order: ['Nvidia'], allow_fallbacks: true },
-    'the upstream is pinned to the one that was measured');
-  assert.deepEqual(sent.body.reasoning, { enabled: false }, 'a re-rank is not a reasoning task');
+  assert.equal(sent.body.provider, undefined, 'S3: one upstream per free variant, no pin');
+  assert.equal(sent.body.reasoning, undefined, 'S3: no reasoning field, which some models refuse');
   assert.equal(sent.body.max_tokens, 2000, '900 truncated answers with long code ids');
   assert.ok(!/llama/i.test(sent.body.model), 'a Llama-family model is forbidden by policy');
   assert.equal(sent.init.method, 'POST');
@@ -356,12 +355,12 @@ test('an answer that stops one closer short is repaired, not rejected', async ()
   const fetchStub = providerStub([short]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'nemotron');
+  assert.equal(r.json.provider, 'inkling');
   assert.equal(fetchStub.calls.length, 1, 'no fallback was needed');
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
 });
 
-test('a provider that answers 200 with unusable content twice falls through (S2: to minimax)', async () => {
+test('a provider that answers 200 with unusable content twice falls through (S3: to flint)', async () => {
   /* STRICTLY STRONGER than the version this replaces. That one stubbed ONE
      unusable answer and asserted only that the OTHER entry answered on call 2.
      A parse or empty failure now buys the primary one retry of itself first
@@ -373,7 +372,7 @@ test('a provider that answers 200 with unusable content twice falls through (S2:
   const fetchStub = providerStub(['I cannot help with that.', 'still not JSON', [id]]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'minimax');
+  assert.equal(r.json.provider, 'flint');
   assert.equal(fetchStub.calls.length, 3);
   assert.equal(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'call 2 is the SAME entry retried, not the fallback');
@@ -383,36 +382,36 @@ test('a provider that answers 200 with unusable content twice falls through (S2:
 
 // ------------------------------------------------------------ the fallback --
 
-test('S2: a failing primary falls back to minimax, which carries no Nvidia pin', async () => {
+test('S3: a failing primary falls back to flint, and no entry sends a pin or a reasoning field', async () => {
   const id = ASK.candidates[4].id;
-  const fetchStub = providerStub([{ status: 503, text: 'nvidia is down' }, [id]]);
+  const fetchStub = providerStub([{ status: 503, text: 'inkling is down' }, [id]]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.provider, 'minimax');
+  assert.equal(r.json.provider, 'flint');
   assert.deepEqual(r.json.results.map((x) => x.id), [id]);
   assert.equal(fetchStub.calls.length, 2, 'exactly one retry, on the OTHER provider');
   assert.equal(fetchStub.calls[0].url, fetchStub.calls[1].url,
     'same gateway by construction — see the PROVIDERS note in api/librarian.js');
   assert.notEqual(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model,
     'the retry used the OTHER entry: same endpoint, different model');
-  assert.equal(fetchStub.calls[1].body.model, 'minimax/minimax-m3.1-flash:free');
+  assert.equal(fetchStub.calls[0].body.model, 'thinkingmachines/inkling-small:free');
+  assert.equal(fetchStub.calls[1].body.model, 'recursive/flint-v1.0:free');
   assert.ok(fetchStub.calls[1].body.model.endsWith(':free'), 'the fallback is free too');
-  assert.equal(fetchStub.calls[1].body.provider, undefined,
-    'minimax is a different upstream: no Nvidia routing pin rides along');
-  assert.equal(fetchStub.calls[1].body.reasoning, undefined,
-    'minimax refuses `reasoning: disabled` (measured 2026-09-04), so none is sent');
-  assert.deepEqual(fetchStub.calls[0].body.provider.order, ['Nvidia'], 'the primary keeps its pin');
-  assert.deepEqual(fetchStub.calls[0].body.reasoning, { enabled: false },
-    'nemotron thinks past the deadline unless told not to');
+  for (const c of fetchStub.calls) {
+    assert.equal(c.body.provider, undefined,
+      'each free variant has one upstream: no routing pin rides along');
+    assert.equal(c.body.reasoning, undefined,
+      'a model that cannot turn thinking off answers 400 to `reasoning` (minimax m2.7), so none is sent');
+  }
 });
 
-test('S2: all three providers failing is a 502 that says why', async () => {
+test('S3: all four providers failing is a 502 that says why', async () => {
   const fetchStub = providerStub([{ status: 500, text: 'boom' }]);
   const r = await call('POST', ASK, { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
-  assert.equal(fetchStub.calls.length, 3);
+  assert.equal(fetchStub.calls.length, 4);
   assert.ok(Array.isArray(r.json.providers));
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['inkling', 'flint', 'laguna', 'gemma']);
   assert.equal(r.json.exhausted, false);
   for (const p of r.json.providers) assert.ok(p.reason, 'each failure carries a reason');
 });
@@ -437,35 +436,35 @@ test('no keys at all is a 502 naming the missing environment variables', async (
    called. The coupling is asserted directly rather than left implicit — it is
    the cost recorded in the PROVIDERS note, and splitting back into two vendors
    should have to change this line on purpose. */
-test('S2: all three entries share one key, so a missing key skips every provider', async () => {
+test('S3: all four entries share one key, so a missing key skips every provider', async () => {
   const providers = handler.PROVIDERS;
-  assert.equal(providers.length, 3);
+  assert.equal(providers.length, 4);
   for (const p of providers) assert.equal(p.keyEnv, 'OPENROUTER_API_KEY');
 
   const fetchStub = providerStub([[ASK.candidates[1].id]]);
   const r = await call('POST', ASK, { env: {}, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'no key means no provider call at all');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['inkling', 'flint', 'laguna', 'gemma']);
   for (const p of r.json.providers) assert.match(p.reason, /OPENROUTER_API_KEY/);
 });
 
 test('a provider hint pins the request to that provider with no fallback', async () => {
   const fetchStub = providerStub([{ status: 500, text: 'boom' }]);
-  const r = await call('POST', Object.assign({ provider: 'nemotron' }, ASK),
+  const r = await call('POST', Object.assign({ provider: 'inkling' }, ASK),
     { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 1, 'pinned: no fallback to the other provider');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['inkling']);
 });
 
-test('the base URLs and the nemotron model id are environment-overridable', async () => {
+test('the base URLs and the inkling model id are environment-overridable', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
   const env = Object.assign({}, KEYS, {
-    LIBRARIAN_NEMOTRON_URL: 'http://127.0.0.1:9/mock/v1/chat/completions',
-    LIBRARIAN_NEMOTRON_MODEL: 'nvidia/some-other-model:free',
+    LIBRARIAN_INKLING_URL: 'http://127.0.0.1:9/mock/v1/chat/completions',
+    LIBRARIAN_INKLING_MODEL: 'nvidia/some-other-model:free',
   });
-  const r = await call('POST', Object.assign({ provider: 'nemotron' }, ASK), { env, fetch: fetchStub });
+  const r = await call('POST', Object.assign({ provider: 'inkling' }, ASK), { env, fetch: fetchStub });
   assert.equal(r.code, 200);
   assert.equal(fetchStub.calls[0].url, 'http://127.0.0.1:9/mock/v1/chat/completions');
   assert.equal(fetchStub.calls[0].body.model, 'nvidia/some-other-model:free');
@@ -475,8 +474,8 @@ test('a Llama-family model override is refused, not forwarded', async () => {
   // POLICY: no Llama model in any role. The env override is the only path by
   // which a different id can reach OpenRouter, so it must be the checked path.
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
-  const env = Object.assign({}, KEYS, { LIBRARIAN_NEMOTRON_MODEL: 'meta-llama/llama-4-maverick' });
-  const r = await call('POST', Object.assign({ provider: 'nemotron' }, ASK), { env, fetch: fetchStub });
+  const env = Object.assign({}, KEYS, { LIBRARIAN_INKLING_MODEL: 'meta-llama/llama-4-maverick' });
+  const r = await call('POST', Object.assign({ provider: 'inkling' }, ASK), { env, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'the forbidden model must never be sent upstream');
   assert.match(r.json.providers[0].reason, /Llama-family model, which policy forbids/);
@@ -484,7 +483,7 @@ test('a Llama-family model override is refused, not forwarded', async () => {
   const stub2 = providerStub([[ASK.candidates[0].id]]);
   const r2 = await call('POST', ASK, { env, fetch: stub2 });
   assert.equal(r2.code, 200);
-  assert.equal(r2.json.provider, 'minimax');
+  assert.equal(r2.json.provider, 'flint');
   assert.equal(stub2.calls.length, 1, 'the forbidden primary was never called');
 });
 
@@ -493,21 +492,22 @@ test('a paid model override is refused, so a stale env var cannot start billing'
   // the built-in ids. A paid id (no :free suffix) on either entry is skipped.
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
   const env = Object.assign({}, KEYS, {
-    LIBRARIAN_NEMOTRON_MODEL: 'nvidia/nemotron-3-super-120b-a12b',
-    LIBRARIAN_MINIMAX_MODEL: 'minimax/minimax-m3.1-flash',
+    LIBRARIAN_INKLING_MODEL: 'thinkingmachines/inkling-small',
+    LIBRARIAN_FLINT_MODEL: 'recursive/flint-v1.0',
+    LIBRARIAN_LAGUNA_MODEL: 'minimax/minimax-m3.1-flash',
     LIBRARIAN_GEMMA_MODEL: 'openai/gpt-oss-120b',
   });
   const r = await call('POST', ASK, { env, fetch: fetchStub });
   assert.equal(r.code, 502);
   assert.equal(fetchStub.calls.length, 0, 'no paid model is ever sent upstream');
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['inkling', 'flint', 'laguna', 'gemma']);
   for (const p of r.json.providers) assert.match(p.reason, /paid model; only :free variants/);
 });
 
 test('the primary base URL is environment-overridable (this is what dev_site mocks)', async () => {
   const fetchStub = providerStub([[ASK.candidates[0].id]]);
   const env = Object.assign({}, KEYS,
-    { LIBRARIAN_NEMOTRON_URL: 'http://127.0.0.1:8131/__mock/v1/chat/completions' });
+    { LIBRARIAN_INKLING_URL: 'http://127.0.0.1:8131/__mock/v1/chat/completions' });
   const r = await call('POST', ASK, { env, fetch: fetchStub });
   assert.equal(r.code, 200);
   assert.equal(fetchStub.calls[0].url, 'http://127.0.0.1:8131/__mock/v1/chat/completions');
@@ -515,43 +515,44 @@ test('the primary base URL is environment-overridable (this is what dev_site moc
 
 // ------------------------------------------------------- free-only policy --
 
-test('S2: every provider is a free variant, three entries, and the deadlines sum to the budget', () => {
-  // Kyle, 2026-09-04: free models only, set and forget. The budget is one
-  // SEARCH budget: every call is clamped to what is left of SEARCH_BUDGET_MS,
-  // and that budget plus slack sits under maxDuration: 15. S2 (2026-10-21): the
-  // ladder is three models on three upstreams — nemotron 6000, minimax 4000,
-  // gemma 3000 — and a hop that times out on all three spends EXACTLY the
-  // budget, by constants alone, with no appeal to runtime luck.
+test('S3: every provider is a free variant, four entries on four upstreams, and the budget is arithmetic', () => {
+  // Kyle, 2026-09-04: free models only, set and forget. S3 (2026-10-22): no
+  // entry owns a fixed timeout any more — each rung gets what the search has
+  // left minus FALLBACK_RESERVE_MS for the next one — and the budget plus slack
+  // still sits under maxDuration: 15, by constants alone.
   const providers = handler.PROVIDERS;
-  assert.deepEqual(providers.map((p) => p.name), ['nemotron', 'minimax', 'gemma']);
-  assert.deepEqual(providers.map((p) => p.timeoutMs), [6000, 4000, 3000]);
+  assert.deepEqual(providers.map((p) => p.name), ['inkling', 'flint', 'laguna', 'gemma']);
   assert.deepEqual(providers.map((p) => p.model), [
-    'nvidia/nemotron-3-super-120b-a12b:free',
-    'minimax/minimax-m3.1-flash:free',
+    'thinkingmachines/inkling-small:free',
+    'recursive/flint-v1.0:free',
+    'poolside/laguna-xs-2.1:free',
     'google/gemma-4-26b-a4b-it:free',
   ]);
-  assert.deepEqual(providers[0].routing && providers[0].routing.order, ['Nvidia']);
-  assert.ok(!providers[1].routing && !providers[2].routing, 'only nemotron is pinned to an upstream');
   assert.deepEqual(providers.map((p) => [p.modelEnv, p.urlEnv]), [
-    ['LIBRARIAN_NEMOTRON_MODEL', 'LIBRARIAN_NEMOTRON_URL'],
-    ['LIBRARIAN_MINIMAX_MODEL', 'LIBRARIAN_MINIMAX_URL'],
+    ['LIBRARIAN_INKLING_MODEL', 'LIBRARIAN_INKLING_URL'],
+    ['LIBRARIAN_FLINT_MODEL', 'LIBRARIAN_FLINT_URL'],
+    ['LIBRARIAN_LAGUNA_MODEL', 'LIBRARIAN_LAGUNA_URL'],
     ['LIBRARIAN_GEMMA_MODEL', 'LIBRARIAN_GEMMA_URL'],
   ]);
+  const vendors = new Set(providers.map((p) => p.model.split('/')[0]));
+  assert.equal(vendors.size, providers.length, 'one upstream per rung');
   for (const p of providers) {
     assert.ok(p.model.endsWith(':free'), `${p.name} must be a free model, got ${p.model}`);
     assert.ok(!/llama/i.test(p.model), `${p.name} must not be a Llama-family model`);
-    assert.ok(Number.isInteger(p.timeoutMs) && p.timeoutMs > 0, `${p.name} needs a deadline`);
-    assert.ok(p.timeoutMs <= handler.SEARCH_BUDGET_MS,
-      `${p.name}'s ceiling ${p.timeoutMs}ms must fit the search budget`);
+    assert.ok(!/^nvidia\//.test(p.model), `${p.name}: S3 dropped every NVIDIA rung`);
+    assert.equal(p.timeoutMs, undefined, `${p.name}: S3 has no fixed per-rung timeout`);
+    assert.equal(p.routing, undefined, `${p.name}: one upstream, no pin`);
+    assert.equal(p.reasoning, undefined, `${p.name}: no reasoning field`);
   }
   assert.ok(handler.SEARCH_BUDGET_MS + handler.TIMEOUT_SLACK_MS <= handler.FUNCTION_MAX_DURATION_MS,
     'the search budget plus slack must sit under the function ceiling');
-  const ceilings = providers.reduce((n, p) => n + p.timeoutMs, 0);
-  assert.equal(ceilings, handler.SEARCH_BUDGET_MS,
-    `a hop that times out on every entry costs ${ceilings}ms — the budget exactly`);
   assert.equal(handler.SEARCH_BUDGET_MS, 13000);
-  assert.equal(handler.MAX_MODEL_CALLS, 3, 'at most three model calls per search');
+  assert.equal(handler.MAX_MODEL_CALLS, 4, 'at most four model calls per search');
+  assert.equal(handler.MAX_MODEL_CALLS, providers.length, 'one call per rung, no more');
   assert.ok(handler.MIN_HOP_MS > 0 && handler.MIN_HOP_MS < handler.SEARCH_BUDGET_MS);
+  assert.equal(handler.FALLBACK_RESERVE_MS, 4000);
+  assert.ok(handler.FALLBACK_RESERVE_MS >= handler.MIN_HOP_MS,
+    'the reserve is enough for the next rung to be started at all');
   const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   const fn = vercel.functions && vercel.functions['api/librarian.js'];
   assert.ok(fn, 'vercel.json declares api/librarian.js');
@@ -559,28 +560,6 @@ test('S2: every provider is a free variant, three entries, and the deadlines sum
     'the constant mirrors vercel.json; change both or neither');
   assert.equal(fn.includeFiles, '{data/graph,search}/**',
     'the walk reads the graph AND the search index out of its own bundle');
-});
-
-test('each provider is aborted at its own deadline, and the message says which', async () => {
-  // A stub that never resolves until aborted; S2: the primary is cut at 6000,
-  // minimax at 4000, gemma at 3000, and the reasons must name each one.
-  const timers = [];
-  const hanging = (url, init) => new Promise((resolve, reject) => {
-    init.signal.addEventListener('abort', () => {
-      const e = new Error('aborted'); e.name = 'AbortError'; reject(e);
-    });
-  });
-  const realSetTimeout = global.setTimeout;
-  global.setTimeout = (fn, ms, ...a) => { timers.push(ms); return realSetTimeout(fn, 0, ...a); };
-  try {
-    const r = await call('POST', ASK, { env: KEYS, fetch: hanging });
-    assert.equal(r.code, 502);
-    assert.deepEqual(r.json.providers.map((p) => p.reason),
-      ['timed out after 6000ms', 'timed out after 4000ms', 'timed out after 3000ms']);
-    assert.ok([6000, 4000, 3000].every((ms) => timers.includes(ms)), 'all three deadlines were armed');
-  } finally {
-    global.setTimeout = realSetTimeout;
-  }
 });
 
 // ------------------------------------------------------- no Vercel helpers --
@@ -920,25 +899,25 @@ test('hop 1 answering open: [] costs exactly one call and reports hops 1', async
   assert.equal(r.json.results.length, 1);
 });
 
-test('a hop 2 that fails 503 then 503 still answers 200 with partial: true after 3 calls', async () => {
+test('a hop 2 that fails 503 on every rung still answers 200 with partial: true after 4 calls', async () => {
   const fetchStub = providerStub([
     { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },
-    { status: 503, text: 'nvidia is down' },
+    { status: 503, text: 'upstream is down' },
   ]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(r.json.calls, 3, 'hop 1 once, hop 2 on both entries');
-  assert.equal(fetchStub.calls.length, 3);
+  assert.equal(r.json.calls, 4, 'hop 1 once, hop 2 on the three calls the cap leaves');
+  assert.equal(fetchStub.calls.length, 4);
   assert.equal(r.json.hops, 2);
   assert.equal(r.json.partial, true, 'the survey answered, the walk did not');
   assert.deepEqual(r.json.results.map((x) => x.href), [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('S2: minimax takes hop 1 and nemotron takes hop 2 in three calls — the stub throws on call 4', async () => {
+test('S3: flint takes hop 1 and inkling takes hop 2 in three calls — the stub throws on call 4', async () => {
   let extra = false;
   const fetchStub = providerStub([
-    { status: 503, text: 'super is down' },
+    { status: 503, text: 'inkling is down' },
     { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },
     { hits: [AFRO_SYM, ESC_REPO] },
     (n) => { extra = true; throw new Error(`there must never be a call ${n}`); },
@@ -951,25 +930,26 @@ test('S2: minimax takes hop 1 and nemotron takes hop 2 in three calls — the st
   assert.equal(r.json.calls, 3);
   assert.equal(r.json.hops, 2);
   assert.equal(r.json.partial, false);
-  assert.equal(r.json.provider, 'nemotron', 'provider names whoever answered the LAST hop');
+  assert.equal(r.json.provider, 'inkling', 'provider names whoever answered the LAST hop');
 });
 
-test('the 3-call cap skips the hop-2 fallback rather than spending a fourth call', async () => {
+test('the 4-call cap skips the hop-2 fallback rather than spending a fifth call', async () => {
   let extra = false;
   const fetchStub = providerStub([
-    { status: 503, text: 'super is down' },              // hop 1, call 1
-    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },      // hop 1, call 2 (minimax)
-    { status: 503, text: 'super is down again' },        // hop 2, call 3
-    (n) => { extra = true; throw new Error(`MAX_MODEL_CALLS is 3, not ${n}`); },
+    { status: 503, text: 'inkling is down' },            // hop 1, call 1
+    { status: 503, text: 'flint is down' },              // hop 1, call 2
+    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },      // hop 1, call 3 (laguna)
+    { status: 503, text: 'inkling is down again' },      // hop 2, call 4
+    (n) => { extra = true; throw new Error(`MAX_MODEL_CALLS is 4, not ${n}`); },
   ]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
   assert.equal(extra, false, 'the hop-2 fallback must be skipped, not spent');
-  assert.equal(r.json.calls, 3);
+  assert.equal(r.json.calls, 4);
   assert.equal(r.json.hops, 2, 'hop 2 was attempted, and failed');
   assert.equal(r.json.partial, true);
-  assert.equal(r.json.provider, 'minimax', 'the last hop that answered was hop 1, on minimax');
+  assert.equal(r.json.provider, 'laguna', 'the last hop that answered was hop 1, on laguna');
   assert.equal(r.json.results.length, 2);
 });
 
@@ -991,27 +971,28 @@ test('a parse failure retries the SAME primary once, before the fallback', async
   assert.equal(r.code, 200);
   assert.equal(extra, false);
   assert.equal(r.json.calls, 2);
-  assert.equal(r.json.provider, 'nemotron', 'the retry is the same entry, not the weaker fallback');
+  assert.equal(r.json.provider, 'inkling', 'the retry is the same entry, not the weaker fallback');
   assert.equal(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model);
   assert.equal(r.json.hops, 1);
   assert.equal(r.json.results.length, 2);
 });
 
-test('two parse failures spend the retry and then the fallback — three calls, never four', async () => {
+test('parse failures spend the retry and then the fallbacks — four calls, never five', async () => {
   let extra = false;
   const fetchStub = providerStub([
     'I cannot help with that.',                       // hop 1, call 1
     'still not JSON',                                 // hop 1, call 2 — the RETRY
-    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },   // hop 1, call 3 — the fallback
-    (n) => { extra = true; throw new Error(`MAX_MODEL_CALLS is 3, not ${n}`); },
+    'flint garbled too',                              // hop 1, call 3 — no retry off the primary
+    { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] },   // hop 1, call 4 — laguna
+    (n) => { extra = true; throw new Error(`MAX_MODEL_CALLS is 4, not ${n}`); },
   ]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 200);
-  assert.equal(extra, false, 'the retry never buys a fourth call');
-  assert.equal(r.json.calls, 3);
-  assert.equal(r.json.provider, 'minimax');
-  assert.equal(r.json.hops, 1, 'the 3-call cap left nothing for the walk');
+  assert.equal(extra, false, 'the retry never buys a fifth call');
+  assert.equal(r.json.calls, 4);
+  assert.equal(r.json.provider, 'laguna');
+  assert.equal(r.json.hops, 1, 'the 4-call cap left nothing for the walk');
   assert.equal(r.json.partial, true, 'a non-empty open that was never walked is partial');
   assert.equal(fetchStub.calls[0].body.model, fetchStub.calls[1].body.model, 'call 2 was the retry');
   assert.notEqual(fetchStub.calls[2].body.model, fetchStub.calls[0].body.model, 'call 3 was the fallback');
@@ -1032,7 +1013,7 @@ test('a primary TIMEOUT is not retried — it goes straight to the other entry',
     assert.equal(r.code, 200);
     assert.equal(n, 2, 'a slow model does not get a second deadline of its own');
     assert.equal(r.json.calls, 2);
-    assert.equal(r.json.provider, 'minimax');
+    assert.equal(r.json.provider, 'flint');
   } finally {
     global.setTimeout = realSetTimeout;
   }
@@ -1044,15 +1025,15 @@ test('an HTTP 429 goes straight to the fallback, and all-429 still reports exhau
     { env: KEYS, fetch: one429 });
   assert.equal(r.code, 200);
   assert.equal(one429.calls.length, 2, 'a quota refusal is not a garble — no retry of the same entry');
-  assert.equal(r.json.provider, 'minimax');
+  assert.equal(r.json.provider, 'flint');
 
   const all429 = providerStub([{ status: 429, text: 'rate limit exceeded' }]);
   const r2 = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: all429 });
   assert.equal(r2.code, 502);
-  assert.equal(all429.calls.length, 3, 'still exactly one attempt per entry (S2: three entries)');
+  assert.equal(all429.calls.length, 4, 'still exactly one attempt per entry (S3: four entries)');
   assert.equal(r2.json.exhausted, true);
-  assert.deepEqual(r2.json.providers.map((p) => p.attempt), [1, 1, 1]);
+  assert.deepEqual(r2.json.providers.map((p) => p.attempt), [1, 1, 1, 1]);
 });
 
 test('every 502 provider entry names its attempt, and the retry is attempt 2', async () => {
@@ -1060,9 +1041,9 @@ test('every 502 provider entry names its attempt, and the retry is attempt 2', a
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: fetchStub });
   assert.equal(r.code, 502);
-  assert.equal(fetchStub.calls.length, 3, 'primary, primary retry, fallback — and then the cap');
+  assert.equal(fetchStub.calls.length, 4, 'primary, primary retry, two fallbacks — and then the cap');
   assert.deepEqual(r.json.providers.map((p) => [p.provider, p.hop, p.attempt]),
-    [['nemotron', 1, 1], ['nemotron', 1, 2], ['minimax', 1, 1]]);
+    [['inkling', 1, 1], ['inkling', 1, 2], ['flint', 1, 1], ['laguna', 1, 1]]);
   assert.equal(r.json.exhausted, false, 'a garble is not a quota problem');
 });
 
@@ -1078,7 +1059,7 @@ test('hop 2 gets the same single retry of its primary', async () => {
   assert.equal(r.json.calls, 3);
   assert.equal(r.json.hops, 2);
   assert.equal(r.json.partial, false, 'the retried walk answered');
-  assert.equal(r.json.provider, 'nemotron');
+  assert.equal(r.json.provider, 'inkling');
   assert.equal(fetchStub.calls[1].body.model, fetchStub.calls[2].body.model,
     'the hop-2 retry is the same entry too');
   assert.equal(r.json.results[0].title, 'AfroESC');
@@ -1109,13 +1090,13 @@ test('the hop-1 prompt pulls the documenting page and the implementing repo toge
     `the hop-1 system prompt is ${system.length} chars — every char is paid on every search`);
 });
 
-test('all-429 failures report exhausted; a 429/503 mix does not (S2: three hop-1 entries)', async () => {
+test('all-429 failures report exhausted; a 429/503 mix does not (S3: four hop-1 entries)', async () => {
   const all429 = providerStub([{ status: 429, text: 'rate limit exceeded' }]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: all429 });
   assert.equal(r.code, 502);
   assert.equal(r.json.exhausted, true, 'every failure was an upstream 429');
-  assert.deepEqual(r.json.providers.map((p) => p.hop), [1, 1, 1]);
+  assert.deepEqual(r.json.providers.map((p) => p.hop), [1, 1, 1, 1]);
   const mixed = providerStub([{ status: 429, text: 'rate limit exceeded' }, { status: 503, text: 'down' }]);
   const r2 = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
     { env: KEYS, fetch: mixed });
@@ -1234,14 +1215,18 @@ test('orderPicks moves graph rows behind the first candidate the model kept', as
     [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('hop 2 inherits what the clock left — armed at 5100ms (S2) — and MIN_HOP_MS skips it', async () => {
-  // (a) hop 1 answers at t = 7900, so hop 2 gets 13000 - 7900 = 5100ms, not the
-  // 6000ms ceiling, and the abort there is reported as `timed out after 5100ms`.
+test('hop 2 inherits what the clock left — armed at 5100ms — and MIN_HOP_MS skips it', async () => {
+  // (a) hop 1 answers at t = 7900, so hop 2 has 13000 - 7900 = 5100ms. Its
+  // first rung gets all of it (5100 - the 4000 reserve is under MIN_HOP_MS),
+  // and when that rung times out the clock is spent, so no fallback starts.
   let t = 0;
   const now = () => t;
   const timers = [];
   const realSetTimeout = global.setTimeout;
-  global.setTimeout = (fn, ms, ...a) => { timers.push(ms); return realSetTimeout(fn, 0, ...a); };
+  global.setTimeout = (fn, ms, ...a) => {
+    timers.push(ms);
+    return realSetTimeout(() => { t += ms; fn(...a); }, 0);
+  };
   let out = null;
   try {
     let n = 0;
@@ -1262,9 +1247,8 @@ test('hop 2 inherits what the clock left — armed at 5100ms (S2) — and MIN_HO
   assert.ok(timers.includes(5100), `hop 2 was armed at 5100ms; saw ${timers.join(', ')}`);
   assert.equal(out.failures[0].hop, 2);
   assert.equal(out.failures[0].reason, 'timed out after 5100ms');
-  assert.equal(out.failures[1].reason, 'timed out after 4000ms', 'the fallback keeps its own ceiling');
-  assert.equal(out.failures.length, 2, 'the 3-call cap leaves gemma out of hop 2');
-  assert.ok(out.ms <= handler.SEARCH_BUDGET_MS, 'the simulated wall stayed inside the budget');
+  assert.equal(out.failures.length, 1, 'a fallback is never started with nothing left');
+  assert.equal(out.ms, handler.SEARCH_BUDGET_MS, 'the simulated wall ends exactly at the budget');
 
   // (b) MIN_HOP_MS: hop 1 answers at t = 11000, leaving 2000ms — less than the
   // 2500ms a hop is allowed to start on, so hop 2 is skipped rather than begun.
@@ -1441,7 +1425,7 @@ test('a repaired document whose hits array is empty is a parse failure, not an e
   return call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: fetchStub })
     .then((r) => {
       assert.equal(r.code, 200);
-      assert.equal(r.json.provider, 'minimax', 'the truncated empty answer did not win');
+      assert.equal(r.json.provider, 'flint', 'the truncated empty answer did not win');
       assert.equal(fetchStub.calls.length, 3, 'primary, primary retry, then the fallback');
     });
 });
@@ -1492,29 +1476,29 @@ test('a salvaged hop 1 answers the search instead of spending the fallback call'
   assert.equal(r.json.hops, 2);
   assert.equal(r.json.partial, false);
   assert.equal(r.json.salvaged, true, 'the 200 records that an answer was salvaged');
-  assert.equal(r.json.provider, 'nemotron');
+  assert.equal(r.json.provider, 'inkling');
   // the salvaged `open: ["esc"]` really opened the repository
   assert.deepEqual(JSON.parse(userMessage(fetchStub.calls[1])).repos.map((x) => x.name), ['esc']);
   assert.deepEqual(r.json.results.map((x) => x.href).slice(0, 2),
     [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
 });
 
-test('S2: version 3 and the ladder header on every response — the zero-quota readiness probe', async () => {
-  const LADDER = 'nemotron,minimax,gemma';
-  assert.equal(handler.LIBRARIAN_VERSION, '3');
+test('S3: version 4 and the ladder header on every response — the zero-quota readiness probe', async () => {
+  const LADDER = 'inkling,flint,laguna,gemma';
+  assert.equal(handler.LIBRARIAN_VERSION, '4');
   const r405 = await call('GET', undefined, { env: KEYS });
   assert.equal(r405.code, 405);
-  assert.equal(r405.headers['x-librarian-version'], '3',
+  assert.equal(r405.headers['x-librarian-version'], '4',
     'the pre-body 405 is what tells a deploy check which handler is live');
   assert.equal(r405.headers['x-librarian-ladder'], LADDER, 'and which ladder it walks');
   const ok = await call('POST', ASK, { env: KEYS, fetch: providerStub([[ASK.candidates[0].id]]) });
   assert.equal(ok.code, 200);
-  assert.equal(ok.headers['x-librarian-version'], '3');
+  assert.equal(ok.headers['x-librarian-version'], '4');
   assert.equal(ok.headers['x-librarian-ladder'], LADDER);
   const r403 = await call('POST', ASK, { env: KEYS }, false,
     { headers: { origin: 'https://evil.example', host: 'docs.example.org' } });
   assert.equal(r403.code, 403);
-  assert.equal(r403.headers['x-librarian-version'], '3');
+  assert.equal(r403.headers['x-librarian-version'], '4');
   assert.equal(r403.headers['x-librarian-ladder'], LADDER);
   const limiter = handler.createLimiter({ perKey: 1, global: 1000 });
   const wire = { headers: { 'x-forwarded-for': '203.0.113.9' } };
@@ -1522,14 +1506,14 @@ test('S2: version 3 and the ladder header on every response — the zero-quota r
   assert.equal((await call('POST', ASK, deps, false, wire)).code, 200);
   const r429 = await call('POST', ASK, deps, false, wire);
   assert.equal(r429.code, 429);
-  assert.equal(r429.headers['x-librarian-version'], '3');
+  assert.equal(r429.headers['x-librarian-version'], '4');
   assert.equal(r429.headers['x-librarian-ladder'], LADDER);
   const r502 = await call('POST', ASK, { env: {}, fetch: providerStub([[ASK.candidates[0].id]]) });
   assert.equal(r502.code, 502);
   assert.equal(r502.headers['x-librarian-ladder'], LADDER);
 });
 
-test('S2: a primary HTTP 404 goes to minimax, then gemma, in one hop', async () => {
+test('S3: a primary HTTP 404 goes to flint, then laguna, in one hop', async () => {
   const realSetTimeout = global.setTimeout;
   global.setTimeout = (fn, ms, ...a) => realSetTimeout(fn, 0, ...a);
   let n = 0;
@@ -1547,10 +1531,10 @@ test('S2: a primary HTTP 404 goes to minimax, then gemma, in one hop', async () 
     const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: doFetch });
     assert.equal(r.code, 200);
     assert.equal(n, 3, 'one call per entry: the 404 is not retried, the timeout is not retried');
-    assert.deepEqual(models, ['nvidia/nemotron-3-super-120b-a12b:free',
-      'minimax/minimax-m3.1-flash:free', 'google/gemma-4-26b-a4b-it:free']);
-    assert.equal(r.json.provider, 'gemma');
-    assert.equal(r.json.model, 'google/gemma-4-26b-a4b-it:free');
+    assert.deepEqual(models, ['thinkingmachines/inkling-small:free',
+      'recursive/flint-v1.0:free', 'poolside/laguna-xs-2.1:free']);
+    assert.equal(r.json.provider, 'laguna');
+    assert.equal(r.json.model, 'poolside/laguna-xs-2.1:free');
     assert.equal(r.json.hops, 1);
     assert.equal(r.json.calls, 3);
     assert.deepEqual(r.json.results.map((x) => x.href), [ESC_URL, '#/setup/hippocampus-bringup/afro-esc']);
@@ -1573,21 +1557,21 @@ test('S2: a 200 with an error body is a provider error and moves on, with no ret
     const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: fetchStub });
     assert.equal(r.code, 200, label);
     assert.equal(fetchStub.calls.length, 2, `${label}: straight to the next entry, no re-ask`);
-    assert.equal(r.json.provider, 'minimax', label);
+    assert.equal(r.json.provider, 'flint', label);
   }
   const allErr = providerStub([() => errorBody]);
   const r = await call('POST', { q: 'ESC I2C firmware', candidates: [] }, { env: KEYS, fetch: allErr });
   assert.equal(r.code, 502);
-  assert.equal(allErr.calls.length, 3);
-  assert.deepEqual(r.json.providers.map((p) => p.provider), ['nemotron', 'minimax', 'gemma']);
+  assert.equal(allErr.calls.length, 4);
+  assert.deepEqual(r.json.providers.map((p) => p.provider), ['inkling', 'flint', 'laguna', 'gemma']);
   for (const p of r.json.providers) assert.match(p.reason, /^provider_error/);
   assert.equal(r.json.exhausted, false);
 });
 
-test('S2: no Llama, no paid id, for the new env names', async () => {
-  for (const name of ['LIBRARIAN_MINIMAX_MODEL', 'LIBRARIAN_GEMMA_MODEL']) {
+test('S3: no Llama, no paid id, for every fallback env name', async () => {
+  for (const name of ['LIBRARIAN_FLINT_MODEL', 'LIBRARIAN_LAGUNA_MODEL', 'LIBRARIAN_GEMMA_MODEL']) {
     const llama = providerStub([[ASK.candidates[0].id]]);
-    const pin = name.includes('MINIMAX') ? 'minimax' : 'gemma';
+    const pin = name.split('_')[1].toLowerCase();
     const env = Object.assign({}, KEYS, { [name]: 'meta-llama/llama-4-scout:free' });
     const r = await call('POST', Object.assign({ provider: pin }, ASK), { env, fetch: llama });
     assert.equal(r.code, 502, name);
@@ -1646,4 +1630,156 @@ test('every row the walk can emit satisfies the client href allowlist', () => {
   }
   const mine = handler.resolveHits([{ id: 'page:#/mine', why: 'w' }], ctx);
   assert.equal(mine[0].href, undefined, 'a candidate row carries no href — the client owns it');
+});
+
+// ------------------------------------------------- the shared budget (S3) --
+
+test('S3: rungDeadline holds the reserve back only while it still buys a fallback', () => {
+  const { rungDeadline, SEARCH_BUDGET_MS: B, FALLBACK_RESERVE_MS: R, MIN_HOP_MS: M } = handler;
+  assert.equal(rungDeadline(B, true), B - R, 'a fresh primary gets the budget minus the reserve');
+  assert.equal(rungDeadline(B, false), B, 'the last rung gets everything left');
+  assert.equal(rungDeadline(R + M, true), M, 'a share of exactly MIN_HOP_MS is still a share');
+  assert.equal(rungDeadline(R + M - 1, true), R + M - 1,
+    'below that the reserve is dropped: a fallback started under MIN_HOP_MS never runs anyway');
+  assert.equal(rungDeadline(5100, true), 5100);
+});
+
+/* A fake clock driven by the timers themselves: an armed deadline that fires
+   moves the clock forward by its own length, and a stub moves it by however
+   long its fake upstream "took". So `ms`, every armed deadline and every
+   timeout reason are what a real run with those latencies would produce. */
+function fakeClock() {
+  const clock = { t: 0, armed: [] };
+  const realSetTimeout = global.setTimeout;
+  clock.install = () => {
+    global.setTimeout = (fn, ms, ...a) => {
+      clock.armed.push(ms);
+      return realSetTimeout(() => { clock.t += ms; fn(...a); }, 0);
+    };
+  };
+  clock.restore = () => { global.setTimeout = realSetTimeout; };
+  clock.now = () => clock.t;
+  return clock;
+}
+function failAfter(clock, ms, status, text) {
+  return () => {
+    clock.t += ms;
+    return { ok: false, status, json: async () => ({}), text: async () => text };
+  };
+}
+function answerAfter(clock, ms, doc) {
+  return () => { clock.t += ms; return modelReply(hopDoc(doc)); };
+}
+
+test('S3: a rung that fails fast hands its unused time to the next rung', async () => {
+  // inkling 404s after 300ms. Under S2's fixed ceilings the next rung got its
+  // own 4000ms; now it gets what is left (12700) minus the reserve: 8700.
+  const clock = fakeClock();
+  clock.install();
+  let out;
+  try {
+    const steps = [
+      failAfter(clock, 300, 404, 'No endpoints found'),
+      hanging,                                                  // flint: slow
+      answerAfter(clock, 2500, { hits: [ESC_REPO, AFRO_PAGE], open: [] }),
+    ];
+    let n = 0;
+    const doFetch = (url, init) => steps[n++](url, init);
+    const cfgs = handler.PROVIDERS.map((p) => handler.providerConfig(p, KEYS));
+    out = await handler.runSearch({ q: 'ESC I2C firmware', candidates: [], pinned: null },
+      ctxFor([]), cfgs, doFetch, clock.now);
+  } finally {
+    clock.restore();
+  }
+  assert.equal(out.ok, true);
+  assert.equal(out.provider, 'laguna');
+  assert.equal(out.calls, 3);
+  assert.deepEqual(clock.armed, [9000, 8700, 4000],
+    'inkling: 13000-4000; flint: 12700-4000; laguna: the 4000 left, reserve dropped');
+  assert.deepEqual(out.failures.map((f) => [f.provider, f.reason.slice(0, 22)]), [
+    ['inkling', 'HTTP 404: No endpoints'],
+    ['flint', 'timed out after 8700ms'],
+  ]);
+  assert.equal(out.ms, 300 + 8700 + 2500);
+  assert.ok(out.ms <= handler.SEARCH_BUDGET_MS);
+});
+
+test('S3: three fast failures still leave the last rung nearly the whole budget', async () => {
+  // The live S2 failure mode (404, 429, an error body) costs ~1s in all, and
+  // gemma, last, gets the rest — S2 gave it a fixed 3000ms.
+  const clock = fakeClock();
+  clock.install();
+  let out;
+  try {
+    const errorBody = () => {
+      clock.t += 400;
+      return { ok: true, status: 200, json: async () => ({ error: { code: 502, message: 'Provider returned error' } }),
+        text: async () => '' };
+    };
+    const steps = [
+      failAfter(clock, 300, 404, 'Function not found'),
+      failAfter(clock, 200, 429, 'rate-limited upstream'),
+      errorBody,
+      answerAfter(clock, 7000, { hits: [ESC_REPO], open: [] }),
+    ];
+    let n = 0;
+    const doFetch = (url, init) => steps[n++](url, init);
+    const cfgs = handler.PROVIDERS.map((p) => handler.providerConfig(p, KEYS));
+    out = await handler.runSearch({ q: 'ESC I2C firmware', candidates: [], pinned: null },
+      ctxFor([]), cfgs, doFetch, clock.now);
+  } finally {
+    clock.restore();
+  }
+  assert.equal(out.ok, true);
+  assert.equal(out.provider, 'gemma');
+  assert.equal(out.calls, 4);
+  assert.deepEqual(clock.armed, [9000, 8700, 8500, 12100],
+    'each rung gets what is left minus the reserve; the last rung gets all of it');
+  assert.equal(out.ms, 300 + 200 + 400 + 7000);
+});
+
+test('S3: the worst case — every rung hangs — spends the budget exactly and starts nothing below MIN_HOP_MS', async () => {
+  const clock = fakeClock();
+  clock.install();
+  let r;
+  let n = 0;
+  try {
+    r = await call('POST', { q: 'ESC I2C firmware', candidates: [] },
+      { env: KEYS, fetch: (url, init) => { n += 1; return hanging(url, init); }, now: clock.now });
+  } finally {
+    clock.restore();
+  }
+  assert.equal(r.code, 502);
+  assert.equal(n, 2, 'after the primary spends its share, only the reserve is left: one more rung');
+  assert.deepEqual(r.json.providers.map((p) => [p.provider, p.reason]), [
+    ['inkling', 'timed out after 9000ms'],
+    ['flint', 'timed out after 4000ms'],
+  ]);
+  assert.equal(clock.t, handler.SEARCH_BUDGET_MS, 'the deadlines sum to the budget, exactly');
+});
+
+test('S3: hop 2 gets what hop 1 left, and its first rung drops the reserve when the share would be too small', async () => {
+  // hop 1 answers at 8000 with open: ['esc'], leaving 5000. 5000 - 4000 is
+  // under MIN_HOP_MS, so hop 2's first rung is given all 5000, not 1000.
+  const clock = fakeClock();
+  clock.install();
+  let out;
+  try {
+    const steps = [
+      answerAfter(clock, 8000, { hits: [ESC_REPO, AFRO_PAGE], open: ['esc'] }),
+      answerAfter(clock, 3000, { hits: [AFRO_SYM, ESC_REPO] }),
+    ];
+    let n = 0;
+    const doFetch = (url, init) => steps[n++](url, init);
+    const cfgs = handler.PROVIDERS.map((p) => handler.providerConfig(p, KEYS));
+    out = await handler.runSearch({ q: 'ESC I2C firmware', candidates: [], pinned: null },
+      ctxFor([]), cfgs, doFetch, clock.now);
+  } finally {
+    clock.restore();
+  }
+  assert.equal(out.ok, true);
+  assert.equal(out.hops, 2);
+  assert.equal(out.partial, false);
+  assert.deepEqual(clock.armed, [9000, 5000]);
+  assert.equal(out.ms, 11000);
 });

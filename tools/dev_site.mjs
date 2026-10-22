@@ -481,8 +481,9 @@ function serveStatic(req, res, urlPath) {
    quota run produces one hop-1 failure per entry, each HTTP 429, and exhausted: true. */
 if (args.mock) {
   const mockUrl = `http://127.0.0.1:${args.port}${MOCK_ROUTE}`;
-  process.env.LIBRARIAN_NEMOTRON_URL = mockUrl;
-  process.env.LIBRARIAN_MINIMAX_URL = mockUrl;
+  process.env.LIBRARIAN_INKLING_URL = mockUrl;
+  process.env.LIBRARIAN_FLINT_URL = mockUrl;
+  process.env.LIBRARIAN_LAGUNA_URL = mockUrl;
   process.env.LIBRARIAN_GEMMA_URL = mockUrl;
   process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || 'dev-site-mock-not-a-real-key';
 }

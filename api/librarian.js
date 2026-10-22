@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 5 September 2026
+// Last substantive modification: 22 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Answer documentation queries through a bounded serverless search of the site's graphs.
 /* The librarian: a serverless search agent that walks this site's own graphs.
@@ -56,7 +56,7 @@
                one entry per ATTEMPT: a primary re-asked after a garbled or
                empty answer appears again as attempt 2 on the same hop.
      EVERY answer, the pre-body 405/403/429 included, carries
-     `x-librarian-version: 3` and `x-librarian-ladder: nemotron,minimax,gemma`
+     `x-librarian-version: 4` and `x-librarian-ladder: inkling,flint,laguna,gemma`
      (the provider names, in order, built once at module load). They cost
      nothing — no body read, no model call — and are the zero-quota readiness
      probe: `curl -sI -X POST …/api/librarian` names the handler and the ladder
@@ -69,7 +69,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const LIBRARIAN_VERSION = '3';
+const LIBRARIAN_VERSION = '4';
 
 const MAX_BODY_BYTES = 512 * 1024;
 const MAX_PICKS = 8;
@@ -112,8 +112,8 @@ const MAX_OPEN_REPOS = 3;
    throttled answer is an error here and the client falls back to the local
    index, so the site never breaks — it just answers keyword-only past the cap.
 
-   ONE GATEWAY, THREE MODELS ON THREE UPSTREAMS. Every entry rides OpenRouter,
-   so an OpenRouter outage takes all three with it: the ladder buys model- and
+   ONE GATEWAY, FOUR MODELS ON FOUR UPSTREAMS. Every entry rides OpenRouter,
+   so an OpenRouter outage takes all four with it: the ladder buys model- and
    upstream-level resilience (one model 404ing, timing out, refusing, or
    answering unparseably), NOT gateway-level resilience. The per-provider URL
    overrides are kept separate so one path can still be broken deliberately
@@ -131,84 +131,117 @@ const MAX_OPEN_REPOS = 3;
      minimax-m2.7:free                  0/15  (refuses reasoning: disabled)
    S2 (2026-10-21): the live site answered 502 — the primary came back 404 and
    nano, the old fallback, then timed out. Nano sat behind the SAME upstream
-   (Nvidia) as the primary, so it bought no upstream resilience, and it is
-   dropped. The ladder is now three entries on three different upstreams:
-   nemotron super (still the measured best) → minimax m3.1 flash → gemma 4 26b.
-   The two new entries carry NO `routing` pin and NO `reasoning` field (minimax
-   refused `reasoning: disabled` in the 2026-09-04 run). Their deadlines are
-   chosen so the three sum to SEARCH_BUDGET_MS exactly: nemotron's successes all
-   finished under 4718ms, so 6000 keeps them, and the room it gives up pays for
-   the two fallbacks. None is a Llama derivative (policy).
+   (Nvidia) as the primary, so it bought no upstream resilience, and it was
+   dropped for nemotron super → minimax m3.1 flash → gemma 4 26b.
 
-   THE WALK-HOP TRADE-OFF, stated: MAX_MODEL_CALLS is 3 and the ladder is 3
+   S3 (2026-10-22): both live probes after the S2 deploy failed on every entry —
+   nemotron 404 ("Function … Not found" at NVIDIA), minimax timed out at its
+   fixed 4s, gemma 429. OpenRouter's public endpoints API (no key, no quota)
+   then showed why: nemotron-3-super :free had 0% uptime over the last day, and
+   the minimax :free id was retired at 12:00 UTC that day (end of its free
+   launch period). The new ladder was picked from the public numbers alone —
+   3-day availability and p50 throughput from each model's providers page:
+     inkling-small :free  (Thinking Machines)  97.3%  107 tok/s  e2e p90  8.6s
+     flint-v1.0 :free     (Recursive)          99.5%  101 tok/s  e2e p90 26.6s
+     laguna-xs-2.1 :free  (Poolside)           95.8%   76 tok/s  e2e p90 22.5s
+     gemma-4-26b :free    (Google AI Studio)   98.0%   43 tok/s  e2e p90 24.2s
+   (skipped: north-mini-code 99.8% but 36 tok/s; dots-3-note, xing4.0, inkling,
+   laguna-s: slower; nemotron 3.5 lightning: 7.5s p50 to first token; liquid
+   lfm and nemotron nano: under 70% uptime.) The answer is short — at most 8
+   rows of an id and 12 words, ~350 tokens — so throughput decides whether a
+   model fits the budget, and the order is availability x throughput, highest
+   first. Four entries on four upstreams, none of them NVIDIA. None carries a
+   `routing` pin (each free variant has exactly one upstream) or a `reasoning`
+   field (a model that cannot turn thinking off answers 400 to one, as minimax
+   m2.7 did). None is a Llama derivative (policy).
+
+   THE WALK-HOP TRADE-OFF, stated: MAX_MODEL_CALLS is 4 and the ladder is 4
    deep, so a hop 1 that falls through the whole ladder leaves no call for hop
-   2, and a hop 1 answered by the second entry leaves one call for hop 2 with
-   no fallback behind it. Accepted: an answer from any model beats a walk
-   nobody gets to see, and the 200 body's `hops`/`partial` report it. */
+   2. Accepted: an answer from any model beats a walk nobody gets to see, and
+   the 200 body's `hops`/`partial` report it. */
 /* `routing` is OpenRouter's `provider` request field — an OpenRouter-only
    extension, sent only when an entry carries it. Repoint an entry at a direct
    vendor endpoint and drop its `routing` in the same edit: OpenAI-compatible
-   servers usually ignore unknown fields, but that is a habit, not a contract. */
+   servers usually ignore unknown fields, but that is a habit, not a contract.
+   No entry has a fixed timeout: see SEARCH_BUDGET_MS and rungDeadline(). */
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PROVIDERS = [
   {
-    name: 'nemotron',
+    name: 'inkling',
     keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_NEMOTRON_URL',
-    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    urlEnv: 'LIBRARIAN_INKLING_URL',
+    defaultUrl: OPENROUTER_URL,
     // POLICY, NOT BENCHMARK: a Llama-family model is forbidden here — at any
     // tier, in any role, fallback included. providerConfig() refuses an
     // override that names one.
-    model: 'nvidia/nemotron-3-super-120b-a12b:free',
-    modelEnv: 'LIBRARIAN_NEMOTRON_MODEL',
-    // The free variant has exactly one upstream (NVIDIA). Pinned anyway so a
-    // future second upstream cannot silently change the measured behaviour.
-    routing: { order: ['Nvidia'], allow_fallbacks: true },
-    // Thinking on, the paid id thought past a 5s deadline on 15 of 15 real
-    // queries. Off, it answers in ~3s.
-    reasoning: { enabled: false },
-    // Its slowest measured success finished at 4718ms. 6000 keeps every one of
-    // them (S2 lowered it from 8000 to pay for the two fallbacks). It is a
-    // CEILING: the real deadline of a call is min(this, what is left of the
-    // search budget).
-    timeoutMs: 6000,
+    model: 'thinkingmachines/inkling-small:free',
+    modelEnv: 'LIBRARIAN_INKLING_MODEL',
   },
   {
-    name: 'minimax',
+    name: 'flint',
     keyEnv: 'OPENROUTER_API_KEY',
-    urlEnv: 'LIBRARIAN_MINIMAX_URL',
-    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
-    model: 'minimax/minimax-m3.1-flash:free',
-    modelEnv: 'LIBRARIAN_MINIMAX_MODEL',
-    timeoutMs: 4000,
+    urlEnv: 'LIBRARIAN_FLINT_URL',
+    defaultUrl: OPENROUTER_URL,
+    model: 'recursive/flint-v1.0:free',
+    modelEnv: 'LIBRARIAN_FLINT_MODEL',
+  },
+  {
+    name: 'laguna',
+    keyEnv: 'OPENROUTER_API_KEY',
+    urlEnv: 'LIBRARIAN_LAGUNA_URL',
+    defaultUrl: OPENROUTER_URL,
+    model: 'poolside/laguna-xs-2.1:free',
+    modelEnv: 'LIBRARIAN_LAGUNA_MODEL',
   },
   {
     name: 'gemma',
     keyEnv: 'OPENROUTER_API_KEY',
     urlEnv: 'LIBRARIAN_GEMMA_URL',
-    defaultUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    defaultUrl: OPENROUTER_URL,
     model: 'google/gemma-4-26b-a4b-it:free',
     modelEnv: 'LIBRARIAN_GEMMA_MODEL',
-    timeoutMs: 3000,
   },
 ];
 
-/* ONE budget for the whole search, not a sum of per-call deadlines. Each call
-   is clamped to min(its own ceiling, what is left), so the worst case is
-   arithmetic rather than luck: a hop that times out on nemotron (6000), then
-   minimax (4000), then gemma (3000) spends exactly SEARCH_BUDGET_MS and still
+/* ONE budget for the whole search, and no rung owns a fixed slice of it (S3).
+   A rung's deadline is what the search has left, minus FALLBACK_RESERVE_MS held
+   back for the next rung while there is one to try — see rungDeadline(). So a
+   rung that fails FAST (a 404, a 429, an error body: the usual free-tier
+   failures, all back in well under a second) hands everything it did not use
+   to the next rung, and only a rung that is SLOW costs the ones after it time.
+   The worst case is still arithmetic: a hop that times out on every rung spends
+   exactly SEARCH_BUDGET_MS (the last rung it starts gets all that is left) and
    leaves TIMEOUT_SLACK_MS for reading the body, the catalog and writing the
    answer inside the function's maxDuration. A test pins every one of those
-   relations.
+   relations. The client gives up at 18000ms (js/search.js), so the budget
+   cannot usefully grow past what is here.
 
-   MAX_MODEL_CALLS is set by the 50-requests-a-day free cap, not by the clock:
-   three 3s hops would fit the budget, but a third hop plus a per-hop fallback
-   needs four calls, and depth is not worth trading resilience for. */
+   MAX_MODEL_CALLS is set by the free cap (~20/min, 50/day per key), not by
+   the clock: a search normally spends one call, and four is the most a whole
+   ladder of fast failures can cost. */
 const SEARCH_BUDGET_MS = 13000;
 const TIMEOUT_SLACK_MS = 2000;
 const FUNCTION_MAX_DURATION_MS = 15000;   // mirrors vercel.json maxDuration: 15
-const MAX_MODEL_CALLS = 3;
+const MAX_MODEL_CALLS = 4;
 const MIN_HOP_MS = 2500;    // never start a hop that cannot plausibly finish
+// Held back for the next rung while one remains: ~350 tokens at the slowest
+// rung's 43 tok/s is ~8s, but at the 76-107 tok/s of the first three it is
+// 3.5-4.5s, and 4000 is what keeps the primary's own share at 9000 — above
+// inkling's measured e2e p90 of 8.6s.
+const FALLBACK_RESERVE_MS = 4000;
 const WALK_THRESHOLD = 3;   // 3+ keyword hits is already a strong answer
+
+/* The deadline for one rung. `left` is what the search has left; `hasNext`
+   says whether another rung could still be called after this one (a rung is
+   queued AND a call is left). The rung gets all of `left` minus the reserve,
+   unless that would leave it under MIN_HOP_MS — then the reserve is dropped
+   and this rung gets everything, because a fallback that would start below
+   MIN_HOP_MS is never started anyway. Pure, so a test can walk it directly. */
+function rungDeadline(left, hasNext) {
+  if (!hasNext) return left;
+  const share = left - FALLBACK_RESERVE_MS;
+  return share >= MIN_HOP_MS ? share : left;
+}
 
 const PROVIDER_NAMES = PROVIDERS.map((p) => p.name);
 // The ladder header (S2): built once, sent on every answer — see send().
@@ -269,7 +302,7 @@ const HOP2_SYSTEM = [
 // ------------------------------------------------------- abuse protection --
 
 /* WHAT THIS BUYS, HONESTLY. This endpoint is public and every call it accepts
-   spends real provider quota — and one request now costs up to three upstream
+   spends real provider quota — and one request now costs up to four upstream
    calls. The two gates below raise the cost of abusing that. They are NOT
    authentication:
 
@@ -285,9 +318,9 @@ const HOP2_SYSTEM = [
    zero-dependency, zero-state design deliberately does not have. */
 
 const RATE_WINDOW_MS = 60000;
-// 6, down from 12: one request is now up to THREE upstream calls, so the old
-// per-minute budget was really 36 calls against a 20/min free cap.
-const RATE_MAX_PER_KEY = 6;       // one browser, one minute
+// 5 (S3), down from 6 and 12: one request is now up to FOUR upstream calls,
+// so 5 x 4 = 20 matches the 20/min free cap.
+const RATE_MAX_PER_KEY = 5;       // one browser, one minute
 const RATE_MAX_GLOBAL = 120;      // this instance, one minute, everyone together
 const RATE_MAX_KEYS = 1000;       // hard ceiling on the tracking map
 
@@ -1185,7 +1218,6 @@ function providerConfig(provider, env) {
     model: override || provider.model,
     routing: provider.routing || null,
     reasoning: provider.reasoning || null,
-    timeoutMs: provider.timeoutMs,
     refused: null,
   };
   if (override && FORBIDDEN_MODEL.test(override)) {
@@ -1196,13 +1228,13 @@ function providerConfig(provider, env) {
   return cfg;
 }
 
-/* `deadlineMs` is what the SEARCH has left; the entry's own timeoutMs stays the
-   ceiling. The tighter of the two wins, so a hop late in the budget is cut
-   before the function itself is. */
+/* `deadlineMs` is this rung's share of what the SEARCH has left (rungDeadline);
+   there is no per-entry ceiling any more (S3), so a call with no deadline at
+   all is held to the whole search budget rather than left unbounded. */
 async function askProvider(cfg, messages, doFetch, deadlineMs) {
   const ms = typeof deadlineMs === 'number' && deadlineMs > 0
-    ? Math.min(deadlineMs, cfg.timeoutMs)
-    : cfg.timeoutMs;
+    ? Math.min(deadlineMs, SEARCH_BUDGET_MS)
+    : SEARCH_BUDGET_MS;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -1290,9 +1322,9 @@ async function runSearch(ask, ctx, cfgs, doFetch, now) {
   let calls = 0;
   let promptChars = 0;
 
-  /* One hop, up to three attempts and never more than the search has calls for:
-       primary → (primary again, ONLY after a parse or empty failure) → minimax
-     → gemma.
+  /* One hop, one attempt per rung and never more than the search has calls for:
+       primary → (primary again, ONLY after a parse or empty failure) → flint
+     → laguna → gemma.
      The retry is the 2026-09-05 measurement made into a rule. The same request,
      sent three times, garbled once and came back empty once — the free serving
      is non-deterministic, and a re-ask of the SAME model is the cheapest fix
@@ -1322,7 +1354,9 @@ async function runSearch(ask, ctx, cfgs, doFetch, now) {
         quota.push(false);
         continue;
       }
-      const deadlineMs = Math.min(cfg.timeoutMs, left);
+      // S3: no fixed per-rung timeout. A rung gets what is left minus the
+      // reserve for the next one, so a fast failure passes its time on.
+      const deadlineMs = rungDeadline(left, queue.length > 0 && calls + 1 < MAX_MODEL_CALLS);
       calls += 1;
       promptChars += chars;
       try {
@@ -1534,6 +1568,8 @@ module.exports.TIMEOUT_SLACK_MS = TIMEOUT_SLACK_MS;
 module.exports.SEARCH_BUDGET_MS = SEARCH_BUDGET_MS;
 module.exports.MAX_MODEL_CALLS = MAX_MODEL_CALLS;
 module.exports.MIN_HOP_MS = MIN_HOP_MS;
+module.exports.FALLBACK_RESERVE_MS = FALLBACK_RESERVE_MS;
+module.exports.rungDeadline = rungDeadline;
 module.exports.WALK_THRESHOLD = WALK_THRESHOLD;
 module.exports.MAX_PICKS = MAX_PICKS;
 module.exports.MAX_OPEN_REPOS = MAX_OPEN_REPOS;
