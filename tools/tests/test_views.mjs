@@ -168,6 +168,45 @@ test('WCAG-1 skip link: its click moves focus to #content and scrolls to it, lea
   assert.equal(site.location.hash, '#/projects');
 });
 
+test('WCAG-8 theme toggle: index.html starts aria-pressed="false"; the toggle sets it true with the light theme and back', async () => {
+  assert.match(INDEX_HTML, /<button id="theme-toggle" type="button" aria-pressed="false"[^>]*>/);
+  const site = await bootSite({ hash: '#/' });
+  const btn = site.document.querySelector('#theme-toggle');
+  const html = site.document.documentElement;
+  assert.equal(btn.getAttribute('aria-pressed'), 'false', 'dark on load');
+  (btn.listeners.click || [])[0]();
+  assert.equal(html.dataset.theme, 'light');
+  assert.equal(btn.getAttribute('aria-pressed'), 'true');
+  (btn.listeners.click || [])[0]();
+  assert.equal(btn.getAttribute('aria-pressed'), 'false');
+});
+
+test('WCAG-9 header nav: navHighlight sets aria-current="page" on the active link only (code check)', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8');
+  const fn = app.slice(app.indexOf('function navHighlight('), app.indexOf('// ---------- views'));
+  assert.match(fn, /setAttribute\('aria-current', 'page'\)/);
+  assert.match(fn, /removeAttribute\('aria-current'\)/);
+});
+
+test('WCAG-11 phone drawer: opening it puts a "Close" button first; that button closes it and returns focus to the toggle', async () => {
+  const site = await bootSite({ hash: '#/setup/getting-started/px4-setup', media: () => true });
+  const toggle = site.document.querySelector('#sidebar-toggle');
+  let focused = 0;
+  toggle.focus = () => { focused += 1; };
+  (toggle.listeners.click || [])[0]();
+  assert.ok(site.document.body.classList.contains('hc-drawer-open'));
+  const first = site.sidebar.children[0];
+  assert.ok(first, 'the drawer has a first child');
+  assert.equal(first.tagName, 'BUTTON');
+  assert.equal(first.getAttribute('type'), 'button');
+  assert.ok(first.classList.contains('drawer-close'));
+  assert.equal(first.textContent, 'Close');
+  (first.listeners.click || [])[0]();
+  assert.equal(site.document.body.classList.contains('hc-drawer-open'), false, 'closed');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(focused, 1, 'focus back on #sidebar-toggle');
+});
+
 // ==== UNIT SETUP ====
 /* Setup pages clear #content and append (plan ground rule 9), so there is no
    view test here: the pure helpers js/app.js exports as window.HCSetup are

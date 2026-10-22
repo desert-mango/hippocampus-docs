@@ -402,7 +402,10 @@
 
   function navHighlight(section) {
     document.querySelectorAll('.site-nav a').forEach((a) => {
-      a.classList.toggle('active', a.dataset.nav === section);
+      const on = a.dataset.nav === section;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'page');   // WCAG-9: the state, not only the look
+      else a.removeAttribute('aria-current');
     });
   }
 
@@ -1506,10 +1509,15 @@
     let saved = null;
     try { saved = localStorage.getItem('hc-theme'); } catch (e) { /* private mode */ }
     if (saved === 'light') document.documentElement.dataset.theme = 'light';
-    $('#theme-toggle').addEventListener('click', () => {
+    const btn = $('#theme-toggle');
+    // WCAG-8: the toggle says its state: pressed = the light theme is on
+    const pressed = () => btn.setAttribute('aria-pressed', document.documentElement.dataset.theme === 'light' ? 'true' : 'false');
+    pressed();
+    btn.addEventListener('click', () => {
       const light = document.documentElement.dataset.theme === 'light';
       if (light) delete document.documentElement.dataset.theme;
       else document.documentElement.dataset.theme = 'light';
+      pressed();
       try { localStorage.setItem('hc-theme', light ? 'dark' : 'light'); } catch (e) { /* ok */ }
     });
   }
@@ -1591,6 +1599,11 @@
     backdrop.className = 'drawer-backdrop';
     backdrop.setAttribute('aria-hidden', 'true');
     document.body.appendChild(backdrop);
+    // WCAG-11: the drawer's own visible way out, its first item while it is open
+    const closeBtn = document.createElement('button');
+    closeBtn.setAttribute('type', 'button');
+    closeBtn.className = 'drawer-close';
+    closeBtn.textContent = 'Close';
     const isOpen = () => document.body.classList.contains('hc-drawer-open');
     // a closed group's links are not reachable (Chrome keeps their boxes, so ask the details itself)
     const focusables = () => Array.from(sidebar.querySelectorAll('a[href], summary, button'))
@@ -1602,6 +1615,7 @@
       toggle.setAttribute('aria-expanded', 'false');
       sidebar.removeAttribute('role');
       sidebar.removeAttribute('aria-modal');
+      closeBtn.remove();
       if (refocus || inside) toggle.focus({ preventScroll: true });
     };
     const open = () => {
@@ -1609,13 +1623,14 @@
       toggle.setAttribute('aria-expanded', 'true');
       sidebar.setAttribute('role', 'dialog');
       sidebar.setAttribute('aria-modal', 'true');
-      const target = sidebar.querySelector('a.active') || focusables()[0];
-      if (target) {
-        target.scrollIntoView({ block: 'center' });
-        target.focus({ preventScroll: true });
-      }
+      sidebar.prepend(closeBtn);
+      // the active link is brought into view; focus lands on Close, the drawer's first item
+      const target = sidebar.querySelector('a.active');
+      if (target) target.scrollIntoView({ block: 'center' });
+      closeBtn.focus({ preventScroll: true });
     };
     toggle.addEventListener('click', () => (isOpen() ? close(true) : open()));
+    closeBtn.addEventListener('click', () => close(true));
     backdrop.addEventListener('click', () => close(true));
     window.addEventListener('hashchange', () => close(false));
     document.addEventListener('keydown', (e) => {
