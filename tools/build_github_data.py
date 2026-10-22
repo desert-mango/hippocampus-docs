@@ -42,7 +42,9 @@ before it writes anything):
   data/graph/avatars/<login>.<png|jpg>  64-px copies (PNG/JPEG by magic
                                  bytes, at most 16 KB, never SVG)
 
-Reads (plan D-K; typically under 100 calls, under 250 worst case):
+Reads (plan D-K; typically under 100 calls, under 250 worst case, plus one
+commits?path= call per page whose file changed: about 90 once, the first run
+after P10, and again for every page that is new or changed off main):
   orgs/<org>/repos?type=public            every public repository (paged)
   repos/<org>/<repo>/commits?since=…      non-fork repos pushed inside the
                                           365-day window; Link: rel="next"
@@ -708,7 +710,10 @@ class Build:
             return cached, cached_blob
         if rows is None:
             rows = self.history(THIS_REPO, rel)
-        return newest_day(rows), (blob if self.on_main() else None)
+        day = newest_day(rows)
+        # review M-1: a file on GitHub's main always has a commit, so a null day means GitHub does not have the
+        # page yet (git_blob_sha may have hashed the uncommitted file): never cache that null against the blob
+        return day, (blob if day is not None and self.on_main() else None)
 
     def page_authors(self, pages):
         prev = self.previous("page-authors")

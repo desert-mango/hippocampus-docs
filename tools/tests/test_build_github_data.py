@@ -879,6 +879,25 @@ class AuthorAndLastCommit(BuildCase):
         self.ok()
         self.assertEqual(self.pages()["setup/raspberry-pi/ethernet"]["last_commit"], "2026-09-20")
 
+    def test_review_m1_on_main_a_page_github_does_not_have_yet_caches_no_blob_and_is_read_again(self):
+        # review M-1: on main, a new page not yet on GitHub has no commits?path= rows. A null day must not be
+        # cached against its blob, or the date stays null after the page is pushed.
+        rel = "content/setup/raspberry-pi/ethernet.md"
+        self.fx.drop(f"{THIS}/commits", path=rel)
+        self.fx.add(f"{THIS}/commits", {"path": rel, "per_page": "100"}, [])
+        self.ok()
+        page = self.pages()["setup/raspberry-pi/ethernet"]
+        self.assertIsNone(page["last_commit"])
+        self.assertIsNone(page["last_commit_blob"], "a null day is never cached against the blob")
+        # the next run (after the push): it reads again and caches the day GitHub now has
+        self.fx.drop(f"{THIS}/commits", path=rel)
+        self.fx.add(f"{THIS}/commits", {"path": rel, "per_page": "100"},
+                    [commit("9" * 40, "2026-09-21T09:00:00Z", "NBauschmann", "N", "new page")])
+        self.ok()
+        page = self.pages()["setup/raspberry-pi/ethernet"]
+        self.assertEqual(page["last_commit"], "2026-09-21", "read again")
+        self.assertEqual(page["last_commit_blob"], bgd.git_blob_sha(self.site, rel))
+
     def test_r3_1_off_main_an_unchanged_page_keeps_its_cached_date_and_blob_with_no_read(self):
         self.ok()
         before = self.pages()
