@@ -1124,11 +1124,16 @@
         e.preventDefault();
         focusCell(next);
       });
-      // WCAG-5: focus arriving shows the cursor at once (the newest day, or where it was left)
+      // WCAG-5: keyboard focus arriving shows the cursor at once (the newest day, or where it was left).
+      // Review S-3: a tap or click also focuses the svg (tabindex 0); that focus must not move the cursor to
+      // the newest day nor scroll the strip from under the finger, so a pointerdown marks the next focus.
+      let pointerFocus = false;
+      root.addEventListener('pointerdown', () => { pointerFocus = true; });
       root.addEventListener('focus', () => {
+        if (pointerFocus) { pointerFocus = false; return; }
         if (rects.length) focusCell(current >= 0 ? current : rects.length - 1);
       });
-      root.addEventListener('blur', () => { ring.classList.remove('is-on'); hideTip(); });
+      root.addEventListener('blur', () => { pointerFocus = false; ring.classList.remove('is-on'); hideTip(); });
       wrap.appendChild(root);
       box.appendChild(wrap);
       const sr = h('p', 'hc-sr-only', summary + '.');

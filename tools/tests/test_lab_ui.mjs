@@ -858,6 +858,26 @@ test('WCAG-5 heatmap focus: focus with no cursor puts it on the newest day with 
   assert.equal(Number(ring.getAttribute('x')), Number(last.el.getAttribute('x')) - 1);
 });
 
+test('review S-3: a focus that follows a pointerdown does not move the cursor or scroll; a plain (keyboard) focus does', async () => {
+  const { doc, lab } = setup();
+  const root = doc.createElement('main');
+  doc.body.appendChild(root);
+  await lab.renderLab(root, () => true, { embedded: true });
+  const svgEl = root.querySelector('.hc-heat svg');
+  const ring = svgEl.querySelector('.hc-focus');
+  const cells = svgEl.querySelectorAll('rect').filter((r) => !r.classList.contains('hc-focus'));
+  doc.scrolls.length = 0;
+  doc.dispatch(cells[3], 'pointerdown');
+  svgEl.focus();
+  doc.dispatch(svgEl, 'focus');
+  assert.equal(doc.scrolls.length, 0, 'a tap or click never yanks the scroller');
+  assert.equal(ring.classList.contains('is-on'), false, 'no automatic cursor for a pointer focus');
+  doc.dispatch(svgEl, 'blur');
+  doc.dispatch(svgEl, 'focus');                      // the next focus, from the keyboard
+  assert.equal(doc.scrolls.length, 1, 'a keyboard focus scrolls the cursor cell into view');
+  assert.ok(ring.classList.contains('is-on'));
+});
+
 test('M11: recent commits: ten rows at most, each a button naming its author, opening a commit dialog with the project', async () => {
   const many = Object.assign({}, ORG, { recent_commits: Array.from({ length: 12 }, (_, i) => ({ repo: 'docs', sha: 'abcdef' + (i % 10), date: '2026-09-01', msg: 'm' + i, author: 'NBauschmann' })) });
   const big = setup(Object.assign({}, ALL_FILES, { 'data/graph/org-activity.json': many }));
