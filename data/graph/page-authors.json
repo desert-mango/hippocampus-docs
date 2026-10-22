@@ -28,8 +28,8 @@
    },
    "converted": null,
    "edited_here": [],
-   "last_commit": "2026-10-19",
-   "last_commit_blob": null
+   "last_commit": "2026-10-21",
+   "last_commit_blob": "c97d66f30f3e4ddbdfd9078dda9a654281540c0d"
   },
   "projects/acoustics": {
    "original": {
@@ -47,7 +47,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "59a96f81b7111d9275b5dd38a10a9682a8183c95"
   },
   "projects/cameras": {
    "original": {
@@ -65,7 +65,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "5e82a4622d090c7115cd65c9d88763e9f9d17e86"
   },
   "projects/core-stack": {
    "original": {
@@ -83,7 +83,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "b04b15c65184ac06e774763a38f4a026dcb1f53b"
   },
   "projects/dev-infrastructure": {
    "original": {
@@ -101,7 +101,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "d0f574cb9e70d7d8b11def7dc502b1ef69fc9456"
   },
   "projects/docs-and-site": {
    "original": {
@@ -123,7 +123,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-09-17",
-   "last_commit_blob": null
+   "last_commit_blob": "a505ffd48372be3e868a0d79146c12c72b9caf7c"
   },
   "projects/hippocampus-vehicle": {
    "original": {
@@ -141,7 +141,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "d00703bbd81e6e5e803064edf377ab9bdb3d1223"
   },
   "projects/holiday-fun": {
    "original": {
@@ -159,7 +159,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "e1d68235e38a0f616437ea551a48f5009a66caa2"
   },
   "projects/lab-infrastructure": {
    "original": {
@@ -177,7 +177,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "496441699427aa4efdc6e59d3fe7d044f3960b69"
   },
   "projects/learning-to-swim": {
    "original": {
@@ -200,8 +200,8 @@
      "state": "closed"
     }
    ],
-   "last_commit": "2026-10-15",
-   "last_commit_blob": null
+   "last_commit": "2026-10-21",
+   "last_commit_blob": "c303f1da2258b25625a8f73a4f90583300b0cade"
   },
   "projects/legacy-ros1": {
    "original": {
@@ -219,7 +219,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "924d274240eee21f70fa0f6bd917a9f99dff1000"
   },
   "projects/localization": {
    "original": {
@@ -237,7 +237,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "ad3ee8958734ff116018196cf59c1f7fe4266563"
   },
   "projects/radio-comms": {
    "original": {
@@ -255,7 +255,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "ecac5bb23f5ae6ad8b7ca4b58f05f1f43f8c41f4"
   },
   "projects/scalar-field": {
    "original": {
@@ -273,7 +273,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "1e912aa2fc2c701caa0b189a03cf4b932781891a"
   },
   "projects/simulation": {
    "original": {
@@ -291,7 +291,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "4f20b392698e81a19049053a6f2b729535204e4b"
   },
   "projects/teaching": {
    "original": {
@@ -309,7 +309,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "c157d7cf20b19342a5360d6ae220ef6d845c0748"
   },
   "projects/underwater-localization": {
    "original": {
@@ -331,7 +331,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "7db2f3e68042f93c7a7e60dafec735788b9ebb07"
   },
   "projects/uvms": {
    "original": {
@@ -349,7 +349,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "7e84ba47128892851a8fc0000937b5ff732d5784"
   },
   "setup/bluerov/alpha-arm": {
    "original": {
@@ -376,7 +376,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "bde95a92c958178b5ebf2099923d36aa6b7fb91b"
   },
   "setup/bluerov/build-and-flash": {
    "original": {
@@ -409,7 +409,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "77c133e62c9c9010b8a52e45ce7241ab70f73ca3"
   },
   "setup/bluerov/deploy": {
    "original": {
@@ -442,7 +442,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "a1988cdc51ab92f72f995080cde1119b2d8d9f16"
   },
   "setup/bluerov/dvl": {
    "original": {
@@ -469,7 +469,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "c4cc9721fbda9f0c0dace71d42a99bd3cf038b0c"
   },
   "setup/bluerov/full-uvms-setup": {
    "original": {
@@ -492,7 +492,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "7007a4dcc9107e9aabd55137479d15bf37047cf2"
   },
   "setup/bluerov/servo-and-light": {
    "original": {
@@ -519,7 +519,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "58c69c0e46e45513798d0d3e6fc627bbb472facd"
   },
   "setup/concepts/colcon": {
    "original": {
@@ -557,7 +557,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "cb757961814be8329c151c84c95e5cb6261b5ace"
   },
   "setup/concepts/deployment": {
    "original": {
@@ -584,7 +584,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "e1263093fca0953de21e5e5b2d6d6e64c291f5ea"
   },
   "setup/concepts/pre-built-packages": {
    "original": {
@@ -622,7 +622,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "556e6c96e881a0b95fec699c85a56150327cbf0a"
   },
   "setup/concepts/ros2-repositories": {
    "original": {
@@ -649,7 +649,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "b69f272cd52a53e6e4316952a456a9ae1f71deb1"
   },
   "setup/concepts/ros2-workspace": {
    "original": {
@@ -682,7 +682,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "c14851c4143e9cfa98ea1f2c50498426a03bc1c9"
   },
   "setup/contributing/debian-packages": {
    "original": {
@@ -715,7 +715,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "6f0a2853102f55744560f04977b0e903b9cd9792"
   },
   "setup/contributing/documentation": {
    "original": {
@@ -742,7 +742,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "e99dc25c5b57446261618cd199964142564f31b0"
   },
   "setup/contributing/hippocampus": {
    "original": {
@@ -769,7 +769,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "d19b85e1a7824949a3ff9dfa81ba2aad2bbc42fe"
   },
   "setup/getting-started/apriltag-localization": {
    "original": {
@@ -792,7 +792,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "bb2c5b2dee4d2fa8297a72df07ecd1d06b7d8f3b"
   },
   "setup/getting-started/deploying-hippocampus": {
    "original": {
@@ -819,7 +819,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "17fd384569a1b2bef7a186bfa65ff6be4953d3e8"
   },
   "setup/getting-started/installing-qgc": {
    "original": {
@@ -850,7 +850,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "a11fd84fcaa5656e8ef983cd8a1005a7e597f086"
   },
   "setup/getting-started/pre-built-packages": {
    "original": {
@@ -877,7 +877,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "1f1d8b9aada1d1cd88b49688260dfedd8873f0f6"
   },
   "setup/getting-started/px4-setup": {
    "original": {
@@ -910,7 +910,7 @@
     }
    ],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "edd4a5cb0c619bc7bd5084f863c0a294c8996ef2"
   },
   "setup/getting-started/ros-installation": {
    "original": {
@@ -943,7 +943,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "6e58d013af393850dd872de623b52197eaa021e0"
   },
   "setup/getting-started/starting-gazebo-simulation": {
    "original": {
@@ -978,7 +978,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "1dbca1828ef59d7e93d5ff79b1796b9bd9f1b984"
   },
   "setup/getting-started/workspace-setup": {
    "original": {
@@ -1005,7 +1005,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "c838cb053a0e2ba55ef294f086d542e341e29b5a"
   },
   "setup/getting-started/workstation-quality-of-life": {
    "original": {
@@ -1028,7 +1028,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "629e46c2c26faa261eb245f3907383ce5e2cb28f"
   },
   "setup/guides/apriltag": {
    "original": {
@@ -1055,7 +1055,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "2c8880c6820c77cbe88cadec4e4a2937245320ac"
   },
   "setup/guides/buttons": {
    "original": {
@@ -1082,7 +1082,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "a52df6b26f3b5c0bc67556c43738265856438694"
   },
   "setup/guides/camera-calibration": {
    "original": {
@@ -1111,7 +1111,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "07f00f02dd78cf1b1327bb5edbc084d1ae504073"
   },
   "setup/guides/dvb-t": {
    "original": {
@@ -1134,7 +1134,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "16a1099159388c68e7c49ffb9a85baccd4bfc0bf"
   },
   "setup/guides/informative-path-planning": {
    "original": {
@@ -1157,7 +1157,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "51cd5e9e7fa8ec7486f3decf4d8fb48cffaba6ed"
   },
   "setup/guides/install-source-dependencies": {
    "original": {
@@ -1180,7 +1180,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "b8a8c9bac3e71adda01c89f8bfa767942e743348"
   },
   "setup/guides/misc-notes": {
    "original": {
@@ -1203,7 +1203,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "ab8167b1368d05af68dd20dd9a0ee646dc901412"
   },
   "setup/guides/mixers": {
    "original": {
@@ -1226,7 +1226,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "daa2b10b73cd0f619548dfb7af505f6ea54a4d9b"
   },
   "setup/guides/path-follower": {
    "original": {
@@ -1249,7 +1249,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "568ddf97f0be5810f9d958ce22b317b89b6e8c07"
   },
   "setup/guides/path-follower-concept": {
    "original": {
@@ -1276,7 +1276,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "6ce13ffc44ac4f70eda09dd11469d83947e896af"
   },
   "setup/guides/ros2-cheatsheet": {
    "original": {
@@ -1299,7 +1299,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "52c631348e9cab60284efe3eac4561704fca1557"
   },
   "setup/guides/ros2-misc": {
    "original": {
@@ -1326,7 +1326,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "109bc02e8e4a4859a49b18a14449f3d7bc616b64"
   },
   "setup/hardware/acoustic-modems": {
    "original": {
@@ -1349,7 +1349,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "67ffbc33d1a5b067c1abce498bba6e6413ded857"
   },
   "setup/hardware/bluerov": {
    "original": {
@@ -1372,7 +1372,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "13a8b7b6d170c33bd903e800f7d1e0055356f24d"
   },
   "setup/hardware/buttons": {
    "original": {
@@ -1395,7 +1395,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "7e91189296cd2f47b1ee70b524fc209da61f52d4"
   },
   "setup/hardware/cameras": {
    "original": {
@@ -1418,7 +1418,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "26ee4534e77143dd32bc3b761c6171cd22d76921"
   },
   "setup/hardware/gantry": {
    "original": {
@@ -1441,7 +1441,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "97386c5ad1e2cb5c1b0e7d5a47baa0c64b4401fd"
   },
   "setup/hardware/hippocampus": {
    "original": {
@@ -1464,7 +1464,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "964bf277fce0a2d8f0a701048c5efc0af540c03a"
   },
   "setup/hardware/marker": {
    "original": {
@@ -1487,7 +1487,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "5a3066f24a7c5b04fdce803bdf8dac3bdc76b82c"
   },
   "setup/hardware/qualisys": {
    "original": {
@@ -1510,7 +1510,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "802908c1693fe8fba1d496d0dfd523911e4753bb"
   },
   "setup/hardware/rf-modules": {
    "original": {
@@ -1533,7 +1533,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "3936dbaa6b14d6b2bb79015793f684daf4f8fbec"
   },
   "setup/hippocampus-bringup/afro-esc": {
    "original": {
@@ -1556,7 +1556,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "0bf54ebd4fa799c16c556aae4d000e01d8e158fc"
   },
   "setup/hippocampus-bringup/fcu-firmware": {
    "original": {
@@ -1579,7 +1579,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "3c959e1bef27d48083909f2b2c7ec41cc1570881"
   },
   "setup/hippocampus-bringup/motor-configuration": {
    "original": {
@@ -1602,7 +1602,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "b06efee2df825d7308170e98f29bbb52f680ffd9"
   },
   "setup/lab-cameras/event-camera-collaboration": {
    "original": {
@@ -1629,7 +1629,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "d4d90319ba35727f298027e56b31e3170def566f"
   },
   "setup/lab-cameras/event-cameras": {
    "original": {
@@ -1662,7 +1662,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "0aad0b94872512301469414ddee895cccda72dd1"
   },
   "setup/lab-cameras/ip-cameras": {
    "original": {
@@ -1689,7 +1689,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "3d6427f255d78d5f4cc0890487761d6ff5abf890"
   },
   "setup/lab-cameras/usb-cameras": {
    "original": {
@@ -1716,7 +1716,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "9e8a9e540805cd99d6570cf090498cf904bcdf81"
   },
   "setup/lab-gantry/general-information": {
    "original": {
@@ -1743,7 +1743,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "8bb092464fea010ae2db788474064dcfdb9c96d1"
   },
   "setup/lab-gantry/installation": {
    "original": {
@@ -1770,7 +1770,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "57c906852169e1ecdc05bc0547473e0a764edbcc"
   },
   "setup/lab-gantry/motor-node": {
    "original": {
@@ -1797,7 +1797,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "078049895947a8daed80bf77337da91eeaa2f4ce"
   },
   "setup/lab-gantry/raspi-setup": {
    "original": {
@@ -1824,7 +1824,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "eb7c1d162e7ffe7b7bc58169f1bc4c460acf8d3e"
   },
   "setup/lab-gantry/usage": {
    "original": {
@@ -1851,7 +1851,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "17ec7e577fceb7f714ad4e11b8fea48cef4e7821"
   },
   "setup/lab-marker/design": {
    "original": {
@@ -1874,7 +1874,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "ec8237b9a2b5b5f744e3c2865e3b45e6d9d2a407"
   },
   "setup/lab-marker/fabrication": {
    "original": {
@@ -1897,7 +1897,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "487cefa853342404fda5f5da80752d7a8107c570"
   },
   "setup/lab-qualisys/calibration": {
    "original": {
@@ -1920,7 +1920,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "e6703e5aa3343e4ca3e1806ef674ac9b94e6bdff"
   },
   "setup/lab-qualisys/camera-settings": {
    "original": {
@@ -1943,7 +1943,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "f559e52ac94faf3dd3e1d5c93d69c2a12bcecefe"
   },
   "setup/lab-qualisys/defining-bodies": {
    "original": {
@@ -1966,7 +1966,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "8c7924fd25acb80471670b0661692edebff8663f"
   },
   "setup/raspberry-pi/ethernet": {
    "original": {
@@ -2003,7 +2003,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "afa12532eddb93dd941104dfec6742ba38673f55"
   },
   "setup/raspberry-pi/pinout": {
    "original": {
@@ -2034,7 +2034,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-09-03",
-   "last_commit_blob": null
+   "last_commit_blob": "98f0234cc3dfb031aecc45567a7c482afb693f3a"
   },
   "setup/raspberry-pi/quality-of-life": {
    "original": {
@@ -2061,7 +2061,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "11ce084539dc32ba9c248d06d58e8a6fc9003240"
   },
   "setup/raspberry-pi/uart-configuration": {
    "original": {
@@ -2099,7 +2099,7 @@
     }
    ],
    "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit_blob": "e1a6fad66cdc6c89c960e571679076c787b05751"
   },
   "setup/raspberry-pi/ubuntu-24-04-server": {
    "original": {
@@ -2132,7 +2132,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "59c94083319d6005055e3a01fca3eab89bef819e"
   },
   "setup/raspberry-pi/usb-configuration": {
    "original": {
@@ -2165,7 +2165,7 @@
     }
    ],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "c6fb4fa7f6dbfdfb64b066a5bfea14929f4d1d8f"
   },
   "setup/start/index": {
    "original": {
@@ -2195,8 +2195,8 @@
     "commit": "b40ade4"
    },
    "edited_here": [],
-   "last_commit": "2026-09-22",
-   "last_commit_blob": null
+   "last_commit": "2026-10-21",
+   "last_commit_blob": "ab153b34752b85b2ed58565441e27ddf2711a20b"
   },
   "setup/time-sync/client": {
    "original": {
@@ -2223,7 +2223,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "e0372daa6f06f44150f6f37c44d33eff9eee6042"
   },
   "setup/time-sync/overview": {
    "original": {
@@ -2246,7 +2246,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "3505147677092fbdb8e329e1aaa7a06fa5d2316b"
   },
   "setup/time-sync/server": {
    "original": {
@@ -2273,7 +2273,7 @@
    },
    "edited_here": [],
    "last_commit": "2026-08-27",
-   "last_commit_blob": null
+   "last_commit_blob": "a8344fb8eccd5a575bb7acf7dfa9ef27c03c517e"
   },
   "tools/onshape-mcp": {
    "original": {
@@ -2291,7 +2291,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-28",
-   "last_commit_blob": null
+   "last_commit_blob": "fa9de631bff5af003697e511484a6cbaabf94a7b"
   },
   "tools/runpod-mcp": {
    "original": {
@@ -2309,7 +2309,7 @@
    "converted": null,
    "edited_here": [],
    "last_commit": "2026-08-28",
-   "last_commit_blob": null
+   "last_commit_blob": "3b913d38483d90c356acbaac930b44ddced27464"
   }
  }
 }
