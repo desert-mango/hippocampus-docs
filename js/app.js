@@ -1100,7 +1100,9 @@
     setTitle([`Search: ${query}`]);
     const hash = location.hash || '';
     const tabbed = /[?&]kind=/.test(hash);   // a tab link, not a fresh search
-    content.innerHTML = '<div class="search-results"><h1>Search</h1><p class="lead">Searching…</p></div>';
+    // WCAG-6: one visually hidden status line tells a screen reader what the search found
+    const statusP = (text) => `<p class="search-status visually-hidden" role="status" aria-live="polite">${esc(text)}</p>`;
+    content.innerHTML = `<div class="search-results"><h1>Search</h1><p class="lead">Searching…</p>${statusP('Searching…')}</div>`;
     const epoch = routeEpoch;
     const terms = HCSearch.queryTerms(query);
     const TAB_NAMES = { page: 'Pages', code: 'Code', cad: 'CAD', all: 'All' };
@@ -1157,15 +1159,27 @@
         </div>`;
       }
       const notice = res.notice ? `<p class="search-notice">${esc(res.notice)}</p>` : '';
+      const all = HCSearch.groupResults(res.results);
+      const byKind = [[all.page.length, 'page', 'pages'], [all.code.length, 'code', 'code'], [all.cad.length, 'CAD', 'CAD']]
+        .filter((k) => k[0] > 0).map((k) => `${k[0]} ${k[0] === 1 ? k[1] : k[2]}`).join(', ');
+      const statusText = res.results.length
+        ? `${res.results.length} result${res.results.length === 1 ? '' : 's'} for “${query}”${byKind ? `: ${byKind}` : ''}.`
+        : `No results for “${query}”.`;
       content.innerHTML = `
       <div class="search-results">
         <h1>Search</h1>
         <p class="lead">${res.results.length ? res.results.length : 'No'} result${res.results.length === 1 ? '' : 's'} for
         “${esc(query)}” across ${res.total.toLocaleString()} indexed pages, code symbols, CAD parts, and files.</p>
-        ${waitLine}${pickBlock}${tabs}
+        ${statusP(statusText)}${waitLine}${pickBlock}${tabs}
         <div class="search-tabpanel">${body}</div>
         ${notice}
       </div>`;
+      // a live region that arrives already filled is not reliably read: fill it a moment after it lands
+      const live = content.querySelector('.search-status');
+      if (live && typeof live.textContent === 'string' && live.textContent) {
+        live.textContent = '';
+        setTimeout(() => { if (epoch === routeEpoch && live.isConnected) live.textContent = statusText; }, 60);
+      }
       // This view owns its own scroll (route() skips the search route): the
       // jump to the top belongs to the FIRST paint, so a slow librarian cannot
       // leave fresh results sitting at the old offset — and the later repaint

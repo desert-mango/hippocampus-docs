@@ -71,6 +71,24 @@ test('S3: kind=cad shows the CAD tab as current', async () => {
   assert.match(html, /<a [^>]*href="#\/search\?q=PX4&amp;kind=cad"[^>]*aria-current="page"/);
 });
 
+test('WCAG-6 search status: #/search?q=zzqq carries one visually hidden role="status" saying "No results"', async () => {
+  const site = await bootSite({ hash: '#/' });
+  await site.go('#/search?q=zzqq');
+  const html = String(site.content.innerHTML);
+  const st = [...html.matchAll(/<p [^>]*role="status"[^>]*>([^<]*)<\/p>/g)].filter((m) => /search-status/.test(m[0]));
+  assert.equal(st.length, 1, 'one search status region');
+  assert.match(st[0][0], /aria-live="polite"/);
+  assert.match(st[0][0], /class="[^"]*visually-hidden/);
+  assert.match(st[0][1], /^No results for “zzqq”/);
+});
+
+test('WCAG-6 search status: a query with results says how many, by type', async () => {
+  const site = await bootSite({ hash: '#/search?q=px4' });
+  const m = /<p [^>]*search-status[^>]*>([^<]*)<\/p>/.exec(String(site.content.innerHTML));
+  assert.ok(m, 'the status region is there');
+  assert.match(m[1], /^\d+ results? for “px4”: \d+ pages?/);
+});
+
 // ==== UNIT SHELL ====
 
 const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
