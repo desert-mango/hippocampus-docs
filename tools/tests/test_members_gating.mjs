@@ -842,7 +842,7 @@ test('a session replaced without sign-out: the next read asks GitHub, never the 
   await site.lab();
   assert.equal(site.orgCalls().length, first, 'the same login keeps its cache');
   // someone else signs in over the live session
-  C.writeSession(site.storage, C.makeSession('<yours>-second-token', null, 'someone-else', NOW));
+  site.win.HCCore.writeSession(site.storage, C.makeSession('<yours>-second-token', null, 'someone-else', NOW));
   await site.win.HCEditor.refresh();
   await settle();
   await site.lab();
@@ -861,7 +861,7 @@ test('a session replaced while the first person\'s reads are in flight: their an
   await site.lab();
   const firsts = held.splice(0);
   assert.ok(firsts.length > 0, 'the first person\'s year reads are waiting');
-  C.writeSession(site.storage, C.makeSession('<yours>-second-token', null, 'someone-else', NOW));
+  site.win.HCCore.writeSession(site.storage, C.makeSession('<yours>-second-token', null, 'someone-else', NOW));
   await site.win.HCEditor.refresh();
   await settle();
   firsts.forEach((go) => go());          // the first person's answers land now (the second's still wait)
@@ -882,7 +882,7 @@ test('a session login that is not a GitHub login: no cache marker, and the cache
   assert.equal(site.storage.raw.get('hc-org-cache:login'), 'kyle-nelson-berkeley', 'a real login is the marker');
   assert.ok([...site.storage.raw.keys()].some((k) => k.startsWith('hc-org-cache:https:')));
   for (const bad of ['not a login', '-leading-dash', 'x'.repeat(40), 'a/b', 'hc-org-cache:https://x']) {
-    C.writeSession(site.storage, C.makeSession('<yours>-second-token', null, bad, NOW));
+    site.win.HCCore.writeSession(site.storage, C.makeSession('<yours>-second-token', null, bad, NOW));
     const before = site.orgCalls().length;
     await site.win.HCEditor.refresh();
     await settle();

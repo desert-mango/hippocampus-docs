@@ -365,8 +365,16 @@
 
   // ----------------------------------------------------------- session ---
 
-  /* {token, expiresAt, login} in sessionStorage: gone when the tab closes.
-     Every access is guarded — storage can throw (privacy modes, quotas). */
+  /* U1 (D20): {token, expiresAt, login} in PAGE MEMORY only. The tab no longer
+     keeps the token in sessionStorage: a reload or another tab gets it back from
+     api/auth.js's sealed httpOnly cookie (GET /api/auth?session=1, js/app.js's
+     boot), and sign-out clears that cookie (forgetSession). SESSION_KEY is the
+     old sessionStorage key: a copy left by an older page is removed on the next
+     write or sign-out, never read. The `storage` arguments stay for that clean-up
+     and for the org reader's cache (ORG_CACHE_PREFIX keys), which still lives in
+     sessionStorage. Every access is guarded — storage can throw. */
+  let memorySession = null;
+
   function makeSession(token, expiresIn, login, now) {
     return {
       token,
@@ -375,10 +383,22 @@
     };
   }
 
+  function validSession(s) {
+    return Boolean(s && typeof s === 'object' && !Array.isArray(s)
+      && typeof s.token === 'string' && s.token
+      && typeof s.login === 'string' && s.login
+      && (s.expiresAt === null || Number.isFinite(s.expiresAt)));
+  }
+
+  function dropStoredCopy(storage) {
+    try { if (storage) storage.removeItem(SESSION_KEY); } catch (e) { /* nothing to clear */ }
+  }
+
   /* Sign-out also drops every org-reader answer (ORG_CACHE_PREFIX keys):
      a signed-out tab never serves an answer fetched with the token. */
   function clearSession(storage) {
-    try { if (storage) storage.removeItem(SESSION_KEY); } catch (e) { /* nothing to clear */ }
+    memorySession = null;
+    dropStoredCopy(storage);
     try {
       const keys = [];
       for (let i = 0; storage && i < storage.length; i += 1) {
@@ -389,30 +409,93 @@
     } catch (e) { /* nothing to clear */ }
   }
 
+  /* The page's session, or null (none, or expired: then it is forgotten). */
   function readSession(storage, now) {
-    let raw = null;
-    try { raw = storage ? storage.getItem(SESSION_KEY) : null; } catch (e) { return null; }
-    if (!raw) return null;
-    let s;
-    try { s = JSON.parse(raw); } catch (e) { clearSession(storage); return null; }
-    const valid = s && typeof s === 'object' && !Array.isArray(s)
-      && typeof s.token === 'string' && s.token
-      && typeof s.login === 'string' && s.login
-      && (s.expiresAt === null || Number.isFinite(s.expiresAt));
-    if (!valid || (s.expiresAt !== null && s.expiresAt <= now)) {
-      clearSession(storage);
+    const s = memorySession;
+    if (!s) return null;
+    if (!validSession(s) || (s.expiresAt !== null && s.expiresAt <= now)) {
+      memorySession = null;
       return null;
     }
     return { token: s.token, expiresAt: s.expiresAt, login: s.login };
   }
 
+  /* Memory only: never written to storage. -> false for a malformed record. */
   function writeSession(storage, record) {
+    if (!validSession(record)) return false;
+    memorySession = { token: record.token, expiresAt: record.expiresAt, login: record.login };
+    dropStoredCopy(storage);
+    return true;
+  }
+
+  /* sha256 hex of a token (WebCrypto), the same hash api/auth.js computes; -> null without
+     crypto.subtle, or for a token that is not plain printable ASCII (GitHub's are), so no
+     TextEncoder is needed. Never throws. */
+  const TOKEN_HASH_RE = /^[0-9a-f]{64}$/;
+  const FP_RE = /^[0-9a-f]{16}$/;
+  async function tokenHash(token, subtle) {
+    if (typeof token !== 'string' || !/^[\x21-\x7e]+$/.test(token)) return null;
+    if (!subtle || typeof subtle.digest !== 'function') return null;
     try {
-      storage.setItem(SESSION_KEY, JSON.stringify(record));
-      return true;
+      const bytes = Uint8Array.from(token, (ch) => ch.charCodeAt(0));
+      const buf = await subtle.digest('SHA-256', bytes);
+      return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
     } catch (e) {
-      return false;
+      return null;
     }
+  }
+
+  /* Sign-out at the server: the delete call to /api/auth clears the session cookie and the
+     hc_in marker and revokes the token at GitHub. opts.ifTokenHash (the 401 path: tokenHash
+     of the token GitHub refused) goes as the X-HC-If-Token header (never the URL): the
+     server then clears the cookie only while it still holds that token, and revokes
+     nothing. A malformed hash sends nothing at all (without the header the call would be
+     a full sign-out). Never throws; -> true when the server answered 2xx. */
+  function forgetSession(doFetch, opts) {
+    if (typeof doFetch !== 'function') return Promise.resolve(false);
+    const headers = { Accept: 'application/json' };
+    if (opts && opts.ifTokenHash !== undefined) {
+      if (typeof opts.ifTokenHash !== 'string' || !TOKEN_HASH_RE.test(opts.ifTokenHash)) return Promise.resolve(false);
+      headers['X-HC-If-Token'] = opts.ifTokenHash;
+    }
+    return Promise.resolve()
+      .then(() => doFetch(AUTH_FUNCTION, { method: 'DELETE', credentials: 'same-origin', cache: 'no-store',
+        headers }))
+      .then((res) => Boolean(res && res.ok))
+      .catch(() => false);
+  }
+
+  /* Every open tab hears a sign-out at once: BroadcastChannel('hc-session'),
+     message {type: 'signed-out'} (no token, no login). The sending tab does not
+     hear its own message. signedOut(fp) adds fp, the first 16 hex of the
+     token's tokenHash (the 401 path: only tabs holding that token drop it);
+     without fp (an explicit Sign out) every tab drops its session. The
+     listener gets the fp, or null; a malformed fp is not heard at all.
+     -> {signedOut(fp?), close()}; a browser without BroadcastChannel gets a
+     channel that does nothing. */
+  const SESSION_CHANNEL = 'hc-session';
+  function sessionChannel(win, onSignedOut) {
+    let ch = null;
+    try {
+      if (win && typeof win.BroadcastChannel === 'function') ch = new win.BroadcastChannel(SESSION_CHANNEL);
+    } catch (e) { ch = null; }
+    if (ch && typeof onSignedOut === 'function') {
+      const hear = (e) => {
+        const m = e && e.data;
+        if (!m || typeof m !== 'object' || m.type !== 'signed-out') return;
+        if (m.fp === undefined) onSignedOut(null);
+        else if (typeof m.fp === 'string' && FP_RE.test(m.fp)) onSignedOut(m.fp);
+      };
+      if (typeof ch.addEventListener === 'function') ch.addEventListener('message', hear);
+      else ch.onmessage = hear;
+    }
+    return Object.freeze({
+      signedOut(fp) {
+        const m = typeof fp === 'string' && FP_RE.test(fp) ? { type: 'signed-out', fp } : { type: 'signed-out' };
+        try { if (ch) ch.postMessage(m); } catch (e) { /* closed */ }
+      },
+      close() { try { if (ch) ch.close(); } catch (e) { /* closed */ } ch = null; },
+    });
   }
 
   // ------------------------------------------------ the one-repo client ---
@@ -4099,7 +4182,7 @@
     ROUTES, BRIDGE_PATH_RE,
     roleFromPermissions, parseRoute, orderOpenPulls, recentMerges, loadRecentMerges, proposerSlots, slotOf, PROPOSER_SLOTS, proposalRows,
     createGeneration, randomHex, authorizeUrl, createSignIn,
-    makeSession, readSession, writeSession, clearSession,
+    makeSession, readSession, writeSession, clearSession, forgetSession, sessionChannel, SESSION_CHANNEL, tokenHash,
     assertRepoPath, createGitHubClient, READ_METHODS, WRITE_METHODS, isAllowedWrite,
     editPath, pencilUrl, placeholderLink,
     isBridgePath, previewFragment, refFetcher, draftFetcher, createPreviewHost, RAW_MEDIA, contentsPath,

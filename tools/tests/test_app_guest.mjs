@@ -156,6 +156,7 @@ function makeDocument() {
     createDocumentFragment: () => makeNode('#fragment', doc),
     addEventListener() {},
     removeEventListener() {},
+    cookie: '',
   };
   doc.api = new Proxy(api, {
     get(t, k) { return k in api ? api[k] : (k === 'then' ? undefined : SINK); },
@@ -203,6 +204,7 @@ function fileResponse(p) {
 function openApp(opts) {
   const o = opts || {};
   const doc = makeDocument();
+  if (o.cookie !== undefined) doc.api.cookie = o.cookie;   // U1: the hc_in marker (document.cookie)
   const listeners = {};
   const fetches = [];
   const opens = [];
@@ -215,6 +217,8 @@ function openApp(opts) {
     hash: o.framed ? SRC.previewFragment(NONCE, o.route || '/') : (o.hash || '#/'),
     reload() {},
     replace() {},
+    assigned: [],
+    assign(u) { location.assigned.push(String(u)); },   // U1: the same-tab sign-in goes to GitHub
   };
   const parentPosts = [];
   const sandbox = {
@@ -226,7 +230,17 @@ function openApp(opts) {
     addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
     removeEventListener: () => {},
     fetch: (url, init) => {
-      fetches.push({ url: String(url), method: (init && init.method) || 'GET' });
+      fetches.push({ url: String(url), method: (init && init.method) || 'GET', init });
+      if (String(url) === '/api/auth?app=editor' && o.clientId) {
+        return Promise.resolve({ ok: true, status: 200, headers: { get: () => null },
+          json: async () => ({ client_id: o.clientId }) });
+      }
+      if (String(url) === '/api/auth?session=1') {
+        // U1: the resume, as api/auth.js answers it (o.resume: the 200 body; absent: 401, no cookie)
+        const ok = Boolean(o.resume);
+        return Promise.resolve({ ok, status: ok ? 200 : 401, headers: { get: () => null },
+          json: async () => (ok ? o.resume : { error: 'not signed in' }) });
+      }
       const own = o.files && Object.prototype.hasOwnProperty.call(o.files, String(url)) ? o.files[String(url)] : null;
       return Promise.resolve(own === null ? fileResponse(url) : {
         ok: true, status: 200, headers: { get: () => null }, text: async () => own, json: async () => JSON.parse(own) });
@@ -327,6 +341,11 @@ function openApp(opts) {
       const a = doc.after.find((x) => x.ref === doc.memo('#edit-page'));
       return a ? a.child : null;
     },
+    // U1 (ED1): the sign-in's own line, beside the button that was clicked
+    signInStatus: () => {
+      const a = doc.after.find((x) => x.ref === doc.memo('#signin-btn'));
+      return a ? a.child : null;
+    },
     injected: () => doc.appended.filter((x) => x.parent === doc.head).map((x) => x.child),
     injectedNames: () => app.injected().map((n) => n.attrs.src || n.attrs.href),
     scriptsOrLinks: () => doc.created.filter((n) => n.tagName === 'SCRIPT' || n.tagName === 'LINK'),
@@ -372,6 +391,9 @@ async function boot(opts) {
   return app;
 }
 
+// U1: a signed-in browser as the page sees it: the hc_in marker, and the resume's 200 body
+const SIGNED_IN = Object.freeze({ cookie: 'theme=dark; hc_in=1', resume: { token: '<yours>', expires_at: Date.now() + 3600 * 1000 } });
+
 const allowedRead = (u) => /^(content|data|search)\/[A-Za-z0-9._/-]+$/.test(u) && !u.includes('..');
 
 // ---------------------------------------------------------- guest boot ---
@@ -389,8 +411,9 @@ test('a guest boot creates no script or stylesheet element and fetches only cont
     assert.ok(allowedRead(f.url), `a guest fetched only same-origin content/ data/ search/: ${f.url}`);
     assert.equal(f.method, 'GET');
   }
-  // the one storage read is the session check; nothing is written
-  assert.deepEqual(app.storage.log, [['get', C.SESSION_KEY]]);
+  // U1: no storage is read at all (the hc_in marker cookie decides), and no marker means no resume call
+  assert.deepEqual(app.storage.log, []);
+  assert.ok(!app.fetches.some((f) => f.url.startsWith('/api/')), 'a guest never calls /api/auth');
 });
 
 test('P4: a guest sees the header sign-in button and no footer entry, on every route', async () => {
@@ -427,7 +450,7 @@ test('a preview frame whose sessionStorage throws still renders, never reads sto
 test('a normal page whose sessionStorage throws boots as a guest', async () => {
   const app = await boot({ hash: '#/', storage: 'throws' });
   assert.deepEqual(app.errors, []);
-  assert.equal(app.storageTouches.n, 1, 'the one guarded read');
+  assert.equal(app.storageTouches.n, 0, 'U1: no storage read (the marker cookie decides)');
   assert.match(String(app.doc.memo('#content').innerHTML), /class="hero"/);
   assert.equal(app.signIn().hidden, false, 'P4: the header sign-in button shows');
   assert.equal(app.scriptsOrLinks().length, 0);
@@ -436,8 +459,8 @@ test('a normal page whose sessionStorage throws boots as a guest', async () => {
 // ------------------------------------------------------- session boot ---
 
 test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor-dock.js, then js/editor.js, each after the last loaded', async () => {
-  const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
-  const app = await boot({ hash: `#${SETUP_ROUTE}`, storage });
+  const app = await boot({ hash: `#${SETUP_ROUTE}`, ...SIGNED_IN });
+  assert.equal(app.fetches.filter((f) => f.url === '/api/auth?session=1').length, 1, 'U1: the marker resumes once');
   assert.deepEqual(app.injectedNames(), ['css/editor.css']);
   const css = app.injected()[0];
   assert.equal(css.tagName, 'LINK');
@@ -453,6 +476,7 @@ test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor
   await app.loaded('js/editor.js');
   assert.equal(app.starts.length, 1);
   assert.equal(app.starts[0].popup, undefined, 'a session boot opens no window');
+  assert.equal(app.starts[0].resumed.token, '<yours>', 'U1: the resumed token is handed to the editor');
   assert.equal(typeof app.starts[0].status, 'function');
   assert.equal(typeof app.starts[0].onSession, 'function');
   assert.equal(app.opens.length, 0);
@@ -460,8 +484,7 @@ test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor
 });
 
 test('signed in: the footer entry is "Edit this page" -> the page with ?editor=changes (D-I); hidden off page routes', async () => {
-  const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
-  const app = await boot({ hash: `#${SETUP_ROUTE}`, storage });
+  const app = await boot({ hash: `#${SETUP_ROUTE}`, ...SIGNED_IN });
   await app.loadAll();
   app.starts[0].onSession(true);
   assert.equal(app.editLink().textContent, 'Edit this page');
@@ -500,7 +523,7 @@ test('the click opens the window synchronously inside the dispatched click, then
   assert.equal(o.win.closes, 0);
 });
 
-test('app.js\'s literals equal HCCore\'s: SESSION_KEY, and the popup\'s name and features', async () => {
+test('app.js\'s literals equal HCCore\'s: the popup\'s name and features (U1: SESSION_KEY is no longer read)', async () => {
   const app = await boot({ hash: '#/' });
   app.click();
   const seen = [];
@@ -516,10 +539,11 @@ test('app.js\'s literals equal HCCore\'s: SESSION_KEY, and the popup\'s name and
   assert.equal(app.opens[0].url, seen[0].url);
   assert.equal(app.opens[0].name, seen[0].name);
   assert.equal(app.opens[0].features, seen[0].features);
-  assert.deepEqual(app.storage.log[0], ['get', C.SESSION_KEY]);
+  assert.ok(!/SESSION_KEY|hc-cms-session/.test(fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8')),
+    'U1: app.js never reads the old sessionStorage key');
 });
 
-test('a failed injection closes the pre-opened window and the footer says so; a second click tries again', async () => {
+test('a failed injection closes the pre-opened window and the line beside the button says so; a second click tries again', async () => {
   const app = await boot({ hash: '#/' });
   app.click();
   await settle();
@@ -528,9 +552,10 @@ test('a failed injection closes the pre-opened window and the footer says so; a 
   const w = app.opens[0].win;
   assert.equal(w.closes, 1, 'the pre-opened window is closed');
   assert.equal(app.starts.length, 0);
-  const status = app.status();
-  assert.ok(status, 'a status line sits beside the footer link');
+  const status = app.signInStatus();
+  assert.ok(status, 'U1 (ED1): a status line sits beside the sign-in button that was clicked');
   assert.equal(status.getAttribute('role'), 'status');
+  assert.equal(status.getAttribute('aria-live'), 'polite');
   assert.match(status.textContent, /could not be loaded/);
   assert.equal(status.hidden, false);
   // again: a new window, and the failed file is injected again
@@ -543,22 +568,22 @@ test('a failed injection closes the pre-opened window and the footer says so; a 
   assert.equal(names.filter((n) => n === 'css/editor.css').length, 1, 'a loaded file is not injected twice');
 });
 
-test('a blocked window: the footer says so and nothing is injected', async () => {
+test('a blocked window: the line beside the button says so and nothing is injected (U1: then the same-tab sign-in)', async () => {
   const app = await boot({ hash: '#/', open: null });
   app.click();
+  assert.match(app.signInStatus().textContent, /blocked/, 'said at once, where the click was');
   await settle();
   assert.equal(app.opens.length, 1);
   assert.deepEqual(app.injected(), []);
-  assert.match(app.status().textContent, /blocked/);
 });
 
-test('HCEditor.start\'s status callback writes the footer line as text', async () => {
+test('HCEditor.start\'s status callback writes the line beside the button as text', async () => {
   const app = await boot({ hash: '#/' });
   app.click();
   await settle();
   await app.loadAll();
   app.starts[0].status('<img src=x onerror=alert(1)> said no', 'error');
-  const status = app.status();
+  const status = app.signInStatus();     // U1 (ED1): the clicked button's line
   assert.equal(status.textContent, '<img src=x onerror=alert(1)> said no');
   assert.equal(status.innerHTML, '', 'never markup');
   assert.equal(status.hidden, false);
@@ -590,6 +615,44 @@ test('window.HCApp is frozen {loadEditor}; loadEditor passes fetch and session, 
   assert.equal(app.injected().length, EDITOR_FILES.length);
 });
 
+test('U1: window.HCApp.loadEditor also passes a resumed {token, expiresIn} (the walk\'s ?auth=cookie mode)', async () => {
+  const app = await boot({ hash: '#/' });
+  const fake = () => Promise.resolve(null);
+  const resumed = { token: '<yours>-resumed', expiresIn: 600 };
+  const done = app.win.HCApp.loadEditor({ fetch: fake, resumed });
+  await settle();
+  await app.loadAll();
+  assert.equal(await done, true);
+  assert.equal(app.starts[0].fetch, fake);
+  assert.equal(app.starts[0].resumed, resumed);
+  assert.equal(app.starts[0].session, undefined);
+  assert.ok(!app.storage.log.some((x) => x[0] === 'set'), 'nothing is written');
+});
+
+/* Fix round 2 (the walk's ?auth=cookie reload / second tab): the site's own boot already resumed and started the
+   editor from the cookie; the seam must say so (true) and never start it a second time. */
+test('U1: HCApp.loadEditor after the boot resumed from the cookie waits for that start: true, and one start only', async () => {
+  const app = await boot({ hash: '#/', ...SIGNED_IN });
+  const fake = () => Promise.resolve(null);
+  const done = app.win.HCApp.loadEditor({ fetch: fake, resumed: { token: '<yours>-again', expiresIn: 600 } });
+  await app.loadAll();
+  assert.equal(await done, true, 'the editor the boot started');
+  assert.equal(app.starts.length, 1, 'never started twice');
+  assert.equal(app.starts[0].resumed.token, '<yours>', 'the boot\'s own resume');
+});
+
+test('U1: HCApp.loadEditor after a boot resume the server turned down starts the editor itself', async () => {
+  const app = await boot({ hash: '#/', cookie: 'hc_in=1' });
+  const fake = () => Promise.resolve(null);
+  const resumed = { token: '<yours>-walk', expiresIn: 600 };
+  const done = app.win.HCApp.loadEditor({ fetch: fake, resumed });
+  await settle();
+  await app.loadAll();
+  assert.equal(await done, true);
+  assert.equal(app.starts.length, 1);
+  assert.equal(app.starts[0].resumed, resumed);
+});
+
 // ------------------------------------------------ the ?editor= bootstrap ---
 
 test('a guest on a ?editor= link (the /cms/ redirect, D-I) loads nothing and is asked to sign in', async () => {
@@ -610,8 +673,7 @@ test('a guest on a ?editor= link (the /cms/ redirect, D-I) loads nothing and is 
 });
 
 test('a session boot on a ?editor= link loads the editor, which reads the parameter itself', async () => {
-  const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
-  const app = await boot({ hash: '#/?editor=media', storage });
+  const app = await boot({ hash: '#/?editor=media', ...SIGNED_IN });
   await app.loadAll();
   assert.equal(app.starts.length, 1);
   assert.equal(app.location.hash, '#/?editor=media', 'app.js leaves the parameter to js/editor.js');
@@ -619,7 +681,7 @@ test('a session boot on a ?editor= link loads the editor, which reads the parame
   assert.ok(!s || s.hidden, 'no sign-in prompt for a session');
 });
 
-test('HCEditor.start that throws: the window closes, the footer says so, no unhandled rejection', async () => {
+test('HCEditor.start that throws: the window closes, the line beside the button says so, no unhandled rejection', async () => {
   const app = await boot({ hash: '#/' });
   app.click();
   await settle();
@@ -639,7 +701,7 @@ test('HCEditor.start that throws: the window closes, the footer says so, no unha
   }
   assert.deepEqual(rejections, []);
   assert.equal(app.opens[0].win.closes, 1);
-  assert.match(app.status().textContent, /could not be loaded/);
+  assert.match(app.signInStatus().textContent, /could not be loaded/);
 });
 
 // ------------------------------------------------------ outside links ---
@@ -679,19 +741,98 @@ test('P4: no guest bubble exists; the header button\'s click is the sign-in (win
 });
 
 test('P4: a session boot never shows the sign-in button (the Editor\'s own dock comes)', async () => {
-  const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
-  const app = await boot({ hash: '#/', storage });
+  const app = await boot({ hash: '#/', ...SIGNED_IN });
   assert.equal(app.signIn().hidden, true, 'no sign-in button with a stored session');
   assert.deepEqual(app.doc.created.filter((n) => /hc-guest/.test(n.className)), []);
 });
 
 test('P4: a stored session the editor turns down (expired) leaves a guest, and the sign-in button shows', async () => {
-  const storage = memoryStorage({ [C.SESSION_KEY]: 'not a session' });
-  const app = await boot({ hash: '#/', storage, startAnswer: false });
+  const app = await boot({ hash: '#/', ...SIGNED_IN, startAnswer: false });
   assert.equal(app.signIn().hidden, true, 'a stored session: the button waits');
   await app.loadAll();
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(app.signIn().hidden, false, 'the editor turned the session down: "Sign in" shows');
+});
+
+// ------------------------------------------------ U1 (D19, ED1): the blocked pop-up --
+test('ED1: a blocked pop-up signs in in this tab: the state and the route kept in sessionStorage, then GitHub', async () => {
+  const app = await boot({ hash: `#${SETUP_ROUTE}`, open: null, clientId: 'Iv1.placeholder' });
+  app.click();
+  const line = app.signInStatus();
+  assert.ok(line, 'the message is beside the button');
+  assert.equal(line.getAttribute('aria-live'), 'polite');
+  assert.match(line.textContent, /blocked/);
+  assert.match(line.textContent, /this tab/);
+  assert.equal(line.hidden, false);
+  await settle();
+  assert.ok(app.fetches.some((f) => f.url === '/api/auth?app=editor'), 'the App\'s public id');
+  assert.equal(app.location.assigned.length, 1, 'the tab goes to GitHub');
+  const saved = JSON.parse(app.storage.raw.get('hc-signin-same-tab'));
+  assert.equal(saved.route, `#${SETUP_ROUTE}`, 'the page to come back to');
+  assert.match(saved.state, /^[0-9a-f]{32}$/);
+  assert.equal(app.location.assigned[0], C.authorizeUrl('Iv1.placeholder', ORIGIN, saved.state),
+    'the same authorize address HCCore builds (redirect_uri = this origin + /cms/callback.html)');
+  assert.deepEqual(app.injected(), [], 'no editor code in this tab before the sign-in');
+});
+
+test('ED1: a blocked pop-up on a host without the server functions says so beside the button and stays', async () => {
+  const app = await boot({ hash: '#/', open: null });
+  app.click();
+  await settle();
+  assert.deepEqual(app.location.assigned, [], 'no navigation');
+  assert.ok(!app.storage.raw.has('hc-signin-same-tab'), 'nothing kept');
+  assert.match(app.signInStatus().textContent, /server functions|not available/);
+});
+
+test('ED1: a blocked pop-up where storage throws cannot keep the state, so it says so and does not navigate', async () => {
+  const app = await boot({ hash: '#/', open: null, clientId: 'Iv1.placeholder', storage: 'throws' });
+  app.click();
+  await settle();
+  assert.deepEqual(app.location.assigned, []);
+  assert.match(app.signInStatus().textContent, /Allow pop-ups/);
+});
+
+test('ED1: the pop-up path hands the clicked button\'s line to the editor; the footer stays quiet', async () => {
+  const app = await boot({ hash: '#/' });
+  app.click();
+  await settle();
+  await app.loadAll();
+  app.starts[0].status('Finish signing in in the GitHub window…');
+  assert.equal(app.signInStatus().textContent, 'Finish signing in in the GitHub window…');
+  assert.ok(!app.status() || app.status().hidden, 'not the footer');
+});
+
+// ------------------------------------------- U1 (D20): the marker cookie and the resume --
+test('U1: on / the hc_in=1 marker triggers the resume (same-origin, X-HC-Session: 1); without it nothing is called', async () => {
+  const app = await boot({ hash: '#/', ...SIGNED_IN });
+  const calls = app.fetches.filter((f) => f.url.startsWith('/api/'));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/auth?session=1');
+  assert.equal(calls[0].method, 'GET');
+  assert.equal(calls[0].init.credentials, 'same-origin');
+  assert.equal(calls[0].init.cache, 'no-store');
+  assert.equal(calls[0].init.headers['X-HC-Session'], '1');
+  for (const cookie of ['', 'theme=dark', 'xhc_in=1', 'hc_in=0', 'hc_in=1x']) {
+    const guest = await boot({ hash: '#/', cookie, resume: SIGNED_IN.resume });
+    assert.ok(!guest.fetches.some((f) => f.url.startsWith('/api/')), `no resume call for ${JSON.stringify(cookie)}`);
+    assert.equal(guest.scriptsOrLinks().length, 0);
+    assert.equal(guest.signIn().hidden, false);
+  }
+});
+
+test('U1: a marker the server turns down (401) loads no editor code and shows "Sign in"', async () => {
+  const app = await boot({ hash: '#/', cookie: 'hc_in=1' });
+  assert.equal(app.fetches.filter((f) => f.url === '/api/auth?session=1').length, 1);
+  assert.equal(app.scriptsOrLinks().length, 0, 'nothing injected');
+  assert.equal(app.signIn().hidden, false, 'a guest again');
+  const expired = await boot({ hash: '#/', cookie: 'hc_in=1', resume: { token: '<yours>', expires_at: Date.now() - 1 } });
+  assert.equal(expired.scriptsOrLinks().length, 0, 'an answer already past its expiry is not used');
+});
+
+test('U1: a preview frame never reads the marker or calls the resume', async () => {
+  const app = await boot({ framed: true, route: '/', storage: 'throws', ...SIGNED_IN });
+  assert.equal(app.fetches.length, 0);
+  assert.equal(app.scriptsOrLinks().length, 0);
 });
 
 // ---------------------------------------------- window.HCShell: pure helpers --

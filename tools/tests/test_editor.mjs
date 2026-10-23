@@ -823,9 +823,10 @@ test('sign-in completes: the adopted window goes to GitHub; its hc-code ends in 
   assert.equal(page.storage.getItem(C.SESSION_KEY), null);
   await deliver(popup, ORIGIN, { type: 'hc-code', code: 'c0de', state });
   assert.equal(log.filter((x) => x.method === 'POST').length, 1);
-  const stored = C.readSession(page.storage, Date.now());
-  assert.ok(stored, 'the session is in sessionStorage');
+  const stored = page.win.HCCore.readSession(page.storage, Date.now());
+  assert.ok(stored, 'the session is in page memory (U1)');
   assert.equal(stored.token, TOKEN);
+  assert.equal(page.storage.getItem(C.SESSION_KEY), null, 'and never in sessionStorage (U1: the cookie keeps it)');
   assert.equal(controlsOf(page).hidden, false);
   assert.equal(page.switchBtn().getAttribute('aria-checked'), 'true', 'Editor mode comes on after a sign-in');
   assert.ok(page.body.classList.contains('hc-editor-on'));
@@ -2004,9 +2005,9 @@ test('js/editor.js editor: leaving a page with a draft that is not proposed asks
   assert.equal(asked[0], C.LEAVE_TEXT);
   assert.match(asked[0], /not proposed/);
   assert.ok(rawEditor(page), 'cancel stays on the page');
-  const unload = { preventDefault() { this.prevented = true; }, returnValue: undefined };
-  for (const fn of page.listeners.beforeunload || []) fn(unload);
-  assert.equal(unload.prevented, true, 'closing the tab with a draft asks too');
+  // U1 (D21, ED63): closing the tab asks nothing — the page drafts are saved as they are typed
+  assert.deepEqual(page.listeners.beforeunload || [], [], 'no beforeunload prompt');
+  assert.ok(C.isDirty(draftsOf(page).get(PAGE_ID)), 'and the page draft is kept for the next visit');
 });
 
 test('js/editor.js Propose from a setup page: exactly blobs -> tree -> commit -> ref -> PR, then #/review/<n>', async () => {
@@ -2042,7 +2043,11 @@ test('js/editor.js Propose: a 401 after the PR opened keeps it proposed (drafts 
   await page.type(page.editorTextarea(), `${PAGE_TEXT}More.\n`);
   page.action('propose').click();
   await settle();
-  assert.deepEqual(writeSeq(rec.writes).slice(-2), ['POST /pulls', 'PATCH /pulls/42'], 'the PR opened');
+  // U1: the ended session also clears its cookie at this site (DELETE /api/auth), which is not a GitHub write
+  const github = rec.writes.filter((w) => w.url.startsWith(REPO_API));
+  assert.deepEqual(writeSeq(github).slice(-2), ['POST /pulls', 'PATCH /pulls/42'], 'the PR opened');
+  assert.deepEqual(rec.writes.filter((w) => !w.url.startsWith(REPO_API)).map((w) => `${w.method} ${w.url}`),
+    ['DELETE /api/auth'], 'the session cookie is cleared');
   assert.equal(draftsOf(page).get(PAGE_ID), null, 'never proposed twice');
   assert.equal(controlsOf(page).hidden, true, 'the session ended');
   assert.equal(page.sessions.at(-1), false, 'app.js hears it');
@@ -2080,15 +2085,19 @@ test('js/editor.js reaches GitHub only through cms-core; every write is an allow
   assert.equal(ui.split(WRAPPER).length, 2, 'exactly one fetch wrapper');
   assert.ok(!/\bfetch\s*\(/.test(ui.replace(WRAPPER, '').replace(/HC\.fetch(JSON|Text)\(/g, '')),
     'the UI calls no bare fetch (the client and the sign-in own the network)');
-  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 8,
+  assert.equal((ui.match(/\bnetFetch\b/g) || []).length, 9,
     'netFetch goes only to the sign-in, the two GitHub clients, the file cache\'s ref fetcher, '
-    + 'the /api/media client, the signed direct upload to Cloudinary and the org reader');
+    + 'the /api/media client, the signed direct upload to Cloudinary, the org reader '
+    + 'and (U1) the sign-out\'s cookie clear, HCCore.forgetSession');
   const core = readRepo('js/cms-core.js');
   const verbs = core.match(/method:\s*'[A-Z]+'/g) || [];
   assert.deepEqual([...new Set(verbs)].sort(),
     ["method: 'DELETE'", "method: 'GET'", "method: 'PATCH'", "method: 'POST'", "method: 'PUT'"]);
-  // U2a: the one delete is undo's drop-ref of a cms/ branch: in the allowlist and the Propose requests only
-  assert.deepEqual(core.match(/method:\s*'DELETE'/g), ["method: 'DELETE'", "method: 'DELETE'"]);
+  // U1: the sign-out DELETE goes to this site's /api/auth (clears the session cookie)
+  const forget = core.slice(core.indexOf('function forgetSession'), core.indexOf('const SESSION_CHANNEL'));
+  assert.ok(forget && /doFetch\(AUTH_FUNCTION, \{ method: 'DELETE'/.test(forget), 'the sign-out DELETE goes to /api/auth');
+  // U2a: at GitHub the one delete is undo's drop-ref of a cms/ branch: the allowlist row and the Propose request only
+  assert.deepEqual(core.replace(forget, '').match(/method:\s*'DELETE'/g), ["method: 'DELETE'", "method: 'DELETE'"]);
   // the write verbs appear only in the allowlist and the review / Propose requests it admits
   const allow = core.slice(core.indexOf('const WRITE_METHODS'), core.indexOf('function isAllowedWrite'));
   const review = core.slice(core.indexOf('function reviewRequest'), core.indexOf('const DONE_TEXT'));
@@ -2154,13 +2163,12 @@ function githubFor(login, repo) {
 const asBob = () => githubFor('bob', answer(200, { permissions: { push: true } }));
 const isGitHub = (url) => url.indexOf('https://api.github.com/') === 0;
 
-/* alice's session in sessionStorage (as a reload finds it); `route` answers
+/* alice's session (U1: held in page memory, as a reload gets it back from the cookie); `route` answers
    every GitHub call by token. */
 function raceSite(route, editorState) {
   const storage = memoryStorage();
-  C.writeSession(storage, C.makeSession(TOKEN_A, null, 'alice', Date.now()));
   if (editorState) storage.setItem('hc-editor', JSON.stringify(editorState));
-  const page = openSite({ session: null, storage, hash: `#${PAGE_ROUTE}`,
+  const page = openSite({ session: C.makeSession(TOKEN_A, null, 'alice', Date.now()), storage, hash: `#${PAGE_ROUTE}`,
     intercept: (url, init) => (isGitHub(url) ? route(url, init) : null) });
   return page;
 }
@@ -2169,7 +2177,7 @@ function raceSite(route, editorState) {
 async function signOutThenInAsBob(page) {
   page.action('sign-out').click();
   await settle();
-  C.writeSession(page.storage, C.makeSession(TOKEN_B, null, 'bob', Date.now()));
+  page.win.HCCore.writeSession(page.storage, C.makeSession(TOKEN_B, null, 'bob', Date.now()));
   page.win.HCEditor.refresh();
   await settle();
   assert.match(whoOf(page), /bob/);
@@ -2189,7 +2197,7 @@ test('js/editor.js: a refresh that lands after sign-out and a new sign-in change
   assert.match(whoOf(page), /bob/);
   assert.match(whoOf(page), /Editor/);
   assert.doesNotMatch(whoOf(page), /Admin|alice/, 'the old answer wrote nothing');
-  assert.equal(C.readSession(page.storage, Date.now()).login, 'bob');
+  assert.equal(page.win.HCCore.readSession(page.storage, Date.now()).login, 'bob');
 });
 
 test('js/editor.js: a "no access" answer that lands after sign-out leaves the signed-out page alone', async () => {
@@ -2217,7 +2225,7 @@ test('js/editor.js: an old session\'s 401 does not end the session that replaced
   await signOutThenInAsBob(page);
   held.resolve();
   await settle();
-  assert.equal(C.readSession(page.storage, Date.now()).login, 'bob');
+  assert.equal(page.win.HCCore.readSession(page.storage, Date.now()).login, 'bob');
   assert.match(whoOf(page), /bob/);
   assert.ok(!page.told.some((t) => /sign-in has ended/.test(t.text)));
 });
@@ -2238,7 +2246,7 @@ test('js/editor.js: a 401 for a list the old session asked for does not end the 
   await signOutThenInAsBob(page);
   held.resolve();
   await settle();
-  assert.equal(C.readSession(page.storage, Date.now()).login, 'bob');
+  assert.equal(page.win.HCCore.readSession(page.storage, Date.now()).login, 'bob');
   assert.match(whoOf(page), /bob/);
   assert.ok(!page.told.some((t) => /sign-in has ended/.test(t.text)));
 });
@@ -2550,18 +2558,17 @@ test('U4b: a draft survives a closed tab, and only for its own login', async () 
   assert.equal(c.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
 });
 
-test('U4b: Sign out asks, then deletes the login\'s drafts; saying no keeps both the session and the drafts', async () => {
+test('U4b, U1 (ED63): Sign out keeps the login\'s drafts and asks nothing; they are back at the next sign-in', async () => {
+  // U1 (D21, ED63) reversed U4b's "Sign out asks, then deletes the login's drafts"
   let page = await editorOn({ confirm: false });
   await typedDraft(page);
   page.action('sign-out').click();
   await settle();
-  assert.match(page.confirms.at(-1), /deletes 1 change you have not sent for review/);
-  assert.ok(draftsOf(page).get(PAGE_ID), 'kept: the person said no');
-  assert.ok(page.switchBtn() && !page.switchBtn().hidden, 'still signed in');
+  assert.deepEqual(page.confirms, [], 'no question');
+  assert.equal(page.sessions.at(-1), false, 'signed out');
+  assert.ok(draftsOf(page).get(PAGE_ID), 'kept in this browser');
   page = await editorOn({ localStorage: page.local });
-  page.action('sign-out').click();
-  await settle();
-  assert.equal(C.createDraftStore(page.local, C.draftsKey('bob')).list().length, 0, 'deleted at sign-out');
+  assert.equal(C.createDraftStore(page.local, C.draftsKey('bob')).list().length, 1, 'back at the next sign-in');
 });
 
 test('U4b: an older tab\'s sessionStorage drafts move into the login\'s store once', async () => {

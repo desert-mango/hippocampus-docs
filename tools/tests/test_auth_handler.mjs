@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
@@ -105,7 +106,7 @@ async function run(body, opts) {
   }
   try {
     await handler(makeReq(o.method || 'POST', body, o.headers, o.url), res,
-      { env: o.env || ENV, fetch: gh.fetch, timeoutMs: o.timeoutMs });
+      { env: o.env || ENV, fetch: gh.fetch, timeoutMs: o.timeoutMs, now: o.now });
     await res.done;
   } finally {
     for (const name of Object.keys(saved)) console[name] = saved[name];
@@ -207,11 +208,11 @@ test('an Origin carrying a path or credentials is refused', async () => {
 
 // ------------------------------------------------------------------- input --
 
-test('a method other than GET or POST is 405 with Allow: GET, POST', async () => {
-  for (const method of ['PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']) {
+test('a method other than GET, POST or DELETE is 405 with Allow: GET, POST, DELETE', async () => {
+  for (const method of ['PUT', 'PATCH', 'HEAD', 'OPTIONS']) {
     const r = await run(undefined, { method, url: '/api/auth?app=editor' });
     assert.equal(r.res.code, 405, method);
-    assert.equal(r.res.headers.allow, 'GET, POST', method);
+    assert.equal(r.res.headers.allow, 'GET, POST, DELETE', method);
     assert.equal(r.calls.length, 0);
   }
 });
@@ -598,4 +599,269 @@ test('dev_site loads .env.local-style KEY=VALUE files and never prints a value',
     site.child.kill();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --------------------------------------- U1 (D20): the sealed session cookie --
+/* POST also sets hc_s (sealed, httpOnly, Path=/api/auth) and the marker hc_in=1 (Path=/, no secret);
+   GET ?session=1 resumes; DELETE clears both and revokes the token at GitHub. Tests come in pairs. */
+
+const setCookies = (r) => [].concat(r.res.headers['set-cookie'] || []);
+const cookieNamed = (r, name) => setCookies(r).find((c) => c.startsWith(`${name}=`)) || null;
+const attrs = (c) => c.split(';').slice(1).map((x) => x.trim());
+const valueOf = (c) => c.split(';')[0].slice(c.indexOf('=') + 1);
+
+async function signedIn(opts) {
+  const r = await run({ code: CODE, app: 'editor' }, opts);
+  assert.equal(r.res.code, 200);
+  return { r, seal: valueOf(cookieNamed(r, 'hc_s')) };
+}
+const RESUME = '/api/auth?session=1';
+const sameOrigin = (seal, extra) => Object.assign({ origin: undefined, 'sec-fetch-site': 'same-origin',
+  'x-hc-session': '1', cookie: seal === null ? undefined : `hc_in=1; hc_s=${seal}` }, extra || {});
+
+test('POST sets hc_s: sealed, HttpOnly, SameSite=Strict, Path=/api/auth, Secure on https, Max-Age 8 h at most', async () => {
+  const { r, seal } = await signedIn();
+  const c = cookieNamed(r, 'hc_s');
+  assert.ok(c, 'the session cookie is set');
+  assert.deepEqual(attrs(c).sort(), ['HttpOnly', 'Max-Age=28800', 'Path=/api/auth', 'SameSite=Strict', 'Secure'].sort());
+  assert.ok(!seal.includes(TOKEN) && !Buffer.from(seal, 'base64url').toString('latin1').includes(TOKEN),
+    'the token is sealed, not readable in the cookie');
+  const m = cookieNamed(r, 'hc_in');
+  assert.ok(m, 'the marker is set');
+  assert.equal(valueOf(m), '1');
+  assert.deepEqual(attrs(m).sort(), ['Max-Age=28800', 'Path=/', 'SameSite=Strict', 'Secure'].sort());
+  assert.ok(!attrs(m).includes('HttpOnly'), 'the marker is readable by the page (it holds no secret)');
+  assert.deepEqual(r.json, { token: TOKEN, expires_in: 28800 }, 'the body is unchanged');
+  assertClean(r);
+});
+
+test('POST cookies: Max-Age follows a shorter token life, never a longer one; no Secure on the localhost dev server', async () => {
+  const short = await run({ code: CODE, app: 'editor' }, { gh: fakeGitHub(200, { access_token: TOKEN, expires_in: 600 }) });
+  assert.ok(attrs(cookieNamed(short, 'hc_s')).includes('Max-Age=600'));
+  assert.ok(attrs(cookieNamed(short, 'hc_in')).includes('Max-Age=600'));
+  for (const payload of [{ access_token: TOKEN, expires_in: 99999 }, { access_token: TOKEN }]) {
+    const long = await run({ code: CODE, app: 'editor' }, { gh: fakeGitHub(200, payload) });
+    assert.ok(attrs(cookieNamed(long, 'hc_s')).includes('Max-Age=28800'), JSON.stringify(payload));
+  }
+  const local = await run({ code: CODE, app: 'editor' },
+    { headers: { host: 'localhost:8131', origin: 'http://localhost:8131' } });
+  assert.ok(!attrs(cookieNamed(local, 'hc_s')).includes('Secure'), 'http localhost: a Secure cookie would never be sent');
+  assert.ok(!attrs(cookieNamed(local, 'hc_in')).includes('Secure'));
+});
+
+test('POST: a refused or failed sign-in sets no cookie', async () => {
+  const bad = await run({ code: CODE, app: 'editor' }, { headers: { origin: 'https://evil.example.com' } });
+  assert.equal(bad.res.code, 403);
+  assert.deepEqual(setCookies(bad), []);
+  const failed = await run({ code: CODE, app: 'editor' }, { gh: fakeGitHub(401, { message: 'no' }) });
+  assert.equal(failed.res.code, 502);
+  assert.deepEqual(setCookies(failed), []);
+});
+
+test('seal round-trip: unseal gives the token and expiry back; a changed byte or another key is refused', () => {
+  const key = handler.sessionKey(ENV);
+  const sealed = handler.seal(key, 'editor', TOKEN, 5000);
+  assert.deepEqual(handler.unseal(key, 'editor', sealed), { token: TOKEN, expAt: 5000 });
+  const bytes = Buffer.from(sealed.slice(3), 'base64url');
+  bytes[bytes.length - 1] ^= 1;
+  assert.equal(handler.unseal(key, 'editor', `v1.${bytes.toString('base64url')}`), null, 'a tampered seal');
+  assert.equal(handler.unseal(handler.sessionKey({ GH_APP_CLIENT_SECRET: 'another-secret' }), 'editor', sealed), null,
+    'another key');
+  for (const junk of ['', 'v1.', 'v2.abc', 'v1.!!!', 'x'.repeat(5000)]) assert.equal(handler.unseal(key, 'editor', junk), null, junk);
+});
+
+test('seal binds the app: an editor seal does not open as the viewer (AAD mismatch refused)', () => {
+  const key = handler.sessionKey(ENV);
+  const sealed = handler.seal(key, 'editor', TOKEN, 5000);
+  assert.equal(handler.unseal(key, 'viewer', sealed), null);
+  assert.ok(handler.unseal(key, 'editor', sealed));
+});
+
+test('seal key: HC_SESSION_KEY when set, else derived from GH_APP_CLIENT_SECRET; neither = no cookie', async () => {
+  const fromSecret = handler.sessionKey(ENV);
+  const fromKey = handler.sessionKey(Object.assign({ HC_SESSION_KEY: 'k'.repeat(48) }, ENV));
+  assert.equal(fromSecret.length, 32);
+  assert.equal(fromKey.length, 32);
+  assert.notDeepEqual(fromSecret, fromKey);
+  assert.notDeepEqual(fromSecret, Buffer.from(SECRET).subarray(0, 32), 'derived, not the secret itself');
+  assert.equal(handler.sessionKey({}), null);
+});
+
+test('resume: a same-origin GET with X-HC-Session: 1 gets {token, expires_at} back from the cookie', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const r = await run(undefined, { method: 'GET', url: RESUME, headers: sameOrigin(seal), now: () => 2000 });
+  assert.equal(r.res.code, 200);
+  assert.deepEqual(r.json, { token: TOKEN, expires_at: 1000 + 28800 * 1000 });
+  assert.equal(r.res.headers['cache-control'], 'no-store');
+  assert.deepEqual(setCookies(r), [], 'a resume sets nothing');
+  assert.equal(r.calls.length, 0, 'GitHub is not asked');
+  const withOrigin = await run(undefined, { method: 'GET', url: RESUME, now: () => 2000,
+    headers: sameOrigin(seal, { origin: ORIGIN, 'sec-fetch-site': undefined }) });
+  assert.equal(withOrigin.res.code, 200, 'a matching Origin is accepted too');
+});
+
+test('resume refuses Origin: null (the sandboxed frame), a foreign Origin, a cross-site fetch, and a missing X-HC-Session', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const cases = [
+    { origin: 'null' },
+    { origin: 'https://evil.example.com' },
+    { 'sec-fetch-site': 'cross-site' },
+    { 'sec-fetch-site': 'same-site' },
+    { 'sec-fetch-site': undefined },
+    { 'x-hc-session': undefined },
+    { 'x-hc-session': 'yes' },
+  ];
+  for (const extra of cases) {
+    const r = await run(undefined, { method: 'GET', url: RESUME, headers: sameOrigin(seal, extra), now: () => 2000 });
+    assert.equal(r.res.code, 403, JSON.stringify(extra));
+    assert.ok(!r.res.body.includes(TOKEN), 'a refused caller gets no token');
+    assert.equal(r.res.headers['cache-control'], 'no-store');
+  }
+});
+
+test('resume without a cookie is 401 and clears the marker; an expired seal is 401 and both cookies are cleared, Secure on https', async () => {
+  const none = await run(undefined, { method: 'GET', url: RESUME, headers: sameOrigin(null) });
+  assert.equal(none.res.code, 401);
+  assert.equal(none.res.headers['cache-control'], 'no-store');
+  assert.ok(attrs(cookieNamed(none, 'hc_in')).includes('Max-Age=0'));
+  const { seal } = await signedIn({ now: () => 1000 });
+  const r = await run(undefined, { method: 'GET', url: RESUME, headers: sameOrigin(seal), now: () => 1000 + 28800 * 1000 + 1 });
+  assert.equal(r.res.code, 401);
+  assert.ok(!r.res.body.includes(TOKEN));
+  const s = cookieNamed(r, 'hc_s');
+  const m = cookieNamed(r, 'hc_in');
+  assert.equal(valueOf(s), '');
+  assert.deepEqual(attrs(s).filter((a) => !a.startsWith('Expires=')).sort(),
+    ['HttpOnly', 'Max-Age=0', 'Path=/api/auth', 'SameSite=Strict', 'Secure'].sort(),
+    'the same attributes as the set, so the browser really removes it');
+  assert.deepEqual(attrs(m).filter((a) => !a.startsWith('Expires=')).sort(), ['Max-Age=0', 'Path=/', 'SameSite=Strict', 'Secure'].sort());
+});
+
+test('resume on the http localhost dev server: the clearing cookies carry no Secure (decided from the Host)', async () => {
+  const r = await run(undefined, { method: 'GET', url: RESUME,
+    headers: sameOrigin(null, { host: 'localhost:8131' }) });
+  assert.equal(r.res.code, 401);
+  assert.ok(!attrs(cookieNamed(r, 'hc_s')).includes('Secure'));
+  assert.ok(!attrs(cookieNamed(r, 'hc_in')).includes('Secure'));
+});
+
+test('resume: a tampered seal or one sealed with another key is 401, never a token', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const other = handler.seal(handler.sessionKey({ GH_APP_CLIENT_SECRET: 'not-this-site' }), 'editor', TOKEN, 9e15);
+  for (const bad of [`${seal.slice(0, -2)}AA`, other, 'garbage']) {
+    const r = await run(undefined, { method: 'GET', url: RESUME, headers: sameOrigin(bad), now: () => 2000 });
+    assert.equal(r.res.code, 401, bad);
+    assert.ok(!r.res.body.includes(TOKEN));
+  }
+});
+
+test('OPTIONS gets no CORS grant (405, no Access-Control-* header)', async () => {
+  const r = await run(undefined, { method: 'OPTIONS', url: RESUME,
+    headers: { origin: 'https://evil.example.com', 'access-control-request-method': 'GET',
+      'access-control-request-headers': 'x-hc-session' } });
+  assert.equal(r.res.code, 405);
+  assert.ok(!Object.keys(r.res.headers).some((k) => /^access-control-/i.test(k)));
+  assert.equal(r.res.headers['cache-control'], 'no-store');
+});
+
+test('DELETE from this site clears both cookies and revokes the token at GitHub (basic auth)', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const gh = fakeGitHub(204, '');
+  const r = await run(undefined, { method: 'DELETE', gh, now: () => 2000, headers: { cookie: `hc_in=1; hc_s=${seal}` } });
+  assert.equal(r.res.code, 200);
+  assert.deepEqual(r.json, { signed_out: true });
+  assert.equal(r.res.headers['cache-control'], 'no-store');
+  assert.ok(attrs(cookieNamed(r, 'hc_s')).includes('Max-Age=0'));
+  assert.ok(attrs(cookieNamed(r, 'hc_s')).includes('HttpOnly'));
+  assert.ok(attrs(cookieNamed(r, 'hc_in')).includes('Max-Age=0'));
+  assert.equal(r.calls.length, 1);
+  const call = r.calls[0];
+  assert.equal(call.url, `https://api.github.com/applications/${ENV.GH_APP_CLIENT_ID}/token`);
+  assert.equal(call.init.method, 'DELETE');
+  const h = Object.fromEntries(Object.entries(call.init.headers).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.equal(h.authorization, `Basic ${Buffer.from(`${ENV.GH_APP_CLIENT_ID}:${SECRET}`).toString('base64')}`);
+  assert.deepEqual(JSON.parse(call.init.body), { access_token: TOKEN });
+  assertClean(r);
+});
+
+test('DELETE: a failed revoke still signs out (fails soft); no cookie = nothing to revoke; a foreign Origin is refused', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const down = { calls: [], fetch: async () => { throw new Error(`network down ${TOKEN}`); } };
+  const r = await run(undefined, { method: 'DELETE', gh: down, now: () => 2000, headers: { cookie: `hc_s=${seal}` } });
+  assert.equal(r.res.code, 200);
+  assert.ok(attrs(cookieNamed(r, 'hc_s')).includes('Max-Age=0'));
+  assertClean(r);
+  const bare = await run(undefined, { method: 'DELETE' });
+  assert.equal(bare.res.code, 200);
+  assert.equal(bare.calls.length, 0, 'no cookie: GitHub is not asked');
+  assert.ok(attrs(cookieNamed(bare, 'hc_in')).includes('Max-Age=0'));
+  const evil = await run(undefined, { method: 'DELETE', headers: { origin: 'https://evil.example.com', cookie: `hc_s=${seal}` } });
+  assert.equal(evil.res.code, 403);
+  assert.deepEqual(setCookies(evil), [], 'a refused caller changes nothing');
+  assert.equal(evil.calls.length, 0);
+});
+
+// ------------------ security review (U1 fix round 3): the 401 path's guarded DELETE --
+/* A tab whose token GitHub refused (401) sends DELETE with X-HC-If-Token: sha256 hex of that dead token.
+   The server clears only when the cookie still holds that token, and never revokes it (GitHub already
+   refused it); a newer sign-in in the cookie is left alone. A plain DELETE (Sign out) is unchanged. */
+const sha256hex = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+
+test('DELETE with X-HC-If-Token for another token: 200 {signed_out: false}, the cookie stays, GitHub is not asked', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  for (const ifToken of [sha256hex('ghu_anOlderDeadToken0000'), 'not-a-hash', sha256hex(TOKEN).toUpperCase().slice(1)]) {
+    const gh = fakeGitHub(204, '');
+    const r = await run(undefined, { method: 'DELETE', gh, now: () => 2000,
+      headers: { cookie: `hc_in=1; hc_s=${seal}`, 'x-hc-if-token': ifToken } });
+    assert.equal(r.res.code, 200, ifToken);
+    assert.deepEqual(r.json, { signed_out: false });
+    assert.equal(r.res.headers['cache-control'], 'no-store');
+    assert.deepEqual(setCookies(r), [], 'the newer sign-in keeps its cookies');
+    assert.equal(r.calls.length, 0, 'no revoke of the newer token');
+    assertClean(r);
+  }
+});
+
+test('DELETE with X-HC-If-Token matching the cookie: both cookies cleared, no revoke (GitHub already refused it)', async () => {
+  const { seal } = await signedIn({ now: () => 1000 });
+  const gh = fakeGitHub(204, '');
+  const r = await run(undefined, { method: 'DELETE', gh, now: () => 2000,
+    headers: { cookie: `hc_in=1; hc_s=${seal}`, 'x-hc-if-token': sha256hex(TOKEN) } });
+  assert.equal(r.res.code, 200);
+  assert.deepEqual(r.json, { signed_out: true });
+  assert.ok(attrs(cookieNamed(r, 'hc_s')).includes('Max-Age=0'));
+  assert.ok(attrs(cookieNamed(r, 'hc_in')).includes('Max-Age=0'));
+  assert.equal(r.calls.length, 0, 'GitHub is not asked');
+  assertClean(r);
+  // no live cookie at all: nothing to protect, the marker goes; still no revoke
+  const bare = await run(undefined, { method: 'DELETE', gh, headers: { 'x-hc-if-token': sha256hex(TOKEN) } });
+  assert.equal(bare.res.code, 200);
+  assert.ok(attrs(cookieNamed(bare, 'hc_in')).includes('Max-Age=0'));
+  assert.equal(gh.calls.length, 0);
+  // the Origin rule still comes first
+  const evil = await run(undefined, { method: 'DELETE',
+    headers: { origin: 'https://evil.example.com', cookie: `hc_s=${seal}`, 'x-hc-if-token': sha256hex(TOKEN) } });
+  assert.equal(evil.res.code, 403);
+  assert.deepEqual(setCookies(evil), []);
+});
+
+// ------------------ security review (U1 fix round 3): a short HC_SESSION_KEY is ignored --
+
+test('seal key: an HC_SESSION_KEY under 32 characters is ignored (HKDF from the client secret) with one log line, never the value', async () => {
+  const short = 'k'.repeat(31);
+  const lines = [];
+  const saved = console.error;
+  console.error = (...a) => { lines.push(a.map(String).join(' ')); };
+  let key;
+  try { key = handler.sessionKey(Object.assign({ HC_SESSION_KEY: short }, ENV)); } finally { console.error = saved; }
+  assert.deepEqual(key, handler.sessionKey(ENV), 'the client-secret key, as if HC_SESSION_KEY were unset');
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /HC_SESSION_KEY/);
+  assert.ok(!lines[0].includes(short) && !lines[0].includes(SECRET), 'the line names the variable, never a value');
+  const exact = handler.sessionKey(Object.assign({ HC_SESSION_KEY: 'k'.repeat(32) }, ENV));
+  assert.notDeepEqual(exact, handler.sessionKey(ENV), '32 characters is long enough');
+  // a sign-in under the short key: the seal opens with the secret-derived key
+  const r = await run({ code: CODE, app: 'editor' }, { env: Object.assign({ HC_SESSION_KEY: short }, ENV) });
+  assert.ok(handler.unseal(handler.sessionKey(ENV), 'editor', valueOf(cookieNamed(r, 'hc_s'))));
+  assertClean(r);
 });

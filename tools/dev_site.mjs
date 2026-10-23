@@ -13,6 +13,9 @@
      node tools/dev_site.mjs                        # static + every function present
      node tools/dev_site.mjs --port 8140
      node tools/dev_site.mjs --dotenv path/to/file   # instead of ./.env.local
+     node tools/dev_site.mjs --host 0.0.0.0         # bind every interface (Docker; map -p 127.0.0.1:8131:8131);
+                                                    # .env.local is then NOT loaded unless --dotenv names a file
+     node tools/dev_site.mjs --handler-deps tools/tests/dev_auth_fake.mjs   # api/auth.js gets a fake GitHub
      node tools/dev_site.mjs --mock-provider=echo   # a fake LLM that echoes candidates
      node tools/dev_site.mjs --mock-provider=adversarial
      node tools/dev_site.mjs --mock-provider=graph  # the walk, keyless and deterministic
@@ -60,6 +63,8 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const DEFAULT_PORT = 8131;
+const DEFAULT_HOST = '127.0.0.1';            // loopback only, unless --host says otherwise
+const HOST_RE = /^[A-Za-z0-9.:[\]-]{1,64}$/;
 const API_DIR = path.join(ROOT, 'api');
 const API_ROUTE_RE = /^\/api\/([a-z0-9][a-z0-9_-]*)$/;   // one plain name, no dots, no slashes
 const API_FILE_RE = /^([a-z0-9][a-z0-9_-]*)\.js$/;
@@ -94,17 +99,24 @@ const TYPES = {
 
 // ------------------------------------------------------------------- args ---
 
-const USAGE = 'usage: node tools/dev_site.mjs [--port N] [--dotenv PATH] '
+const USAGE = 'usage: node tools/dev_site.mjs [--port N] [--host H] [--dotenv PATH] [--handler-deps MODULE] '
   + `[--mock-provider=${MOCK_MODES.join('|')}] [--mock-delay=<ms>]\n`
+  + '  --host           the address to bind (default 127.0.0.1, loopback only). 0.0.0.0 is for\n'
+  + '                   a Docker run that publishes the port on the Mac\'s loopback only.\n'
+  + '  --handler-deps   a module whose default export (an object) is handed to api/auth.js as its\n'
+  + '                   `deps` (tools/tests/dev_auth_fake.mjs: a fake GitHub exchange, dev only).\n'
+  + '                   With no flag no deps are injected.\n'
   + '  --dotenv         KEY=VALUE file loaded at startup (default: .env.local at the repo root,\n'
-  + '                   skipped silently when absent). Values are never printed.\n'
+  + '                   skipped silently when absent; with a --host beyond loopback the default\n'
+  + '                   is NOT loaded — pass --dotenv to load a file on purpose). Values are never printed.\n'
   + '  --mock-provider  echo/adversarial re-rank the candidates; graph answers both hops\n'
   + '                   of the walk by token overlap; quota 429s every call.\n'
   + '  --mock-delay     milliseconds the mock waits before answering EACH call (default 0).\n'
   + '                   It only means something with a mock, so it is refused without one.\n';
 
 function parseArgs(argv) {
-  const out = { port: DEFAULT_PORT, mock: null, mockDelay: null, envFile: DEFAULT_ENV_FILE };
+  const out = { port: DEFAULT_PORT, host: DEFAULT_HOST, mock: null, mockDelay: null, envFile: DEFAULT_ENV_FILE,
+    envExplicit: false, handlerDeps: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') { out.help = true; continue; }
@@ -118,6 +130,22 @@ function parseArgs(argv) {
       out.port = port;
       continue;
     }
+    m = arg.match(/^--host(?:=(.*))?$/);
+    if (m) {
+      const value = m[1] !== undefined ? m[1] : argv[++i];
+      if (typeof value !== 'string' || !HOST_RE.test(value)) {
+        throw new Error(`--host needs an address such as 127.0.0.1 or 0.0.0.0, got ${JSON.stringify(value)}`);
+      }
+      out.host = value;
+      continue;
+    }
+    m = arg.match(/^--handler-deps(?:=(.*))?$/);
+    if (m) {
+      const value = m[1] !== undefined ? m[1] : argv[++i];
+      if (!value) throw new Error('--handler-deps needs a module path');
+      out.handlerDeps = path.resolve(value);
+      continue;
+    }
     m = arg.match(/^--dotenv(?:=(.*))?$/);
     if (m) {
       const value = m[1] !== undefined ? m[1] : argv[++i];
@@ -125,6 +153,7 @@ function parseArgs(argv) {
       // name and exits before this file runs.
       if (!value) throw new Error('--dotenv needs a path');
       out.envFile = path.resolve(value);
+      out.envExplicit = true;
       continue;
     }
     m = arg.match(/^--mock-provider(?:=(.*))?$/);
@@ -200,9 +229,16 @@ function loadEnvFile(file) {
   return counts;
 }
 
+/* Bound beyond loopback (e.g. 0.0.0.0), anyone who can reach the port can call the functions
+   with the credentials .env.local holds: the default file is then skipped, and only an explicit
+   --dotenv loads one. */
+const LOOPBACK_HOSTS = new Set(['localhost', '::1', '[::1]']);
+const isLoopback = (h) => LOOPBACK_HOSTS.has(h) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+const envSkipped = !isLoopback(args.host) && !args.envExplicit;
+
 let envCounts = null;
 try {
-  envCounts = loadEnvFile(args.envFile);
+  if (!envSkipped) envCounts = loadEnvFile(args.envFile);
 } catch (e) {
   process.stderr.write(`${e.message}\n`);
   process.exit(1);
@@ -512,6 +548,24 @@ for (const file of apiFiles) {
   }
 }
 
+/* --handler-deps: one module, loaded once, whose default export is handed to
+   api/auth.js's handler as its `deps` ({env, fetch, ...}). Only auth gets it;
+   with no flag nothing is injected and every handler sees the raw call. */
+let handlerDeps = null;
+if (args.handlerDeps) {
+  try {
+    const mod = await import(pathToFileURL(args.handlerDeps).href);
+    handlerDeps = mod && mod.default;
+  } catch (e) {
+    process.stderr.write(`--handler-deps: ${args.handlerDeps} did not load (${(e && e.name) || 'error'})\n${USAGE}`);
+    process.exit(1);
+  }
+  if (!handlerDeps || typeof handlerDeps !== 'object') {
+    process.stderr.write(`--handler-deps: ${args.handlerDeps} must export an object as its default\n${USAGE}`);
+    process.exit(1);
+  }
+}
+
 // ------------------------------------------------------------- the server ----
 
 /* Access logging for the two API routes ONLY — never for static files, which
@@ -551,7 +605,7 @@ const server = http.createServer((req, res) => {
     }
     // RAW pass-through. No shim, no body parsing, no helpers bolted on.
     Promise.resolve()
-      .then(() => fn(req, res))
+      .then(() => (handlerDeps && name === 'auth' ? fn(req, res, handlerDeps) : fn(req, res)))
       .catch((e) => {
         // The error's name and its stack FRAMES, never its message: a sign-in
         // handler's error text could carry what it was handling.
@@ -575,9 +629,9 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, urlPath);
 });
 
-server.listen(args.port, '127.0.0.1', () => {
+server.listen(args.port, args.host, () => {
   process.stdout.write(`dev_site serving ${ROOT}\n`);
-  process.stdout.write(`  http://127.0.0.1:${args.port}/\n`);
+  process.stdout.write(`  http://${args.host === '0.0.0.0' ? '127.0.0.1' : args.host}:${args.port}/\n`);
   if (handlers.size) {
     process.stdout.write(`  api handlers loaded -> ${[...handlers.keys()].map((n) => `/api/${n}`).join(', ')}\n`);
   } else {
@@ -590,8 +644,14 @@ server.listen(args.port, '127.0.0.1', () => {
       + `${envCounts.kept ? `, ${envCounts.kept} already set in the shell (kept)` : ''}`
       + `${envCounts.skipped ? `, ${envCounts.skipped} line(s) skipped (not KEY=VALUE)` : ''}`
       + ' — values never printed\n');
+  } else if (envSkipped) {
+    process.stdout.write(`  env: ${path.relative(ROOT, args.envFile) || args.envFile} not loaded: --host ${args.host} is not loopback`
+      + ' (pass --dotenv PATH to load a file on purpose; functions see the shell environment only)\n');
   } else {
     process.stdout.write(`  env: no ${path.relative(ROOT, args.envFile) || args.envFile} (functions see the shell environment only)\n`);
+  }
+  if (handlerDeps) {
+    process.stdout.write(`  handler deps: ${path.relative(ROOT, args.handlerDeps) || args.handlerDeps} -> /api/auth only\n`);
   }
   if (args.mock) {
     process.stdout.write(
@@ -609,4 +669,8 @@ server.listen(args.port, '127.0.0.1', () => {
     process.stdout.write(
       `  mock provider: off (set --mock-provider=${MOCK_MODES.join('|')})\n`);
   }
+  // last, so a caller waiting for it has every line above
+  const where = server.address();
+  process.stdout.write(`  listening on ${where && where.address ? where.address : args.host}:${args.port}`
+    + `${args.host === DEFAULT_HOST ? '' : ' (not loopback only: publish the port on 127.0.0.1)'}\n`);
 });

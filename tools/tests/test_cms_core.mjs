@@ -512,33 +512,111 @@ function memoryStorage() {
   };
 }
 
-test('session: {token, expiresAt, login} round-trips through sessionStorage', () => {
+test('session (U1): {token, expiresAt, login} round-trips in page memory; nothing is written to storage', () => {
   const s = memoryStorage();
+  s.m.set(C.SESSION_KEY, JSON.stringify(C.makeSession('old', null, 'x', 1)));   // an older page's copy
   const rec = C.makeSession(TOKEN, 28800, 'kyle-nelson-berkeley', 1000);
   assert.deepEqual(rec, { token: TOKEN, expiresAt: 1000 + 28800 * 1000, login: 'kyle-nelson-berkeley' });
   assert.equal(C.writeSession(s, rec), true);
-  assert.deepEqual([...s.m.keys()], [C.SESSION_KEY]);
+  assert.deepEqual([...s.m.keys()], [], 'no token in storage; the older copy is removed');
   assert.deepEqual(C.readSession(s, 2000), rec);
+  assert.deepEqual(C.readSession(null, 2000), rec, 'memory, whatever storage is passed');
   assert.deepEqual(C.makeSession(TOKEN, null, 'x', 5), { token: TOKEN, expiresAt: null, login: 'x' });
   assert.equal(C.readSession(s, rec.expiresAt + 1), null, 'an expired session is gone');
-  assert.equal(s.m.size, 0, 'and removed');
+  assert.equal(C.readSession(s, 2000), null, 'and forgotten');
 });
 
-test('session: malformed, empty or unreadable storage is "signed out", never a throw', () => {
+test('session (U1): a malformed record is refused; storage that throws never breaks a read, a write or a sign-out', () => {
   const s = memoryStorage();
-  for (const raw of ['nope', '{}', '{"token":""}', '[1]', 'null', '{"token":"t","login":5}']) {
-    s.m.set(C.SESSION_KEY, raw);
-    assert.equal(C.readSession(s, 1), null, raw);
+  for (const bad of [null, {}, { token: '' }, [1], { token: 't', login: 5, expiresAt: null }, { token: 't', login: 'x', expiresAt: 'soon' }]) {
+    assert.equal(C.writeSession(s, bad), false, JSON.stringify(bad));
+    assert.equal(C.readSession(s, 1), null, JSON.stringify(bad));
   }
+  s.m.set(C.SESSION_KEY, JSON.stringify(C.makeSession('t', null, 'x', 1)));
+  assert.equal(C.readSession(s, 1), null, 'an older page\'s stored copy is never read');
   const hostile = { getItem() { throw new Error('SecurityError'); },
     setItem() { throw new Error('QuotaExceeded'); }, removeItem() { throw new Error('x'); } };
-  assert.equal(C.readSession(hostile, 1), null);
-  assert.equal(C.writeSession(hostile, C.makeSession('t', 1, 'x', 1)), false);
+  assert.equal(C.writeSession(hostile, C.makeSession('t', 1, 'x', 1)), true, 'memory needs no storage');
+  assert.ok(C.readSession(hostile, 1));
   assert.doesNotThrow(() => C.clearSession(hostile));
-  assert.equal(C.readSession(null, 1), null);
-  C.writeSession(s, C.makeSession('t', null, 'x', 1));
-  C.clearSession(s);
-  assert.equal(s.m.size, 0, 'sign out clears the record');
+  assert.equal(C.readSession(null, 1), null, 'sign out clears the record');
+});
+
+test('session (U1): forgetSession DELETEs /api/auth same-origin and never throws', async () => {
+  const seen = [];
+  assert.equal(await C.forgetSession(async (url, init) => { seen.push([url, init]); return { ok: true, status: 200 }; }), true);
+  assert.equal(seen[0][0], '/api/auth');
+  assert.equal(seen[0][1].method, 'DELETE');
+  assert.equal(seen[0][1].credentials, 'same-origin');
+  assert.equal(await C.forgetSession(async () => { throw new Error('offline'); }), false);
+  assert.equal(await C.forgetSession(async () => ({ ok: false, status: 403 })), false);
+  assert.equal(await C.forgetSession(null), false);
+});
+
+test('session (U1): sessionChannel posts {type: signed-out} on hc-session and hears only that', () => {
+  const made = [];
+  class FakeChannel {
+    constructor(name) { this.name = name; this.posted = []; this.fns = []; made.push(this); }
+    postMessage(m) { this.posted.push(m); }
+    addEventListener(type, fn) { if (type === 'message') this.fns.push(fn); }
+    close() { this.closed = true; }
+  }
+  let heard = 0;
+  const ch = C.sessionChannel({ BroadcastChannel: FakeChannel }, () => { heard += 1; });
+  assert.equal(made[0].name, 'hc-session');
+  ch.signedOut();
+  assert.deepEqual(made[0].posted, [{ type: 'signed-out' }], 'no token, no login');
+  for (const data of [{ type: 'signed-in' }, 'signed-out', null, { type: 'signed-out', token: 'x' }]) made[0].fns.forEach((f) => f({ data }));
+  assert.equal(heard, 1, 'only a signed-out message counts');
+  ch.close();
+  assert.equal(made[0].closed, true);
+  const none = C.sessionChannel({}, () => {});
+  assert.doesNotThrow(() => { none.signedOut(); none.close(); }, 'no BroadcastChannel: a quiet channel');
+  const throws = C.sessionChannel({ BroadcastChannel: function Boom() { throw new Error('x'); } }, () => {});
+  assert.doesNotThrow(() => throws.signedOut());
+});
+
+test('session (U1 security fix): tokenHash is sha256 hex of the token; null without WebCrypto or for a non-ASCII token', async () => {
+  const { webcrypto, createHash } = await import('node:crypto');
+  const tok = 'ghu_fakeTokenValue0000000000';
+  assert.equal(await C.tokenHash(tok, webcrypto.subtle), createHash('sha256').update(tok, 'utf8').digest('hex'),
+    'the same hash api/auth.js computes');
+  assert.equal(await C.tokenHash(tok, null), null, 'no crypto.subtle: no hash');
+  assert.equal(await C.tokenHash('', webcrypto.subtle), null);
+  assert.equal(await C.tokenHash('t\u00e9', webcrypto.subtle), null);
+});
+
+test('session (U1 security fix): forgetSession({ifTokenHash}) sends X-HC-If-Token as a header, never in the URL', async () => {
+  const seen = [];
+  const doFetch = async (url, init) => { seen.push([url, init]); return { ok: true, status: 200 }; };
+  const hash = 'a'.repeat(64);
+  assert.equal(await C.forgetSession(doFetch, { ifTokenHash: hash }), true);
+  assert.equal(seen[0][0], '/api/auth', 'the URL carries nothing');
+  assert.equal(seen[0][1].method, 'DELETE');
+  assert.equal(seen[0][1].headers['X-HC-If-Token'], hash);
+  await C.forgetSession(doFetch);
+  assert.equal(seen[1][1].headers['X-HC-If-Token'], undefined, 'a plain sign-out sends no such header');
+  await C.forgetSession(doFetch, { ifTokenHash: 'not-hex' });
+  assert.equal(seen.length, 2, 'a malformed hash sends nothing (it would become a plain sign-out)');
+});
+
+test('session (U1 security fix): sessionChannel carries a 16-hex fp when given and hands it to the listener', () => {
+  const made = [];
+  class FakeChannel {
+    constructor(name) { this.name = name; this.posted = []; this.fns = []; made.push(this); }
+    postMessage(m) { this.posted.push(m); }
+    addEventListener(type, fn) { if (type === 'message') this.fns.push(fn); }
+    close() {}
+  }
+  const heard = [];
+  const ch = C.sessionChannel({ BroadcastChannel: FakeChannel }, (fp) => { heard.push(fp); });
+  ch.signedOut('0123456789abcdef');
+  ch.signedOut('bad');
+  ch.signedOut();
+  assert.deepEqual(made[0].posted, [{ type: 'signed-out', fp: '0123456789abcdef' }, { type: 'signed-out' }, { type: 'signed-out' }]);
+  for (const data of [{ type: 'signed-out', fp: 'fedcba9876543210' }, { type: 'signed-out' }, { type: 'signed-out', fp: 'XYZ' },
+    { type: 'signed-out', fp: 7 }]) made[0].fns.forEach((f) => f({ data }));
+  assert.deepEqual(heard, ['fedcba9876543210', null], 'an fp, then everyone; a malformed fp is not heard at all');
 });
 
 // ------------------------------------------------- the one-repo API client --

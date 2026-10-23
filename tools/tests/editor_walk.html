@@ -94,6 +94,35 @@
   answers {type: 'hc-walk-scroll-samples', samples, log, loadedAt, nonce16,
   now} — its document's scrollY since it loaded.
 
+  U1 (D20): &auth=cookie proves the real sign-in cookie in a real browser.
+  It needs the function-aware server with the fake GitHub exchange (no
+  serve.sh, which has no /api/auth), e.g. in Docker:
+    node tools/dev_site.mjs --host 0.0.0.0 --port 8131 --handler-deps tools/tests/dev_auth_fake.mjs
+    http://localhost:8131/tools/tests/editor_walk.html?step=on&auth=cookie
+  The walk then hands the Editor no fake `session`. Whether hc_in=1 is set
+  is read once, from the walk's own document before the site's frame
+  exists (the cookie is Path=/, so it is the one the site's boot reads).
+  With no hc_in=1 cookie it signs in for real: GET /api/auth?app=editor (the App id), a state of its
+  own, the "callback" (code "dev", the same state, checked here as the page
+  does), POST /api/auth {code, app} (dev_auth_fake.mjs swaps any code for a
+  fake token; api/auth.js seals it into hc_s and sets hc_in=1), GET
+  /api/auth?session=1 with X-HC-Session: 1 -> {token, expires_at}, then
+  HCApp.loadEditor({fetch, resumed}): `fetch` sends same-origin /api/auth to
+  the real server and everything else to the fake GitHub. A failed call marks
+  "<step>:failed" with the reason. With hc_in=1 already set (a reload, a
+  second tab) there is NO POST: the site's own boot resumes from the cookie,
+  as it does for a person; the walk only checks GET ?session=1 answers 200
+  and calls HCApp.loadEditor, which waits for the start the site's boot
+  made (true when it started) and never starts the Editor twice. The
+  Editor switch stays disabled until GitHub's /user answer confirms access. For that the walk swaps the
+  site window's fetch as soon as the site's document exists: same-origin
+  /api/auth and the site's own files go to the real server, GitHub and every
+  other /api/ call or write to the fake. The tab's saved Editor setting is
+  cleared first, so every step starts with Editor off. The account menu's
+  "Sign out" sends the real DELETE /api/auth and every other open tab of the
+  site signs out (BroadcastChannel). Cookies are per host, not per port:
+  clear localhost's cookies after the run.
+
   When the state is reached, THIS page's body gets
   data-walk-step="<step>:ready" (smoke.mjs asserts it in --dump-dom, then
   takes the screenshot); on failure "<step>:failed" and data-walk-why.
@@ -319,6 +348,81 @@
   if (step === 'phone') site.style.width = '390px';
   const width = Number(params.get('width'));
   if (step !== 'phone' && Number.isInteger(width) && width >= 200 && width <= 2000) site.style.width = `${width}px`;
+
+  /* ---- U1: auth=cookie ---- */
+  const authCookie = params.get('auth') === 'cookie';
+  const MARKER_RE = /(?:^|;\s*)hc_in=1(?:;|$)/;
+  /* Read ONCE, here, before the site's frame exists: the same cookie (Path=/, this origin) the site's boot will read,
+     so the walk and the site always agree on "sign in" vs "resume" (never a POST beside the site's own resume). */
+  let hadMarker = false;
+  try { hadMarker = authCookie && MARKER_RE.test(String(document.cookie || '')); } catch (e) { hadMarker = false; }
+  let fakeIs = null;
+  const fakeReady = new Promise((r) => { fakeIs = r; });
+  const urlIn = (w, url) => { try { return new URL(String(url), w.location.href); } catch (e) { return null; } };
+  const isAuthCall = (w, url) => { const u = urlIn(w, url); return Boolean(u && u.origin === w.location.origin && u.pathname === '/api/auth'); };
+  // the Editor's network in this mode (HCApp.loadEditor's fetch): the real /api/auth, the fake GitHub for the rest
+  const cookieFetch = (w) => (url, init) => (isAuthCall(w, url) ? w.walkRealFetch(url, init)
+    : fakeReady.then((f) => f.fetch(url, init)));
+  /* The site window's own fetch, swapped before its boot can resume from the cookie (a reload, a
+     second tab), so the Editor the site starts itself never reaches the real GitHub. */
+  function patchSite(w) {
+    let href = '';
+    try { href = w && w.location.href; } catch (e) { return; }
+    if (!href || href === 'about:blank' || w.walkRealFetch) return;
+    const real = w.fetch.bind(w);
+    w.walkRealFetch = real;
+    try { w.sessionStorage.removeItem('hc-editor'); } catch (e) { /* the default */ }
+    w.fetch = (url, init) => {
+      const u = urlIn(w, url);
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      const own = Boolean(u && u.origin === w.location.origin);
+      if (own && u.pathname === '/api/auth') return real(url, init);
+      if (!own || method !== 'GET' || u.pathname.indexOf('/api/') === 0) return fakeReady.then((f) => f.fetch(url, init));
+      return real(url, init);
+    };
+  }
+  const patchPoll = authCookie ? setInterval(() => patchSite(site.contentWindow), 2) : null;
+  async function authJson(res, what) {
+    let doc = null;
+    try { doc = await res.json(); } catch (e) { doc = null; }
+    if (!res.ok) throw new Error(`${what} answered HTTP ${res.status}${doc && doc.error ? `: ${doc.error}` : ''}`);
+    return doc || {};
+  }
+  // -> true when the Editor started (by the walk after a real sign-in, or by the site's own resume)
+  async function cookieStart(fake) {
+    clearInterval(patchPoll);
+    patchSite(SW);
+    fakeIs(fake);
+    const real = SW.walkRealFetch;
+    const opts = { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } };
+    const resumeOpts = Object.assign({}, opts, { headers: { Accept: 'application/json', 'X-HC-Session': '1' } });
+    if (hadMarker) {
+      // a reload or a second tab: no POST; the site's boot resumes from the cookie itself, and HCApp.loadEditor
+      // waits for that start (true when it started; it never starts the editor a second time)
+      await authJson(await real('/api/auth?session=1', resumeOpts), 'the resume (GET /api/auth?session=1)');
+      if (await SW.HCApp.loadEditor({ fetch: cookieFetch(SW) }) !== true) {
+        throw new Error('the site\'s own resume from the hc_in=1 cookie did not start the Editor');
+      }
+      return true;
+    }
+    const app = await authJson(await real('/api/auth?app=editor', opts), 'GET /api/auth?app=editor');
+    if (typeof app.client_id !== 'string' || !app.client_id) throw new Error('GET /api/auth?app=editor gave no client id');
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const back = new URLSearchParams(`code=dev&state=${state}`);   // what GitHub would send to the callback
+    if (back.get('state') !== state) throw new Error('the callback state does not match');
+    await authJson(await real('/api/auth', Object.assign({}, opts, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ code: back.get('code'), app: 'editor' }) })), 'the sign-in POST /api/auth');
+    if (!MARKER_RE.test(String(SD.cookie || ''))) throw new Error('the sign-in POST set no hc_in=1 cookie');
+    const got = await authJson(await real('/api/auth?session=1', resumeOpts), 'the resume (GET /api/auth?session=1)');
+    if (typeof got.token !== 'string' || !got.token) throw new Error('the resume gave no token');
+    const at = Number(got.expires_at);
+    const resumed = { token: got.token, expiresIn: Number.isFinite(at) ? Math.floor((at - Date.now()) / 1000) : null };
+    return SW.HCApp.loadEditor({ fetch: cookieFetch(SW), resumed });
+  }
+  /* ---- end U1 ---- */
   body.appendChild(site);
 
   let SW = null;               // the site's window
@@ -647,7 +751,7 @@
         // the access steps start with Editor OFF, whatever an earlier step in this tab left on
         if (access) SW.sessionStorage.removeItem('hc-editor');
       } catch (e) { /* the defaults */ }
-      const started = await SW.HCApp.loadEditor({ fetch: fake.fetch,
+      const started = authCookie ? await cookieStart(fake) : await SW.HCApp.loadEditor({ fetch: fake.fetch,
         session: { token: 'walk-fake-not-a-token', login: String(user.login), expiresAt: null } });
       if (started !== true) throw new Error('HCApp.loadEditor did not start the editor');
       await REGISTRY[step]();

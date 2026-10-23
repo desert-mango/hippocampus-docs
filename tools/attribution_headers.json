@@ -1450,6 +1450,21 @@
         "purpose": "Test the U7 layout work: a still page when Editor turns on, the instant switch, header word, Contents."
       },
       "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/dev_auth_fake.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "3648bcede0a4609c2a03b8cdfb5e0addc73ff46a3db5759bd517fd20444f863d",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "A fake GitHub sign-in exchange for api/auth.js under tools/dev_site.mjs, for local browser runs only."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U1); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

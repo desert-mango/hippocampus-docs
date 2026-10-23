@@ -47,8 +47,9 @@
 
    It talks to this one repository only (HCCore's client refuses any other
    path), and its only writes are the review actions HCCore.runReviewAction
-   sends and the proposal HCCore.runPropose sends. The token lives in
-   sessionStorage and in closures; it never enters the page's DOM, the frame,
+   sends and the proposal HCCore.runPropose sends. The token lives in page
+   memory and in closures (U1: a reload or another tab gets it back from the
+   sealed cookie, through js/app.js); it never enters the page's DOM, the frame,
    or a message. Every GitHub-derived string is set as text.
 
    Seams:
@@ -177,10 +178,53 @@
 
   // ---------------------------------------------------------- the client ---
 
-  function endSession(message) {
+  const webSubtle = () => { try { return (window.crypto && window.crypto.subtle) || null; } catch (e) { return null; } };
+
+  /* U1: the session cookie and its marker go at the server (HCCore.forgetSession, to /api/auth).
+     forgetCookie() is the explicit Sign out: the cookie goes and the token is revoked.
+     forgetCookie(deadToken) is GitHub's 401: the delete call with X-HC-If-Token (the dead token's
+     sha256), so the server clears the cookie only while it still holds that token (another
+     tab may have signed in since) and revokes nothing; -> a Promise of the hash, or null
+     when nothing was sent. Without crypto.subtle no hash can be made, and a delete call without
+     the header would be a full sign-out of whatever the cookie holds — so on the 401 path
+     NOTHING is sent: only the page's memory session drops (a dead cookie then fails its
+     own next resume). */
+  function forgetCookie(deadToken) {
+    const signOut = deadToken === undefined;
+    return (signOut ? Promise.resolve(null) : C.tokenHash(deadToken, webSubtle())).then((hash) => {
+      if (!signOut && !hash) return null;
+      C.forgetSession(netFetch, signOut ? undefined : { ifTokenHash: hash });
+      return hash;
+    });
+  }
+
+  /* GitHub refused this token (401): the cookie goes only if it still holds it, and the
+     other tabs hear its fingerprint (the first 16 hex of the hash): only a tab holding
+     the same token drops it. */
+  function tokenRefused(token) {
+    if (typeof token !== 'string' || !token) return;
+    const ch = channel;
+    forgetCookie(token).then((hash) => { if (hash && ch) ch.signedOut(hash.slice(0, 16)); });
+  }
+
+  /* opts.elsewhere: another tab signed out (its 'signed-out' message): this tab
+     only drops its copy. opts.signOut: the person's own Sign out: the server
+     cookie goes (HCCore.forgetSession, which also revokes the token) and every
+     other tab hears it. Otherwise GitHub refused the token (401): tokenRefused. */
+  function endSession(message, opts) {
+    const elsewhere = Boolean(opts && opts.elsewhere);
+    const signOut = Boolean(opts && opts.signOut);
+    const held = state.session || state.memoryOnly;
+    const dead = held && typeof held.token === 'string' ? held.token : null;
     sessionGen.next();
     if (ed.on) setEditor(false);
     C.clearSession(store());
+    if (signOut) {
+      forgetCookie();
+      if (channel) channel.signedOut();
+    } else if (!elsewhere) {
+      tokenRefused(dead);
+    }
     membersClear();
     Object.assign(state, { session: null, client: null, user: null, role: null,
       access: 'none-yet', accessError: '', memoryOnly: null });
@@ -260,7 +304,13 @@
     });
   }
 
-  async function completeSignIn(exchange) {
+  /* exchange: a Promise of {token, expiresIn} — the sign-in's code exchange,
+     or (opts.resumed) the token js/app.js got back from the session cookie on
+     a reload or in another tab. A resumed sign-in does not force Editor mode
+     on (start() restores what the tab had); one GitHub no longer accepts (401)
+     clears the cookie, and the page is a guest's again. */
+  async function completeSignIn(exchange, opts) {
+    const resumed = Boolean(opts && opts.resumed);
     // the newest thing to happen to the session: a later sign-in or a
     // sign-out while this one waits makes it stale, and it then writes nothing
     const gen = sessionGen.next();
@@ -276,25 +326,32 @@
     const me = await client.get('/user');
     if (!sessionGen.isCurrent(gen)) return;
     if (!me.ok || !me.data || typeof me.data.login !== 'string') {
+      if (resumed) {
+        if (me.status === 401) tokenRefused(out.token);
+        await refresh();          // nobody: the guest's sign-in button comes back
+        tell(me.status === 401 ? 'Your sign-in has ended. Please sign in again.'
+          : 'GitHub did not say who you are. Reload the page to try again.', 'error');
+        return;
+      }
+      // the code exchange already set the session cookie: a token GitHub refuses must not resume on a reload
+      if (me.status === 401) tokenRefused(out.token);
       tell('Signed in, but GitHub did not say who you are. Please sign in again.', 'error');
       return;
     }
     const record = C.makeSession(out.token, out.expiresIn, me.data.login, Date.now());
     state.memoryOnly = C.writeSession(store(), record) ? null : record;
-    tell(state.memoryOnly ? 'Signed in. This browser would not keep the sign-in, so it ends when you leave this page.' : '');
+    tell('');
     await refresh();
     // the person asked to edit: Editor mode comes on once GitHub confirmed access
-    if (state.session && state.access === 'ok' && !ed.on) setEditor(true);
+    if (!resumed && state.session && state.access === 'ok' && !ed.on) setEditor(true);
   }
 
+  /* U1 (D21, ED63): sign-out only signs out. The login's unsent edits stay in
+     this browser (localStorage, keyed by login) and come back at the next
+     sign-in; nobody else's sign-in sees them. No question first. */
   function onSignOutClick() {
-    // U4b: drafts are kept in this browser per login; signing out deletes them (a shared computer keeps nothing)
-    const n = drafts.dirty().length;
-    if (n && typeof window.confirm === 'function'
-      && !window.confirm(`Signing out deletes ${n} change${n === 1 ? '' : 's'} you have not sent for review yet, kept in this browser. Sign out anyway?`)) return;
-    drafts.clear();
     signIn.cancel();
-    endSession(null);
+    endSession(null, { signOut: true });   // the cookie too, and every other tab (U1)
     tell('Signed out.');
   }
 
@@ -3037,6 +3094,8 @@
     switchBtn = h('button', { type: 'button', class: 'hc-switch', role: 'switch', 'aria-checked': 'false',
       'data-editor-switch': true, title: 'Editor mode: edit this page where it stands' },
     h('span', { class: 'hc-switch-track', 'aria-hidden': 'true' }), h('span', { class: 'hc-switch-label', text: 'Editor' }));
+    // U1: off until renderChrome hears GitHub confirmed access (a resume asks /user first; a click before does nothing)
+    switchBtn.disabled = state.access !== 'ok';
     switchBtn.addEventListener('click', () => setEditor(!ed.on));
     who = h('span', { class: 'hc-who' });
     avatarBtn = h('button', { type: 'button', class: 'hc-avatar', 'data-action': 'avatar',
@@ -3095,7 +3154,7 @@
     handle.addEventListener('click', () => trayGo('#/'));
     document.body.appendChild(tray);
     // U4b: another tab wrote this login's drafts (one storage entry per page): read them again. When it changed
-    // THIS page, say so; when it REMOVED this page's draft (proposed, discarded, or signed out there), this tab
+    // THIS page, say so; when it REMOVED this page's draft (proposed or discarded there; U1: sign-out keeps it), this tab
     // drops it too and shows the page as it is, so a deleted draft is never written back.
     window.addEventListener('storage', (e) => {
       const base = draftBound.key;
@@ -3106,7 +3165,7 @@
       drafts.sync(open && theirs ? [open] : []);
       if (open && !theirs && (e.key === null || e.key === draftStore().entryKey(open))) {
         Object.assign(ed, { draft: null, sel: null, selected: null, inPage: null });
-        say('This page\'s unsent changes were removed in another tab (sent for review, discarded, or signed out there).', 'error');
+        say('This page\'s unsent changes were removed in another tab (sent for review or discarded there).', 'error');
         if (ed.on) frameTo(ed.route, true);
       } else if (open && theirs && JSON.stringify(theirs.files) !== mineText) {
         say('This page is also being changed in another tab. Each tab keeps its own changes; the tab that saves last wins.', 'error');
@@ -3871,6 +3930,7 @@
   }
 
   let started = false;
+  let channel = null;      // U1: BroadcastChannel('hc-session'), HCCore.sessionChannel
 
   /* Boot once, for a session (sessionStorage's, or opts.session held in
      memory only), or for the sign-in click: opts.popup is the window
@@ -3893,7 +3953,11 @@
     const given = o.session && typeof o.session === 'object' && typeof o.session.token === 'string'
       && typeof o.session.login === 'string' ? o.session : null;
     const stored = C.readSession(store(), Date.now());
-    if (!given && !stored && !popup) return false;
+    // U1: js/app.js's resume from the session cookie, {token, expiresIn}
+    const resumed = !given && o.resumed && typeof o.resumed === 'object' && typeof o.resumed.token === 'string'
+      && o.resumed.token ? { token: o.resumed.token,
+        expiresIn: Number.isFinite(o.resumed.expiresIn) ? o.resumed.expiresIn : null } : null;
+    if (!given && !stored && !popup && !resumed) return false;
     const restored = given || stored;
     legacyOwner = restored && typeof restored.login === 'string' ? restored.login : null;
     started = true;
@@ -3904,15 +3968,38 @@
     loadAvatars();
     window.addEventListener('message', onMessage);
     window.addEventListener('hashchange', onHashChange);
-    window.addEventListener('beforeunload', (e) => {
-      if (!drafts.dirty().length) return;
-      e.preventDefault();
-      e.returnValue = '';            // the browser asks before the tab's drafts go
+    // U1: a sign-out in another tab signs this one out too. A message with an fp (another
+    // tab's token was refused by GitHub) counts only when this tab holds that same token:
+    // a tab with a newer sign-in keeps it.
+    channel = C.sessionChannel(window, (fp) => {
+      const held = state.session || state.memoryOnly;
+      if (!held) return;
+      if (fp === null) {
+        signIn.cancel();
+        endSession(null, { elsewhere: true });
+        tell('Signed out in another tab.');
+        return;
+      }
+      C.tokenHash(held.token, webSubtle()).then((hash) => {
+        const now = state.session || state.memoryOnly;
+        if (!hash || hash.slice(0, 16) !== fp || !now || now.token !== held.token) return;
+        signIn.cancel();
+        endSession('Your sign-in has ended. Please sign in again.', { elsewhere: true });
+      });
     });
+    // U1 (D21): no beforeunload prompt — drafts are saved as they are typed, so leaving loses nothing
     const param = takeEditorParam();
     const saved = readEditorState();
     if (param) { applyParam(param); D.unfold(); }
     else if (saved) { ed.trayOpen = saved.tray; if (saved.hash) trayHash = saved.hash; }
+    if (!given && !stored && resumed) {
+      // a reload or another tab: who this is, then the tab's own Editor setting
+      const wantOn = Boolean(param) || Boolean(saved && saved.on);
+      if (popup) closePopup();
+      completeSignIn(Promise.resolve(resumed), { resumed: true })
+        .then(() => { if (wantOn && state.session && state.access === 'ok' && !ed.on) setEditor(true); });
+      return true;
+    }
     if (!given && !stored) {
       refresh();                 // nobody yet: the controls stay hidden
       onSignInClick(popup);      // completeSignIn turns Editor mode on

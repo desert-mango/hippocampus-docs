@@ -1037,6 +1037,25 @@ body.hc-signin-hidden .hc-signin {
   transform: translateX(calc(100% + 2.5rem)); opacity: 0; pointer-events: none; visibility: hidden;
   transition: transform 240ms cubic-bezier(0.23, 1, 0.32, 1), opacity 240ms cubic-bezier(0.23, 1, 0.32, 1), visibility 0s linear 240ms;
 }
+/* U1 (ED1): the sign-in's own line (js/app.js puts it right after the clicked button; role=status).
+   Beside the button on wide screens, small and muted, at most two lines so the header's height
+   never changes. Below 480 px it hangs under the header's right edge instead (absolute: nothing
+   moves when it appears). An error is red even before css/editor.css is in. */
+.hc-signin-status {
+  flex: 0 1 auto; max-width: 16rem; min-width: 0;
+  color: var(--muted); font-size: 0.78rem; line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.hc-signin-status[hidden] { display: none; }
+.hc-signin-status.is-error { color: var(--danger); }
+@media (max-width: 479.98px) {
+  .hc-signin-status {
+    position: absolute; top: 100%; right: 1rem; left: 1rem; max-width: none;
+    display: block; -webkit-line-clamp: none; overflow: visible; text-align: right;
+    padding: 0.35rem 0.6rem; background: var(--surface); border: 1px solid var(--edge-soft);
+    border-top: 0; border-radius: 0 0 8px 8px;
+  }
+}
 
 /* uiux P5–P7: the setup sidebar's groups fold; only the current page's group is open. The headings
    are plain, readable labels in the heading colour (no small grey capitals), with a chevron. The

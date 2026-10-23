@@ -1255,20 +1255,26 @@
   // ---------- Editor mode: loaded for a session or the sign-in click only (plan D-C) ----------
   /* Guests load no editor code and make no GitHub request: index.html has no
      tag for js/cms-core.js, js/editor-dock.js, js/editor.js or css/editor.css. This file injects
-     them, and only (1) when this tab's sessionStorage holds a sign-in, or
+     them, and only (1) when the sign-in marker cookie hc_in=1 is present and
+     the resume call (GET /api/auth?session=1, api/auth.js's sealed httpOnly
+     cookie, U1/D20) hands back a token — anonymous visitors never call it — or
      (2) on the header's "Sign in" click (#signin-btn), which opens the GitHub
      window FIRST — synchronously inside the click, because a window opened
      after an await is blocked — then injects, then hands that window to the
-     editor's sign-in. A preview frame (HC.preview) never reads storage and
-     never loads the editor; every storage access sits in try/catch, because
-     a sandboxed frame throws on sessionStorage.
-     The three literals repeat HCCore's (this file must not load HCCore
-     first); tools/tests/test_app_guest.mjs proves them equal.
-     window.HCApp.loadEditor(opts) is the test seam (opts.fetch, opts.session:
-     the localhost walk's fake GitHub and its in-memory session, never
-     written under SESSION_KEY); HC is frozen by js/source.js, so the seam is
+     editor's sign-in. A preview frame (HC.preview) never reads the cookie or
+     storage and never loads the editor; every cookie and storage access sits
+     in try/catch, because a sandboxed frame throws on them.
+     The literals repeat HCCore's (this file must not load HCCore first);
+     tools/tests/test_app_guest.mjs proves them equal.
+     window.HCApp.loadEditor(opts) is the test seam (opts.fetch, opts.session or
+     opts.resumed: the localhost walk's fake GitHub and its in-memory session, never
+     kept anywhere but page memory); HC is frozen by js/source.js, so the seam is
      its own frozen object. */
-  const SESSION_KEY = 'hc-cms-session';
+  const MARKER_RE = /(?:^|;\s*)hc_in=1(?:;|$)/;
+  const RESUME_URL = '/api/auth?session=1';
+  const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
+  const CALLBACK_PATH = '/cms/callback.html';
+  const SAME_TAB_KEY = 'hc-signin-same-tab';    // js/cms-callback.js reads it back
   const POPUP_NAME = 'hc-signin';
   const POPUP_FEATURES = 'popup=yes,width=620,height=720';
   const EDITOR_FILES = [
@@ -1277,11 +1283,31 @@
     ['script', { src: 'js/editor-dock.js' }],
     ['script', { src: 'js/editor.js' }],
   ];
-  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, sessionKnown: false };
+  const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, sessionKnown: false,
+    boot: null };   // U1: bootSession's resume -> Promise<boolean> (the editor started from the cookie), or null
 
-  function storedSession() {
+  /* The marker says a sign-in may be resumed; it holds no secret (the token is
+     sealed in the httpOnly hc_s cookie, which this page cannot read). */
+  function signedInMarker() {
     if (HC.preview) return false;
-    try { return Boolean(window.sessionStorage.getItem(SESSION_KEY)); } catch (e) { return false; }
+    try { return MARKER_RE.test(String(document.cookie || '')); } catch (e) { return false; }
+  }
+
+  /* -> Promise<{token, expiresIn} | null>, never rejects. The custom header makes
+     any cross-origin caller preflight, which api/auth.js never grants. */
+  function resumeSession() {
+    return Promise.resolve()
+      .then(() => window.fetch(RESUME_URL, { method: 'GET', credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json', 'X-HC-Session': '1' } }))
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((body) => {
+        if (!body || typeof body.token !== 'string' || !body.token) return null;
+        const at = Number(body.expires_at);
+        const left = Number.isFinite(at) ? Math.floor((at - Date.now()) / 1000) : null;
+        if (left !== null && left <= 0) return null;
+        return { token: body.token, expiresIn: left };
+      })
+      .catch(() => null);
   }
 
   /* The line beside the footer link: sign-in progress and failures, as text. It sits after the
@@ -1353,12 +1379,14 @@
     return injectEditor().then(() => window.HCEditor.start({
       fetch: typeof o.fetch === 'function' ? o.fetch : undefined,
       session: o.session && typeof o.session === 'object' ? o.session : undefined,
+      resumed: o.resumed && typeof o.resumed === 'object' ? o.resumed : undefined,
       popup: o.popup || undefined,
-      status: footerStatus,
+      status: typeof o.status === 'function' ? o.status : footerStatus,
       onSession: onEditorSession,
     }) === true).catch(() => {
       if (o.popup) { try { o.popup.close(); } catch (e) { /* already gone */ } }
-      footerStatus('The editor could not be loaded. Check the connection and try again.', 'error');
+      (typeof o.status === 'function' ? o.status : footerStatus)(
+        'The editor could not be loaded. Check the connection and try again.', 'error');
       return false;
     });
   }
@@ -1411,19 +1439,75 @@
     }
   }
 
+  /* U1 (D19, ED1): the sign-in speaks where the click was — a polite live line
+     right after the clicked control (the header button, or the footer link),
+     as text. One line per control, hidden while empty. */
+  const signInLines = new Map();
+  function signInLine(anchor) {
+    const at = anchor && typeof anchor.after === 'function' ? anchor : ($('#signin-btn') || $('#edit-page'));
+    return (text, kind) => {
+      if (!at) return;
+      let line = signInLines.get(at);
+      if (!line) {
+        line = document.createElement('span');
+        line.className = 'edit-status hc-signin-status';
+        line.setAttribute('role', 'status');
+        line.setAttribute('aria-live', 'polite');
+        at.after(line);
+        signInLines.set(at, line);
+      }
+      line.textContent = text || '';
+      line.hidden = !text;
+      line.classList.toggle('is-error', kind === 'error');
+    };
+  }
+
+  /* The pop-up was blocked (or this browser opens none, e.g. an embedded pane):
+     sign in in THIS tab. The `state` (the CSRF guard) and the route to come
+     back to go to sessionStorage, which survives the trip to GitHub in this
+     tab; cms/callback.html, finding no opener, checks the state, POSTs the
+     code to /api/auth itself (which sets the session cookie) and returns
+     here, where the boot resumes from the cookie. */
+  function sameTabSignIn(say) {
+    say('Pop-ups are blocked here, so sign-in continues in this tab…');
+    return Promise.resolve()
+      .then(() => window.fetch('/api/auth?app=editor',
+        { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' }))
+      .then((res) => Promise.resolve(res.json()).catch(() => null).then((body) => ({ res, body })))
+      .then(({ res, body }) => {
+        if (!res.ok || !body || typeof body.client_id !== 'string' || !body.client_id) {
+          say(body && typeof body.error === 'string' ? `Sign-in is not available here: ${body.error}.`
+            : 'Sign-in needs this site\'s server functions, which this host does not run.', 'error');
+          return;
+        }
+        const bytes = window.crypto.getRandomValues(new Uint8Array(16));
+        const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+        try {
+          window.sessionStorage.setItem(SAME_TAB_KEY,
+            JSON.stringify({ state, route: String(location.hash || '#/'), at: Date.now() }));
+        } catch (err) {
+          say('This browser blocks both pop-ups and site storage, so sign-in cannot finish here. '
+            + 'Allow pop-ups for this site and try again.', 'error');
+          return;
+        }
+        const q = new URLSearchParams({ client_id: body.client_id, redirect_uri: location.origin + CALLBACK_PATH, state });
+        location.assign(`${AUTHORIZE_URL}?${q.toString()}`);
+      })
+      .catch(() => say('Sign-in could not reach this site\'s server. Check the connection and try again.', 'error'));
+  }
+
   function signInClick(e) {
     if (editor.signedIn) return;               // "Edit this page": a plain link
     e.preventDefault();
     // first, before anything else: the browser allows this window only
     // inside the click itself
     const popup = window.open('about:blank', POPUP_NAME, POPUP_FEATURES);
-    if (!popup) {
-      footerStatus('The sign-in window was blocked. Allow pop-ups for this site and try again.', 'error');
-      return;
-    }
+    const say = signInLine(e.currentTarget || e.target);
     editor.prompt = false;
     footerStatus('');
-    loadEditor({ popup });
+    if (!popup) { sameTabSignIn(say); return; }
+    say('');
+    loadEditor({ popup, status: say });
   }
 
   // the shell's pure helpers, for tools/tests/test_app_guest.mjs (uiux P5, P6, F3)
@@ -1432,7 +1516,11 @@
   window.HCApp = Object.freeze({
     loadEditor(opts) {
       const o = opts || {};
-      return loadEditor({ fetch: o.fetch, session: o.session });
+      // U1: resumed {token, expiresIn} — the walk's ?auth=cookie mode, after the real /api/auth handshake.
+      // When the boot is resuming from the cookie (a reload, a second tab), its start is the answer: the editor
+      // starts once, and the seam is true when that start was; only a resume the server turned down starts anew.
+      const own = () => loadEditor({ fetch: o.fetch, session: o.session, resumed: o.resumed });
+      return editor.boot ? editor.boot.then((started) => started || own()) : own();
     },
   });
 
@@ -1677,12 +1765,16 @@
   }
 
   function bootSession() {
-    editor.session = storedSession();       // the one storage read (guarded)
+    editor.session = signedInMarker();      // the one cookie read (guarded); no storage read
     editor.sessionKnown = true;
     syncSignIn();
-    // a stored session the editor turns down (expired, malformed): a guest after all, so "Sign in" shows.
-    // loadEditor injects nothing before its first microtask, so the first route() still paints first.
-    if (editor.session) loadEditor().then((started) => { if (!started) { editor.session = false; syncSignIn(); } });
+    // a marker the server turns down (expired, signed out elsewhere) or an editor that does not start: a guest
+    // after all, so "Sign in" shows. Nothing is injected before the resume answers, so the first route() paints first.
+    if (editor.session) {
+      editor.boot = resumeSession()
+        .then((resumed) => (resumed ? loadEditor({ resumed }) : false))
+        .then((started) => { if (!started) { editor.session = false; syncSignIn(); } return started; });
+    }
   }
 
   async function boot() {

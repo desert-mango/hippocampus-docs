@@ -6,12 +6,13 @@
   <meta name="robots" content="noindex">
   <meta name="referrer" content="no-referrer">
   <title>Signing in — HippoCampus Docs</title>
-  <!-- GitHub sends the sign-in popup here. js/cms-callback.js hands the code
-       to the page that opened this window, then closes it. This page never
-       sees a token and never stores anything. -->
+  <!-- GitHub sends the sign-in here. In the pop-up, js/cms-callback.js hands
+       the code to the page that opened this window, then closes it. When the
+       pop-up was blocked (the same-tab sign-in), it finishes the sign-in itself
+       and returns to the site. This page never reads a token. -->
 </head>
 <body>
-  <p id="status">Signing you in… you can close this window.</p>
+  <p id="status" role="status" aria-live="polite">Signing you in… If this window stays open, you can close this window.</p>
   <script src="../js/cms-callback.js"></script>
 </body>
 </html>
