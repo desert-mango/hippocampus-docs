@@ -124,10 +124,8 @@
     body.setAttribute('data-walk-step', 'refused');
     return;
   }
-  const STEPS = ['on', 'select', 'edit', 'insert', 'inserted', 'view', 'tray-proposals', 'tray-media', 'tray-guide', 'phone',
-    'overlay-inline', 'overlay-side', 'two-prs', 'members', 'scroll',
-    'access-sitewide', 'access-commits', 'access-added', 'access-removed', 'access-nowrite', 'access-none', 'access-admin',
-    'access-proposals'];
+  const REGISTRY = stepRegistry();   // the steps, by unit (below)
+  const STEPS = Object.keys(REGISTRY);
   const ACCESS_STEPS = STEPS.filter((s) => s.indexOf('access-') === 0);
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
   const params = new URLSearchParams(location.search);
@@ -451,161 +449,7 @@
     } catch (e) { return 'no site document'; }
   }
 
-  const RUN = {
-    on: async () => { await editorOn(); },
-    select: async () => {
-      await editorOn();
-      frameSays('hc-block-select', { index: await paragraphIndex() });
-      await until(() => { const t = blockEditor(); return t && t.value.trim(); }, 'the block\'s text in the tray');
-      await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
-    },
-    edit: async () => {
-      const before = await editorOn();
-      frameSays('hc-block-select', { index: await paragraphIndex() });
-      const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
-      ta.value += ' The walk typed this sentence.';
-      ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
-      await frameReady(before);            // reloaded with a NEW nonce, the block still selected
-      await until(() => /walk typed/.test(blockEditor().value), 'the edit kept in the tray');
-    },
-    insert: async () => {
-      await editorOn();
-      const index = await paragraphIndex();
-      const want = SW.HCEditorFrame.INSERT_KINDS.map((k) => k.kind);   // the site's own copy of the file
-      let reply = null;
-      await until(() => {
-        const f = pageFrame();
-        if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-picker', index }, '*');
-        reply = pickerReplies.length ? pickerReplies[pickerReplies.length - 1] : null;
-        return reply && reply.index === index && reply.open === true;
-      }, `the frame's "+" picker open before block ${index} (last answer ${JSON.stringify(reply)})`);
-      if (JSON.stringify(reply.kinds) !== JSON.stringify(want)) {
-        throw new Error(`the picker shows ${JSON.stringify(reply.kinds)}, not ${JSON.stringify(want)}`);
-      }
-    },
-    inserted: async () => {
-      const before = await editorOn();
-      frameSays('hc-block-insert', { index: await paragraphIndex(), kind: 'note' });
-      await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
-      await frameReady(before);
-    },
-    view: async () => {
-      await editorOn();
-      await openTray('view');
-      await until(() => $('#hc-tray [data-setting="suggestions"]'), 'the View settings');
-    },
-    'tray-proposals': async () => {
-      await editorOn();
-      await openTray('proposals');
-      const title = await until(() => $('#hc-tray article.hc-card[data-pr="1"] a.cms-title'), 'proposal #1\'s card');
-      title.click();                       // #/review/1: the card opens in place
-      const card = await until(() => {
-        const d = $('#hc-tray article.hc-card.is-open[data-pr="1"] .hc-card-detail');
-        return d && d.querySelector('ul.hc-files li .hc-here') && d.querySelector('.cms-actions button[data-action]')
-          && d.querySelector('button[data-action="show-on-page"]') && d.querySelector('.cms-check') ? d.parentNode : null;
-      }, 'proposal #1\'s card open: the check, Show on page, a review button, the files');
-      // the card's top at the tray's top, then (only as far as needed) down to the review buttons:
-      // at 900 px the files below them are off screen (the card lists them; the shot cannot hold all)
-      card.scrollIntoView({ block: 'start', behavior: 'instant' });
-      card.querySelector('.cms-actions .cms-action-row').scrollIntoView({ block: 'nearest', behavior: 'instant' });
-    },
-    'tray-media': async () => {
-      await editorOn();
-      await openTray('media');
-      await until(() => { const g = $('#hc-tray .cms-media-grid'); return g && g.children.length; }, 'the Media grid');
-    },
-    'tray-guide': async () => {
-      await editorOn();
-      await openTray('guide');
-      await until(() => $('#hc-tray ol.hc-guide'), 'the Guide');
-    },
-    phone: async () => {
-      await editorOn();
-      await openTray('proposals');
-      await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
-      await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
-    },
-    scroll: async () => {
-      await editorOn();
-      const siteSamples = [];
-      const siteLog = [];
-      const t0 = Date.now();
-      const siteTimer = setInterval(() => { if (siteSamples.length < 2000) siteSamples.push([Date.now() - t0, SW.scrollY]); }, 16);
-      const onSiteScroll = () => { if (siteLog.length < 2000) siteLog.push([Date.now() - t0, SW.scrollY]); };
-      SW.addEventListener('scroll', onSiteScroll);
-      try {
-        frameSays('hc-block-select', { index: await lastParagraphIndex() });
-        const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
-        // before: the frame has scrolled the selected block into view and holds still (3 answers in a row, +-2 px)
-        const end = Date.now() + LIMIT_MS;
-        const run = [];
-        let before = null;
-        while (!before) {
-          if (Date.now() > end) throw new Error(`the frame never held still at >= 100 px (last ${JSON.stringify(run)})`);
-          const r = await askScroll('before typing');
-          if (r.now >= 100 && run.length && Math.abs(r.now - run[run.length - 1].now) <= 2) run.push(r);
-          else run.splice(0, run.length, r);
-          if (run.length >= 3 && run[0].now >= 100) before = r;
-          else await sleep(100);
-        }
-        const nonceBefore = nonceOf(pageFrame());
-        ta.value += 'x';
-        ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
-        // a reload (the old editor) shows as a NEW nonce's hc-ready; no reload is fine too (the fix)
-        try { await frameReady(nonceBefore); } catch (e) { /* no reload within the limit */ }
-        await sleep(1000);
-        const after = await askScroll('after typing');
-        body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(before)));
-        body.setAttribute('data-walk-scroll-after', JSON.stringify(scrollSummary(after)));
-        const ys = siteSamples.map((x) => x[1]);
-        body.setAttribute('data-walk-scroll-site', JSON.stringify({ count: ys.length, first: ys.length ? ys[0] : null,
-          last: ys.length ? ys[ys.length - 1] : null, max: ys.length ? Math.max(...ys) : null,
-          samples: siteSamples.slice(0, 40), events: siteLog.slice(0, 300) }));
-      } finally {
-        SW.removeEventListener('scroll', onSiteScroll);
-        clearInterval(siteTimer);
-      }
-    },
-    'overlay-inline': async () => {
-      await editorOn();
-      await until(() => { const b = pageBar(); return b && /walk-proposer proposes changes to this page/.test(b.textContent); },
-        'the page bar for proposal #2');
-      await until(() => /main changed this since the proposal/.test(pageBar().textContent), 'the conflict line');
-    },
-    'overlay-side': async () => {
-      await RUN['overlay-inline']();
-    },
-    'two-prs': async () => {
-      await editorOn();
-      await until(() => { const b = pageBar(); return b && /newer-proposer proposes changes to this page/.test(b.textContent); },
-        'the page bar for the newest proposal, #3');
-      await until(() => /Also proposing changes here:\s*#2 by walk-proposer/.test(pageBar().textContent)
-        && $('.hc-pagebar [data-action="pagebar-show"][data-proposal="2"]'), '#2 listed with its own Show on page');
-    },
-  };
   const pageBar = () => { const b = $('#hc-frame-host .hc-pagebar'); return b && !b.hidden ? b : null; };
-
-  // U4: Editor stays OFF; the members-only detail under the page's public GitHub surfaces
-  RUN.members = async () => {
-    await until(() => $('[data-editor-switch]') && !$('[data-editor-switch]').disabled, 'the role read (the switch enabled)');
-    if (page === '/lab') {
-      const sec = await until(() => $('.hc-m-people'), '"People committing this year"');
-      await until(() => $('.hc-m-author') || $('.hc-m-people .hc-m-error'), 'an author on a recent commit');
-      (SD.querySelector('.hc-cols') || sec).scrollIntoView({ block: 'start', behavior: 'instant' });
-      const row = await until(() => $('.hc-m-people [data-hc-login]'), 'a row with a login');
-      row.click();
-      await until(() => $('.hc-person-pop .hc-pp-members'), 'the members-only part of the popover');
-      return;
-    }
-    if (page === '/about') {
-      const strip = await until(() => $('.hc-gh-strip'), 'a GitHub strip on a roster card');
-      strip.closest('.people-group').scrollIntoView({ block: 'start', behavior: 'instant' });
-      return;
-    }
-    const box = await until(() => $('.hc-authors .hc-m-authors'), 'the members-only lines under "who wrote this"');
-    await until(() => box.querySelector('.hc-m-line') || box.querySelector('.hc-m-error'), 'a counts line');
-    box.closest('.hc-authors').scrollIntoView({ block: 'start', behavior: 'instant' });
-  };
 
   // Edit access: Editor OFF, the box at the top of a project page's aside (access-proposals: Editor on, the list)
   const accessBoxReady = async (check) => {
@@ -616,27 +460,200 @@
     SW.scrollTo({ top: 0, behavior: 'instant' });
   };
   const accessText = (box) => (box.querySelector('.hc-access-text') || {}).textContent || '';
-  RUN['access-sitewide'] = () => accessBoxReady((b) => /^You can edit every project \((Maintainer|Admin)\)\.$/.test(accessText(b)));
-  RUN['access-commits'] = () => accessBoxReady((b) => /^You can edit this project: you have commits in/.test(accessText(b)));
-  RUN['access-added'] = () => accessBoxReady((b) => accessText(b) === 'An admin gave you access to this project.');
-  RUN['access-removed'] = () => accessBoxReady((b) => accessText(b) === 'An admin removed your access to this project.'
-    && b.querySelector('button[data-action="access-request"]'));
-  RUN['access-nowrite'] = () => accessBoxReady((b) => /^You have commits here, but/.test(accessText(b))
-    && b.querySelector('a[data-action="access-issue"]'));
-  RUN['access-none'] = () => accessBoxReady((b) => /^You have no commits/.test(accessText(b))
-    && b.querySelector('button[data-action="access-request"]'));
-  RUN['access-admin'] = () => accessBoxReady((b) => accessText(b) === 'You can edit every project (Admin).'
-    && b.querySelector('button[data-action="access-remove"]') && b.querySelector('button[data-action="access-add"]'));
-  RUN['access-proposals'] = async () => {
-    // the list needs no page frame: Editor on, then the Proposals view (not editorOn's wait for the frame)
-    const sw = await until(() => { const b = $('[data-editor-switch]'); return b && !b.disabled ? b : null; },
-      'the Editor switch (GitHub access confirmed)');
-    sw.click();
-    await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
-    await openTray('proposals');
-    await until(() => $('#hc-tray .hc-prow[data-pr="4"] .hc-prow-access:not([hidden])')
-      && $('#hc-tray .hc-prow[data-pr="5"] .hc-prow-access:not([hidden])'), 'the two access labels in the list');
-  };
+
+  /* The walk's steps, one labelled block per unit (editor UI/UX build, U0): a unit adds its steps in its own block.
+     Each step is an async function that resolves once its state is on screen. STEPS is the registry's keys; the
+     registry is built at the top (stepRegistry is hoisted) so an unknown step is refused before anything loads. */
+  function stepRegistry() {
+    return {
+      /* ---- U0 (existing) ---- */
+      on: async () => { await editorOn(); },
+      select: async () => {
+        await editorOn();
+        frameSays('hc-block-select', { index: await paragraphIndex() });
+        await until(() => { const t = blockEditor(); return t && t.value.trim(); }, 'the block\'s text in the tray');
+        await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
+      },
+      edit: async () => {
+        const before = await editorOn();
+        frameSays('hc-block-select', { index: await paragraphIndex() });
+        const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
+        ta.value += ' The walk typed this sentence.';
+        ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
+        await frameReady(before);            // reloaded with a NEW nonce, the block still selected
+        await until(() => /walk typed/.test(blockEditor().value), 'the edit kept in the tray');
+      },
+      insert: async () => {
+        await editorOn();
+        const index = await paragraphIndex();
+        const want = SW.HCEditorFrame.INSERT_KINDS.map((k) => k.kind);   // the site's own copy of the file
+        let reply = null;
+        await until(() => {
+          const f = pageFrame();
+          if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-picker', index }, '*');
+          reply = pickerReplies.length ? pickerReplies[pickerReplies.length - 1] : null;
+          return reply && reply.index === index && reply.open === true;
+        }, `the frame's "+" picker open before block ${index} (last answer ${JSON.stringify(reply)})`);
+        if (JSON.stringify(reply.kinds) !== JSON.stringify(want)) {
+          throw new Error(`the picker shows ${JSON.stringify(reply.kinds)}, not ${JSON.stringify(want)}`);
+        }
+      },
+      inserted: async () => {
+        const before = await editorOn();
+        frameSays('hc-block-insert', { index: await paragraphIndex(), kind: 'note' });
+        await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
+        await frameReady(before);
+      },
+      view: async () => {
+        await editorOn();
+        await openTray('view');
+        await until(() => $('#hc-tray [data-setting="suggestions"]'), 'the View settings');
+      },
+      'tray-proposals': async () => {
+        await editorOn();
+        await openTray('proposals');
+        const title = await until(() => $('#hc-tray article.hc-card[data-pr="1"] a.cms-title'), 'proposal #1\'s card');
+        title.click();                       // #/review/1: the card opens in place
+        const card = await until(() => {
+          const d = $('#hc-tray article.hc-card.is-open[data-pr="1"] .hc-card-detail');
+          return d && d.querySelector('ul.hc-files li .hc-here') && d.querySelector('.cms-actions button[data-action]')
+            && d.querySelector('button[data-action="show-on-page"]') && d.querySelector('.cms-check') ? d.parentNode : null;
+        }, 'proposal #1\'s card open: the check, Show on page, a review button, the files');
+        // the card's top at the tray's top, then (only as far as needed) down to the review buttons:
+        // at 900 px the files below them are off screen (the card lists them; the shot cannot hold all)
+        card.scrollIntoView({ block: 'start', behavior: 'instant' });
+        card.querySelector('.cms-actions .cms-action-row').scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      },
+      'tray-media': async () => {
+        await editorOn();
+        await openTray('media');
+        await until(() => { const g = $('#hc-tray .cms-media-grid'); return g && g.children.length; }, 'the Media grid');
+      },
+      'tray-guide': async () => {
+        await editorOn();
+        await openTray('guide');
+        await until(() => $('#hc-tray ol.hc-guide'), 'the Guide');
+      },
+      phone: async () => {
+        await editorOn();
+        await openTray('proposals');
+        await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
+        await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+      },
+      scroll: async () => {
+        await editorOn();
+        const siteSamples = [];
+        const siteLog = [];
+        const t0 = Date.now();
+        const siteTimer = setInterval(() => { if (siteSamples.length < 2000) siteSamples.push([Date.now() - t0, SW.scrollY]); }, 16);
+        const onSiteScroll = () => { if (siteLog.length < 2000) siteLog.push([Date.now() - t0, SW.scrollY]); };
+        SW.addEventListener('scroll', onSiteScroll);
+        try {
+          frameSays('hc-block-select', { index: await lastParagraphIndex() });
+          const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
+          // before: the frame has scrolled the selected block into view and holds still (3 answers in a row, +-2 px)
+          const end = Date.now() + LIMIT_MS;
+          const run = [];
+          let before = null;
+          while (!before) {
+            if (Date.now() > end) throw new Error(`the frame never held still at >= 100 px (last ${JSON.stringify(run)})`);
+            const r = await askScroll('before typing');
+            if (r.now >= 100 && run.length && Math.abs(r.now - run[run.length - 1].now) <= 2) run.push(r);
+            else run.splice(0, run.length, r);
+            if (run.length >= 3 && run[0].now >= 100) before = r;
+            else await sleep(100);
+          }
+          const nonceBefore = nonceOf(pageFrame());
+          ta.value += 'x';
+          ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
+          // a reload (the old editor) shows as a NEW nonce's hc-ready; no reload is fine too (the fix)
+          try { await frameReady(nonceBefore); } catch (e) { /* no reload within the limit */ }
+          await sleep(1000);
+          const after = await askScroll('after typing');
+          body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(before)));
+          body.setAttribute('data-walk-scroll-after', JSON.stringify(scrollSummary(after)));
+          const ys = siteSamples.map((x) => x[1]);
+          body.setAttribute('data-walk-scroll-site', JSON.stringify({ count: ys.length, first: ys.length ? ys[0] : null,
+            last: ys.length ? ys[ys.length - 1] : null, max: ys.length ? Math.max(...ys) : null,
+            samples: siteSamples.slice(0, 40), events: siteLog.slice(0, 300) }));
+        } finally {
+          SW.removeEventListener('scroll', onSiteScroll);
+          clearInterval(siteTimer);
+        }
+      },
+      'overlay-inline': async () => {
+        await editorOn();
+        await until(() => { const b = pageBar(); return b && /walk-proposer proposes changes to this page/.test(b.textContent); },
+          'the page bar for proposal #2');
+        await until(() => /main changed this since the proposal/.test(pageBar().textContent), 'the conflict line');
+      },
+      'overlay-side': async () => {
+        await REGISTRY['overlay-inline']();
+      },
+      'two-prs': async () => {
+        await editorOn();
+        await until(() => { const b = pageBar(); return b && /newer-proposer proposes changes to this page/.test(b.textContent); },
+          'the page bar for the newest proposal, #3');
+        await until(() => /Also proposing changes here:\s*#2 by walk-proposer/.test(pageBar().textContent)
+          && $('.hc-pagebar [data-action="pagebar-show"][data-proposal="2"]'), '#2 listed with its own Show on page');
+      },
+      // U4: Editor stays OFF; the members-only detail under the page's public GitHub surfaces
+      members: async () => {
+        await until(() => $('[data-editor-switch]') && !$('[data-editor-switch]').disabled, 'the role read (the switch enabled)');
+        if (page === '/lab') {
+          const sec = await until(() => $('.hc-m-people'), '"People committing this year"');
+          await until(() => $('.hc-m-author') || $('.hc-m-people .hc-m-error'), 'an author on a recent commit');
+          (SD.querySelector('.hc-cols') || sec).scrollIntoView({ block: 'start', behavior: 'instant' });
+          const row = await until(() => $('.hc-m-people [data-hc-login]'), 'a row with a login');
+          row.click();
+          await until(() => $('.hc-person-pop .hc-pp-members'), 'the members-only part of the popover');
+          return;
+        }
+        if (page === '/about') {
+          const strip = await until(() => $('.hc-gh-strip'), 'a GitHub strip on a roster card');
+          strip.closest('.people-group').scrollIntoView({ block: 'start', behavior: 'instant' });
+          return;
+        }
+        const box = await until(() => $('.hc-authors .hc-m-authors'), 'the members-only lines under "who wrote this"');
+        await until(() => box.querySelector('.hc-m-line') || box.querySelector('.hc-m-error'), 'a counts line');
+        box.closest('.hc-authors').scrollIntoView({ block: 'start', behavior: 'instant' });
+      },
+      // Edit access: Editor OFF, the box at the top of a project page's aside (access-proposals: Editor on, the list)
+      'access-sitewide': () => accessBoxReady((b) => /^You can edit every project \((Maintainer|Admin)\)\.$/.test(accessText(b))),
+      'access-commits': () => accessBoxReady((b) => /^You can edit this project: you have commits in/.test(accessText(b))),
+      'access-added': () => accessBoxReady((b) => accessText(b) === 'An admin gave you access to this project.'),
+      'access-removed': () => accessBoxReady((b) => accessText(b) === 'An admin removed your access to this project.'
+        && b.querySelector('button[data-action="access-request"]')),
+      'access-nowrite': () => accessBoxReady((b) => /^You have commits here, but/.test(accessText(b))
+        && b.querySelector('a[data-action="access-issue"]')),
+      'access-none': () => accessBoxReady((b) => /^You have no commits/.test(accessText(b))
+        && b.querySelector('button[data-action="access-request"]')),
+      'access-admin': () => accessBoxReady((b) => accessText(b) === 'You can edit every project (Admin).'
+        && b.querySelector('button[data-action="access-remove"]') && b.querySelector('button[data-action="access-add"]')),
+      'access-proposals': async () => {
+        // the list needs no page frame: Editor on, then the Proposals view (not editorOn's wait for the frame)
+        const sw = await until(() => { const b = $('[data-editor-switch]'); return b && !b.disabled ? b : null; },
+          'the Editor switch (GitHub access confirmed)');
+        sw.click();
+        await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
+        await openTray('proposals');
+        await until(() => $('#hc-tray .hc-prow[data-pr="4"] .hc-prow-access:not([hidden])')
+          && $('#hc-tray .hc-prow[data-pr="5"] .hc-prow-access:not([hidden])'), 'the two access labels in the list');
+      },
+
+      /* ---- U2 ---- */
+
+      /* ---- U3 ---- */
+
+      /* ---- U4 ---- */
+
+      /* ---- U5 ---- */
+
+      /* ---- U6 ---- */
+
+      /* ---- U7 ---- */
+    };
+  }
 
   site.addEventListener('load', async () => {
     try {
@@ -664,7 +681,7 @@
       const started = await SW.HCApp.loadEditor({ fetch: fake.fetch,
         session: { token: 'walk-fake-not-a-token', login: String(user.login), expiresAt: null } });
       if (started !== true) throw new Error('HCApp.loadEditor did not start the editor');
-      await RUN[step]();
+      await REGISTRY[step]();
       await sleep(SETTLE_MS);
       mark(`${step}:ready`);
     } catch (e) {

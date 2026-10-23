@@ -1195,6 +1195,261 @@
         "purpose": "Boot the public site's scripts in a vm over a fake DOM for view tests, and parse the theme tokens for contrast tests."
       },
       "reason": "First-party site, tool, or test implementation verified from source history and provenance."
+    },
+    "tools/tests/editor_harness.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "35774b24f80f7406f5011aaa2725e57dd31be67a680604f662f4b9f43260f93b",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Run the Editor mode's parent side in a vm over a fake DOM and the fake GitHub, for the editor tests."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/frame_harness.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "5cd83c90029cdd24ffac4ee8ac0e5934c9a9ed33d3f9ac6ef28abe0c06077584",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "A fake DOM for the Editor mode's frame side (js/editor-frame.js) and a loader for its lazy scripts, for tests."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "js/editor-dock.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "3ca5aa46bf65d24fe46e72fa48790668c1cdc30042c65cc7d40eea8cebefed40",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Draw the Editor mode's dock (the bubble at the bottom right): change count, undo, send, edit gate, fold."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_dock.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "a101cf6611d15217afaae4e917115e43c524d489621d9d367f99a27c8b502956",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the Editor mode's dock (js/editor-dock.js, window.HCDock): its interface and how it is loaded."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "js/editor-people.js": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "c0c18c76cc367b9062c04b5d24aa7f35c1f9bebe4d53165d11f6e9c60ee3276f",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "The Team page's people tools inside the Editor's preview frame: card menu, moves, drag, \"+\" cards, marks."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_people.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ca2ebbd27e218cd5e2050375685f5a90ef07fc4075ac7de08c9786bd6ca711ba",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the Team page's people tools in the preview frame (js/editor-people.js) and how the frame loads them."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u0b.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "840ec5ed0c937b6179652f10511d40f31ddd635b86f02f8b1dbfb4743f18349c",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U0b removals: each retired editor address redirects to the page it now opens."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u1.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "386520c5e3d29def9686941540754dbd8614f08110bdb042acd161030d576172",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U1 sign-in work in the editor: staying signed in, the same-tab fallback, sign-out keeping edits."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_dev_site.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "929384c2ff842d79ae79e3a0bcbc53aa33d3cbbc5a4333c844cf6b1af35b74ea",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test tools/dev_site.mjs, the function-aware local server: its flags and the handlers it runs."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_cms_core_send.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "7b8abac5fa293f354337f679a4f499d374df6dbdda5b8bac9fdb2a56ef9c67d4",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the cms-core side of the dock's send flow (U2): what Send for review writes, and nothing more."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u3.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "aee710e9daf14185e14983050e405683e8906bd0cff01be574e233ce5b59e98d",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U3 review work in the editor: the review panel, margin cards, redirects and the Escape order."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u4.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "836da7f38de8b57f5dad9b5118bb0100a5a9a70bdfed4524b0726022c28bad54",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U4 typing work on the editor's parent side: toolbar, comments, marks restored after a reload."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_frame_u4.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "7912f95253bfbdbc961a72cc47f77ead22e73d4e38c9dfe6f7207d5f21bf0595",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U4 typing work inside the preview frame: un-strike, the \"+\" rail, boxes and the image tile."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u5.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "82034c727f36530c60b4794cccd939f8358164f6710e07490c9754bf3a747520",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U5 Team page work on the editor's parent side: in-place edits, the own-card rule, add in place."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_u6.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "3154a37bed995bc2e07d2e90275c5bee1c1ff2e2a6b19bd53e141a633db3aaf4",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U6 project page work on the editor's parent side: facts in place, the lock line, New project."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_frame_u6.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "b4f97d3c48c7209ca4d9cfc7800c572184cce8f5dcd98395e1e5cfe1cee80213",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U6 project page work inside the preview frame: the facts fields drawn in the page."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
+    },
+    "tools/tests/test_editor_layout.mjs": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "6e7bb66ac214de5ab94979dfc064b4427ab3a3513017737ee0df57e68afaf6e3",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test the U7 layout work: a still page when Editor turns on, the instant switch, header word, Contents."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
     }
   },
   "schema_version": 1

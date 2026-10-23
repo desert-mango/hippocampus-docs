@@ -49,7 +49,7 @@ const ORIGIN = 'https://docs.example.org';
 const NONCE = 'n0nce-4f9c2a7e1b3d5f60';
 const SCRIPTS = ['source.js', 'editor-frame.js', 'sanitize.js', 'marked.min.js', 'search.js',
   'graph.js', 'lab.js', 'app.js'];
-const EDITOR_FILES = ['css/editor.css', 'js/cms-core.js', 'js/editor.js'];
+const EDITOR_FILES = ['css/editor.css', 'js/cms-core.js', 'js/editor-dock.js', 'js/editor.js'];
 const SETUP_ROUTE = '/setup/hippocampus-bringup/fcu-firmware';
 
 // ----------------------------------------------------- permissive DOM ---
@@ -435,7 +435,7 @@ test('a normal page whose sessionStorage throws boots as a guest', async () => {
 
 // ------------------------------------------------------- session boot ---
 
-test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor.js, each after the last loaded', async () => {
+test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor-dock.js, then js/editor.js, each after the last loaded', async () => {
   const storage = memoryStorage({ [C.SESSION_KEY]: JSON.stringify(C.makeSession('<yours>', null, 'bob', Date.now())) });
   const app = await boot({ hash: `#${SETUP_ROUTE}`, storage });
   assert.deepEqual(app.injectedNames(), ['css/editor.css']);
@@ -446,6 +446,8 @@ test('a session boot injects css/editor.css, then js/cms-core.js, then js/editor
   assert.deepEqual(app.injectedNames(), ['css/editor.css', 'js/cms-core.js']);
   assert.equal(app.injected()[1].tagName, 'SCRIPT');
   await app.loaded('js/cms-core.js');
+  assert.deepEqual(app.injectedNames(), ['css/editor.css', 'js/cms-core.js', 'js/editor-dock.js']);
+  await app.loaded('js/editor-dock.js');
   assert.deepEqual(app.injectedNames(), EDITOR_FILES);
   assert.equal(app.starts.length, 0, 'not started before js/editor.js loaded');
   await app.loaded('js/editor.js');
@@ -585,7 +587,7 @@ test('window.HCApp is frozen {loadEditor}; loadEditor passes fetch and session, 
   assert.ok(!app.storage.log.some((x) => x[0] === 'set'), 'nothing is written under SESSION_KEY');
   // a second call does not inject again
   await HCApp.loadEditor({ fetch: fake, session });
-  assert.equal(app.injected().length, 3);
+  assert.equal(app.injected().length, EDITOR_FILES.length);
 });
 
 // ------------------------------------------------ the ?editor= bootstrap ---
@@ -623,6 +625,7 @@ test('HCEditor.start that throws: the window closes, the footer says so, no unha
   await settle();
   await app.loaded('css/editor.css');
   await app.loaded('js/cms-core.js');
+  await app.loaded('js/editor-dock.js');
   const n = app.injected().find((x) => x.attrs.src === 'js/editor.js');
   app.win.HCEditor = Object.freeze({ start: () => { throw new Error('boom'); } });
   const rejections = [];

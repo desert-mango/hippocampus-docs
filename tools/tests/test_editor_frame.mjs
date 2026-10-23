@@ -23,130 +23,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { PREFIX, Node, Text, El, el, makeDoc, S, setupPage, fakeHC, fakeWin, kids, blocksOf, summary } from './frame_harness.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(new URL('../..', import.meta.url).pathname);
 const EF = require(path.join(ROOT, 'js', 'editor-frame.js'));
+const EP = require(path.join(ROOT, 'js', 'editor-people.js'));   // U0: the people tools moved out of editor-frame.js
 const C = require(path.join(ROOT, 'js', 'cms-core.js'));
-const PREFIX = 'a1b2c3d4e5f60718';
-
-// ------------------------------------------------------------ a fake DOM --
-
-class Node {
-  constructor(doc, type) { this.ownerDocument = doc; this.nodeType = type; this.parentNode = null; this.childNodes = []; }
-  get previousSibling() { const s = this.parentNode ? this.parentNode.childNodes : []; return s[s.indexOf(this) - 1] || null; }
-  get nextSibling() { const s = this.parentNode ? this.parentNode.childNodes : []; const i = s.indexOf(this); return i < 0 ? null : s[i + 1] || null; }
-}
-class Text extends Node {
-  constructor(doc, data) { super(doc, 3); this.data = data; }
-  get textContent() { return this.data; }
-}
-class El extends Node {
-  constructor(doc, tag) {
-    super(doc, 1);
-    this.tagName = tag.toUpperCase();
-    this.attrs = {};
-    this.listeners = {};
-    this.id = '';
-    this._cls = new Set();
-    const self = this;
-    this.classList = {
-      add: (c) => self._cls.add(c), remove: (c) => self._cls.delete(c), contains: (c) => self._cls.has(c),
-      toggle: (c, on) => { const want = on === undefined ? !self._cls.has(c) : Boolean(on); if (want) self._cls.add(c); else self._cls.delete(c); return want; },
-    };
-    this.scrolled = 0;
-  }
-  get className() { return [...this._cls].join(' '); }
-  set className(v) { this._cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
-  get textContent() { return this.childNodes.map((c) => c.textContent).join(''); }
-  set textContent(t) { this.childNodes.forEach((c) => { c.parentNode = null; }); this.childNodes = t ? [new Text(this.ownerDocument, String(t))] : []; }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
-  removeAttribute(k) { delete this.attrs[k]; }
-  _detach(c) { if (c.parentNode) { const s = c.parentNode.childNodes; s.splice(s.indexOf(c), 1); } }
-  appendChild(c) { this._detach(c); this.childNodes.push(c); c.parentNode = this; return c; }
-  insertBefore(c, ref) {
-    if (ref === null || ref === undefined) return this.appendChild(c);
-    this._detach(c);
-    this.childNodes.splice(this.childNodes.indexOf(ref), 0, c);
-    c.parentNode = this;
-    return c;
-  }
-  removeChild(c) { this._detach(c); c.parentNode = null; return c; }
-  addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
-  dispatch(t, target, extra) {
-    // bubbles from target up to this element's document root
-    for (let n = target || this; n; n = n.parentNode) {
-      for (const fn of (n.listeners && n.listeners[t]) || []) fn({ type: t, target: target || this, ...(extra || {}), stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; } });
-    }
-  }
-  click() { this.dispatch('click', this); }
-  scrollIntoView() { this.scrolled += 1; }
-}
-
-function el(doc, tag, attrs, ...kids) {
-  const e = new El(doc, tag);
-  for (const [k, v] of Object.entries(attrs || {})) { if (k === 'id') e.id = v; else if (k === 'class') e.className = v; else e.setAttribute(k, v); }
-  kids.forEach((k) => e.appendChild(typeof k === 'string' ? new Text(doc, k) : k));
-  return e;
-}
-
-function makeDoc() {
-  const doc = { listeners: {} };
-  doc.createElement = (t) => new El(doc, t);
-  doc.head = new El(doc, 'head');
-  doc.body = new El(doc, 'body');
-  doc.addEventListener = (t, fn) => { (doc.listeners[t] = doc.listeners[t] || []).push(fn); };
-  doc.getElementById = (id) => {
-    const walk = (n) => { if (n.id === id) return n; for (const c of n.childNodes || []) { if (c.nodeType === 1) { const r = walk(c); if (r) return r; } } return null; };
-    return walk(doc.body);
-  };
-  return doc;
-}
-
-const S = (doc, i, prefix) => el(doc, 'div', { id: `hcb-${prefix || PREFIX}-${i}` });
-
-/* A setup page as app.js leaves it: the Markdown's top-level elements with
-   sentinels (blocks 1 and 4 are blank-line blocks: no sentinel), then the
-   prev/next nav and lab.js's "who wrote this". */
-function setupPage() {
-  const doc = makeDoc();
-  const content = el(doc, 'main', { id: 'content', class: 'content' });
-  doc.body.appendChild(el(doc, 'header', { class: 'site-header' }));
-  doc.body.appendChild(content);
-  const body = el(doc, 'div', { class: 'page-body' },
-    '\n', S(doc, 0), '\n', el(doc, 'h1', null, 'Title'), '\n',
-    S(doc, 2), el(doc, 'p', null, 'Intro ', el(doc, 'a', { href: '#/about' }, 'link')), el(doc, 'p', null, 'dangling'),
-    S(doc, 3), el(doc, 'div', { class: 'adm adm-note' }, el(doc, 'p', null, 'note')),
-    el(doc, 'div', { id: 'hcb-ffffffffffffffff-9' }),            // another load's mark: plain content
-    S(doc, 5), el(doc, 'div', { class: 'code-wrap' }, el(doc, 'pre', null, 'code')),
-    el(doc, 'nav', { class: 'page-nav' }, el(doc, 'a', { href: '#/x' }, 'next')),
-    el(doc, 'section', { class: 'hc-authors' }, 'who wrote this'));
-  content.appendChild(body);
-  return { doc, content, body };
-}
-
-function fakeHC(prefix) {
-  const posts = [];
-  let listener = null;
-  return {
-    preview: true, blockPrefix: prefix || PREFIX, posts,
-    post: (type, data) => { posts.push(Object.assign({ type }, data || {})); return true; },
-    onEditor: (fn) => { listener = fn; return true; },
-    send: (m) => listener(Object.assign({ on: true, selected: null, overlay: [],
-      settings: { suggestions: true, diff: 'inline', compact: false, outlines: true } }, m)),
-  };
-}
-
-function fakeWin() {
-  const listeners = {};
-  return { listeners, location: { hash: '#/setup/x' }, setTimeout: (fn) => fn(),
-    addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); } };
-}
-
-const kids = (n) => n.childNodes.filter((c) => c.nodeType === 1);
-const blocksOf = (body) => kids(body).filter((c) => c.classList.contains('hc-block'));
-const summary = (w) => kids(w).filter((c) => !c.classList.contains('hc-pencil')).map((c) => c.id || c.tagName.toLowerCase() + (c.className ? `.${c.className.split(' ')[0]}` : ''));
 
 // ------------------------------------------------------------------ tests --
 
@@ -563,34 +446,34 @@ test('peopleMove: up/down, to the other list (pin or unpin as needed), pin, drop
   const lists = () => ({ team: [P('Ann', true, true, false), P('Ben', true, false, true), P('Uli', false, false, false)],
     alumni: [P('Cid', true, false, false), P('Dot', false, false, false)] });
   const names = (o) => ({ team: o.team.map((x) => `${x.name}${x.pinned ? '*' : ''}`), alumni: o.alumni.map((x) => `${x.name}${x.pinned ? '*' : ''}`) });
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'down', name: 'Ann' })), { team: ['Ben*', 'Ann', 'Uli'], alumni: ['Cid', 'Dot'] });
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'up', name: 'Dot' })), { team: ['Ann', 'Ben*', 'Uli'], alumni: ['Dot', 'Cid'] });
-  assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Ann' }), null, 'already first: nothing to do');
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'down', name: 'Ann' })), { team: ['Ben*', 'Ann', 'Uli'], alumni: ['Cid', 'Dot'] });
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'up', name: 'Dot' })), { team: ['Ann', 'Ben*', 'Uli'], alumni: ['Dot', 'Cid'] });
+  assert.equal(EP.peopleMove(lists(), { op: 'up', name: 'Ann' }), null, 'already first: nothing to do');
   // to the team: a linked, quiet person is pinned (or GitHub would send them back); an unlinked one just moves
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Cid' })).team, ['Ann', 'Ben*', 'Uli', 'Cid*']);
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Dot' })).team, ['Ann', 'Ben*', 'Uli', 'Dot']);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'other', name: 'Cid' })).team, ['Ann', 'Ben*', 'Uli', 'Cid*']);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'other', name: 'Dot' })).team, ['Ann', 'Ben*', 'Uli', 'Dot']);
   // to the alumni: a quiet person's team pin comes off (the rule keeps them there); an ACTIVE person is pinned to
   // the alumni (Kyle 2026-10-16), first there, never refused
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'other', name: 'Ben' })).alumni, ['Ben', 'Cid', 'Dot']);
-  const away = EF.peopleMove(lists(), { op: 'other', name: 'Ann' });
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'other', name: 'Ben' })).alumni, ['Ben', 'Cid', 'Dot']);
+  const away = EP.peopleMove(lists(), { op: 'other', name: 'Ann' });
   assert.equal(away.refused, undefined, 'never refused');
   assert.deepEqual(names(away), { team: ['Ben*', 'Uli'], alumni: ['Ann*', 'Cid', 'Dot'] });
   // back to the team: the alumni pin comes off (active, the rule keeps them there)
-  assert.deepEqual(names(EF.peopleMove(away, { op: 'other', name: 'Ann' })).team, ['Ben*', 'Uli', 'Ann']);
+  assert.deepEqual(names(EP.peopleMove(away, { op: 'other', name: 'Ann' })).team, ['Ben*', 'Uli', 'Ann']);
   // Unpin in the alumni releases them (the 30-day rule then shows them on the team); Pin again pins
-  assert.deepEqual(names(EF.peopleMove(away, { op: 'pin', name: 'Ann' })).alumni, ['Ann', 'Cid', 'Dot']);
+  assert.deepEqual(names(EP.peopleMove(away, { op: 'pin', name: 'Ann' })).alumni, ['Ann', 'Cid', 'Dot']);
   // a person pinned to the alumni but quiet, moved to the team: pinned to the team
   const quietAway = { team: [], alumni: [P('Eve', true, false, true)] };
-  assert.deepEqual(names(EF.peopleMove(quietAway, { op: 'other', name: 'Eve' })), { team: ['Eve*'], alumni: [] });
+  assert.deepEqual(names(EP.peopleMove(quietAway, { op: 'other', name: 'Eve' })), { team: ['Eve*'], alumni: [] });
   // pin / unpin (linked only)
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Cid' })).alumni, ['Cid*', 'Dot']);
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'pin', name: 'Ben' })).team, ['Ann', 'Ben', 'Uli']);
-  assert.equal(EF.peopleMove(lists(), { op: 'pin', name: 'Uli' }), null, 'no pin without a GitHub link');
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'pin', name: 'Cid' })).alumni, ['Cid*', 'Dot']);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'pin', name: 'Ben' })).team, ['Ann', 'Ben', 'Uli']);
+  assert.equal(EP.peopleMove(lists(), { op: 'pin', name: 'Uli' }), null, 'no pin without a GitHub link');
   // a drop: into a list at an index, the same rules
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Uli', list: 'team', index: 0 })).team, ['Uli', 'Ann', 'Ben*']);
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Cid', list: 'team', index: 1 })).team, ['Ann', 'Cid*', 'Ben*', 'Uli']);
-  assert.deepEqual(names(EF.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 1 })).alumni, ['Cid', 'Ann*', 'Dot']);
-  assert.equal(EF.peopleMove(lists(), { op: 'up', name: 'Nobody' }), null);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'drop', name: 'Uli', list: 'team', index: 0 })).team, ['Uli', 'Ann', 'Ben*']);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'drop', name: 'Cid', list: 'team', index: 1 })).team, ['Ann', 'Cid*', 'Ben*', 'Uli']);
+  assert.deepEqual(names(EP.peopleMove(lists(), { op: 'drop', name: 'Ann', list: 'alumni', index: 1 })).alumni, ['Cid', 'Ann*', 'Dot']);
+  assert.equal(EP.peopleMove(lists(), { op: 'up', name: 'Nobody' }), null);
 });
 
 test('editor-frame (the edit gate): a locked project page picks nothing; body.hc-edit-locked hides the "+" rails', () => {

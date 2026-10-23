@@ -45,373 +45,19 @@ body[data-hc-tint="5"] { --hc-tint: var(--hc-p5); --hc-hl: var(--hc-p5); --hc-hl
 /* text selected while editing takes the edit colour too (a browser surface: craft floor) */
 body.hc-edit-on .page-body ::selection { background: color-mix(in srgb, var(--hc-edit) 24%, transparent); }
 
-/* ---------- 1. the frame side ---------- */
-
-/* The frame shows content only: the parent's header, sidebar and footer are
-   the ones on screen. */
-body.hc-framed .site-header,
-body.hc-framed .sidebar,
-body.hc-framed .site-footer,
-body.hc-framed .skip-link { display: none !important; }
-body.hc-framed .layout { display: block; width: auto; max-width: none; padding: 0; }
-body.hc-framed .content { padding: 1.4rem 1.6rem 3rem; max-width: 52rem; margin: 0 auto; }
-
-/* One look for a block in Editor mode (Kyle, 2026-10-14): a line in the left margin — faint on hover and on
-   the solid line on keyboard focus and when the block is selected or open. No pencil, no ring, no box: the same ::after in
-   every state, only its colour changes, so nothing jumps. A note box, a code box and the Markdown box get the
-   same line. */
-:root { --hc-line-faint: color-mix(in srgb, var(--hc-edit) 38%, transparent); }
-body.hc-edit-on .page-body > .hc-block,
-body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; cursor: pointer; outline: none; }
-body.hc-edit-on .page-body > .hc-block::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block::after { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
-  width: 2px; border-radius: 2px; background: transparent; transition: background-color .15s ease-out; pointer-events: none; }
-body.hc-edit-on.hc-outlines .page-body > .hc-block:hover::after,
-body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover::after { background: var(--hc-line-faint); }
-/* keyboard focus: the solid line (a faint one would not reach 3:1 as a focus indicator) */
-body.hc-edit-on .page-body > .hc-block:focus-visible::after,
-body.hc-edit-on .page-body > .hc-block.hc-selected::after,
-body.hc-edit-on .page-body > .hc-block.hc-open::after,
-body.hc-edit-on .page-body > .hc-block.hc-hot::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block:focus-visible::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block.hc-selected::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block.hc-open::after,
-body.hc-edit-on .page-body > .hc-side > .hc-block.hc-hot::after { background: var(--hc-edit); }
-@media (prefers-reduced-motion: reduce) {
-  body.hc-edit-on .page-body > .hc-block::after, body.hc-edit-on .page-body > .hc-side > .hc-block::after { transition: none; } }
-
-/* the edit gate (2026-10-21): a project page this person may not edit is read, not picked: no "+" rails, no line */
-body.hc-edit-on.hc-edit-locked .hc-plus { display: none; }
-body.hc-edit-on.hc-edit-locked .page-body > .hc-block,
-body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block { cursor: auto; }
-body.hc-edit-on.hc-edit-locked .page-body > .hc-block:not(.hc-hot)::after,
-body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block:not(.hc-hot)::after { background: transparent; }
-
-/* an image block (V2): it can be dragged; the line shows where it lands */
-body.hc-edit-on .page-body > .hc-block[data-hc-image] { cursor: grab; }
-body.hc-edit-on .page-body > .hc-block[data-hc-image]:active { cursor: grabbing; }
-.hc-drop-line { position: absolute; z-index: 40; height: 2px; border-radius: 2px; background: var(--hc-edit); pointer-events: none;
-  box-shadow: 0 0 0 3px var(--hc-edit-soft); }
-.hc-drop-line[hidden] { display: none; }
-
-/* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout; the
-   left line (blue) says where the caret is. Suggestions (js/editor-type.js): new text in the change colour
-   (--hc-mark), underlined; removed text struck through in it; a format change dotted in it. */
-body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
-.hc-edit-root [contenteditable] { outline: none; caret-color: var(--hc-edit); cursor: text; }
-.hc-sug-ins { color: var(--hc-mark); background: none; text-decoration: underline; text-decoration-color: var(--hc-mark);
-  text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
-.hc-sug-del { color: var(--hc-mark); background: none; text-decoration: line-through; text-decoration-color: var(--hc-mark);
-  text-decoration-thickness: 1.5px; }
-.hc-sug-del + .hc-sug-ins { margin-left: .25em; }
-.hc-sug-fmt { text-decoration: underline dotted var(--hc-mark); text-decoration-thickness: 2px; text-underline-offset: 4px; }
-
-/* the block editors (editor redesign U3, js/editor-blocks.js): built from the site's own parts */
-.hc-boxbar, .hc-codebar { position: absolute; top: calc(1.1rem - 15px); right: 12px; z-index: 4; display: flex; align-items: center; gap: 2px;
-  padding: 2px; border-radius: 8px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
-  font: 500 12.5px var(--sans); cursor: default; }
-.hc-codebar { top: -14px; gap: 6px; padding: 2px 4px 2px 8px; color: var(--body-soft); }
-.hc-codebar select { background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 6px; font: 12px var(--sans); padding: 2px 6px; }
-.hc-box-type { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
-  color: var(--heading); font: 600 12.5px var(--sans); cursor: pointer; }
-.hc-box-type:hover, .hc-box-remove:hover { background: var(--surface-2); }
-.hc-box-remove { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--body-soft); cursor: pointer; font: inherit; }
-.hc-chev { color: var(--body-soft); font-size: .7rem; }
-.hc-box-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--hc-edit); }
-.hc-dot-tip { background: var(--ok); } .hc-dot-warning { background: var(--note-warn); } .hc-dot-danger { background: var(--danger); }
-.hc-boxmenu { position: absolute; top: 32px; right: 0; z-index: 6; width: 170px; padding: 5px; border-radius: 10px; background: var(--surface);
-  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-.hc-boxmenu .hc-pm-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px;
-  background: none; color: var(--heading); font: 500 13px var(--sans); cursor: pointer; text-align: left; }
-.hc-boxmenu .hc-pm-item:hover { background: var(--surface-2); }
-.hc-boxmenu .is-current { background: var(--hc-edit-soft); }
-.hc-block.hc-removed { opacity: .55; text-decoration: line-through; text-decoration-color: var(--hc-mark); }
-.hc-formatbar { position: absolute; z-index: 60; padding: 4px; border-radius: 10px; background: var(--surface);
-  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-[data-theme="light"] .hc-formatbar { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
-.hc-formatbar[hidden], .hc-fb-row[hidden], .hc-fb-linkrow[hidden], .hc-fb-err[hidden] { display: none; }
-.hc-fb-row { display: flex; gap: 2px; }
-.hc-fb { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 7px; background: none;
-  color: var(--heading); cursor: pointer; font: 700 14px var(--sans); transition: background-color .12s ease-out, color .12s ease-out; }
-.hc-fb-em { font-style: italic; font-weight: 600; font-family: Georgia, serif; }
-.hc-fb-code { font: 600 12.5px var(--mono); letter-spacing: -.04em; }
-.hc-fb:hover { background: var(--surface-2); color: var(--hc-edit-ink); }
-.hc-fb:active { background: var(--hc-edit-soft); }
-.hc-fb:focus-visible, .hc-fb-add:focus-visible, .hc-fb-cancel:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-fb-linkrow { width: 19rem; max-width: calc(100vw - 32px); }
-.hc-fb-inputs { display: flex; align-items: center; gap: 4px; }
-.hc-fb-url { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--edge); border-radius: 7px; background: var(--bg);
-  color: var(--heading); font: 13px var(--mono); }
-.hc-fb-url:focus { outline: 2px solid color-mix(in srgb, var(--hc-edit) 60%, transparent); outline-offset: 0; border-color: var(--hc-edit); }
-.hc-fb-add { height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--hc-edit-ink); color: var(--hc-edit-on); font: 600 13px var(--sans); cursor: pointer; }
-.hc-fb-add:hover { filter: brightness(1.08); }
-.hc-fb-cancel { width: 32px; height: 32px; border: 0; border-radius: 7px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.05rem; }
-.hc-fb-cancel:hover { background: var(--surface-2); color: var(--heading); }
-.hc-fb-err { margin: 6px 4px 2px; color: var(--hc-del); font: 12.5px/1.4 var(--sans); }
-/* an inline code or link suggestion keeps its own look under the dotted format mark */
-code.hc-sug-fmt { font-family: var(--mono); }
-a.hc-sug-fmt { color: var(--hc-mark); }
-/* the in-place Markdown box (Kyle's D1 change 6b) */
-.hc-mdbox { margin: 1.1rem 0; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); overflow: hidden; cursor: default; }
-.hc-md-head { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 14px; min-height: 46px; border-bottom: 1px solid var(--edge-soft);
-  font: 13.5px var(--sans); flex-wrap: wrap; }
-.hc-md-title { color: var(--heading); font-weight: 600; }
-.hc-md-hint { color: var(--body-soft); font-size: 12.5px; }
-.hc-md-views { display: flex; margin-left: auto; align-self: stretch; }
-.hc-md-views button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--body-soft); font: 500 13px var(--sans); padding: 0 11px; cursor: pointer; }
-.hc-md-views button[aria-selected="true"] { color: var(--hc-edit-ink); border-bottom-color: var(--hc-edit); }
-.hc-md-done { min-height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--heading); color: var(--bg); font: 600 13px var(--sans); cursor: pointer; }
-.hc-md-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.hc-mdbox[data-view="text"] .hc-md-cols, .hc-mdbox[data-view="preview"] .hc-md-cols { grid-template-columns: minmax(0, 1fr); }
-.hc-mdbox[data-view="text"] .hc-md-prevwrap, .hc-mdbox[data-view="preview"] .hc-md-srcwrap { display: none; }
-.hc-md-srcwrap { display: flex; background: var(--code-bg); border-right: 1px solid var(--edge-soft); min-width: 0; }
-.hc-md-nums { flex: none; padding: 12px 8px 12px 12px; color: var(--muted); font: 12.5px/1.6 var(--mono); text-align: right; white-space: pre;
-  user-select: none; overflow: hidden; border-right: 1px solid var(--edge-soft); }
-.hc-md-src { flex: 1; min-width: 0; box-sizing: border-box; margin: 0; padding: 12px 14px; border: 0; background: transparent; color: var(--heading);
-  font: 12.5px/1.6 var(--mono); resize: none; outline: none; overflow: auto; tab-size: 2; }
-.hc-md-prevwrap { padding: 10px 16px 6px; min-width: 0; overflow: auto; }
-.hc-md-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--body-soft); margin: 2px 0 4px; }
-.hc-md-prev { font-size: .95em; }
-.hc-md-foot { padding: 8px 14px; border-top: 1px solid var(--edge-soft); color: var(--body-soft); font: 12.5px var(--sans); }
-
-.hc-plus { position: relative; height: 0; margin: 0; }
-.hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: transparent; }
-.hc-plus > .hc-plus-btn { position: absolute; left: 50%; top: -.75rem; transform: translateX(-50%); z-index: 4;
-  width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--edge); background: var(--surface);
-  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s; font: inherit; line-height: 1; }
-.hc-plus:hover > .hc-plus-btn, .hc-plus.is-open > .hc-plus-btn, .hc-plus-btn:focus-visible {
-  opacity: 1; border-color: var(--hc-edit); color: var(--hc-edit-ink); }
-.hc-plus:hover::before, .hc-plus.is-open::before { background: color-mix(in srgb, var(--hc-edit) 40%, transparent); }
-.hc-plus.is-open { height: 6.2rem; }
-.hc-picker { position: absolute; left: 50%; transform: translateX(-50%); top: 1rem; z-index: 5; display: flex;
-  gap: .35rem; padding: .45rem; width: max-content; max-width: 100%; flex-wrap: wrap; justify-content: center;
-  border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-soft);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
-.hc-picker .hc-pick { font: inherit; font-size: .74rem; display: flex; flex-direction: column; align-items: center;
-  gap: .25rem; width: 4.6rem; flex: none; padding: .5rem .3rem; border-radius: 8px; border: 1px solid var(--edge);
-  background: var(--surface); color: var(--body-soft); cursor: pointer; }
-.hc-picker .hc-pick:hover, .hc-picker .hc-pick:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
-.hc-picker .hc-pick small { font-size: .62rem; color: var(--muted); }
-
-/* The Team page in Editor mode (round 2, R5; Kyle items 5 and 10): no block line over the roster — a light
-   card-level affordance instead (a 1 px outline in the edit colour, a grab cursor), a dashed "+" card at the end
-   of each list, the card menu, and the drop target while dragging. */
-body.hc-people-edit .person-card[data-hc-ptools] { cursor: grab; outline: 1px solid transparent; outline-offset: 2px;
-  transition: outline-color .15s ease-out, background-color .15s ease-out; }
-body.hc-people-edit .person-card[data-hc-ptools]:hover,
-body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline-color: color-mix(in srgb, var(--hc-edit) 60%, transparent);
-  transform: none; border-color: var(--edge-soft); }
-body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline: 2px solid var(--hc-edit); }
-body.hc-people-edit .person-card.is-dragging { opacity: .4; cursor: grabbing; }
-body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb, var(--hc-edit) 70%, transparent); outline-offset: 6px; border-radius: var(--radius); }
-.hc-padd { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; min-height: 7rem;
-  width: 100%; font: inherit; color: var(--body-soft); background: none; border: 1px dashed color-mix(in srgb, var(--hc-edit) 45%, var(--edge));
-  border-radius: var(--radius); cursor: pointer; transition: color .15s ease-out, border-color .15s ease-out, background-color .15s ease-out; }
-.hc-padd:hover { color: var(--hc-edit-ink); border-color: var(--hc-edit); background: var(--hc-edit-soft); }
-.hc-padd:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
-.hc-padd .hc-padd-plus { font-size: 1.6rem; line-height: 1; font-weight: 300; }
-.hc-padd .person-name { color: inherit; font-weight: 500; }
-.hc-pmenu { position: absolute; z-index: 60; min-width: 13rem; padding: .3rem; border-radius: 10px; background: var(--surface);
-  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-[data-theme="light"] .hc-pmenu { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
-.hc-pmenu-item { display: block; width: 100%; min-height: 34px; padding: .35rem .6rem; border: 0; border-radius: 6px; background: none;
-  color: var(--body); font: .86rem var(--sans); text-align: left; cursor: pointer; }
-.hc-pmenu-item:hover, .hc-pmenu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
-/* what my draft or an opened proposal changes, card by card: the highlight (--hc-hl; blue for mine) */
-.person-card[data-hc-badge] { position: relative; outline: 2px solid var(--hc-hl); outline-offset: 2px; }
-.person-card[data-hc-badge]::after { content: attr(data-hc-badge); position: absolute; top: -.55rem; left: 50%; transform: translateX(-50%);
-  padding: 0 .45rem; border-radius: 999px; background: var(--hc-hl); color: var(--hc-hl-on); font: 700 .66rem/1.25rem var(--sans);
-  white-space: nowrap; }
-.person-card.hc-pghost { opacity: .55; outline-style: dashed; }
-.person-card.hc-pghost .person-name { text-decoration: line-through; }
-
-/* Proposal marks (the overlay; U7 draws the composite), the highlight: --hc-hl, blue for the viewer's own and the
-   proposer's colour for anyone else's (body[data-hc-tint]); a removal keeps the red wash and takes a dashed line. */
-.hc-block.hc-prop-add, .hc-block.hc-prop-change { border-left: 3px solid var(--hc-hl); padding-left: .9rem;
-  margin-left: -1.05rem; border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--hc-hl) 8%, transparent); }
-.hc-block.hc-prop-del { border-left: 3px dashed var(--hc-hl); padding-left: .9rem; margin-left: -1.05rem;
-  border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--hc-del) 7%, transparent); opacity: .8; }
-.hc-block.hc-prop-conflict { border-left: 3px dashed var(--warn); padding-left: .9rem; margin-left: -1.05rem; }
-body.hc-hide-suggestions .hc-block.hc-prop-add,
-body.hc-hide-suggestions .hc-block.hc-prop-del { display: none; }
-/* main changed this block since the proposal: main's version, said in words (the frame gets no text) */
-.hc-block.hc-prop-conflict::before { content: "main changed this since the proposal \2014  Update from main";
-  display: block; margin-bottom: .3rem; font-size: .72rem; font-weight: 600; color: var(--warn); }
-
-/* Side by side (View: diff style): a replaced block and its new version in two columns
-   (js/editor-frame.js pairs them into .hc-side; inline keeps them stacked, old above new). */
-body.hc-edit-on .page-body > .hc-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: .9rem; align-items: start; margin: .2rem 0; }
-body.hc-edit-on .page-body > .hc-side > .hc-block { min-width: 0; margin-left: 0; border-radius: 0 6px 6px 0; }
-.hc-side > .hc-block.hc-prop-del::before, .hc-side > .hc-block.hc-prop-change::before { display: block;
-  margin-bottom: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.hc-side > .hc-block.hc-prop-del::before { content: "Now"; color: var(--hc-del); }
-.hc-side > .hc-block.hc-prop-change::before { content: "Proposed"; color: var(--hc-hl); }
-
-/* View settings */
-body.hc-compact .page-body { font-size: .93em; line-height: 1.5; }
-body.hc-compact .page-body pre { font-size: .8em; }
-
-/* the frame's own viewport: beside the site's sidebar it is ~750 px wide, so two columns hold until 560 px */
-@media (max-width: 560px) {
-  body.hc-edit-on .page-body > .hc-side { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
-}
-
-@media (max-width: 767px) {
-  body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
-  .hc-block.hc-prop-add, .hc-block.hc-prop-change, .hc-block.hc-prop-del { margin-left: -.6rem; padding-left: .55rem; }
-}
+/* ==== base/shell ==== */
+/* The sections below are disjoint regions, one per owner (editor UI/UX build, unit U0): base/shell, frame layout
+   (U7), typing (U4), boxes/picker (U4), people (U5), project (U6), rail/margin (U3), dock (U2), phone (U2), then
+   the end-of-file override blocks, one per unit. A unit edits only its own section(s) and its override block. */
 
 /* Scrollbars in the editor's own scrolling boxes: the site's tokens (css/site.css --scroll-thumb), both themes. */
 .hc-md-src, .hc-md-prevwrap, .hc-sendbox, .hc-tray-body { scrollbar-color: var(--scroll-thumb) transparent; scrollbar-width: thin; }
 .hc-md-src::-webkit-scrollbar-thumb, .hc-md-prevwrap::-webkit-scrollbar-thumb, .hc-sendbox::-webkit-scrollbar-thumb,
 .hc-tray-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; }
 
-/* ---------- 2. the parent side (js/editor.js) ---------- */
-
-/* The header: the Editor switch, then who is signed in. */
-.hc-editor-controls { display: inline-flex; align-items: center; gap: .5rem; }
-.hc-editor-controls[hidden] { display: none; }
-.hc-switch { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; font: inherit; font-size: .84rem;
-  color: var(--body-soft); background: none; border: 0; padding: .2rem .3rem; border-radius: 8px; }
-.hc-switch-track { width: 30px; height: 17px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--edge);
-  position: relative; transition: background .2s; flex: none; }
-.hc-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%;
-  background: var(--muted); transition: left .2s, background .2s; }
-.hc-switch.is-on { color: var(--heading); }
-.hc-switch.is-on .hc-switch-track { background: var(--hc-edit-soft); border-color: var(--hc-edit); }
-.hc-switch.is-on .hc-switch-track::after { left: 15px; background: var(--hc-edit); }
-.hc-switch:disabled { opacity: .5; cursor: default; }
-.hc-switch:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-who { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--body-soft); }
-.hc-who { position: relative; }
-.hc-who .cms-role { font-size: .68rem; padding: .05rem .4rem; }
-/* The avatar: the committed 64-px copy, or the first name's initial; its menu holds Sign out. */
-.hc-avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%;
-  border: 1px solid var(--edge); background: var(--surface-2); color: var(--heading); cursor: pointer; overflow: hidden;
-  font: inherit; font-size: .74rem; font-weight: 600; flex: none; }
-.hc-avatar:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.hc-menu { position: absolute; top: calc(100% + .45rem); right: 0; z-index: 60; min-width: 12rem; padding: .35rem;
-  background: var(--surface); border: 1px solid var(--edge); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
-.hc-menu[hidden] { display: none; }
-.hc-menu-who { margin: .2rem .45rem .4rem; font-size: .76rem; color: var(--muted); overflow-wrap: anywhere; }
-.hc-menu-item { display: block; width: 100%; text-align: left; font: inherit; font-size: .84rem; color: var(--body);
-  background: none; border: 0; border-radius: 6px; padding: .35rem .45rem; cursor: pointer; }
-.hc-menu-item:hover, .hc-menu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
-
-/* the dock (Kyle's live feedback, 2026-10-14, items 6-7): a bubble at the TOP RIGHT, just under the header and
-   lined up with the TUHH mark above it (the header's right padding), never inside the header. Two rows:
-   the Editor switch, avatar and role (with the x), then the change count and Send for review. The x tucks it
-   into a tag on the right edge at the same height. Site tokens, light and dark. */
-.hc-dock { position: fixed; top: calc(var(--header-h) + 10px); right: 1.25rem; z-index: 80; display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: .45rem; min-width: 17.5rem; max-width: calc(100vw - 16px);
-  padding: .45rem .45rem .5rem .65rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .42), 0 2px 6px rgba(0, 0, 0, .22); color: var(--heading); font-size: .84rem;
-  transition: transform .22s cubic-bezier(.2, .8, .2, 1), opacity .18s ease-out; }
-[data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag, [data-theme="light"] .hc-sendbox { box-shadow: 0 12px 30px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
-.hc-dock[hidden], .hc-dock-tag[hidden] { display: none; }
-/* round 2 (R2a, Kyle 2026-10-15): the top row is who (photo; name with role; the Proposals link under them) with
-   the Editor switch at its right end and the x; the bottom row is the count, Undo/Redo and Send for review */
-.hc-dock > .hc-editor-controls { grid-column: 1 / 3; grid-row: 1; min-width: 0; display: flex; align-items: center; gap: .75rem; }
-.hc-dock > .hc-dock-x { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; }
-.hc-dock .hc-who { flex: 1; min-width: 0; gap: .55rem; color: var(--body-soft); }
-.hc-dock .hc-avatar { width: 32px; height: 32px; }
-.hc-id { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; gap: .12rem; line-height: 1.2; }
-.hc-id-line { display: flex; align-items: center; gap: .4rem; min-width: 0; }
-.hc-dock .hc-login { color: var(--heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hc-dock .hc-switch { color: var(--heading); font-weight: 600; }
-.hc-dock-send-wrap { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  margin-top: .45rem; padding-top: .5rem; border-top: 1px solid var(--edge-soft); }
-.hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
-.hc-dock-count { color: var(--body-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* round 2 (R2b): Undo / Redo, two quiet icon buttons between the count and Send */
-.hc-dock-histwrap { display: inline-flex; gap: .15rem; margin-left: auto; }
-.hc-dock-histwrap:not(:has(.hc-dock-hist:not([hidden]))) { display: none; }
-.hc-dock-hist { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
-  background: none; color: var(--body); cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
-.hc-dock-hist svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.hc-dock-hist:hover:not(:disabled) { background: var(--surface-2); color: var(--hc-edit-ink); }
-.hc-dock-hist:active:not(:disabled) { transform: scale(.94); }
-.hc-dock-hist:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-dock-hist:disabled { color: var(--muted); opacity: .55; cursor: default; }
-.hc-dock-hist[hidden] { display: none; }
-@media (pointer: coarse) { .hc-dock-hist { width: 44px; height: 44px; } }
-.hc-dock-send[hidden] { display: none; }
-.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1;
-  transition: background-color .12s ease-out, color .12s ease-out; }
-.hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
-.hc-dock-x:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-dock-tag { position: fixed; right: 0; top: calc(var(--header-h) + 14px); z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
-  border: 1px solid var(--edge); border-right: 0; border-radius: 10px 0 0 10px; background: var(--surface); cursor: pointer;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .42); transform: translateX(110%); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
-.hc-dock-tag:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
-.hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 24px; height: 24px; border-radius: 50%; }
-.hc-dock-badge { position: absolute; top: -6px; left: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-  background: var(--hc-edit-ink); color: var(--hc-edit-on); font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
-body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
-body.hc-dock-collapsed .hc-dock-tag { transform: none; }
-/* the edit gate in the bubble, on a project page: why you can edit it (one quiet line), or "You can't edit this
-   project." with why and Request edit access */
-.hc-dock-lock { grid-column: 1 / -1; display: grid; gap: .3rem; margin-top: .45rem; padding-top: .5rem;
-  border-top: 1px solid var(--edge-soft); max-width: 19rem; font-size: .78rem; line-height: 1.45; }
-.hc-dock-lock[hidden] { display: none; }
-.hc-dock-lock p { margin: 0; overflow-wrap: anywhere; }
-.hc-dock-lock-head { color: var(--heading); font-weight: 600; }
-.hc-dock-lock-why { color: var(--body-soft); }
-.hc-dock-lock > .cms-btn { justify-self: start; margin-top: .15rem; }
-.hc-dock-lock .cms-action-result { font-size: .76rem; }
-.hc-access-locked { margin: .2rem 0 .6rem; }
-.hc-access-locked .hc-dock-lock-head { color: var(--heading); font-weight: 600; }
-.hc-access-locked .hc-dock-lock-why { color: var(--body-soft); }
-
-/* Send for review opens below the bubble (js/editor.js sets its top from the bubble's bottom) */
-.hc-sendbox { position: fixed; right: 1.25rem; top: calc(var(--header-h) + 128px); z-index: 85; width: 26rem; max-width: calc(100vw - 24px);
-  max-height: calc(100vh - var(--header-h) - 150px); overflow: auto;
-  padding: .9rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
-.hc-sendbox-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; color: var(--heading); }
-@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag, .hc-dock-x { transition: none; } }
-/* the propose form inside the send box: the box is the card, so the form drops its own panel chrome, and its
-   heading (which says new proposal or "Add to your proposal #N") becomes a quiet line under "Send for review" */
-.hc-sendbox .cms-propose.cms-panel { border: 0; padding: 0; margin: 0; background: none; box-shadow: none; }
-.hc-sendbox .cms-propose > h2 { margin: 0 0 .7rem; font-size: .86rem; font-weight: 500; color: var(--body-soft); letter-spacing: 0; }
 /* The footer's sign-in line (js/app.js) once this file is in. */
 .edit-status.is-error { color: var(--danger); }
 
-/* Editor on: the frame takes the content cell; the site's own content is hidden. */
-body.hc-editor-on #content { display: none; }
-.hc-frame-host[hidden] { display: none; }
-.hc-frame-host { min-width: 0; display: flex; flex-direction: column; height: calc(100vh - var(--header-h)); }
-.hc-frame { display: block; width: 100%; height: calc(100vh - var(--header-h)); flex: 1 1 auto; min-height: 0; border: 0;
-  background: var(--bg); }
-
-/* The page bar above the frame (U7): who proposes changes to this page, the gate, Review in tray. */
-.hc-pagebar { flex: none; display: flex; flex-direction: column; gap: .3rem; padding: .5rem 1rem; font-size: .82rem;
-  color: var(--body-soft); border-bottom: 1px solid color-mix(in srgb, var(--hc-hl) 35%, var(--edge));
-  background: color-mix(in srgb, var(--hc-hl) 7%, var(--bg)); }
-.hc-pagebar[hidden] { display: none; }
-/* U5b: the bubble sits over the bar's right end (top right, under the header): the bar's buttons stay clear of it */
-@media (min-width: 768px) {
-  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-right: calc(var(--hc-dock-w, 0px) + 2rem); }
-}
-/* a phone: the bubble spans the width, so the bar starts below it */
-@media (max-width: 767px) {
-  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-top: calc(var(--hc-dock-h, 0px) + 1rem); }
-}
-.hc-pagebar-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin: 0; overflow-wrap: anywhere; }
-.hc-pagebar-line b { color: var(--heading); font-weight: 600; }
-.hc-pagebar-line.is-warn { color: var(--warn); }
-.hc-pagebar-sep { color: var(--muted); }
-.hc-pagebar-check { font-family: var(--mono); font-size: .76rem; }
-.hc-pagebar-check.is-pass { color: var(--hc-add); }
-.hc-pagebar-check.is-fail { color: var(--hc-del); }
-.hc-pagebar-check.is-checking, .hc-pagebar-check.is-unknown { color: var(--muted); }
-.hc-pagebar .cms-btn { padding: .2rem .6rem; font-size: .76rem; }
-.hc-pagebar-other { display: inline-flex; align-items: center; gap: .35rem; }
-.hc-pagebar-result { color: var(--body-soft); }
-.hc-pagebar-result.is-error { color: var(--danger); }
-.hc-pagebar-result[hidden] { display: none; }
 /* The editor page (Kyle, 2026-10-14: the right tray is gone). Proposals and Data open as a full page over
    the frame (the frame stays loaded underneath: nothing reloads), from the bubble's "Proposals" button;
    "Back to the page" or Escape closes it. The bubble stays on top, so the page keeps clear of its column on
@@ -495,31 +141,10 @@ body.hc-editor-on #content { display: none; }
   color: var(--body-soft); font-weight: 600; }
 .hc-tray-body h2:first-child, .hc-tray-body section:first-child > h2:first-child { margin-top: .2rem; }
 .hc-tray-body h3 { font-size: .9rem; margin: .9rem 0 .4rem; color: var(--heading); }
-.hc-notice { grid-column: 1 / -1; margin: .45rem 0 0; padding-top: .45rem; border-top: 1px solid var(--edge-soft); font-size: .8rem;
-  color: var(--body-soft); max-width: 22rem; overflow-wrap: anywhere; }
-.hc-notice[hidden] { display: none; }
-.hc-notice.is-error { color: var(--hc-del); }
 .hc-back { margin: 0 0 .4rem; font-size: .84rem; }
 .hc-back a { color: var(--body-soft); text-decoration: none; }
 .hc-back a:hover { color: var(--hc-edit-ink); }
 
-/* the bubble's way into the editor page: "Proposals" with the open count */
-.hc-dock-pages { display: inline-flex; align-items: center; gap: .4rem;
-  min-height: 30px; padding: 0 .6rem; border: 1px solid var(--edge); border-radius: 8px; background: none; color: var(--heading);
-  font: 600 .8rem var(--sans); cursor: pointer; transition: background-color .12s ease-out, border-color .12s ease-out; }
-.hc-dock-pages:hover, .hc-dock-pages[aria-expanded="true"] { background: var(--surface-2); border-color: color-mix(in srgb, var(--hc-edit) 45%, var(--edge)); }
-.hc-dock-pages[hidden] { display: none; }
-.hc-dock-pages .n { min-width: 1.2rem; padding: 0 .3rem; border-radius: 6px; background: var(--hc-edit-soft); color: var(--hc-edit-ink);
-  font: 600 .72rem/1.25rem var(--mono); text-align: center; font-variant-numeric: tabular-nums; }
-.hc-dock-pages .n:empty { display: none; }
-/* round 2 (R2a): in the bubble it is a small text link under the name, not a chip */
-.hc-dock-pages.hc-dock-link { min-height: 0; padding: .1rem 0; border: 0; border-radius: 4px; background: none; gap: .3rem;
-  color: var(--body-soft); font: 500 .76rem var(--sans); transition: color .12s ease-out; }
-.hc-dock-pages.hc-dock-link:hover, .hc-dock-pages.hc-dock-link[aria-expanded="true"] { background: none; color: var(--hc-edit-ink);
-  text-decoration: underline; text-underline-offset: 3px; }
-.hc-dock-pages.hc-dock-link:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
-.hc-dock-pages.hc-dock-link .n { min-width: 0; padding: 0; background: none; font: 600 .74rem/1 var(--mono); }
-@media (pointer: coarse) { .hc-dock-pages.hc-dock-link { min-height: 32px; } }
 
 /* Proposals: a card per proposal, expanded in place. */
 .hc-card { border: 1px solid var(--edge); border-radius: 10px; background: var(--surface); padding: .8rem .85rem; margin-bottom: .75rem; }
@@ -698,7 +323,7 @@ a.cms-btn { display: inline-block; text-decoration: none; }
 .cms-media-rename { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; font-size: .78rem; }
 .cms-photo { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-size: .82rem; color: var(--heading); }
 
-/* ---------- 3. members-only detail (js/editor.js, U4) ---------- */
+/* ---------- members-only detail (js/editor.js, U4) ---------- */
 /* Drawn under js/lab.js's public surfaces for a member, with Editor mode off. */
 .hc-m-people { margin: 0 0 1rem; padding-bottom: .6rem; border-bottom: 1px solid var(--edge); }
 .hc-m-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: .2rem .6rem; align-items: center;
@@ -738,6 +363,229 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--hc-edit); outline-offse
 .hc-m-authors { margin: .6rem 0 0; padding: .55rem .7rem; border: 1px dashed var(--edge); border-radius: 8px; }
 .hc-m-authors .hc-m-label { margin: 0 0 .3rem; color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
 .hc-m-line { margin: .25rem 0; line-height: 1.6; color: var(--body); }
+
+/* ==== frame layout (U7) ==== */
+
+/* The frame shows content only: the parent's header, sidebar and footer are
+   the ones on screen. */
+body.hc-framed .site-header,
+body.hc-framed .sidebar,
+body.hc-framed .site-footer,
+body.hc-framed .skip-link { display: none !important; }
+body.hc-framed .layout { display: block; width: auto; max-width: none; padding: 0; }
+body.hc-framed .content { padding: 1.4rem 1.6rem 3rem; max-width: 52rem; margin: 0 auto; }
+
+/* Editor on: the frame takes the content cell; the site's own content is hidden. */
+body.hc-editor-on #content { display: none; }
+.hc-frame-host[hidden] { display: none; }
+.hc-frame-host { min-width: 0; display: flex; flex-direction: column; height: calc(100vh - var(--header-h)); }
+.hc-frame { display: block; width: 100%; height: calc(100vh - var(--header-h)); flex: 1 1 auto; min-height: 0; border: 0;
+  background: var(--bg); }
+
+/* The page bar above the frame (U7): who proposes changes to this page, the gate, Review in tray. */
+.hc-pagebar { flex: none; display: flex; flex-direction: column; gap: .3rem; padding: .5rem 1rem; font-size: .82rem;
+  color: var(--body-soft); border-bottom: 1px solid color-mix(in srgb, var(--hc-hl) 35%, var(--edge));
+  background: color-mix(in srgb, var(--hc-hl) 7%, var(--bg)); }
+.hc-pagebar[hidden] { display: none; }
+/* U5b: the bubble sits over the bar's right end (top right, under the header): the bar's buttons stay clear of it */
+@media (min-width: 768px) {
+  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-right: calc(var(--hc-dock-w, 0px) + 2rem); }
+}
+/* a phone: the bubble spans the width, so the bar starts below it */
+@media (max-width: 767px) {
+  body.hc-editor-on:not(.hc-dock-collapsed) .hc-pagebar { padding-top: calc(var(--hc-dock-h, 0px) + 1rem); }
+}
+.hc-pagebar-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin: 0; overflow-wrap: anywhere; }
+.hc-pagebar-line b { color: var(--heading); font-weight: 600; }
+.hc-pagebar-line.is-warn { color: var(--warn); }
+.hc-pagebar-sep { color: var(--muted); }
+.hc-pagebar-check { font-family: var(--mono); font-size: .76rem; }
+.hc-pagebar-check.is-pass { color: var(--hc-add); }
+.hc-pagebar-check.is-fail { color: var(--hc-del); }
+.hc-pagebar-check.is-checking, .hc-pagebar-check.is-unknown { color: var(--muted); }
+.hc-pagebar .cms-btn { padding: .2rem .6rem; font-size: .76rem; }
+.hc-pagebar-other { display: inline-flex; align-items: center; gap: .35rem; }
+.hc-pagebar-result { color: var(--body-soft); }
+.hc-pagebar-result.is-error { color: var(--danger); }
+.hc-pagebar-result[hidden] { display: none; }
+
+/* ==== typing (U4) ==== */
+
+/* One look for a block in Editor mode (Kyle, 2026-10-14): a line in the left margin — faint on hover and on
+   the solid line on keyboard focus and when the block is selected or open. No pencil, no ring, no box: the same ::after in
+   every state, only its colour changes, so nothing jumps. A note box, a code box and the Markdown box get the
+   same line. */
+:root { --hc-line-faint: color-mix(in srgb, var(--hc-edit) 38%, transparent); }
+body.hc-edit-on .page-body > .hc-block,
+body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; cursor: pointer; outline: none; }
+body.hc-edit-on .page-body > .hc-block::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block::after { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
+  width: 2px; border-radius: 2px; background: transparent; transition: background-color .15s ease-out; pointer-events: none; }
+body.hc-edit-on.hc-outlines .page-body > .hc-block:hover::after,
+body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover::after { background: var(--hc-line-faint); }
+/* keyboard focus: the solid line (a faint one would not reach 3:1 as a focus indicator) */
+body.hc-edit-on .page-body > .hc-block:focus-visible::after,
+body.hc-edit-on .page-body > .hc-block.hc-selected::after,
+body.hc-edit-on .page-body > .hc-block.hc-open::after,
+body.hc-edit-on .page-body > .hc-block.hc-hot::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block:focus-visible::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-selected::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-open::after,
+body.hc-edit-on .page-body > .hc-side > .hc-block.hc-hot::after { background: var(--hc-edit); }
+@media (prefers-reduced-motion: reduce) {
+  body.hc-edit-on .page-body > .hc-block::after, body.hc-edit-on .page-body > .hc-side > .hc-block::after { transition: none; } }
+
+/* the edit gate (2026-10-21): a project page this person may not edit is read, not picked: no "+" rails, no line */
+body.hc-edit-on.hc-edit-locked .hc-plus { display: none; }
+body.hc-edit-on.hc-edit-locked .page-body > .hc-block,
+body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block { cursor: auto; }
+body.hc-edit-on.hc-edit-locked .page-body > .hc-block:not(.hc-hot)::after,
+body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block:not(.hc-hot)::after { background: transparent; }
+
+/* an image block (V2): it can be dragged; the line shows where it lands */
+body.hc-edit-on .page-body > .hc-block[data-hc-image] { cursor: grab; }
+body.hc-edit-on .page-body > .hc-block[data-hc-image]:active { cursor: grabbing; }
+.hc-drop-line { position: absolute; z-index: 40; height: 2px; border-radius: 2px; background: var(--hc-edit); pointer-events: none;
+  box-shadow: 0 0 0 3px var(--hc-edit-soft); }
+.hc-drop-line[hidden] { display: none; }
+
+/* typing in the page (editor redesign U2, the D1 look): the open block keeps the page's exact layout; the
+   left line (blue) says where the caret is. Suggestions (js/editor-type.js): new text in the change colour
+   (--hc-mark), underlined; removed text struck through in it; a format change dotted in it. */
+body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
+.hc-edit-root [contenteditable] { outline: none; caret-color: var(--hc-edit); cursor: text; }
+.hc-sug-ins { color: var(--hc-mark); background: none; text-decoration: underline; text-decoration-color: var(--hc-mark);
+  text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.hc-sug-del { color: var(--hc-mark); background: none; text-decoration: line-through; text-decoration-color: var(--hc-mark);
+  text-decoration-thickness: 1.5px; }
+.hc-sug-del + .hc-sug-ins { margin-left: .25em; }
+.hc-sug-fmt { text-decoration: underline dotted var(--hc-mark); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+
+/* ==== boxes/picker (U4) ==== */
+
+/* the block editors (editor redesign U3, js/editor-blocks.js): built from the site's own parts */
+.hc-boxbar, .hc-codebar { position: absolute; top: calc(1.1rem - 15px); right: 12px; z-index: 4; display: flex; align-items: center; gap: 2px;
+  padding: 2px; border-radius: 8px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+  font: 500 12.5px var(--sans); cursor: default; }
+.hc-codebar { top: -14px; gap: 6px; padding: 2px 4px 2px 8px; color: var(--body-soft); }
+.hc-codebar select { background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 6px; font: 12px var(--sans); padding: 2px 6px; }
+.hc-box-type { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--heading); font: 600 12.5px var(--sans); cursor: pointer; }
+.hc-box-type:hover, .hc-box-remove:hover { background: var(--surface-2); }
+.hc-box-remove { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--body-soft); cursor: pointer; font: inherit; }
+.hc-chev { color: var(--body-soft); font-size: .7rem; }
+.hc-box-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--hc-edit); }
+.hc-dot-tip { background: var(--ok); } .hc-dot-warning { background: var(--note-warn); } .hc-dot-danger { background: var(--danger); }
+.hc-boxmenu { position: absolute; top: 32px; right: 0; z-index: 6; width: 170px; padding: 5px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
+.hc-boxmenu .hc-pm-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 0 10px; border: 0; border-radius: 7px;
+  background: none; color: var(--heading); font: 500 13px var(--sans); cursor: pointer; text-align: left; }
+.hc-boxmenu .hc-pm-item:hover { background: var(--surface-2); }
+.hc-boxmenu .is-current { background: var(--hc-edit-soft); }
+.hc-block.hc-removed { opacity: .55; text-decoration: line-through; text-decoration-color: var(--hc-mark); }
+.hc-formatbar { position: absolute; z-index: 60; padding: 4px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
+[data-theme="light"] .hc-formatbar { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
+.hc-formatbar[hidden], .hc-fb-row[hidden], .hc-fb-linkrow[hidden], .hc-fb-err[hidden] { display: none; }
+.hc-fb-row { display: flex; gap: 2px; }
+.hc-fb { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 7px; background: none;
+  color: var(--heading); cursor: pointer; font: 700 14px var(--sans); transition: background-color .12s ease-out, color .12s ease-out; }
+.hc-fb-em { font-style: italic; font-weight: 600; font-family: Georgia, serif; }
+.hc-fb-code { font: 600 12.5px var(--mono); letter-spacing: -.04em; }
+.hc-fb:hover { background: var(--surface-2); color: var(--hc-edit-ink); }
+.hc-fb:active { background: var(--hc-edit-soft); }
+.hc-fb:focus-visible, .hc-fb-add:focus-visible, .hc-fb-cancel:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-fb-linkrow { width: 19rem; max-width: calc(100vw - 32px); }
+.hc-fb-inputs { display: flex; align-items: center; gap: 4px; }
+.hc-fb-url { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--edge); border-radius: 7px; background: var(--bg);
+  color: var(--heading); font: 13px var(--mono); }
+.hc-fb-url:focus { outline: 2px solid color-mix(in srgb, var(--hc-edit) 60%, transparent); outline-offset: 0; border-color: var(--hc-edit); }
+.hc-fb-add { height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--hc-edit-ink); color: var(--hc-edit-on); font: 600 13px var(--sans); cursor: pointer; }
+.hc-fb-add:hover { filter: brightness(1.08); }
+.hc-fb-cancel { width: 32px; height: 32px; border: 0; border-radius: 7px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.05rem; }
+.hc-fb-cancel:hover { background: var(--surface-2); color: var(--heading); }
+.hc-fb-err { margin: 6px 4px 2px; color: var(--hc-del); font: 12.5px/1.4 var(--sans); }
+/* an inline code or link suggestion keeps its own look under the dotted format mark */
+code.hc-sug-fmt { font-family: var(--mono); }
+a.hc-sug-fmt { color: var(--hc-mark); }
+/* the in-place Markdown box (Kyle's D1 change 6b) */
+.hc-mdbox { margin: 1.1rem 0; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); overflow: hidden; cursor: default; }
+.hc-md-head { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 14px; min-height: 46px; border-bottom: 1px solid var(--edge-soft);
+  font: 13.5px var(--sans); flex-wrap: wrap; }
+.hc-md-title { color: var(--heading); font-weight: 600; }
+.hc-md-hint { color: var(--body-soft); font-size: 12.5px; }
+.hc-md-views { display: flex; margin-left: auto; align-self: stretch; }
+.hc-md-views button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--body-soft); font: 500 13px var(--sans); padding: 0 11px; cursor: pointer; }
+.hc-md-views button[aria-selected="true"] { color: var(--hc-edit-ink); border-bottom-color: var(--hc-edit); }
+.hc-md-done { min-height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--heading); color: var(--bg); font: 600 13px var(--sans); cursor: pointer; }
+.hc-md-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.hc-mdbox[data-view="text"] .hc-md-cols, .hc-mdbox[data-view="preview"] .hc-md-cols { grid-template-columns: minmax(0, 1fr); }
+.hc-mdbox[data-view="text"] .hc-md-prevwrap, .hc-mdbox[data-view="preview"] .hc-md-srcwrap { display: none; }
+.hc-md-srcwrap { display: flex; background: var(--code-bg); border-right: 1px solid var(--edge-soft); min-width: 0; }
+.hc-md-nums { flex: none; padding: 12px 8px 12px 12px; color: var(--muted); font: 12.5px/1.6 var(--mono); text-align: right; white-space: pre;
+  user-select: none; overflow: hidden; border-right: 1px solid var(--edge-soft); }
+.hc-md-src { flex: 1; min-width: 0; box-sizing: border-box; margin: 0; padding: 12px 14px; border: 0; background: transparent; color: var(--heading);
+  font: 12.5px/1.6 var(--mono); resize: none; outline: none; overflow: auto; tab-size: 2; }
+.hc-md-prevwrap { padding: 10px 16px 6px; min-width: 0; overflow: auto; }
+.hc-md-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; color: var(--body-soft); margin: 2px 0 4px; }
+.hc-md-prev { font-size: .95em; }
+.hc-md-foot { padding: 8px 14px; border-top: 1px solid var(--edge-soft); color: var(--body-soft); font: 12.5px var(--sans); }
+
+.hc-plus { position: relative; height: 0; margin: 0; }
+.hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: transparent; }
+.hc-plus > .hc-plus-btn { position: absolute; left: 50%; top: -.75rem; transform: translateX(-50%); z-index: 4;
+  width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--edge); background: var(--surface);
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s; font: inherit; line-height: 1; }
+.hc-plus:hover > .hc-plus-btn, .hc-plus.is-open > .hc-plus-btn, .hc-plus-btn:focus-visible {
+  opacity: 1; border-color: var(--hc-edit); color: var(--hc-edit-ink); }
+.hc-plus:hover::before, .hc-plus.is-open::before { background: color-mix(in srgb, var(--hc-edit) 40%, transparent); }
+.hc-plus.is-open { height: 6.2rem; }
+.hc-picker { position: absolute; left: 50%; transform: translateX(-50%); top: 1rem; z-index: 5; display: flex;
+  gap: .35rem; padding: .45rem; width: max-content; max-width: 100%; flex-wrap: wrap; justify-content: center;
+  border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-soft);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.hc-picker .hc-pick { font: inherit; font-size: .74rem; display: flex; flex-direction: column; align-items: center;
+  gap: .25rem; width: 4.6rem; flex: none; padding: .5rem .3rem; border-radius: 8px; border: 1px solid var(--edge);
+  background: var(--surface); color: var(--body-soft); cursor: pointer; }
+.hc-picker .hc-pick:hover, .hc-picker .hc-pick:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
+.hc-picker .hc-pick small { font-size: .62rem; color: var(--muted); }
+
+/* ==== people (U5) ==== */
+
+/* The Team page in Editor mode (round 2, R5; Kyle items 5 and 10): no block line over the roster — a light
+   card-level affordance instead (a 1 px outline in the edit colour, a grab cursor), a dashed "+" card at the end
+   of each list, the card menu, and the drop target while dragging. */
+body.hc-people-edit .person-card[data-hc-ptools] { cursor: grab; outline: 1px solid transparent; outline-offset: 2px;
+  transition: outline-color .15s ease-out, background-color .15s ease-out; }
+body.hc-people-edit .person-card[data-hc-ptools]:hover,
+body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline-color: color-mix(in srgb, var(--hc-edit) 60%, transparent);
+  transform: none; border-color: var(--edge-soft); }
+body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline: 2px solid var(--hc-edit); }
+body.hc-people-edit .person-card.is-dragging { opacity: .4; cursor: grabbing; }
+body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb, var(--hc-edit) 70%, transparent); outline-offset: 6px; border-radius: var(--radius); }
+.hc-padd { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; min-height: 7rem;
+  width: 100%; font: inherit; color: var(--body-soft); background: none; border: 1px dashed color-mix(in srgb, var(--hc-edit) 45%, var(--edge));
+  border-radius: var(--radius); cursor: pointer; transition: color .15s ease-out, border-color .15s ease-out, background-color .15s ease-out; }
+.hc-padd:hover { color: var(--hc-edit-ink); border-color: var(--hc-edit); background: var(--hc-edit-soft); }
+.hc-padd:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
+.hc-padd .hc-padd-plus { font-size: 1.6rem; line-height: 1; font-weight: 300; }
+.hc-padd .person-name { color: inherit; font-weight: 500; }
+.hc-pmenu { position: absolute; z-index: 60; min-width: 13rem; padding: .3rem; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
+[data-theme="light"] .hc-pmenu { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
+.hc-pmenu-item { display: block; width: 100%; min-height: 34px; padding: .35rem .6rem; border: 0; border-radius: 6px; background: none;
+  color: var(--body); font: .86rem var(--sans); text-align: left; cursor: pointer; }
+.hc-pmenu-item:hover, .hc-pmenu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
+/* what my draft or an opened proposal changes, card by card: the highlight (--hc-hl; blue for mine) */
+.person-card[data-hc-badge] { position: relative; outline: 2px solid var(--hc-hl); outline-offset: 2px; }
+.person-card[data-hc-badge]::after { content: attr(data-hc-badge); position: absolute; top: -.55rem; left: 50%; transform: translateX(-50%);
+  padding: 0 .45rem; border-radius: 999px; background: var(--hc-hl); color: var(--hc-hl-on); font: 700 .66rem/1.25rem var(--sans);
+  white-space: nowrap; }
+.person-card.hc-pghost { opacity: .55; outline-style: dashed; }
+.person-card.hc-pghost .person-name { text-decoration: line-through; }
+
+/* ==== project (U6) ==== */
+
 /* a project page: edit access at the top of the aside box (any signed-in session, Editor off; 2026-10-19) */
 .hc-access { display: grid; gap: .5rem; padding: .6rem .7rem; border: 1px dashed var(--edge); border-radius: 8px;
   font-size: .8rem; line-height: 1.5; min-width: 0; }
@@ -766,21 +614,45 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--hc-edit); outline-offse
   font-size: .78rem; line-height: 1.5; color: var(--body); overflow-wrap: anywhere; }
 .hc-access-line[hidden] { display: none; }
 
-@media (max-width: 359px) { .hc-dock .hc-role { display: none; } }
-/* Phones: the tray is a bottom sheet; the handle sits at the bottom edge. */
-@media (max-width: 767px) {
-  .hc-tray-head { flex-wrap: wrap; gap: .4rem; padding-top: .45rem; }
-  /* a phone: the bubble spans the top, so the editor page starts below it (it folds away with its x) */
-  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 104px; }
-  .hc-pagebar { padding: .4rem .7rem; font-size: .78rem; }
-  /* round 2 (R2a): the bubble spans the width, so the name and role stay; only the narrowest screens drop the role */
-  .hc-dock { right: 8px; top: calc(var(--header-h) + 8px); min-width: 0; width: min(20rem, calc(100vw - 16px)); }
-  .hc-dock-tag { top: calc(var(--header-h) + 12px); }
-  .hc-sendbox { right: 8px; left: 8px; width: auto; max-height: calc(100vh - var(--header-h) - 140px); }
-  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 112px; }
-  /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
-  body.hc-editor-on .sidebar { display: none; }
+/* ==== rail/margin (U3) ==== */
+
+/* Proposal marks (the overlay; U7 draws the composite), the highlight: --hc-hl, blue for the viewer's own and the
+   proposer's colour for anyone else's (body[data-hc-tint]); a removal keeps the red wash and takes a dashed line. */
+.hc-block.hc-prop-add, .hc-block.hc-prop-change { border-left: 3px solid var(--hc-hl); padding-left: .9rem;
+  margin-left: -1.05rem; border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--hc-hl) 8%, transparent); }
+.hc-block.hc-prop-del { border-left: 3px dashed var(--hc-hl); padding-left: .9rem; margin-left: -1.05rem;
+  border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--hc-del) 7%, transparent); opacity: .8; }
+.hc-block.hc-prop-conflict { border-left: 3px dashed var(--warn); padding-left: .9rem; margin-left: -1.05rem; }
+body.hc-hide-suggestions .hc-block.hc-prop-add,
+body.hc-hide-suggestions .hc-block.hc-prop-del { display: none; }
+/* main changed this block since the proposal: main's version, said in words (the frame gets no text) */
+.hc-block.hc-prop-conflict::before { content: "main changed this since the proposal \2014  Update from main";
+  display: block; margin-bottom: .3rem; font-size: .72rem; font-weight: 600; color: var(--warn); }
+
+/* Side by side (View: diff style): a replaced block and its new version in two columns
+   (js/editor-frame.js pairs them into .hc-side; inline keeps them stacked, old above new). */
+body.hc-edit-on .page-body > .hc-side { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: .9rem; align-items: start; margin: .2rem 0; }
+body.hc-edit-on .page-body > .hc-side > .hc-block { min-width: 0; margin-left: 0; border-radius: 0 6px 6px 0; }
+.hc-side > .hc-block.hc-prop-del::before, .hc-side > .hc-block.hc-prop-change::before { display: block;
+  margin-bottom: .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.hc-side > .hc-block.hc-prop-del::before { content: "Now"; color: var(--hc-del); }
+.hc-side > .hc-block.hc-prop-change::before { content: "Proposed"; color: var(--hc-hl); }
+
+/* View settings */
+body.hc-compact .page-body { font-size: .93em; line-height: 1.5; }
+body.hc-compact .page-body pre { font-size: .8em; }
+
+/* the frame's own viewport: beside the site's sidebar it is ~750 px wide, so two columns hold until 560 px */
+@media (max-width: 560px) {
+  body.hc-edit-on .page-body > .hc-side { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
 }
+
+@media (max-width: 767px) {
+  body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
+  .hc-block.hc-prop-add, .hc-block.hc-prop-change, .hc-block.hc-prop-del { margin-left: -.6rem; padding-left: .55rem; }
+}
+
 
 /* ---------------------------------------------------------------- the review rail (U5b) ---
    Beside the frame, in the parent: one card per suggested change, on its block's line. Cards are the
@@ -873,3 +745,166 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
   .hc-rslot, .hc-rcard, .hc-rcard-btn { transition: none; }
   .hc-spin { animation: none; }
 }
+
+/* ==== dock (U2) ==== */
+
+/* The header: the Editor switch, then who is signed in. */
+.hc-editor-controls { display: inline-flex; align-items: center; gap: .5rem; }
+.hc-editor-controls[hidden] { display: none; }
+.hc-switch { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; font: inherit; font-size: .84rem;
+  color: var(--body-soft); background: none; border: 0; padding: .2rem .3rem; border-radius: 8px; }
+.hc-switch-track { width: 30px; height: 17px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--edge);
+  position: relative; transition: background .2s; flex: none; }
+.hc-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--muted); transition: left .2s, background .2s; }
+.hc-switch.is-on { color: var(--heading); }
+.hc-switch.is-on .hc-switch-track { background: var(--hc-edit-soft); border-color: var(--hc-edit); }
+.hc-switch.is-on .hc-switch-track::after { left: 15px; background: var(--hc-edit); }
+.hc-switch:disabled { opacity: .5; cursor: default; }
+.hc-switch:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-who { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--body-soft); }
+.hc-who { position: relative; }
+.hc-who .cms-role { font-size: .68rem; padding: .05rem .4rem; }
+/* The avatar: the committed 64-px copy, or the first name's initial; its menu holds Sign out. */
+.hc-avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--edge); background: var(--surface-2); color: var(--heading); cursor: pointer; overflow: hidden;
+  font: inherit; font-size: .74rem; font-weight: 600; flex: none; }
+.hc-avatar:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hc-menu { position: absolute; top: calc(100% + .45rem); right: 0; z-index: 60; min-width: 12rem; padding: .35rem;
+  background: var(--surface); border: 1px solid var(--edge); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
+.hc-menu[hidden] { display: none; }
+.hc-menu-who { margin: .2rem .45rem .4rem; font-size: .76rem; color: var(--muted); overflow-wrap: anywhere; }
+.hc-menu-item { display: block; width: 100%; text-align: left; font: inherit; font-size: .84rem; color: var(--body);
+  background: none; border: 0; border-radius: 6px; padding: .35rem .45rem; cursor: pointer; }
+.hc-menu-item:hover, .hc-menu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
+
+/* the dock (Kyle's live feedback, 2026-10-14, items 6-7): a bubble at the TOP RIGHT, just under the header and
+   lined up with the TUHH mark above it (the header's right padding), never inside the header. Two rows:
+   the Editor switch, avatar and role (with the x), then the change count and Send for review. The x tucks it
+   into a tag on the right edge at the same height. Site tokens, light and dark. */
+.hc-dock { position: fixed; top: calc(var(--header-h) + 10px); right: 1.25rem; z-index: 80; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: .45rem; min-width: 17.5rem; max-width: calc(100vw - 16px);
+  padding: .45rem .45rem .5rem .65rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .42), 0 2px 6px rgba(0, 0, 0, .22); color: var(--heading); font-size: .84rem;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), opacity .18s ease-out; }
+[data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag, [data-theme="light"] .hc-sendbox { box-shadow: 0 12px 30px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
+.hc-dock[hidden], .hc-dock-tag[hidden] { display: none; }
+/* round 2 (R2a, Kyle 2026-10-15): the top row is who (photo; name with role; the Proposals link under them) with
+   the Editor switch at its right end and the x; the bottom row is the count, Undo/Redo and Send for review */
+.hc-dock > .hc-editor-controls { grid-column: 1 / 3; grid-row: 1; min-width: 0; display: flex; align-items: center; gap: .75rem; }
+.hc-dock > .hc-dock-x { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; }
+.hc-dock .hc-who { flex: 1; min-width: 0; gap: .55rem; color: var(--body-soft); }
+.hc-dock .hc-avatar { width: 32px; height: 32px; }
+.hc-id { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; gap: .12rem; line-height: 1.2; }
+.hc-id-line { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.hc-dock .hc-login { color: var(--heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-dock .hc-switch { color: var(--heading); font-weight: 600; }
+.hc-dock-send-wrap { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  margin-top: .45rem; padding-top: .5rem; border-top: 1px solid var(--edge-soft); }
+.hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
+.hc-dock-count { color: var(--body-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* round 2 (R2b): Undo / Redo, two quiet icon buttons between the count and Send */
+.hc-dock-histwrap { display: inline-flex; gap: .15rem; margin-left: auto; }
+.hc-dock-histwrap:not(:has(.hc-dock-hist:not([hidden]))) { display: none; }
+.hc-dock-hist { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  background: none; color: var(--body); cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
+.hc-dock-hist svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hc-dock-hist:hover:not(:disabled) { background: var(--surface-2); color: var(--hc-edit-ink); }
+.hc-dock-hist:active:not(:disabled) { transform: scale(.94); }
+.hc-dock-hist:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-dock-hist:disabled { color: var(--muted); opacity: .55; cursor: default; }
+.hc-dock-hist[hidden] { display: none; }
+@media (pointer: coarse) { .hc-dock-hist { width: 44px; height: 44px; } }
+.hc-dock-send[hidden] { display: none; }
+.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1;
+  transition: background-color .12s ease-out, color .12s ease-out; }
+.hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
+.hc-dock-x:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-dock-tag { position: fixed; right: 0; top: calc(var(--header-h) + 14px); z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid var(--edge); border-right: 0; border-radius: 10px 0 0 10px; background: var(--surface); cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .42); transform: translateX(110%); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.hc-dock-tag:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
+.hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 24px; height: 24px; border-radius: 50%; }
+.hc-dock-badge { position: absolute; top: -6px; left: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--hc-edit-ink); color: var(--hc-edit-on); font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+body.hc-dock-collapsed .hc-dock-tag { transform: none; }
+/* the edit gate in the bubble, on a project page: why you can edit it (one quiet line), or "You can't edit this
+   project." with why and Request edit access */
+.hc-dock-lock { grid-column: 1 / -1; display: grid; gap: .3rem; margin-top: .45rem; padding-top: .5rem;
+  border-top: 1px solid var(--edge-soft); max-width: 19rem; font-size: .78rem; line-height: 1.45; }
+.hc-dock-lock[hidden] { display: none; }
+.hc-dock-lock p { margin: 0; overflow-wrap: anywhere; }
+.hc-dock-lock-head { color: var(--heading); font-weight: 600; }
+.hc-dock-lock-why { color: var(--body-soft); }
+.hc-dock-lock > .cms-btn { justify-self: start; margin-top: .15rem; }
+.hc-dock-lock .cms-action-result { font-size: .76rem; }
+.hc-access-locked { margin: .2rem 0 .6rem; }
+.hc-access-locked .hc-dock-lock-head { color: var(--heading); font-weight: 600; }
+.hc-access-locked .hc-dock-lock-why { color: var(--body-soft); }
+
+/* Send for review opens below the bubble (js/editor.js sets its top from the bubble's bottom) */
+.hc-sendbox { position: fixed; right: 1.25rem; top: calc(var(--header-h) + 128px); z-index: 85; width: 26rem; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - var(--header-h) - 150px); overflow: auto;
+  padding: .9rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+.hc-sendbox-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; color: var(--heading); }
+@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag, .hc-dock-x { transition: none; } }
+/* the propose form inside the send box: the box is the card, so the form drops its own panel chrome, and its
+   heading (which says new proposal or "Add to your proposal #N") becomes a quiet line under "Send for review" */
+.hc-sendbox .cms-propose.cms-panel { border: 0; padding: 0; margin: 0; background: none; box-shadow: none; }
+.hc-sendbox .cms-propose > h2 { margin: 0 0 .7rem; font-size: .86rem; font-weight: 500; color: var(--body-soft); letter-spacing: 0; }
+.hc-notice { grid-column: 1 / -1; margin: .45rem 0 0; padding-top: .45rem; border-top: 1px solid var(--edge-soft); font-size: .8rem;
+  color: var(--body-soft); max-width: 22rem; overflow-wrap: anywhere; }
+.hc-notice[hidden] { display: none; }
+.hc-notice.is-error { color: var(--hc-del); }
+/* the bubble's way into the editor page: "Proposals" with the open count */
+.hc-dock-pages { display: inline-flex; align-items: center; gap: .4rem;
+  min-height: 30px; padding: 0 .6rem; border: 1px solid var(--edge); border-radius: 8px; background: none; color: var(--heading);
+  font: 600 .8rem var(--sans); cursor: pointer; transition: background-color .12s ease-out, border-color .12s ease-out; }
+.hc-dock-pages:hover, .hc-dock-pages[aria-expanded="true"] { background: var(--surface-2); border-color: color-mix(in srgb, var(--hc-edit) 45%, var(--edge)); }
+.hc-dock-pages[hidden] { display: none; }
+.hc-dock-pages .n { min-width: 1.2rem; padding: 0 .3rem; border-radius: 6px; background: var(--hc-edit-soft); color: var(--hc-edit-ink);
+  font: 600 .72rem/1.25rem var(--mono); text-align: center; font-variant-numeric: tabular-nums; }
+.hc-dock-pages .n:empty { display: none; }
+/* round 2 (R2a): in the bubble it is a small text link under the name, not a chip */
+.hc-dock-pages.hc-dock-link { min-height: 0; padding: .1rem 0; border: 0; border-radius: 4px; background: none; gap: .3rem;
+  color: var(--body-soft); font: 500 .76rem var(--sans); transition: color .12s ease-out; }
+.hc-dock-pages.hc-dock-link:hover, .hc-dock-pages.hc-dock-link[aria-expanded="true"] { background: none; color: var(--hc-edit-ink);
+  text-decoration: underline; text-underline-offset: 3px; }
+.hc-dock-pages.hc-dock-link:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
+.hc-dock-pages.hc-dock-link .n { min-width: 0; padding: 0; background: none; font: 600 .74rem/1 var(--mono); }
+@media (pointer: coarse) { .hc-dock-pages.hc-dock-link { min-height: 32px; } }
+/* ==== phone (U2) ==== */
+
+@media (max-width: 359px) { .hc-dock .hc-role { display: none; } }
+/* Phones: the tray is a bottom sheet; the handle sits at the bottom edge. */
+@media (max-width: 767px) {
+  .hc-tray-head { flex-wrap: wrap; gap: .4rem; padding-top: .45rem; }
+  /* a phone: the bubble spans the top, so the editor page starts below it (it folds away with its x) */
+  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 104px; }
+  .hc-pagebar { padding: .4rem .7rem; font-size: .78rem; }
+  /* round 2 (R2a): the bubble spans the width, so the name and role stay; only the narrowest screens drop the role */
+  .hc-dock { right: 8px; top: calc(var(--header-h) + 8px); min-width: 0; width: min(20rem, calc(100vw - 16px)); }
+  .hc-dock-tag { top: calc(var(--header-h) + 12px); }
+  .hc-sendbox { right: 8px; left: 8px; width: auto; max-height: calc(100vh - var(--header-h) - 140px); }
+  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 112px; }
+  /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
+  body.hc-editor-on .sidebar { display: none; }
+}
+
+/* ==== END-OF-FILE OVERRIDE BLOCKS ==== */
+/* One block per unit, in this order. A rule goes here only when it must win over a rule in an earlier section
+   (same specificity, later in the file); everything else goes in the unit's own section. */
+/* ==== override: U7 ==== */
+
+/* ==== override: U2 ==== */
+
+/* ==== override: U3 ==== */
+
+/* ==== override: U4 ==== */
+
+/* ==== override: U5 ==== */
+
+/* ==== override: U6 ==== */

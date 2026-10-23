@@ -355,6 +355,12 @@
       }
       return { type, rects, view: Math.round(d.view) };
     }
+    /* Per-unit blocks (editor UI/UX build, U0): a new frame -> parent message kind goes in its unit's block. */
+    /* ---- U4 ---- */
+
+    /* ---- U5 ---- */
+
+    /* ---- U6 ---- */
     return null;
   }
 
@@ -410,6 +416,12 @@
         if (typeof c.snap !== 'string' || !SNAP_RE.test(c.snap) || typeof c.save !== 'string' || !SNAP_RE.test(c.save)) return null;
         return { n: c.n, op: 'restore', index: c.index, snap: c.snap, save: c.save };
       })(),
+      /* Per-unit blocks (editor UI/UX build, U0): a new hc-editor field goes in its unit's block. */
+      /* ---- U4 ---- */
+
+      /* ---- U5 ---- */
+
+      /* ---- U6 ---- */
     };
   }
 

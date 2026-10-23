@@ -398,6 +398,16 @@ READER_REQUIRED_KEYS = {
                      "removed": {"keys": ("login", "had_commits"),
                                  "types": {"login": str, "had_commits": bool}}}}},
     },
+    # Per-unit slots (editor UI/UX build, U0): a unit adds its new registry entries in its own slot only.
+    # ---- U2 ----
+
+    # ---- U3 ----
+
+    # ---- U4 ----
+
+    # ---- U5 ----
+
+    # ---- U6 ----
 }
 # Registries with an entry above that may be absent (checked when present).
 EDIT_ACCESS = "data/graph/edit-access.json"

@@ -696,3 +696,11 @@ test('hc-history and hc-key (frame -> parent); hc-editor.cmd (parent -> frame): 
   assert.equal(m({ n: 3, op: 'erase', index: 2, snap: 'f1-1', save: 'u1' }), null);
   assert.equal(m(undefined), null);
 });
+
+/* Per-unit blocks (editor UI/UX build, U0): each unit's paired bridge tests (a well-formed message passes, a
+   malformed one is dropped) go in its own block. */
+/* ---- U4 ---- */
+
+/* ---- U5 ---- */
+
+/* ---- U6 ---- */

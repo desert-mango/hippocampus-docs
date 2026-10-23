@@ -1254,7 +1254,7 @@
 
   // ---------- Editor mode: loaded for a session or the sign-in click only (plan D-C) ----------
   /* Guests load no editor code and make no GitHub request: index.html has no
-     tag for js/cms-core.js, js/editor.js or css/editor.css. This file injects
+     tag for js/cms-core.js, js/editor-dock.js, js/editor.js or css/editor.css. This file injects
      them, and only (1) when this tab's sessionStorage holds a sign-in, or
      (2) on the header's "Sign in" click (#signin-btn), which opens the GitHub
      window FIRST — synchronously inside the click, because a window opened
@@ -1274,6 +1274,7 @@
   const EDITOR_FILES = [
     ['link', { rel: 'stylesheet', href: 'css/editor.css' }],
     ['script', { src: 'js/cms-core.js' }],
+    ['script', { src: 'js/editor-dock.js' }],
     ['script', { src: 'js/editor.js' }],
   ];
   const editor = { loading: null, loaded: new Set(), signedIn: false, session: false, status: null, prompt: false, sessionKnown: false };

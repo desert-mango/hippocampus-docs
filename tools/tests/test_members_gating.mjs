@@ -294,7 +294,7 @@ function openSite(opts) {
     calls.push({ url: String(url), method: (init && init.method) || 'GET', auth: Object.prototype.hasOwnProperty.call(headers, 'Authorization') });
     return fake.fetch(url, init);
   };
-  for (const f of ['cms-core.js', 'lab.js', 'editor.js']) {
+  for (const f of ['cms-core.js', 'lab.js', 'editor-dock.js', 'editor.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', f), 'utf8'), win, { filename: f });
   }
   const session = o.noSession ? null : C.makeSession(TOKEN, null, 'kyle-nelson-berkeley', NOW);

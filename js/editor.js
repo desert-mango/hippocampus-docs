@@ -68,26 +68,19 @@
   'use strict';
 
   const C = window.HCCore;
+  const D = window.HCDock;   // the dock (js/editor-dock.js, loaded just before this file)
   let main = null;         // the tray's view panel (the old #cms-main)
   let notice = null;       // the tray's notice line
   let tray = null;         // aside#hc-tray
   let trayBody = null;     // the tray's scrolling body
   let controls = null;     // the Editor controls (switch, avatar, role), in the dock
-  let dock = null;         // the bottom-right dock (editor redesign U4a, Kyle's D1 change 3)
-  let dockTag = null;      // the small tag on the right edge that brings a collapsed dock back
-  let dockCount = null;    // "N changes" in the dock
-  let dockSend = null;     // "Send for review" in the dock
-  let dockUndo = null;     // round 2 (R2b): Undo / Redo in the dock
-  let dockRedo = null;
-  let dockLock = null;     // the edit gate (2026-10-21): on a project page, what you can do there, in one or two lines
-  let sendBox = null;      // the box above the dock that Send opens (the propose form)
-  let sendKey = null;      // the draft that box was opened for
+  let dock = null;         // the bottom-right dock (js/editor-dock.js draws it; editor redesign U4a)
   let switchBtn = null;
   let who = null;
   let frameHost = null;    // #hc-frame-host (index.html)
   let trayTitle = null;    // the editor page's heading (round 2, R3: the tabs are gone)
   let trayCrumb = null;    // "← Proposals", on every view but the list
-  let handle = null;       // the tray's handle while it is closed
+  let handle = null;       // the tray's handle while it is closed (the dock's "Proposals" link)
   let showBar = null;      // "Showing proposal #n on the page", while it is
   let pageBar = null;      // the bar above the frame: who proposes changes to this page (U7)
   let trayHash = '#/';     // the tray's own route (HCCore.parseRoute), never the site's hash
@@ -171,14 +164,8 @@
     notice.classList.toggle('is-error', kind === 'error');
     if (text) unfoldDock();
   }
-  /* The status line lives in the bubble: a message (or the image picker's button) must be seen, so a tucked
-     bubble unfolds for it, without taking the focus. */
-  function unfoldDock() {
-    if (!dock || !document.body.classList.contains('hc-dock-collapsed')) return;
-    document.body.classList.remove('hc-dock-collapsed');
-    try { const st = localStore(); if (st) st.setItem(DOCK_KEY, 'open'); } catch (e) { /* this page only */ }
-    refreshDock();
-  }
+  /* The status line lives in the bubble: a message must be seen, so a tucked bubble unfolds (js/editor-dock.js). */
+  function unfoldDock() { D.unfold(); }
 
   /* Sign-in news: the footer line beside "Sign in to edit" (js/app.js),
      because the tray is not on screen while nobody is signed in. */
@@ -484,65 +471,6 @@
     drawDraftList(false);
     refreshDock();
   }
-  // the undo / redo arrows (Lucide-style strokes, drawn here: no icon font)
-  function histIcon(op) {
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS ? document.createElementNS(ns, 'svg') : h('span');
-    if (!svg.setAttribute) return svg;
-    for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '16'], ['height', '16'], ['aria-hidden', 'true'], ['focusable', 'false']]) svg.setAttribute(k, v);
-    const path = document.createElementNS ? document.createElementNS(ns, 'path') : null;
-    if (path) {
-      path.setAttribute('d', op === 'undo' ? 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11' : 'm15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13');
-      svg.appendChild(path);
-    }
-    return svg;
-  }
-
-  /* The dock (editor redesign U4a, Kyle's D1 change 3): the Editor switch and the avatar leave the
-     header and sit in a bubble at the bottom right with the page's change count and "Send for
-     review"; its x tucks it into a small tag on the right edge (remembered in this browser). */
-  const DOCK_KEY = 'hc-editor-dock';
-  function mountDock() {
-    dockCount = h('span', { class: 'hc-dock-count', 'data-dock-count': true });
-    dockSend = h('button', { type: 'button', class: 'cms-btn cms-btn-primary hc-dock-send', 'data-action': 'dock-send' }, 'Send for review');
-    dockSend.addEventListener('click', () => { openSendBox().catch(shown); });
-    const x = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'dock-collapse', 'aria-label': 'Hide the editor controls',
-      title: 'Hide (the tag on the right edge brings it back)' }, '×');
-    x.addEventListener('click', () => collapseDock(true));
-    // round 2 (R2b): Undo and Redo sit between the count and Send for review
-    const mac = /Mac|iPhone|iPad/.test(String((window.navigator && window.navigator.platform) || ''));
-    const keyName = mac ? '⌘' : 'Ctrl+';
-    dockUndo = h('button', { type: 'button', class: 'hc-dock-hist', 'data-action': 'undo', 'aria-label': 'Undo', title: `Undo (${keyName}Z)` }, histIcon('undo'));
-    dockRedo = h('button', { type: 'button', class: 'hc-dock-hist', 'data-action': 'redo', 'aria-label': 'Redo', title: `Redo (${mac ? '⇧⌘Z' : 'Ctrl+Y'})` }, histIcon('redo'));
-    dockUndo.addEventListener('click', () => undoRedo('undo'));
-    dockRedo.addEventListener('click', () => undoRedo('redo'));
-    const sendWrap = h('span', { class: 'hc-dock-send-wrap' }, dockCount,
-      h('span', { class: 'hc-dock-histwrap', role: 'group', 'aria-label': 'Undo and redo' }, dockUndo, dockRedo), dockSend);
-    // the proposals list opens from here: a small text link with the open count, under the name (round 2, R2a)
-    handle = h('button', { type: 'button', class: 'hc-dock-pages hc-dock-link', 'data-action': 'tray-open', 'aria-expanded': 'false',
-      title: 'Open proposals' }, 'Proposals');
-    handle.hidden = true;
-    dockLock = h('div', { class: 'hc-dock-lock', role: 'status', 'data-dock-lock': true });
-    dockLock.hidden = true;
-    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, controls, x, sendWrap, dockLock);
-    dockTag = h('button', { type: 'button', class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
-      title: 'Show the editor controls' });
-    dockTag.addEventListener('click', () => collapseDock(false));
-    document.body.appendChild(dock);
-    document.body.appendChild(dockTag);
-    if (typeof window.addEventListener === 'function') window.addEventListener('resize', placeSendBox);   // the bubble rewraps
-    let collapsed = false;
-    try { const s = localStore(); collapsed = Boolean(s && s.getItem(DOCK_KEY) === 'collapsed'); } catch (e) { collapsed = false; }
-    document.body.classList.toggle('hc-dock-collapsed', collapsed);
-  }
-  function collapseDock(on) {
-    document.body.classList.toggle('hc-dock-collapsed', on);
-    try { const s = localStore(); if (s) s.setItem(DOCK_KEY, on ? 'collapsed' : 'open'); } catch (e) { /* this page only */ }
-    if (on) closeSendBox();
-    refreshDock();
-    const next = on ? dockTag : switchBtn;
-    if (next && typeof next.focus === 'function') next.focus();
-  }
   /* "N changes" on this page: the blocks my draft changed, added or removed against what it started from. */
   function pageChanges() {
     const d = ed.draft;
@@ -553,95 +481,54 @@
     if (!diff) return d.files[page.file] !== d.originals[page.file] ? 1 : 0;   // a page the block model refuses (CRLF): changed or not
     return diff.filter((e) => e.status !== 'same').length;
   }
-  /* The edit gate in the dock, on a project page: "You can't edit this project." with why and Request edit access
-     (accessAsk, the project box's own), or one short line saying why you can. Redrawn only when the answer
-     changed, so a request's result stays on screen. */
-  /* "You can't edit this project.", why, and Request edit access (only once the list is read) with its result
-     line: the dock's lines and the facts-file page's note. */
-  function lockParts(a, projectId, name) {
-    const result = h('p', { class: 'hc-access-result cms-action-result', role: 'status' });
-    result.hidden = true;
-    const ask = a.status === 'read' ? accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)) : null;
-    return [h('p', { class: 'hc-dock-lock-head', text: C.ACCESS_LOCKED_TEXT }), h('p', { class: 'hc-dock-lock-why', text: a.text }),
-      ask, result].filter(Boolean);
-  }
   const accessLockNote = (a, projectId, name) => h('section', { class: 'hc-access hc-access-locked', 'data-access-locked': true,
-    'aria-label': 'Edit access' }, ...lockParts(a, projectId, name));
-  let dockLockKey = '';
-  function drawDockLock(a, page) {
-    const key = a ? [page.pageId, a.status, a.can, a.why, a.text].join('\n') : '';
-    if (key === dockLockKey) return;
-    dockLockKey = key;
-    if (!a) { dockLock.replaceChildren(); dockLock.hidden = true; return; }
-    if (a.can) dockLock.replaceChildren(h('p', { class: 'hc-dock-lock-why', text: a.text }));
-    else dockLock.replaceChildren(...lockParts(a, projectIdOf(page), page.label));
-    dockLock.classList.toggle('is-locked', !a.can);
-    dockLock.hidden = false;
+    'aria-label': 'Edit access' }, ...D.lockParts(a, projectId, name));
+  /* The dock is js/editor-dock.js (HCDock); this is what it shows, built from the editor's state on every redraw. */
+  function dockView() {
+    const signedIn = Boolean(state.session);
+    const editing = ed.on && Boolean(ed.page) && canEditPage(ed.page);
+    const ours = editing && hist.key === ed.page.pageId;
+    const projectId = signedIn && ed.on && state.access === 'ok' ? projectIdOf(ed.page) : null;
+    return {
+      signedIn,
+      login: signedIn ? String(state.session.login) : null,
+      editing,
+      changes: editing ? pageChanges() : 0,
+      canUndo: Boolean(ours && hist.undo.length),
+      canRedo: Boolean(ours && hist.redo.length),
+      access: projectId ? projectAccess(projectId) : null,
+      projectId,
+      page: ed.page,
+      draftKey: ed.draft ? ed.draft.key : null,
+    };
   }
-  function closeSendBox() { if (sendBox) { sendBox.remove(); sendBox = null; sendKey = null; } }
   function refreshDock() {
     if (!dock) return;
-    const signedIn = Boolean(state.session);
-    dock.hidden = !signedIn;
-    const tucked = document.body.classList.contains('hc-dock-collapsed');
-    dockTag.hidden = !signedIn || !tucked;                // only while tucked away
-    if (tucked) { dock.setAttribute('inert', ''); closeMenu(); } else dock.removeAttribute('inert');   // nothing hidden is in the tab order
-    const editing = ed.on && Boolean(ed.page) && canEditPage(ed.page);
-    const n = editing ? pageChanges() : 0;
-    dockCount.textContent = !editing ? '' : (n === 0 ? 'No changes yet' : `${n} ${n === 1 ? 'change' : 'changes'}`);
-    dockSend.hidden = !editing;
-    dockSend.disabled = n === 0;
-    const ours = editing && hist.key === ed.page.pageId;
-    dockUndo.hidden = !editing;
-    dockRedo.hidden = !editing;
-    dockUndo.disabled = !(ours && hist.undo.length);
-    dockRedo.disabled = !(ours && hist.redo.length);
-    const projectId = signedIn && ed.on && state.access === 'ok' ? projectIdOf(ed.page) : null;
-    drawDockLock(projectId ? projectAccess(projectId) : null, ed.page);
-    // the page bar keeps its buttons clear of the bubble above it (css/editor.css reads the width)
-    const bs = document.body.style;
-    if (bs && typeof bs.setProperty === 'function') {
-      bs.setProperty('--hc-dock-w', `${Math.round(dock.offsetWidth || 0)}px`);
-      bs.setProperty('--hc-dock-h', `${Math.round(dock.offsetHeight || 0)}px`);
-    }
-    // Editor off, signed out, nothing left to send, or another page's draft on screen: the box goes
-    if (!signedIn || !editing || n === 0 || (sendBox && (!ed.draft || ed.draft.key !== sendKey))) closeSendBox();
-    else placeSendBox();
-    if (signedIn) {
-      const login = String(state.session.login);
-      const kids = [avatarFace(login, login)];
-      if (n) kids.push(h('span', { class: 'hc-dock-badge', text: String(n) }));
-      dockTag.replaceChildren(...kids);
-    }
+    D.refresh(dockView());
   }
-  /* The send box sits below the bubble, whatever its height (two rows; wrapped on a narrow screen); measured again
-     whenever the bubble is redrawn and on the next frame, so a bubble that grew after the box opened is never covered. */
-  function placeSendBox() {
-    if (!sendBox || !dock || typeof dock.getBoundingClientRect !== 'function') return;
-    const put = () => {
-      const below = sendBox && dock.getBoundingClientRect();
-      if (below && below.bottom > 0) sendBox.style.top = `${Math.round(below.bottom + 8)}px`;
+  /* What js/editor-dock.js may reach of the editor (its header documents every key). */
+  function dockApi() {
+    return {
+      h,
+      store: localStore,
+      controls,
+      switchBtn,
+      closeMenu: () => closeMenu(),
+      redraw: () => refreshDock(),
+      undoRedo: (op) => undoRedo(op),
+      draft: () => ed.draft,
+      canSend: (d) => Boolean(canEditPage(ed.page) && canEditKey(d.key) && pageChanges()),
+      myProposals: () => myProposals(),
+      propose: (d, slot, own) => openPropose(d, routeEpoch, slot, own),
+      shown: (e) => shown(e),
+      avatar: (login, first) => avatarFace(login, first),
+      accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
+      onCount: (n) => { ed.count = n; },
+      openCount: () => {
+        const gen = sessionGen.current();
+        return openPulls().then((pulls) => (sessionGen.isCurrent(gen) ? C.orderOpenPulls(pulls, null).length : null));
+      },
     };
-    put();
-    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(put);
-  }
-  /* Send for review: the page's draft goes through the same propose form the tray uses, in a box
-     below the dock. */
-  async function openSendBox() {
-    if (sendBox) { closeSendBox(); return; }
-    const d = ed.draft;
-    if (!d || !canEditPage(ed.page) || !canEditKey(d.key) || !pageChanges()) return;
-    const slot = h('div', { class: 'hc-propose-slot' });
-    const close = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'send-close', 'aria-label': 'Close' }, '×');
-    close.addEventListener('click', closeSendBox);
-    sendBox = h('div', { class: 'hc-sendbox', role: 'dialog', 'aria-label': 'Send for review' },
-      h('div', { class: 'hc-sendbox-head' }, h('strong', { text: 'Send for review' }), close), slot);
-    sendKey = d.key;
-    document.body.appendChild(sendBox);
-    placeSendBox();
-    const own = await myProposals();
-    if (!sendBox || sendKey !== d.key || !ed.draft || ed.draft.key !== d.key) return;   // closed or moved on meanwhile
-    openPropose(d, routeEpoch, slot, own);
   }
 
   function renderChrome() {
@@ -813,7 +700,7 @@
     const login = state.session && state.session.login;
     const [pulls, merged] = await Promise.all([openPulls(), C.loadRecentMerges(api, 5)]);
     const open = C.orderOpenPulls(pulls, null);
-    setCount(open.length);
+    D.setCount(open.length);
     const files = new Map();
     await Promise.all(open.map(async (p) => { files.set(p.number, await filesOrNull(p.number)); }));
     if (epoch !== routeEpoch) return;
@@ -918,7 +805,7 @@
     // "Recently merged" pages the closed PRs until nothing unread can be newer
     const [pulls, merged] = await Promise.all([openPulls(), C.loadRecentMerges(api, 5)]);
     const open = C.orderOpenPulls(pulls, login);
-    setCount(open.length);
+    D.setCount(open.length);
     // the badges and "touches this page" need each proposal's file list: read eagerly
     const files = await Promise.all(open.map((p) => filesOrNull(p.number)));
     if (epoch !== routeEpoch) return;
@@ -2793,7 +2680,7 @@
       return;
     }
     if (ed.trayOpen) renderTray();
-    if (!(ed.trayOpen && ed.tab === 'proposals')) loadCount();   // the Proposals tab reads it itself
+    if (!(ed.trayOpen && ed.tab === 'proposals')) D.loadCount();   // the Proposals tab reads it itself
     frameTo(currentRoute(), false);
   }
 
@@ -2827,20 +2714,6 @@
     const onList = ed.tab === 'proposals' && (trayHash === '#/' || C.parseRoute(trayHash).name !== 'review-pr');
     trayTitle.textContent = ed.tab === 'proposals' && !onList ? 'Proposal' : VIEW_TITLE[ed.tab] || 'Proposals';
     trayCrumb.hidden = onList;
-  }
-
-  /* The open proposals' count: on the Proposals tab and the handle. */
-  function setCount(n) {
-    ed.count = n;
-    handle.replaceChildren(document.createTextNode('Proposals'),
-      h('span', { class: 'n', 'aria-label': `${n} open`, text: n > 0 ? String(n) : '' }));
-  }
-
-  function loadCount() {
-    const gen = sessionGen.current();
-    openPulls().then((pulls) => {
-      if (sessionGen.isCurrent(gen)) setCount(C.orderOpenPulls(pulls, null).length);
-    }).catch(() => { /* the button keeps saying "Proposals" */ });
   }
 
   /* The Data tab's home (the old Changes home). A block picked or inserted is edited IN THE PAGE now, so
@@ -4653,7 +4526,7 @@
     menu.addEventListener('keydown', escape);
     // round 2 (R2a, Kyle 2026-10-15): who comes first (photo, name with role, the Proposals link under it), then the switch
     controls = h('span', { class: 'hc-editor-controls' }, who, switchBtn);
-    mountDock();
+    ({ dock, handle } = D.mount(document.body, dockApi()));
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
     // round 2 (R3): no tabs; a title says which view this is, and the views other than the list link back to it
