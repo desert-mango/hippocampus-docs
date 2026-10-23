@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-22",
+ "read_at": "2026-10-23",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 196,
+  "commits_365d": 199,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -644,14 +644,35 @@
     4,
     1,
     1,
+    3,
     0,
-    null,
     null,
     null
    ]
   }
  ],
  "recent_commits": [
+  {
+   "repo": "ipp_rig",
+   "sha": "7180d5f",
+   "date": "2026-10-22",
+   "msg": "feat(launch): add wall_aware argument and update default scenario path to new scalar_field_sim layou",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_sim",
+   "sha": "c3ade38",
+   "date": "2026-10-22",
+   "msg": "fix(field): block rays at wall contact, reject zero-length walls",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_sim",
+   "sha": "8da0832",
+   "date": "2026-10-22",
+   "msg": "feat(scenario files): add new field files, plot tool and cleanup",
+   "author": "NBauschmann"
+  },
   {
    "repo": "ipp_rig",
    "sha": "db97e2c",
@@ -805,35 +826,14 @@
    "date": "2026-09-01",
    "msg": "Add README",
    "author": "Latfoo"
-  },
-  {
-   "repo": "ipp_rviz_visuals",
-   "sha": "973fc24",
-   "date": "2026-09-01",
-   "msg": "Add README",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "0a0622f",
-   "date": "2026-09-01",
-   "msg": "Add dependency and clean up documentation",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "docs",
-   "sha": "0eba667",
-   "date": "2026-08-27",
-   "msg": "Add instruction for enabling motors and checking status",
-   "author": "NBauschmann"
   }
  ],
  "most_active_repos": [
   {
    "name": "ipp_rig",
-   "commits": 89,
+   "commits": 90,
    "language": "Python",
-   "pushed_at": "2026-10-21"
+   "pushed_at": "2026-10-22"
   },
   {
    "name": "fav_docs",
@@ -843,9 +843,9 @@
   },
   {
    "name": "scalar_field_sim",
-   "commits": 21,
+   "commits": 23,
    "language": "Python",
-   "pushed_at": "2026-10-16"
+   "pushed_at": "2026-10-22"
   },
   {
    "name": "scalar_field_belief",
