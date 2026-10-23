@@ -25,15 +25,20 @@
        opts.phone         matchMedia(...).matches; page.mql.handlers holds the 'change' listeners
        opts.confirm       what window.confirm answers (default true); page.confirms records the questions
        opts.start         more HCEditor.start options, merged last
+       opts.textEncoder   true puts Node's TextEncoder on the vm window (opt-in: the review rail then hashes its keys;
+                          left off by default, as some tests rely on the rail's no-TextEncoder path)
+       opts.afterScript   (file, win) => void, called after each editor script runs (e.g. to wrap window.HCDock with a
+                          spy before js/editor.js captures it)
        page.win / body / header / content / host     the vm window and the fake nodes
        page.calls         every fetch {url, method}; page.github() the api.github.com ones
        page.listeners     window listeners by type; page.docListeners(type) the document's
        page.created, page.replaced, page.opens, page.told, page.sessions, page.hcReads   spies
-       page.all(pred) / page.one(pred)   a walk of the body; page.frame(s), switchBtn, textarea, nonce,
-                          tray, trayTitle, trayTab, handle, action(name), linkTo(href)   finders
-       page.go(hash), page.send(data, extra), page.asks(path), page.pick(i), page.showData(),
-                          page.type(el, text), page.review(n), page.tab(id), page.follow(a)   drivers; each
-                          resolves after settle()
+       page.all(pred) / page.one(pred)   a walk of the body; page.frame(s), switchBtn, editorTextarea, nonce,
+                          tray, trayTitle, handle, action(name), linkTo(href)   finders
+       page.go(hash), page.send(data, extra), page.asks(path), page.pick(i), page.typeIn(i, md),
+                          page.wholePage(), page.dataFiles(), page.type(el, text), page.follow(a)   drivers;
+                          each resolves after settle(). (U0b removed textarea, showData, review, tab and
+                          trayTab with the tray's block editor and the old screens.)
      settle()   drains microtasks and the 0-ms timers (window.setTimeout runs every timer at once)
      FakeElement, findAll(node, pred), memoryStorage(), localFor(storage), FakeFormData, tick()
    NOT granted: layout (offsetWidth/getBoundingClientRect are absent), CSS, querySelector(All) (answers
@@ -237,6 +242,7 @@ export function openSite(opts) {
     matchMedia: (q) => { mql.media = q; return mql; },
   });
   win.window = win;
+  if (o.textEncoder) win.TextEncoder = TextEncoder;
   win.fetch = (url, init) => {
     calls.push({ url: String(url), method: (init && init.method) || 'GET' });
     const mine = o.intercept ? o.intercept(String(url), init || {}) : null;
@@ -244,6 +250,7 @@ export function openSite(opts) {
   };
   for (const f of EDITOR_SCRIPTS) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), win, { filename: path.basename(f) });
+    if (o.afterScript) o.afterScript(f, win);
   }
   const session = o.session === undefined ? C.makeSession(TOKEN, null, 'bob', Date.now()) : o.session;
   const started = win.HCEditor.start(Object.assign({ session,
@@ -260,7 +267,8 @@ export function openSite(opts) {
     frames: () => findAll(host, (e) => e.tagName === 'IFRAME'),
     frame: () => findAll(host, (e) => e.tagName === 'IFRAME').at(-1),
     switchBtn: () => findAll(body, (e) => e.attrs['data-editor-switch'] !== undefined)[0],
-    textarea: () => findAll(body, (e) => e.tagName === 'TEXTAREA' && e.attrs['data-block-editor'] !== undefined)[0],
+    // the thin editor page's textarea (the whole page as Markdown, or a raw data file)
+    editorTextarea: () => findAll(body, (e) => e.tagName === 'TEXTAREA' && e.attrs['data-editor'] !== undefined)[0],
     nonce: () => /#preview=([A-Za-z0-9_-]+)/.exec(page.frame().srcs.at(-1))[1],
     async go(hash) {
       location.hash = hash;
@@ -281,26 +289,23 @@ export function openSite(opts) {
       const hit = frame.posted.find((x) => x.m.type === 'hc-file' && x.m.id === id);
       return hit && hit.m;
     },
-    // V2 (Kyle, 2026-10-14): a picked block is edited in the page; its Markdown is on the editor page's Data tab.
-    // pick = the frame says hc-block-select, then the person opens Proposals -> Data (when it is not open yet)
+    // a picked block is edited in the page (U0b: the tray's block textarea is gone): pick = the frame says
+    // hc-block-select; typeIn = the frame types in it (hc-block-state visual, then hc-block-md)
     async pick(index) {
       await page.send({ type: 'hc-block-select', index });
-      await page.showData();
     },
-    async showData() {
-      if (page.tray().hidden) { page.handle().click(); await settle(); }
-      if (page.trayTitle() !== 'Edit as Markdown') { page.tab('changes').click(); await settle(); }
+    async typeIn(index, md) {
+      await page.send({ type: 'hc-block-state', index, editor: 'visual', reason: '' });
+      await page.send({ type: 'hc-block-md', index, md });
     },
+    // the thin editor page (U0b): "Edit whole page as Markdown" / "Data files" in the account menu
+    async wholePage() { page.action('menu-whole').click(); await settle(); },
+    async dataFiles() { page.action('menu-data').click(); await settle(); },
     editorMessages: () => page.frame().posted.filter((x) => x.m.type === 'hc-editor').map((x) => x.m),
     async type(el, text) { el.value = text; el.fire('input'); await settle(); },
     github: () => calls.filter((c) => c.url.indexOf('https://api.github.com/') === 0),
     tray: () => findAll(body, (e) => e.attrs.id === 'hc-tray')[0],
-    // round 2 (R3): no tab buttons; a "tab" is HCEditor.openView(id), the view the old tab showed
-    async review(n) { win.HCEditor.openView(`#/review/${n}`); await settle(); },
-    tab: (id) => ({ click: () => win.HCEditor.openView(id), get textContent() { return page.trayTitle(); },
-      getAttribute: (k) => (k === 'aria-selected' ? String(page.trayTab() === id) : null) }),
     trayTitle: () => { const t = findAll(body, (e) => e.classList.contains('hc-tray-title'))[0]; return t ? t.textContent : null; },
-    trayTab: () => ({ Proposals: 'proposals', Proposal: 'proposals', 'Edit as Markdown': 'changes', 'View settings': 'view', Guide: 'guide' })[page.trayTitle()],
     handle: () => findAll(body, (e) => e.attrs['data-action'] === 'tray-open')[0],
     action: (name) => findAll(body, (e) => e.attrs['data-action'] === name)[0],
     // a click on a tray link: the tray body's listener sees it (event delegation)

@@ -4,20 +4,24 @@
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Send the retired /cms/ editor's routes to the site page they now live on, in Editor mode.
 /* HCRedirect — the /cms/ redirect map (plan D-I). The editor moved from
-   /cms/ into the site itself (Editor mode, D-H: #/<route>?editor=<tab>).
-   legacyRoute(cmsHash) maps each old hash route to its new home:
+   /cms/ into the site itself (Editor mode, D-H: #/<route>?editor=…).
+   legacyRoute(cmsHash) maps each old hash route to its new home. Since U0b
+   of the editor UI/UX build (plan D18) the editor's own screens are gone
+   too: every ?editor=… lands on the page it names with Editor mode on and
+   the bubble out (js/editor.js's REDIRECTS); pr=N keeps that proposal drawn
+   on the page, data=<x> opens that raw data file on the thin editor page.
 
-     #/  #/review          -> /#/?editor=proposals
-     #/review/N            -> /#/?editor=proposals&pr=N
-     #/edit/<pageId>       -> that page's site route + ?editor=changes
+     #/  #/review          -> /#/?editor=review
+     #/review/N            -> /#/?editor=review&pr=N
+     #/edit/<pageId>       -> that page's site route + ?editor=on
                               (setup/<id>, project/<id>, tool/<id>, about;
-                              #/edit/data/<x> -> /#/about?editor=changes&data=<x>)
-     #/new/project         -> /#/projects?editor=changes&new=project
-     #/new/person          -> /#/about?editor=changes&new=person
-     #/media               -> /#/?editor=media
-     #/help  #/private     -> /#/?editor=guide
-     #/pages               -> /#/setup?editor=changes
-     anything else         -> /#/?editor=proposals
+                              #/edit/data/<x> -> /#/about?editor=on&data=<x>)
+     #/new/project         -> /#/projects?editor=on
+     #/new/person          -> /#/about?editor=on
+     #/media               -> /#/?editor=on
+     #/help  #/private     -> /#/?editor=on
+     #/pages               -> /#/setup?editor=on
+     anything else         -> /#/?editor=review
 
    The answer is always a same-site '/#/…' route built from checked pieces
    (the same id rules as js/cms-core.js's routes, copied, because this file
@@ -28,7 +32,7 @@
 (function () {
   'use strict';
 
-  const HOME = '/#/?editor=proposals';
+  const HOME = '/#/?editor=review';
   const PAGE_ID_RE = /^[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*)*$/;
   const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
   const DATA_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -36,23 +40,23 @@
   const FIXED = Object.freeze({
     '/': HOME,
     '/review': HOME,
-    '/new/project': '/#/projects?editor=changes&new=project',
-    '/new/person': '/#/about?editor=changes&new=person',
-    '/media': '/#/?editor=media',
-    '/help': '/#/?editor=guide',
-    '/private': '/#/?editor=guide',
-    '/pages': '/#/setup?editor=changes',
+    '/new/project': '/#/projects?editor=on',
+    '/new/person': '/#/about?editor=on',
+    '/media': '/#/?editor=on',
+    '/help': '/#/?editor=on',
+    '/private': '/#/?editor=on',
+    '/pages': '/#/setup?editor=on',
   });
 
   function editRoute(pageId) {
     if (!PAGE_ID_RE.test(pageId)) return null;
-    if (pageId === 'about') return '/#/about?editor=changes';
+    if (pageId === 'about') return '/#/about?editor=on';
     const [kind, ...rest] = pageId.split('/');
     const id = rest.join('/');
-    if (kind === 'setup' && id) return `/#/setup/${id}?editor=changes`;
-    if (kind === 'project' && SLUG_RE.test(id)) return `/#/projects/${id}?editor=changes`;
-    if (kind === 'tool' && SLUG_RE.test(id)) return `/#/tools/${id}?editor=changes`;
-    if (kind === 'data' && DATA_RE.test(id)) return `/#/about?editor=changes&data=${id}`;
+    if (kind === 'setup' && id) return `/#/setup/${id}?editor=on`;
+    if (kind === 'project' && SLUG_RE.test(id)) return `/#/projects/${id}?editor=on`;
+    if (kind === 'tool' && SLUG_RE.test(id)) return `/#/tools/${id}?editor=on`;
+    if (kind === 'data' && DATA_RE.test(id)) return `/#/about?editor=on&data=${id}`;
     return null;
   }
 

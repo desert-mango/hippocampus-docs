@@ -112,18 +112,17 @@ test('role badge: admin -> Admin, maintain -> Maintainer, push -> Editor, else R
 
 // ---------------------------------------------------------------- routes --
 
+/* U0b (editor UI/UX build, plan D18): the routes of the removed screens (home, review, review-pr, help, pages, new,
+   media, private) are gone from HCCore.ROUTES; js/editor.js's REDIRECTS sends their addresses to the page
+   (tools/tests/test_editor_u0b.mjs). These three tests were changed with them: their cases for those routes now
+   expect not-found, '#/edit' alone is the data files list, and the table holds only edit. */
 test('routes: the plan\'s hash routes parse into {name, params}', () => {
   const cases = [
-    ['', 'home', {}], ['#', 'home', {}], ['#/', 'home', {}],
-    ['#/review', 'review', {}], ['#/review/', 'review', {}],
-    ['#/review/1', 'review-pr', { number: 1 }], ['#/review/42', 'review-pr', { number: 42 }],
-    ['#/help', 'help', {}],
+    ['#/edit', 'edit', {}],
     ['#/edit/about', 'edit', { pageId: 'about' }],
     ['#/edit/setup/lab-marker/design', 'edit', { pageId: 'setup/lab-marker/design' }],
     ['#/edit/project/uvms', 'edit', { pageId: 'project/uvms' }],
     ['#/edit/data/people', 'edit', { pageId: 'data/people' }],
-    ['#/new/project', 'new', { kind: 'project' }], ['#/new/person', 'new', { kind: 'person' }],
-    ['#/media', 'media', {}], ['#/private', 'private', {}],
   ];
   for (const [hash, name, params] of cases) {
     const r = C.parseRoute(hash);
@@ -133,21 +132,21 @@ test('routes: the plan\'s hash routes parse into {name, params}', () => {
 });
 
 test('routes: anything else is not-found, never a guessed page', () => {
-  for (const hash of ['#/review/0', '#/review/-1', '#/review/1x', '#/review/1/2', '#/nope',
-    '#/edit/', '#/edit', '#/new/', '#/new/Project', '#/help/me', '#review', '#//review',
+  for (const hash of ['', '#', '#/', '#/review', '#/review/1', '#/help', '#/pages', '#/new/project', '#/media', '#/private',
+    '#/review/0', '#/review/-1', '#/review/1x', '#/review/1/2', '#/nope',
+    '#/edit/', '#/new/', '#/new/Project', '#/help/me', '#review', '#//review',
     '#/edit/../x', '#/edit/a//b', `#/edit/a${'\u0000'}b`, '#/review/99999999999']) {
     assert.equal(C.parseRoute(hash).name, 'not-found', hash);
   }
 });
 
 test('routes: a query after the route is ignored, and the table names every owner', () => {
-  assert.equal(C.parseRoute('#/review?x=1').name, 'review');
+  assert.deepEqual(C.parseRoute('#/edit/data/people?x=1'), { name: 'edit', params: { pageId: 'data/people' } });
   const names = C.ROUTES.map((r) => r.name);
-  assert.deepEqual(names, ['home', 'review', 'review-pr', 'help', 'pages', 'edit', 'new', 'media', 'private']);
+  assert.deepEqual(names, ['edit']);
   for (const r of C.ROUTES) assert.match(r.owner, /^U(7a|7b|8|9|10)$/, r.name);
-  // U7b built the editor (#/pages, #/edit/…, #/new/…), U9 Media; Private waits for U10
-  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name), ['private']);
-  assert.deepEqual(C.parseRoute('#/pages'), { name: 'pages', params: {} });
+  // U7b built the editor (#/edit/…); nothing waits as a placeholder any more
+  assert.deepEqual(C.ROUTES.filter((r) => r.placeholder).map((r) => r.name), []);
 });
 
 // -------------------------------------------------------------- PR lists --

@@ -23,33 +23,27 @@
      - the page's Markdown reaches the frame with id-sentinels before every
        block (HCCore.withSentinels, prefix = the first 16 characters of THIS
        load's nonce), so the frame groups the blocks and posts
-       hc-block-select / hc-block-insert. The tray's Changes tab edits the
-       picked block: its character SPAN in the draft (HCCore.spanOf), every
-       change is HCCore.replaceSpan, and the frame reloads with a fresh nonce
-       and `selected`. Files are read at a commit sha through
-       HCCore.cachedFetcher, and drafts are served from memory, so a reload
-       after an edit makes no network call.
-     - the tray: today's /cms/ views in a fixed right panel (a bottom sheet
-       on phones, body.hc-phone), five tabs, routed by a tray-local hash
-       (trayHash), never the site's; a handle ("Editor · N proposals") while
-       it is closed. Proposals = home + review list + review page, one card
-       per proposal that expands in place ("Show on page" shows its head in
-       the frame, read-only, its changes marked).
+       hc-block-select / hc-block-insert; a picked block is typed in the
+       page itself, and every change is HCCore.replaceSpan of its character
+       SPAN in the draft (HCCore.spanOf). Files are read at a commit sha
+       through HCCore.cachedFetcher, and drafts are served from memory, so a
+       reload after an edit makes no network call.
+     - the thin editor page (#hc-tray, routed by its own hash trayHash, never
+       the site's): only the whole page as Markdown (#/edit/<page>) and the
+       raw data files (#/edit, #/edit/data/…), from the account menu. U0b
+       (editor UI/UX build, plan D18) removed the proposals list, the review
+       page, the Guide, View settings, the image library, the page list, the
+       New project / New person forms, both bars above the page and the Send
+       box; their addresses redirect to the page (REDIRECTS).
      - proposals in place (U7, plan D-F, D-G): an open proposal that touches
        the page on screen is drawn over main in the frame — the composite of
        HCCore.overlayOnMain (the PR's block diff from its merge base, read
-       with compare), marked add / del / change / conflict — with a page bar
-       above the frame ("X proposes changes to this page · PR #n · check …
-       · Review in tray"). The frame's indices are then the composite's: a
+       with compare), marked add / del / change / conflict — with the review
+       rail's cards beside it. The frame's indices are then the composite's: a
        main block is edited at its index in main, a proposal's block opens
-       that proposal's card. My draft of the page is shown instead when I
-       have one; the newest of several proposals is drawn, the others are
-       listed with their own "Show on page". Changes = the picked block (snippets over
-       HCCore.SNIPPET_CATALOG, "Image from Media"), my drafts with Propose… /
-       Discard, "Edit whole page as Markdown", the four registries as raw
-       JSON, New project / New person. Media = the Media view. View = my
-       settings (HCCore.viewSettings, localStorage). Guide = Help with the
-       Editor-mode steps.
+       its card. My draft of the page is shown instead when I have one; the
+       newest of several proposals is drawn. View settings are fixed
+       (HCCore.viewSettings is constants).
 
    It talks to this one repository only (HCCore's client refuses any other
    path), and its only writes are the review actions HCCore.runReviewAction
@@ -62,7 +56,8 @@
                            every GitHub and /api call (the localhost walk's fake
                            GitHub); opts.session is a session held in memory
                            only, never written under HCCore.SESSION_KEY.
-     VIEWS                 tray route name -> view function (route, epoch).
+     VIEWS                 thin editor page route name -> view function (route, epoch).
+     HCEditor.helpers      REDIRECTS, redirectOf and the helpers kept from the removed screens.
      mountPreview(el, {route, fetcher})   a sandboxed preview under el. */
 (function () {
   'use strict';
@@ -79,10 +74,9 @@
   let who = null;
   let frameHost = null;    // #hc-frame-host (index.html)
   let trayTitle = null;    // the editor page's heading (round 2, R3: the tabs are gone)
-  let trayCrumb = null;    // "← Proposals", on every view but the list
+  let menuWhole = null;    // the account menu's "Edit whole page as Markdown" (U0b)
+  let menuData = null;     // the account menu's "Data files" (U0b)
   let handle = null;       // the tray's handle while it is closed (the dock's "Proposals" link)
-  let showBar = null;      // "Showing proposal #n on the page", while it is
-  let pageBar = null;      // the bar above the frame: who proposes changes to this page (U7)
   let trayHash = '#/';     // the tray's own route (HCCore.parseRoute), never the site's hash
   let avatarBtn = null;    // the header's avatar (its menu holds Sign out)
   let menu = null;         // the avatar's menu
@@ -467,8 +461,6 @@
       ed.cmdOut = { n: ed.cmdN, op: 'restore', index: e.index, snap: e.snap, save };
       postEditor();
     } else frameTo(ed.route, true);
-    if (inPageLine && ed.draft) inPageLine.textContent = draftStateText(ed.draft);
-    drawDraftList(false);
     refreshDock();
   }
   /* "N changes" on this page: the blocks my draft changed, added or removed against what it started from. */
@@ -519,7 +511,7 @@
       draft: () => ed.draft,
       canSend: (d) => Boolean(canEditPage(ed.page) && canEditKey(d.key) && pageChanges()),
       myProposals: () => myProposals(),
-      propose: (d, slot, own) => openPropose(d, routeEpoch, slot, own),
+      propose: (d) => sendDraft(d, null),
       shown: (e) => shown(e),
       avatar: (login, first) => avatarFace(login, first),
       accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
@@ -550,6 +542,8 @@
     const first = name ? name.split(/\s+/)[0] : login;
     avatarBtn.replaceChildren(avatarFace(login, first));
     menuWho.textContent = `Signed in as ${login}`;
+    menuWhole.hidden = !ed.on;
+    menuData.hidden = !ed.on;
     who.appendChild(avatarBtn);
     // name with role on the first line, the Proposals link under them (round 2, R2a)
     const line = h('span', { class: 'hc-id-line' }, h('span', { class: 'hc-login', title: login, text: first }));
@@ -613,20 +607,13 @@
     return api(`${C.REPO_API_PATH}/pulls?state=open&per_page=100`);
   }
 
-  // ------------------------------------------------------ the Review tab ---
-  /* U8. #/review lists the open proposals with their badges; #/review/<n>
-     shows one: the gate's status (and, when red, its located messages), the
-     buttons the role allows, the rendered preview of the PR head's content
-     (labelled "content only" when the proposal also changes code), and the
-     files with their text diffs. A merged proposal offers Undo on GitHub.
-     Every write is HCCore.runReviewAction: the client's allowlist admits only
-     the review paths, and the answer comes back in the tab's words. */
-
-  let flash = null;             // {number, text, ok}: an action's outcome, shown once after the refresh
-  let acting = false;           // one action at a time
-
-  const filesWord = (k) => `${k} file${k === 1 ? '' : 's'}`;
-  const badge = (b) => h('span', { class: `cms-badge cms-badge-${b.key}`, title: b.text }, b.label);
+  // ---------------------------------------------------------- proposals ---
+  /* U0b (editor UI/UX build, plan D18): the proposals list (#/, #/review), the review page (#/review/<n>) and
+     both bars above the page are gone; their addresses redirect to the page (REDIRECTS, below). What stays is
+     the data the page view and the review rail read: the open proposals with their files, and the shared trust
+     and decision rules in js/cms-core.js (parseRecords, decisions, mayApproveEdit, proposalEligible,
+     reviewActionsFor, runReviewAction, classifyAccessProposal, ownProposals), which U3's review list in the
+     bubble builds on. */
 
   /* Every changed file of PR n, or null when GitHub would not list them
      (the page still shows the rest; a stale or signed-out answer is passed on). */
@@ -639,540 +626,25 @@
     }
   }
 
-  // ---------------------------------------------------- the Proposals tab ---
-  /* Today's home, review list and review page in one tab (plan D-N): a card
-     per open proposal (yours first) with its badges and "touches this page";
-     the card of #/review/<n> expands in place with the gate's status and its
-     located messages, the files ("← this page"), the review actions the role
-     allows and "Show on page". A proposal opened by number that is not open
-     (merged, closed, or none) gets its own card above the lists; a merged one
-     offers Undo on GitHub. */
 
-  const isMerged = (p) => p.merged === true || typeof p.merged_at === 'string';
-  const pageFile = () => (ed.page ? ed.page.file : null);
-  const touches = (files) => Boolean(files && pageFile() && files.some((f) => f && f.filename === pageFile()));
-  let marks = [];               // [{files, pill} | {file, li}]: what "this page" marks, redrawn when the page moves
 
-  /* The "touches this page" pills and "← this page" lines follow the page on
-     screen without a new read. */
-  function markPage() {
-    for (const m of marks) {
-      if (m.pill) m.pill.hidden = !touches(m.files);
-      else m.li.classList.toggle('is-here', m.file === pageFile());
-    }
-  }
 
-  function prCard(p, files, login, open) {
-    const n = p.number;
-    const mine = login && loginOf(p).toLowerCase() === login.toLowerCase();
-    const age = C.ageText(p.created_at, Date.now());
-    const pill = h('span', { class: 'hc-pill', text: 'touches this page' });
-    pill.hidden = !touches(files);
-    marks.push({ files, pill });
-    const detail = h('div', { class: 'hc-card-detail' });
-    const card = h('article', { class: open ? 'hc-card is-open' : 'hc-card', 'data-pr': String(n) },
-      h('div', { class: 'hc-card-row' },
-        h('span', { class: 'cms-num', text: `#${n}` }),
-        // the open card's title folds it again
-        link(open ? '#/' : `#/review/${n}`, String(p.title || '(no title)'), 'cms-title'),
-        mine ? h('span', { class: 'cms-mine', text: 'yours' }) : null, pill),
-      h('div', { class: 'hc-card-row cms-meta' },
-        h('span', { text: `by ${loginOf(p)}${age ? `, opened ${age}` : ''}` }),
-        h('span', { text: files ? filesWord(files.length) : 'files unknown' }),
-        ...(files ? C.pullBadges(files) : []).map(badge),
-        link(prLink(n), 'on GitHub', 'cms-gh')),
-      detail);
-    return { card, detail };
-  }
 
-  /* Round 2 (R3, Kyle 2026-10-15): the editor page is ONE plain list — who, which page, when, status — open
-     proposals newest first, then the recently merged (HCCore.proposalRows). A row opens its page with THAT
-     proposal drawn over it (ed.focusPr) and its review cards beside it; a proposal with no page on the site
-     (code only) opens on GitHub. Each proposer has their own colour (the dot; the same slot colours their marks).
-     The foot keeps View settings and the Guide; data files are edited in place or on GitHub. The old card page
-     (#/review/<n>) stays only as the page bar's "Review" details. */
-  const dateFmt = (() => { try { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }); } catch (e) { return null; } })();
-  const shortDay = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? (dateFmt ? dateFmt.format(new Date(t)) : day(iso)) : ''; };
-  const LIST_CHECK = Object.freeze({ pass: "checks pass", fail: "checks failing", checking: "checks running" });
 
-  async function viewProposalList(r, epoch) {
-    paint(epoch, h('p', { class: 'cms-muted', text: 'Loading proposals…' }));
-    const login = state.session && state.session.login;
-    const [pulls, merged] = await Promise.all([openPulls(), C.loadRecentMerges(api, 5)]);
-    const open = C.orderOpenPulls(pulls, null);
-    D.setCount(open.length);
-    const files = new Map();
-    await Promise.all(open.map(async (p) => { files.set(p.number, await filesOrNull(p.number)); }));
-    if (epoch !== routeEpoch) return;
-    const rows = C.proposalRows(open, merged, (n) => files.get(n) || null, state.regs, login);
-    // the gate's status is read for the first LIST_CHECKS open rows only (memoized per head sha); the rest say "Open"
-    const byNumber = new Map(open.map((p) => [p.number, p]));
-    const list = h('ul', { class: 'hc-plist' }, ...rows.map((row, i) => proposalRow(row, login, i < LIST_CHECKS,
-      row.state === 'open' && byNumber.has(row.number) ? accessKindOf(byNumber.get(row.number), files.get(row.number)) : null)));
-    paint(epoch, [
-      rows.length ? list : h('p', { class: 'hc-plist-empty', text: 'No proposals yet. Turn Editor on and change a page: Send for review starts one.' }),
-      h('p', { class: 'hc-plist-foot' },
-        h('button', { type: 'button', class: 'hc-foot-link', 'data-action': 'foot-view', 'data-tab': 'view' }, 'View settings'),
-        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }),
-        h('button', { type: 'button', class: 'hc-foot-link', 'data-action': 'foot-guide', 'data-tab': 'guide' }, 'Guide'),
-        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }),
-        link(`${C.GITHUB_WEB}/tree/main/data`, 'Data files on GitHub', 'hc-foot-link')),
-    ]);
-    for (const b of main.querySelectorAll ? Array.from(main.querySelectorAll('[data-action^="foot-"]')) : []) {
-      b.addEventListener('click', () => trayGo(b.getAttribute('data-tab') === 'view' ? VIEW_HASH : '#/help'));
-    }
-  }
 
-  const LIST_CHECKS = 10;
-  /* Edit access (2026-10-19): is open proposal p (files: its rows) an access proposal? Only when its files are
-     exactly one modified data/projects.json; then its two texts (at the merge base with main, else the PR's
-     base sha, and at the head) go to HCCore.classifyAccessProposal. Never from the title. -> null | {kind, changes} */
-  const ACCESS_INDEX = 'data/projects.json';
-  async function accessKindOf(p, files) {
-    if (!Array.isArray(files) || files.length !== 1 || !isPlain(files[0]) || files[0].filename !== ACCESS_INDEX
-      || files[0].status !== 'modified') return null;
-    const head = headShaOf(p);
-    if (!head) return null;
-    let base = null;
-    try { base = await mergeBaseOf(await mainSha(), head); } catch (e) { if (quiet(e)) throw e; base = null; }
-    if (!base && isPlain(p.base) && FULL_SHA.test(String(p.base.sha))) base = p.base.sha;
-    if (!base) return null;
-    const [before, after] = await Promise.all([textAt(base, ACCESS_INDEX, false), textAt(head, ACCESS_INDEX, false)]);
-    return C.classifyAccessProposal(files, before, after, loginOf(p));
-  }
 
-  function proposalRow(row, login, withCheck, access) {
-    const mine = Boolean(login) && row.who.toLowerCase() === String(login).toLowerCase();
-    const age = row.state === 'open' ? C.ageText(row.when, Date.now()) : '';
-    const when = row.state === 'open' ? (age ? `opened ${age}` : '') : `merged ${shortDay(row.when)}`;
-    const where = row.pages.length ? row.pages.map((x) => x.label).slice(0, 2).join(', ')
-      + (row.pages.length > 2 ? ` +${row.pages.length - 2} more` : '') : (row.filesKnown ? 'code and data only' : 'files unknown');
-    const status = h('span', { class: `hc-prow-status is-${row.state}`, text: row.state === 'open' ? 'Open' : 'Live' });
-    if (withCheck && row.state === 'open' && row.head && /^[0-9a-f]{40}$/.test(row.head)) {
-      checkOf(row.head).then((c) => { if (c && LIST_CHECK[c.state]) status.textContent = `Open · ${LIST_CHECK[c.state]}`; }).catch(() => {});
-    }
-    const open = h('button', { type: 'button', class: 'hc-prow-open', 'data-action': 'open-proposal', 'data-pr': String(row.number),
-      'aria-label': `${row.title}, by ${row.who}${mine ? ' (yours)' : ''}, ${where}` },
-    h('span', { class: 'hc-prow-dot', 'aria-hidden': 'true' }),
-    avatarFace(row.who, row.who),
-    h('span', { class: 'hc-prow-main' },
-      h('span', { class: 'hc-prow-title', text: row.title }),
-      h('span', { class: 'hc-prow-meta' }, h('span', { class: 'hc-prow-who', text: mine ? `${row.who} (you)` : row.who }),
-        h('span', { class: 'hc-sep', 'aria-hidden': 'true', text: '·' }), h('span', { class: 'hc-prow-where', text: where }))),
-    h('span', { class: 'hc-prow-side' }, status, h('span', { class: 'hc-prow-when', text: when })));
-    open.addEventListener('click', () => openFromList(row));
-    if (access) {
-      // an access proposal: its label and one line per change, under the title (from the diff, never the title)
-      const slot = h('span', { class: 'hc-prow-access' });
-      slot.hidden = true;
-      const main = open.querySelector ? open.querySelector('.hc-prow-main') : null;
-      (main || open).appendChild(slot);
-      access.then((c) => {
-        if (!c) return;
-        const kind = C.accessKindLabel(c.kind);
-        const lines = c.changes.map((x) => C.accessChangeLine(x));
-        slot.replaceChildren(h('span', { class: 'hc-pill hc-access-kind', text: kind }),
-          ...lines.map((t) => h('span', { class: 'hc-access-change', text: t })));
-        slot.hidden = false;
-        open.setAttribute('aria-label', `${open.getAttribute('aria-label')}. ${kind}: ${lines.join('; ')}`);
-      }).catch(() => {});
-    }
-    return h('li', { class: 'hc-prow', 'data-pr': String(row.number), 'data-state': row.state, 'data-slot': String(row.slot) }, open);
-  }
 
-  /* A row: its first page, with that proposal drawn (an open one); a merged one shows the page as it is now;
-     nothing on the site to show: the proposal on GitHub, beside the site. */
-  function openFromList(row) {
-    // the page on screen when the proposal touches it, else its first content page, else its first page
-    const target = row.pages.find((x) => x.route === currentRoute())
-      || row.pages.find((x) => x.file.indexOf('content/') === 0) || row.pages[0] || null;
-    if (!target || !ROUTE_RE.test(target.route)) {
-      if (typeof window.open === 'function') window.open(prLink(row.number), '_blank', 'noopener,noreferrer');
-      return;
-    }
-    ed.focusPr = row.state === 'open' ? row.number : null;
-    ed.show = null;
-    clearSelection();
-    closeTray();
-    if (target.route !== currentRoute()) { window.location.hash = `#${target.route}`; return; }   // onHashChange loads it
-    frameTo(currentRoute(), false);
-  }
 
-  async function viewProposals(r, epoch) {
-    const want = r.name === 'review-pr' ? r.params.number : null;
-    paint(epoch, [h('h2', { text: 'Open proposals' }), h('p', { class: 'cms-muted', text: 'Loading proposals…' })]);
-    const login = state.session && state.session.login;
-    // "Recently merged" pages the closed PRs until nothing unread can be newer
-    const [pulls, merged] = await Promise.all([openPulls(), C.loadRecentMerges(api, 5)]);
-    const open = C.orderOpenPulls(pulls, login);
-    D.setCount(open.length);
-    // the badges and "touches this page" need each proposal's file list: read eagerly
-    const files = await Promise.all(open.map((p) => filesOrNull(p.number)));
-    if (epoch !== routeEpoch) return;
-    marks = [];
-    const cards = open.map((p, i) => prCard(p, files[i], login, p.number === want));
-    const at = open.findIndex((p) => p.number === want);
-    const lone = want !== null && at < 0 ? h('article', { class: 'hc-card is-open', 'data-pr': String(want) }) : null;
-    if (!paint(epoch, [
-      link('#/', '← All proposals', 'hc-back-link'),
-      lone,
-      h('h2', { text: 'Open proposals' }),
-      cards.length ? h('div', { class: 'hc-cards' }, ...cards.map((c) => c.card))
-        : h('p', { class: 'cms-muted', text: 'No open proposals.' }),
-      h('h2', { text: 'Recently merged' }),
-      merged.length
-        ? h('ul', { class: 'cms-list' }, ...merged.map((p) => h('li', null,
-          h('span', { class: 'cms-num', text: `#${p.number}` }),
-          // its card offers Undo on GitHub
-          link(`#/review/${p.number}`, String(p.title || '(no title)'), 'cms-title'),
-          h('span', { class: 'cms-meta', text: `by ${loginOf(p)}, merged ${day(p.merged_at)}` }))))
-        : h('p', { class: 'cms-muted', text: 'Nothing merged recently.' }),
-    ])) return;
-    if (want !== null) await prDetail(want, epoch, at >= 0 ? cards[at].detail : lone, at < 0);
-  }
 
-  function takeFlash(n) {
-    const f = flash;
-    flash = null;
-    if (!f || f.number !== n) return null;
-    return h('p', { class: `cms-action-result ${f.ok ? 'is-ok' : 'is-error'}`, role: 'status', text: f.text });
-  }
 
-  function prFacts(p, n, files) {
-    const merged = p.merged === true || typeof p.merged_at === 'string';
-    const age = C.ageText(p.created_at, Date.now());
-    let count = '?';
-    if (files) count = String(files.length);
-    else if (Number.isInteger(p.changed_files)) count = String(p.changed_files);
-    return h('dl', { class: 'cms-facts' },
-      h('dt', { text: 'Proposal' }), h('dd', null, link(prLink(n), `#${n} on GitHub`)),
-      h('dt', { text: 'State' }), h('dd', { text: merged ? `merged ${day(p.merged_at)}` : String(p.state || 'unknown') }),
-      h('dt', { text: 'Author' }), h('dd', { text: loginOf(p) }),
-      age ? h('dt', { text: 'Opened' }) : null, age ? h('dd', { text: age }) : null,
-      h('dt', { text: 'Files changed' }), h('dd', { text: count }));
-  }
 
-  function badgeNotes(files) {
-    if (!files) {
-      return h('p', { class: 'cms-muted', text: 'GitHub did not list the changed files, so the badges are unknown. '
-        + 'Look at the files on GitHub before you merge.' });
-    }
-    const badges = C.pullBadges(files);
-    if (!badges.length) return null;
-    return h('ul', { class: 'cms-badge-notes' }, ...badges.map((b) => h('li', null, badge(b), ` ${b.text}`)));
-  }
 
-  const MARK = { pass: '✓', fail: '✗', checking: '…', unknown: '?' };
 
-  function statusBlock(status, notes) {
-    const out = [h('p', { class: `cms-check cms-check-${status.state}`, role: 'status' },
-      h('span', { class: 'cms-check-mark', 'aria-hidden': 'true', text: MARK[status.state] || '?' }),
-      h('span', { text: status.text }),
-      status.runUrl ? h('span', { class: 'cms-meta' }, ' · ', link(status.runUrl, 'the full report')) : null)];
-    if (status.state !== 'fail') return out;
-    if (notes === null) {
-      out.push(h('p', { class: 'cms-muted', text: 'The located messages could not be read; the full report has them.' }));
-    } else if (!notes.length) {
-      out.push(h('p', { class: 'cms-muted', text: 'The check left no located messages; the full report has the text.' }));
-    } else {
-      out.push(h('p', { text: 'What to fix (file, line, message):' }),
-        h('ul', { class: 'cms-annotations' }, ...notes.map((row) => h('li', { text: C.annotationText(row) }))));
-    }
-    return out;
-  }
 
-  const ACTION_LABEL = { approve: 'Approve', 'request-changes': 'Request changes', merge: 'Merge',
-    update: 'Update from main', close: 'Close' };
 
-  function actionsBlock(p, n, sha, epoch, status, files, access, hasRecords) {
-    const login = (state.session && state.session.login) || '';
-    // who may approve (edit access, 2026-10-19): a project's editors come from MAIN's data/graph/edit-access.json
-    // (accessRegistry), never the proposal's
-    // every path the proposal touches: a rename's old path too; a list GitHub cut short counts as unknown
-    const complete = Array.isArray(files) && !(Number.isInteger(p.changed_files) && files.length < p.changed_files);
-    const paths = complete ? files.flatMap((f) => [f && f.filename, f && f.previous_filename].filter((x) => typeof x === 'string')) : null;
-    const keys = C.reviewActionsFor(state.role, p, { login, files: paths && paths.length ? paths : null, access: access || null,
-      hasRecords: hasRecords === true });
-    if (!keys.length) {
-      return h('p', { class: 'cms-muted', text: 'You can read this proposal. Reviewing it needs write access to this site\'s repository.' });
-    }
-    const approveNote = state.role && state.role.key === 'push' && keys.indexOf('approve') < 0
-      ? h('p', { class: 'cms-muted', 'data-approve-note': true, text: loginOf(p).toLowerCase() === login.toLowerCase()
-        ? 'Someone else approves your own proposal.'
-        : 'Approve is for the site\'s maintainers here, or for a project\'s editors on that project\'s pages.' })
-      : null;
-    const isAuthor = loginOf(p).toLowerCase() === login.toLowerCase();
-    const box = keys.indexOf('request-changes') >= 0
-      ? h('textarea', { class: 'cms-comment', rows: 3, 'aria-label': 'What should change',
-        placeholder: 'What should change? (needed to request changes)' })
-      : null;
-    const result = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
-    // Merge while the gate is not green: the first click asks once, "Merge anyway" merges
-    const confirm = h('p', { class: 'cms-merge-confirm', role: 'alert', hidden: true });
-    const buttons = keys.map((k) => h('button', { type: 'button', 'data-action': k,
-      class: k === 'merge' ? 'cms-btn cms-btn-primary' : 'cms-btn' }, ACTION_LABEL[k]));
-    const ctx = (extra) => Object.assign({ number: n, sha, comment: box ? box.value : '', isAuthor,
-      checkState: status.state }, extra);
-    const ui = { epoch, buttons, result };
-    buttons.forEach((b, i) => b.addEventListener('click', () => {
-      if (keys[i] === 'merge' && C.mergeNeedsConfirm(status.state)) {
-        askToMerge(confirm, () => act('merge', ctx({ confirmed: true }), ui), ui);
-        return;
-      }
-      act(keys[i], ctx(), ui);
-    }));
-    return h('section', { class: 'cms-actions', 'aria-label': 'Review actions' },
-      h('h2', { text: 'Your review' }), box, h('div', { class: 'cms-action-row' }, ...buttons), approveNote,
-      confirm, result);
-  }
 
-  /* The one confirmation before a merge on a gate that is not green. Its
-     button joins the action buttons, so it is disabled while one runs. */
-  function askToMerge(confirm, onYes, ui) {
-    if (confirm.dataset.asked === 'yes') return;           // asked once already
-    confirm.dataset.asked = 'yes';
-    const yes = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'merge-anyway' },
-      'Merge anyway');
-    yes.addEventListener('click', onYes);
-    confirm.replaceChildren(document.createTextNode(`${C.MERGE_CONFIRM_TEXT} `), yes);
-    confirm.hidden = false;
-    ui.buttons.push(yes);
-  }
 
-  /* One review action. Nothing sent (no comment, no sha) -> say why here and
-     keep what was typed. Sent -> refresh the proposal and show the outcome
-     on it. An answer for a session that has since ended changes nothing.
-     Update from main that GitHub took stays pending (`acting`, the buttons
-     disabled, "updating…" on the card) until the head moved, the wait timed
-     out or the read failed (followUpdate): only then is the card drawn
-     again, from the proposal as it is now — so no second update goes out
-     with the same expected head, and a Merge from the redrawn card pins the
-     new head, not the old one. */
-  async function act(action, ctx, ui) {
-    if (acting || !state.client) return;
-    acting = true;
-    ui.buttons.forEach((b) => { b.disabled = true; });
-    const gen = sessionGen.current();
-    let out;
-    let moved = null;
-    try {
-      try {
-        out = await C.runReviewAction(state.client, action, ctx);
-      } catch (e) {
-        out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
-      }
-      if (!sessionGen.isCurrent(gen)) return;
-      if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
-      if (!out.sent) {
-        ui.buttons.forEach((b) => { b.disabled = false; });
-        ui.result.textContent = out.message;
-        ui.result.hidden = false;
-        ui.result.classList.toggle('is-error', true);
-        return;
-      }
-      forgetProposals();               // the proposal moved on: the page bar and overlay read it again
-      // Update from main: GitHub moves the branch a moment later, so the card
-      // and the page follow once the head moved; every other action at once
-      if (action === 'update' && out.ok && ed.on) {
-        ui.result.textContent = `${out.message} Updating…`;
-        ui.result.hidden = false;
-        ui.result.classList.toggle('is-error', false);
-        moved = await followUpdate(ctx.number, ctx.sha, gen);
-        if (!sessionGen.isCurrent(gen)) return;
-      } else if (ed.on) {
-        frameTo(ed.route, true);
-      }
-    } finally {
-      acting = false;
-    }
-    const text = moved ? `Updated from main: the card shows proposal #${ctx.number} as it is now.` : out.message;
-    if (ui.epoch !== routeEpoch) { say(text, out.ok ? null : 'error'); return; }
-    flash = { number: ctx.number, text, ok: out.ok };
-    route();
-  }
 
-  function mergedPanel(p, n) {
-    const keys = C.reviewActionsFor(state.role, p);
-    return h('section', { class: 'cms-panel cms-undo' },
-      h('p', { text: `This proposal was merged ${day(p.merged_at)}.` }),
-      keys.indexOf('undo') >= 0
-        ? h('p', null, h('a', { class: 'cms-btn cms-btn-primary', 'data-action': 'undo', href: C.undoOnGitHubUrl(n),
-          target: '_blank', rel: 'noopener noreferrer' }, C.UNDO_TEXT))
-        : null,
-      h('p', { class: 'cms-muted', text: 'To undo it: GitHub opens this proposal, and its Revert button makes a new '
-        + 'proposal that undoes the merge. That proposal then comes back here to be reviewed and merged.' }));
-  }
-
-  const diffClass = (line) => {
-    if (line.indexOf('@@') === 0) return 'cms-diff-hunk';
-    if (line.charAt(0) === '+') return 'cms-diff-add';
-    if (line.charAt(0) === '-') return 'cms-diff-del';
-    return null;
-  };
-
-  function filesBlock(files) {
-    if (!files) return h('p', { class: 'cms-muted', text: 'GitHub did not list the changed files.' });
-    if (!files.length) return h('p', { class: 'cms-muted', text: 'No files changed.' });
-    return h('ul', { class: 'cms-files hc-files' }, ...files.map((f) => {
-      const moved = typeof f.previous_filename === 'string' ? ` from ${f.previous_filename}` : '';
-      const counts = Number.isInteger(f.additions) && Number.isInteger(f.deletions) ? `, +${f.additions} −${f.deletions}` : '';
-      const li = h('li', { class: f.filename === pageFile() ? 'is-here' : null },
-        h('div', { class: 'cms-file-head' }, h('code', { text: f.filename }),
-          h('span', { class: 'hc-here', text: '← this page' }),
-          h('span', { class: 'cms-meta', text: `${String(f.status || 'changed')}${moved}${counts}` })),
-        typeof f.patch === 'string' && f.patch
-          ? h('details', null, h('summary', { text: 'The text diff' }), h('pre', { class: 'cms-diff' },
-            ...f.patch.split('\n').map((line) => h('span', { class: diffClass(line), text: `${line}\n` }))))
-          : h('p', { class: 'cms-muted', text: 'No text diff (a binary file, or too large to show here).' }));
-      marks.push({ file: f.filename, li });
-      return li;
-    }));
-  }
-
-  /* The registries at the proposal's head where it changes them (a new
-     page), else the live site's: the page ids of its changed files. */
-  async function headRegistries(sha, files) {
-    const regs = await registries();
-    const head = await C.loadHeadRegistries(sessionCache().at(sha), files);
-    return { setup: head.setup || regs.setup, projects: head.projects || regs.projects, tools: head.tools || regs.tools };
-  }
-
-  /* "Show on page" (plan D-G 3): the frame shows the proposal's head,
-     read-only — on this page when the proposal changes it, else on its first
-     changed page; one button per other changed page. */
-  function showOnPage(n, sha, files, pages, scope) {
-    if (!sha || !files) {
-      return h('p', { class: 'cms-muted', text: 'No "Show on page": GitHub did not say which commit or files this proposal has.' });
-    }
-    const here = pages.find((pg) => pg.file === pageFile());
-    const order = here ? [here].concat(pages.filter((pg) => pg !== here)) : pages;
-    const main = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'show-on-page',
-      title: order.length ? order[0].file : 'this page' }, 'Show on page');
-    main.addEventListener('click', () => showProposal(n, sha, files, order.length ? order[0].route : null));
-    const others = order.slice(1).map((pg) => {
-      const b = h('button', { type: 'button', class: 'cms-btn', 'data-route': pg.route, title: pg.file }, pg.label);
-      b.addEventListener('click', () => showProposal(n, sha, files, pg.route));
-      return b;
-    });
-    return h('div', { class: 'hc-show' },
-      scope.text ? h('p', { class: 'cms-preview-scope', text: scope.text }) : null,
-      h('div', { class: 'cms-action-row' }, main, ...others));
-  }
-
-  /* One proposal's detail, drawn into its card (`slot`). standalone: the
-     card has no title row (a proposal that is not open), so it gets one. */
-  async function prDetail(n, epoch, slot, standalone) {
-    const put = (nodes) => {
-      if (epoch !== routeEpoch) return false;
-      slot.replaceChildren(...[].concat(nodes).filter(Boolean));
-      return true;
-    };
-    put(h('p', { class: 'cms-muted', text: 'Loading…' }));
-    const res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}`);
-    if (res.status === 404) {
-      put(h('p', { text: `There is no proposal #${n} in this site's repository.` }));
-      return;
-    }
-    if (!res.ok || !res.data) throw new Error(res.status ? `GitHub answered HTTP ${res.status}` : 'GitHub could not be reached');
-    const p = res.data;
-    const note = takeFlash(n);
-    const title = standalone ? h('h3', { class: 'hc-card-title', text: `#${n} ${String(p.title || '')}` }) : null;
-    if (isMerged(p)) {
-      put([title, note, prFacts(p, n, null), mergedPanel(p, n)]);
-      return;
-    }
-    if (p.state !== 'open') {
-      put([title, note, prFacts(p, n, null), h('p', { text: 'This proposal was closed without merging.' })]);
-      return;
-    }
-    const sha = p.head && /^[0-9a-f]{40}$/.test(String(p.head.sha)) ? p.head.sha : null;
-    const [files, checks, comments] = await Promise.all([
-      filesOrNull(n),
-      sha ? apiResponse(`${C.REPO_API_PATH}/commits/${sha}/check-runs?check_name=check&per_page=100`) : null,
-      apiResponse(`${C.REPO_API_PATH}/issues/${n}/comments?per_page=100`),
-    ]);
-    let status = { state: 'unknown', text: `${C.CHECK_TEXT.unknown} (the head commit is unknown)`, runUrl: null };
-    if (checks && checks.ok) status = C.checkStatus(checks.data);
-    else if (checks) status = { state: 'unknown', runUrl: null,
-      text: `${C.CHECK_TEXT.unknown} (${checks.status ? `GitHub answered HTTP ${checks.status}` : 'GitHub could not be reached'})` };
-    let notes = [];
-    if (status.state === 'fail' && status.runId) {
-      try {
-        notes = await C.loadAnnotations(api, status.runId);   // every page of them
-      } catch (e) {
-        if (e && (e.message === STALE || e.message === 'signed out')) throw e;
-        notes = null;
-      }
-    }
-    const pages = sha && files ? C.previewPages(files, await headRegistries(sha, files)) : [];
-    const access = await accessRegistry();                 // main's data/graph/edit-access.json: the project editors for Approve
-    const vercel = comments && comments.ok ? C.vercelCommentUrl(comments.data) : null;
-    // plan-u5: a proposal with a TRUSTED edit-by-edit record (the go-live engine's rule: may approve one of its
-    // pages, not the author, no commit on it) is not merged whole: no Merge
-    const partial = (list) => Object.assign(list.slice(), { partial: true });
-    const everyComment = comments && comments.ok && Array.isArray(comments.data) && comments.data.length >= 100
-      ? await allComments(n).catch((e) => { if (quiet(e)) throw e; return partial(comments.data); })
-      : (comments && comments.ok && Array.isArray(comments.data) ? comments.data : partial([]));
-    const hasRecords = await trustedRecordExists(p, files, everyComment, access);
-    put([
-      title, note, prFacts(p, n, files), badgeNotes(files),
-      ...statusBlock(status, notes),
-      vercel ? h('p', null, link(vercel, 'Vercel\'s preview comment'), ' (a deploy preview, when Vercel made one)') : null,
-      showOnPage(n, sha, files, pages, C.previewScope(files)),
-      actionsBlock(p, n, sha, epoch, status, files, access, hasRecords),
-      h('h3', { class: 'hc-card-title', text: 'Files changed' }), filesBlock(files),
-    ]);
-    markPage();
-  }
-
-  /* The Guide tab: today's Help with Editor mode's steps (#/private of
-     /cms/ is one line here). */
-  function viewHelp(r, epoch) {
-    const step = (b, ...rest) => h('li', null, h('b', { text: b }), ...rest);
-    paint(epoch, [
-      h('h2', { text: 'How editing works here' }),
-      h('ol', { class: 'hc-guide' },
-        step('Editor on', ' (the switch in the bubble at the top right) shows this page in a frame you can edit. Your changes stay '
-          + 'a draft in this browser (even when you close the tab) until you send them for review; signing out deletes them.'),
-        step('Click a block', ' and type right in the page: new text is underlined and removed text struck through, in orange (yellow in dark mode). '
-          + 'Select words for Bold, Italic, inline code or a Link. Tables and tabs open as Markdown in place.'),
-        step('Undo and Redo', ': Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, or the two arrows in the bubble, step back and forward '
-          + 'through your changes, one burst of typing at a time; the marks come back with the text. Typing done before the '
-          + 'page is drawn again (after a block is added or moved) undoes as one step.'),
-        step('Images', ': click an image to replace it with a new file (it is uploaded for you), or drag it to another '
-          + 'place; with the image focused, Alt+Up and Alt+Down move it too.'),
-        step('People and data', ': the Team page\u2019s people are changed on the Team page itself (drag a card, click it for '
-          + 'its menu, or the "+" card); other data files on GitHub. "Proposals" in the bubble opens the list of proposals; '
-          + '"Back to the page" or Escape closes it.'),
-        step('Press + between two blocks', ' to add a new block there.'),
-        step('Send for review', ' (in the bubble) turns your changes into a proposal: a pull request on GitHub, checked by '
-          + 'the site\'s gate.'),
-        step('Nothing is live', ' until someone with write access approves it. The ', link('#/', 'Proposals list'),
-          ' shows who proposed what, where, when; click one to see its page with its changes; a merge can be undone on GitHub.'),
-        step('Open proposals are drawn on the page', ' (View: "Show others\u2019 suggestions"), each person in their own '
-          + 'colour (yours in blue); a removed block is on red, a dashed mark means main changed that block since '
-          + 'the proposal (Update from main). Click a marked block to open its card beside the page.'),
-        step('View', ' holds your own settings for the page. They stay in this browser.')),
-      h('p', { class: 'cms-muted', text: 'Per-line diff inside code blocks is out of v1: a changed code block is shown '
-        + 'whole, the old one and then the new one.' }),
-      h('p', { class: 'cms-muted', text: 'Private (members-only) pages are not in the editor yet.' }),
-      h('h2', { text: 'Roles' }),
-      h('dl', { class: 'cms-facts' },
-        h('dt', { text: 'Admin' }), h('dd', { text: 'everything, and managing who can edit' }),
-        h('dt', { text: 'Maintainer' }), h('dd', { text: 'reviews and merges proposals' }),
-        h('dt', { text: 'Editor' }), h('dd', { text: 'edits pages and proposes changes; approves and merges only on the '
-          + 'pages of a project it can edit (commits in the project\'s repos, or added by an admin), never its own proposal' }),
-        h('dt', { text: 'Read-only' }), h('dd', { text: 'reads proposals and previews' })),
-      h('p', { class: 'cms-muted', text: 'A new picture also changes the shared image list, so a maintainer approves it, '
-        + 'even on a project page.' }),
-      h('p', null, 'How proposals are reviewed and merged: ', link(C.PROTOCOLS_URL, 'the maintainer protocols'), '.'),
-      h('p', null, 'Every page can also be edited on github.com: ',
-        link(`${C.GITHUB_WEB}/tree/main/content`, 'open its file and click the pencil'), '.'),
-      state.role && state.role.key === 'admin'
-        ? h('p', null, link(`${C.GITHUB_WEB}/settings/access`, 'Manage people'), ' — who can edit (GitHub settings).')
-        : null,
-    ]);
-  }
 
   /* data/setup.json, data/projects.json and data/tools.json, read the way
      js/app.js reads them (HC.fetchJSON), for the page-id -> file mapping. */
@@ -1214,20 +686,6 @@
     const m = page ? /^project\/([a-z0-9][a-z0-9-]{0,80})$/.exec(String(page.pageId)) : null;
     return m ? m[1] : null;
   };
-  /* The Changes tab's header on a project page: one line, what you can do on this project (HCCore.accessFor).
-     Hidden until the access file is read; a failed read shows nothing (unless you edit every project). */
-  function accessLine(projectId) {
-    const line = h('p', { class: 'hc-access-line', role: 'status', hidden: true });
-    const gen = sessionGen.current();
-    accessRegistry().then((doc) => {
-      if (!sessionGen.isCurrent(gen)) return;
-      const a = C.accessFor(doc, projectId, sessionLogin(), state.role);
-      if (!doc && a.why !== 'site-wide') return;
-      line.textContent = a.text;
-      line.hidden = false;
-    });
-    return line;
-  }
 
   /* The edit gate (Kyle, 2026-10-21: an Editor could change every project). Editing a project in Editor mode
      follows the same list as Approve: an Admin or Maintainer edits every project; an Editor (Write) edits a
@@ -1286,16 +744,16 @@
   function accessChanged() {
     if (ed.on && pageLocked(ed.page) && (ed.sel || ed.selected !== null)) clearSelection();
     refreshDock();
-    if (ed.on) { postEditor(); refreshChanges(); }
+    if (ed.on) postEditor();
   }
 
   // ------------------------------------------------------------ the editor ---
-  /* U7b. #/pages is the page tree (the registries' pages, as js/app.js
-     routes them, plus the four raw-JSON registries). #/edit/<page> is the
-     editor: the file's text at the head of main (or of my own open
-     proposal), snippet buttons, and the live preview — the sandboxed site
-     served the draft through the bridge, reloaded with a fresh nonce a moment
-     after each change. A draft lives in memory and in this browser's
+  /* U7b, trimmed by U0b (plan D18): the thin editor page stays for two things only. #/edit/<page> is the
+     whole page as Markdown ("Edit whole page as Markdown" in the account menu, and a page or block the page
+     itself cannot edit), and #/edit/data/<registry> or #/edit/data/projects/<id> a raw data file; #/edit alone
+     lists those data files (the account menu's "Data files"). The editor: the file's text at the head of main
+     (or of my own open proposal), snippet buttons, and the live preview — the page frame, served the draft
+     from memory, reloaded with a fresh nonce a moment after each change. A draft lives in memory and in this browser's
      localStorage (U4b: it survives a closed tab), one store per login
      (HCCore.draftsKey), keyed by page, with its base sha; leaving a page whose
      draft is not proposed asks first; Sign out deletes the login's drafts
@@ -1378,123 +836,41 @@
 
   const sameBase = (a, b) => a.base.ref === b.base.ref;
 
-  const backToChanges = () => h('p', { class: 'hc-back' }, link('#/pages', '← Changes'));
-
-  /* The Changes tab's home: the picked block's editor, my drafts (Propose…
-     / Discard), the four registries as raw JSON, New project / New person. */
-  function viewChanges(r, epoch) {
-    const panel = changesPanel();
-    const projectFacts = (state.regs && state.regs.projects && Array.isArray(state.regs.projects.projects)
-      ? state.regs.projects.projects : []).filter((x) => x && typeof x.id === 'string' && C.PROJECT_ID_RE.test(x.id))
-      .map((x) => ({ id: x.id, name: typeof x.name === 'string' && x.name.trim() ? x.name.trim() : x.id }));
-    fillBase(panel.slot, epoch);
-    draftList = h('section', { class: 'hc-drafts', 'aria-label': 'Your drafts' });
-    drawDraftList(true);
-    if (!paint(epoch, [
-      panel.node,
-      draftList,
-      h('h2', { text: 'Registries (raw JSON)' }),
-      h('ul', { class: 'hc-links' }, ...C.RAW_REGISTRIES.map((f) => h('li', null, link(`#/edit/${f.slice(0, -5)}`, f)))),
-      // each project's own facts (2026-10-14): its editors (data/graph/edit-access.json) edit and approve these; the list above stays admin-owned
-      projectFacts.length ? h('h2', { text: 'Project facts (each project\'s own file)' }) : null,
-      projectFacts.length ? h('ul', { class: 'hc-links' }, ...projectFacts.map((x) => h('li', null,
-        link(`#/edit/data/projects/${x.id}`, `${x.name} — ${C.projectFactsFile(x.id)}`)))) : null,
-      // the image library (upload, rename, delete); a page's own images are replaced in the page itself
-      h('h2', { text: 'Images' }),
-      h('p', null, link('#/media', 'The image library'), ' — on a page, click an image to replace it, or drag it to move it.'),
-      canEdit() ? h('h2', { text: 'New' }) : null,
-      canEdit() ? h('p', { class: 'cms-new-links' }, link('#/new/project', 'New project'), ' · ',
-        link('#/new/person', 'New person')) : null,
-    ])) return;
-    const sel = ed.pendingSelect;
-    ed.pendingSelect = null;
-    if (sel && panel.ta) {
-      panel.ta.focus();
-      panel.ta.setSelectionRange(sel.start, sel.end);
-    }
-  }
-
-  /* The page's "Start from" picker goes in once my open proposals are
-     known (none: no picker, every change starts a new proposal). */
-  function fillBase(slot, epoch) {
-    const page = ed.page;
-    if (!slot || !page) return;
-    ownOpen().then((own) => {
-      if (epoch !== routeEpoch || !samePage(page, ed.page) || !own.length || !canEditPage(page)) return;
-      slot.replaceChildren(pageBasePicker(page, own));
-    }).catch(shown);
-  }
-
-  let draftList = null;          // the Changes tab's draft list, while drawn
-  let draftKeys = null;
-
-  /* My changed drafts; redrawn only when the set of them changed (a
-     keystroke does not rebuild an open Propose panel). */
-  function drawDraftList(force) {
-    refreshDock();
-    if (!draftList) return;
-    const list = canEdit() ? drafts.dirty() : [];
-    const keys = list.map((d) => d.key).join('\n');
-    if (!force && keys === draftKeys) return;
-    draftKeys = keys;
-    draftList.replaceChildren(...(list.length ? [h('h2', { text: 'Your drafts, not proposed yet' }),
-      h('ul', { class: 'hc-draft-list' }, ...list.map(draftRow))] : []));
-  }
-
-  function draftRow(d) {
-    const slot = h('div', { class: 'hc-propose-slot' });
-    const problem = problemLine();
-    const propose = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'propose-draft' }, 'Propose…');
-    const discard = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'discard-draft' }, 'Discard');
-    propose.addEventListener('click', async () => {
-      propose.disabled = true;
-      try {
-        openPropose(d, routeEpoch, slot, await myProposals());
-      } catch (e) {
-        if (!quiet(e)) showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
-      } finally {
-        propose.disabled = false;
-      }
-    });
-    discard.addEventListener('click', () => discardDraft(d));
-    // the edit gate: a kept draft of a project you may not edit is listed (to discard), never proposed
-    const mine = canEditKey(d.key);
-    return h('li', { 'data-draft': d.key },
-      h('span', { class: 'hc-draft-label', text: d.label }),
-      ...Object.keys(d.files).map((f) => h('code', { text: f })),
-      d.base.number ? h('span', { class: 'cms-meta', text: `for your proposal #${d.base.number}` }) : null,
-      mine ? null : h('p', { class: 'cms-muted', 'data-draft-locked': true, text: C.ACCESS_LOCKED_TEXT }),
-      h('div', { class: 'cms-action-row' }, mine ? propose : null, discard), problem, slot);
-  }
-
-  function discardDraft(d) {
-    if (!window.confirm(C.DISCARD_TEXT)) return;
-    drafts.remove(d.key);
-    chosenBase.delete(d.key);
-    if (ed.draft && ed.draft.key === d.key) clearSelection();
-    route();
-    frameTo(ed.route, false);
-  }
+  const DATA_HASH = '#/edit';
+  const backToData = () => h('p', { class: 'hc-back' }, link(DATA_HASH, '← Data files'));
 
   function cannotEdit(epoch, pageId) {
-    paint(epoch, [backToChanges(), h('h1', { text: 'Not editable here' }),
-      h('p', null, `The editor has no page "${pageId}". `, link('#/pages', 'Back to Changes'),
+    paint(epoch, [backToData(), h('h1', { text: 'Not editable here' }),
+      h('p', null, `The editor has no page "${pageId}". `, link(DATA_HASH, 'Back to the data files'),
         ', or ', link(`${C.GITHUB_WEB}/tree/main`, 'edit the repository on github.com'), '.')]);
+  }
+
+  /* #/edit: the raw data files (the account menu's "Data files", U0b): the registries, then each project's
+     own facts file (2026-10-14: its editors, data/graph/edit-access.json, edit and approve these; the index
+     stays admin-owned). The list the old Changes tab held. */
+  async function viewDataFiles(r, epoch) {
+    const regs = await registries();
+    const projectFacts = (regs && regs.projects && Array.isArray(regs.projects.projects) ? regs.projects.projects : [])
+      .filter((x) => x && typeof x.id === 'string' && C.PROJECT_ID_RE.test(x.id))
+      .map((x) => ({ id: x.id, name: typeof x.name === 'string' && x.name.trim() ? x.name.trim() : x.id }));
+    paint(epoch, [
+      h('h2', { text: 'Registries (raw JSON)' }),
+      h('ul', { class: 'hc-links' }, ...C.RAW_REGISTRIES.map((f) => h('li', null, link(`${DATA_HASH}/${f.slice(0, -5)}`, f)))),
+      projectFacts.length ? h('h2', { text: 'Project facts (each project\'s own file)' }) : null,
+      projectFacts.length ? h('ul', { class: 'hc-links' }, ...projectFacts.map((x) => h('li', null,
+        link(`${DATA_HASH}/data/projects/${x.id}`, `${x.name} — ${C.projectFactsFile(x.id)}`)))) : null,
+      h('p', null, link(`${C.GITHUB_WEB}/tree/main/data`, 'Data files on GitHub')),
+    ]);
   }
 
   async function viewEdit(r, epoch) {
     const pageId = r.params.pageId;
+    if (pageId === undefined) { await viewDataFiles(r, epoch); return; }
     const kind = C.editKind(pageId);
     const regs = await registries();
     const file = kind ? C.editPath(pageId, regs) : null;
     const route = kind ? C.routeForPage(pageId, regs) : null;
     if (!file || !route) { cannotEdit(epoch, pageId); return; }
-    if (kind === 'page') {
-      // a content page is edited where it stands: go there, the Changes tab edits its blocks
-      if (currentRoute() !== route) window.location.hash = `#${route}`;
-      trayGo('#/pages');
-      return;
-    }
     const meta = { label: kind === 'registry' ? file
       : (C.pageList(regs).find((pg) => pg.pageId === pageId) || {}).title || pageId, route };
     paint(epoch, [h('h1', { text: `Edit: ${meta.label}` }), h('p', { class: 'cms-muted', text: 'Loading the page…' })]);
@@ -1502,16 +878,19 @@
     const projectId = projectOfKey(pageId);
     if (projectId && canEdit()) await accessSettled();
     const editable = canEditKey(pageId);
-    let d = editable ? drafts.get(pageId) : null;
+    // the whole page as Markdown edits the SAME draft the page on screen edits in place (its undo history too)
+    const onScreen = kind === 'page' && ed.draft && ed.draft.key === pageId ? ed.draft : null;
+    let d = editable ? onScreen || drafts.get(pageId) : null;
     // an unchanged draft is not kept: the page opens at the base's newest head
-    if (d && !C.isDirty(d)) { drafts.remove(pageId); d = null; }
+    if (d && !C.isDirty(d) && d !== onScreen) { drafts.remove(pageId); d = null; }
     const own = editable ? await myProposals() : [];
     if (!d) d = await loadDraft(pageId, meta, [file], baseFor(pageId, own));
     if (d.originals[file] === null) throw new Error(`${file} is not on ${d.base.ref}`);
+    if (kind === 'page' && editable && ed.page && ed.page.pageId === pageId) ed.draft = d;
     const nodes = editorPage(d, file, kind, editable, epoch, own);
     if (projectId && canEdit() && !editable) {
       const name = (C.pageList(regs).find((pg) => pg.pageId === `project/${projectId}`) || {}).title || projectId;
-      nodes.splice(2, 0, accessLockNote(projectAccess(projectId), projectId, name));
+      nodes.splice(nodes.findIndex((n) => n && n.tagName === 'H1') + 1, 0, accessLockNote(projectAccess(projectId), projectId, name));
     }
     if (!paint(epoch, nodes)) return;
     editing = { key: pageId, hash: trayHash };
@@ -1542,7 +921,7 @@
     const problem = h('p', { class: 'cms-problem', 'data-problem': '', role: 'alert', hidden: true });
     const stateLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status' });
     const proposeBtn = editable ? h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'propose' },
-      'Propose…') : null;
+      'Send for review') : null;
     const discardBtn = editable ? h('button', { type: 'button', class: 'cms-btn', 'data-action': 'discard' },
       'Discard changes') : null;
     let bad = null;
@@ -1581,23 +960,24 @@
       changed();
     }
 
-    const tools = editable && kind === 'page' ? snippetBar(ta, replaceText, d) : null;
+    const tools = editable && kind === 'page' ? snippetBar(ta, replaceText) : null;
     if (discardBtn) {
       discardBtn.addEventListener('click', () => {
         if (C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) return;
         drafts.remove(d.key);
         editing = null;
+        if (ed.draft === d) { clearSelection(); frameTo(ed.route, false); }   // the page on screen drops it too
         route();
       });
     }
-    const slot = h('div', { id: 'cms-propose-slot' });
-    if (proposeBtn) proposeBtn.addEventListener('click', () => openPropose(d, epoch, slot, own));
+    const slot = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
+    if (proposeBtn) proposeBtn.addEventListener('click', () => { sendDraft(d, { go: proposeBtn, result: slot }).catch(shown); });
     check();
     const isNew = d.originals[file] === null;
 
     const ids = kind === 'registry' ? C.lockedIds(file, safeParse(d.originals[file])) : [];
     const nodes = [
-      backToChanges(),
+      kind === 'registry' ? backToData() : null,
       h('h1', { text: d.key.indexOf('new/') === 0 ? d.label : `Edit: ${d.label}` }),
       isNew ? h('p', { class: 'cms-meta' }, h('code', { text: file }), ' · a new file')
         : h('p', { class: 'cms-meta' }, h('code', { text: file }), ' · ', link(C.pencilUrl(file), 'edit on github.com instead')),
@@ -1626,10 +1006,9 @@
     try { return JSON.parse(text); } catch (e) { return null; }
   }
 
-  /* Note box, warning, tabs, an internal link picked from the page tree,
-     and "Image from Media" (U9): the chooser opens under the toolbar and
-     "Insert into page" writes ![alt](url) at the cursor of draft d's text. */
-  function snippetBar(ta, replaceText, d) {
+  /* Note box, warning, tabs and an internal link picked from the page tree, at the cursor of the text. (U0b: the
+     "Image from Media" chooser went with the image library; an image is added with "+" Image in the page.) */
+  function snippetBar(ta, replaceText) {
     const btn = (kind, label) => h('button', { type: 'button', class: 'cms-btn', 'data-snippet': kind }, label);
     const kinds = Object.keys(C.SNIPPET_CATALOG).filter((k) => !C.SNIPPET_CATALOG[k].media);
     const buttons = kinds.map((k) => btn(k, C.SNIPPET_CATALOG[k].label));
@@ -1650,14 +1029,8 @@
       const md = C.linkMarkdown(pg, ta.value.slice(a, b));
       replaceText(ta.value.slice(0, a) + md + ta.value.slice(b), a + md.length, a + md.length);
     });
-    const slot = h('div', { class: 'cms-media-slot' });
-    const media = mediaToggle('Image from Media', slot, () => mediaPanel({ mode: 'insert', baseOf: () => (d ? d.base : MAIN_BASE),
-      onInsert(md) {
-        const out = C.insertText(ta.value, ta.selectionStart, ta.selectionEnd, md);
-        replaceText(out.text, out.selStart, out.selEnd);
-      } }));
     return h('div', null, h('div', { class: 'cms-snippets', role: 'toolbar', 'aria-label': 'Insert' },
-      ...buttons, picker, linkBtn, media), slot);
+      ...buttons, picker, linkBtn));
   }
 
   /* "Start from": the live site (a new proposal) or one of my open
@@ -1675,40 +1048,23 @@
       const hit = own.find((p) => String(p.number) === sel.value);
       drafts.remove(d.key);
       if (hit) chosenBase.set(d.key, { number: hit.number }); else chosenBase.delete(d.key);
+      if (ed.draft && ed.draft.key === d.key) clearSelection();   // the page on screen lets go of the old base too
       editing = null;
       route();
     });
     return h('p', { class: 'cms-base' }, h('label', null, 'Start from: ', sel));
   }
 
-  /* The Propose panel under the editor: a summary (the PR title), the
-     drafts that go in (every changed draft on the same base), what refuses
-     them, and one button — "Propose" (a new branch and PR) or "Add to
-     proposal #n" (one more commit on my proposal's branch). */
-  function openPropose(d, epoch, slot, own) {
-    // the edit gate: a draft of a project you may not edit never rides along in a proposal
+  /* Send for review (U0b, plan D18: the propose form and the Send box are gone; U2 builds the one-click send with
+     its generated title). Every changed draft on d's base that I may edit goes in one proposal — the edit gate: a
+     draft of a project I may not edit never rides along — titled "Edit <label>" (a new project: its label), or
+     one more commit on my proposal #n when d builds on it. ui: {go, result} (the thin editor page's button and
+     its result line) or null (the bubble: the outcome is said on its status line). */
+  async function sendDraft(d, ui) {
+    const own = await myProposals();
     const group = () => drafts.dirty().filter((o) => sameBase(o, d) && canEditKey(o.key));
-    const plan = C.collectProposal(group());
-    const problems = plan.problems.concat(stillOpen(d, own) ? [] : [closedText(d)]);
-    const box = h('input', { type: 'text', 'data-field': 'summary', maxlength: 120,
-      'aria-label': 'What this proposal does' });
-    box.value = d.key.indexOf('new/') === 0 ? d.label : `Edit ${d.label}`;
-    const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'send-proposal' },
-      d.base.number ? `Add to proposal #${d.base.number}` : 'Propose');
-    go.disabled = problems.length > 0;
-    const result = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
-    go.addEventListener('click', () => sendProposal(d, { box, go, result, group, own, epoch }));
-    const n = plan.changes.length;
-    slot.replaceChildren(h('section', { class: 'cms-propose cms-panel', 'aria-label': 'Propose' },
-      h('h2', { text: d.base.number ? `Add to your proposal #${d.base.number}` : 'Propose these changes' }),
-      h('label', null, 'What does this change do? (the proposal\'s title on GitHub)', box),
-      h('p', { text: `What goes in (${n} file${n === 1 ? '' : 's'}):` }),
-      h('ul', null, ...plan.pages.map((pg) => h('li', null, `${pg.label} — `, h('code', { text: pg.file })))),
-      problems.length ? h('ul', { class: 'cms-problem', role: 'alert' }, ...problems.map((t) => h('li', { text: t }))) : null,
-      h('p', { class: 'cms-muted', text: d.base.number
-        ? 'This adds one commit to your proposal. Its reviewers see the change there.'
-        : 'This makes one commit on a new branch and opens a proposal on GitHub. Someone with write access reviews it and merges it.' }),
-      h('div', { class: 'cms-action-row' }, go), result));
+    return sendProposal(d, { summary: d.key.indexOf('new/') === 0 ? d.label : `Edit ${d.label}`,
+      go: ui && ui.go ? ui.go : null, result: ui && ui.result ? ui.result : null, group, own });
   }
 
   const stillOpen = (d, own) => !d.base.number || own.some((p) => p.number === d.base.number && p.branch === d.base.ref);
@@ -1720,18 +1076,19 @@
     const plan = C.collectProposal(ui.group());       // the text as it is now
     const problems = plan.problems.concat(stillOpen(d, ui.own) ? [] : [closedText(d)]);
     const show = (text) => {
+      if (!ui.result) { say(text, 'error'); return; }
       ui.result.textContent = text;
       ui.result.hidden = false;
       ui.result.classList.toggle('is-error', true);
     };
     if (problems.length) { show(`Nothing was sent: ${problems.join(' ')}`); return; }
     proposing = true;
-    ui.go.disabled = true;
+    if (ui.go) ui.go.disabled = true;
     const gen = sessionGen.current();
     let out;
     try {
       out = await C.runPropose(state.client, {
-        login: state.session.login, summary: ui.box.value, now: Date.now(), origin: window.location.origin,
+        login: state.session.login, summary: ui.summary, now: Date.now(), origin: window.location.origin,
         target: d.base.number ? { branch: d.base.ref, number: d.base.number } : null,
         changes: plan.changes, pages: plan.pages,
       });
@@ -1742,7 +1099,7 @@
     }
     if (!sessionGen.isCurrent(gen)) return;
     if (out.status === 401) { endSession(out.message); return; }
-    if (!out.ok) { ui.go.disabled = false; show(out.message); return; }
+    if (!out.ok) { if (ui.go) ui.go.disabled = false; show(out.message); return; }
     const sent = ui.group().map((o) => o.key);
     for (const o of ui.group()) { drafts.remove(o.key); chosenBase.delete(o.key); }
     editing = null;
@@ -1750,83 +1107,43 @@
       clearSelection();
       frameTo(ed.route, false);
     }
+    // the review page that opened here is gone (U0b): the bubble hears the number (HCDock.sent; U2 fills it)
+    D.sent(out.number);
     if (out.signedOut) {
       // the proposal is open; only the sign-in ended (after the PR opened)
-      trayGo(`#/review/${out.number}`);
       endSession(`${out.message} Your sign-in has ended. Please sign in again.`);
       return;
     }
-    if (ui.epoch !== routeEpoch) { say(out.message); return; }
-    flash = { number: out.number, text: out.message, ok: true };
-    trayGo(`#/review/${out.number}`);
+    say(out.message);
+    if (ed.trayOpen) route();           // the thin editor page shows the file as it is now
   }
 
-  // #/new/project and #/new/person.
-  async function viewNew(r, epoch) {
-    if (r.params.kind !== 'project' && r.params.kind !== 'person') { viewNotFound(r, epoch); return; }
-    const what = r.params.kind;
-    if (!canEdit()) {
-      paint(epoch, [backToChanges(), h('h1', { text: `New ${what}` }), h('p', { class: 'cms-muted' },
-        `View only: adding a ${what} needs write access to this site's repository. You can still `,
-        link(C.pencilUrl(what === 'project' ? 'data/projects.json' : 'data/people.json'),
-          'propose a change on github.com'), '.')]);
-      return;
-    }
-    const regs = await registries();
-    if (what === 'project') await newProjectPage(epoch); else await newPersonPage(epoch, regs);
+
+
+  /* ---- kept for the units that rebuild the New project and New person flows in place (U0b) ----
+     The #/new/project and #/new/person forms are gone; what they knew stays here as named helpers
+     (HCEditor.helpers): U6's "+ New project" dialog and U5's "+ New person" build on them. */
+
+  /* The New project form: its fields in order (the keys HCCore.newProjectDraft reads), the statuses a project may
+     have, and the values a blank form starts with. Pure. */
+  function newProjectForm() {
+    return Object.freeze({
+      fields: Object.freeze(['id', 'name', 'status', 'tagline', 'repos', 'story']),
+      statuses: Object.freeze(C.PROJECT_STATUSES.slice()),
+      defaults: Object.freeze({ id: '', name: '', status: 'active', tagline: '', repos: '', story: '## What it is\n\n' }),
+    });
   }
 
-  const field = (tag, k, attrs) => h(tag, Object.assign({ 'data-field': k }, tag === 'input' ? { type: 'text' } : {}, attrs));
-  const labelled = (text, el, hint) => h('label', null, text, el, hint ? h('span', { class: 'cms-hint', text: hint }) : null);
-  const problemLine = () => h('p', { class: 'cms-problem', 'data-problem': '', role: 'alert', hidden: true });
-  const showProblem = (el, text) => { el.textContent = text || ''; el.hidden = !text; };
-
-  /* A new project: the form, then (once it makes a draft) the story in the
-     editor with its preview and Propose. One draft, two files. */
-  async function newProjectPage(epoch) {
-    const d = drafts.get('new/project');
-    if (d && C.isDirty(d)) {
-      const md = Object.keys(d.files).find((p) => /\.md$/.test(p));
-      const facts = Object.keys(d.files).find((p) => C.PROJECT_FACTS_FILE_RE.test(p));
-      const own = d.base.number ? await myProposals() : [];   // is my proposal still open?
-      if (!paint(epoch, [backToChanges(), h('p', { class: 'cms-muted', text: `This draft adds ${md}, its facts file ${facts} and `
-        + 'one entry to data/projects.json. To change the entry, discard it and fill the form again.' })]
-        .concat(editorPage(d, md, 'page', true, epoch, own)))) return;
-      editing = { key: d.key, hash: trayHash };
-      return;
-    }
-    const own = await myProposals();
-    const f = {
-      base: field('select', 'base', { 'aria-label': 'Start from' }),
-      id: field('input', 'id', { autocomplete: 'off' }), name: field('input', 'name'),
-      status: field('select', 'status', null, null),
-      tagline: field('input', 'tagline'), repos: field('textarea', 'repos', { rows: 3 }),
-      story: field('textarea', 'story', { rows: 10 }),
-    };
-    f.base.appendChild(h('option', { value: '' }, 'the live site (a new proposal)'));
-    for (const p of own) f.base.appendChild(h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`));
-    f.base.value = '';
-    for (const s of C.PROJECT_STATUSES) f.status.appendChild(h('option', { value: s }, s));
-    f.status.value = 'active';
-    f.story.value = '## What it is\n\n';
-    const problem = problemLine();
-    const make = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'make-draft' },
-      'Make the draft');
-    make.addEventListener('click', () => makeProjectDraft(f, own, problem, make, epoch));
-    paint(epoch, [
-      backToChanges(),
-      h('h1', { text: 'New project' }),
-      h('p', { class: 'cms-muted', text: 'A project is one entry in data/projects.json (its id and its add and remove lists), its facts file '
-        + 'data/projects/<id>.json and one page of Markdown. A new project needs a site admin\'s approval; after that its editors '
-        + 'look after it. The draft stays in this browser until you propose it.' }),
-      h('div', { class: 'cms-form' },
-        own.length ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
-        labelled('Id', f.id, 'The page address, /projects/<id>: lowercase letters, digits and dashes. It cannot be changed later.'),
-        labelled('Name', f.name), labelled('Status', f.status),
-        labelled('Tagline', f.tagline, 'One line under the name.'),
-        labelled('Repositories', f.repos, 'One name per line, as on github.com/HippoCampusRobotics. Each repository belongs to one project.'),
-        labelled('Story (Markdown)', f.story), problem, h('div', { class: 'cms-action-row' }, make)),
-    ]);
+  /* The New person form over data/people.json's text: the lists a person may join (HCCore.personGroups), the
+     fields in order (the photo must be an image of the site's list, check.py 6c: picked, never typed; photo and
+     link are optional) and the list a blank form starts in. Pure. */
+  function personFields(peopleText) {
+    const groups = C.personGroups(peopleText);
+    return Object.freeze({
+      groups,
+      fields: Object.freeze(['group', 'name', 'title', 'photo', 'link']),
+      defaultGroup: groups.length ? groups[0].id : null,
+    });
   }
 
   /* The projects (index + each facts file) at a commit: the draft's base, so a repository a project on my
@@ -1845,141 +1162,32 @@
     return C.mergeProjects(index, facts);
   }
 
-  async function makeProjectDraft(f, own, problem, make, epoch) {
-    const form = {};
-    for (const k of Object.keys(f)) form[k] = f[k].value;
-    const hit = own.find((p) => String(p.number) === form.base);
-    const id = String(form.id).trim();
-    make.disabled = true;
-    try {
-      const files = ['data/projects.json'].concat(C.PROJECT_ID_RE.test(id) ? [C.projectFactsFile(id), `content/projects/${id}.md`] : []);
-      const d = await loadDraft('new/project', { label: `New project: ${String(form.name).trim() || id}`,
-        route: `/projects/${id}` }, files, hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
-      const out = C.newProjectDraft(form, d.originals['data/projects.json'], await projectsAt(d.base.sha, d.originals['data/projects.json']));
-      const md = `content/projects/${out.id}.md`;
-      if (out.problem) { showProblem(problem, out.problem); return; }
-      for (const f2 of [md, C.projectFactsFile(out.id)]) {
-        if (d.originals[f2] !== null) { showProblem(problem, `${f2} already exists on the site — pick another id`); return; }
-      }
-      if (epoch !== routeEpoch) return;
-      d.files = out.files;
-      drafts.put(d);
-      route();
-    } catch (e) {
-      if (e && (e.message === 'signed out' || e.message === STALE)) return;
-      showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
-    } finally {
-      make.disabled = false;
+  /* A new project's draft from the form's values (newProjectForm's fields) on `base` ({ref, number}: main, or my
+     open proposal's branch): one draft, key new/project, of three files — data/projects.json with the new entry,
+     the facts file data/projects/<id>.json and content/projects/<id>.md (HCCore.newProjectDraft). A repository
+     another project already holds at that base, a bad field or an id whose files exist is refused in words.
+     Nothing is stored or sent. -> {d} | {problem} */
+  async function makeProjectDraft(form, base) {
+    const id = String((form && form.id) || '').trim();
+    const target = base && base.number ? { ref: base.ref, number: base.number } : MAIN_BASE;
+    const files = ['data/projects.json'].concat(C.PROJECT_ID_RE.test(id) ? [C.projectFactsFile(id), `content/projects/${id}.md`] : []);
+    const d = await loadDraft('new/project', { label: `New project: ${String((form && form.name) || '').trim() || id}`,
+      route: `/projects/${id}` }, files, target);
+    const out = C.newProjectDraft(form, d.originals['data/projects.json'], await projectsAt(d.base.sha, d.originals['data/projects.json']));
+    if (out.problem) return { problem: out.problem };
+    for (const f2 of [`content/projects/${out.id}.md`, C.projectFactsFile(out.id)]) {
+      if (d.originals[f2] !== null) return { problem: `${f2} already exists on the site — pick another id` };
     }
-  }
-
-  /* A new person: one entry added to the data/people.json draft. With no
-     changed people draft, "Start from" picks the live site (a new proposal)
-     or one of my open proposals (one more commit on its branch), like New
-     project; a changed draft already open decides the base itself. */
-  async function newPersonPage(epoch, regs) {
-    const FILE = 'data/people.json';
-    const key = 'data/people';
-    const meta = { label: FILE, route: C.routeForPage(key, regs) };
-    let d = drafts.get(key);
-    const open = Boolean(d && C.isDirty(d));
-    const own = open ? [] : await myProposals();
-    if (!open) d = await loadDraft(key, meta, [FILE], baseFor(key, own));
-    const groups = C.personGroups(d.files[FILE]);
-    const f = { group: field('select', 'group') };
-    for (const g of groups) f.group.appendChild(h('option', { value: g.id }, g.title));
-    if (groups.length) f.group.value = groups[0].id;
-    if (ed.addGroup && groups.some((g) => g.id === ed.addGroup)) f.group.value = ed.addGroup;   // R5: the "+" card's list
-    ed.addGroup = null;
-    for (const k of ['name', 'title', 'link']) f[k] = field('input', k);
-    if (!open && own.length) {
-      f.base = field('select', 'base', { 'aria-label': 'Start from' });
-      f.base.appendChild(h('option', { value: '' }, 'the live site (a new proposal)'));
-      for (const p of own) f.base.appendChild(h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`));
-      f.base.value = d.base.number ? String(d.base.number) : '';
-    }
-    // a photo must be in the site's image list (check.py 6c): it is picked from Media, never typed
-    f.photo = { value: null };
-    const photoLine = h('span', { class: 'cms-hint', 'data-photo': '', text: 'No photo: the card shows none.' });
-    const mediaSlot = h('div', { class: 'cms-media-slot' });
-    const personBase = () => {
-      if (!f.base) return d.base;
-      const hit = own.find((p) => String(p.number) === f.base.value);
-      return hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE;
-    };
-    const media = mediaToggle('Photo from Media', mediaSlot, (close) => mediaPanel({ mode: 'photo', folder: 'people',
-      baseOf: personBase,
-      onUse(entry) {
-        f.photo.value = entry.url;
-        photoLine.textContent = `Photo: ${entry.public_id}`;
-        close();
-      } }));
-    const problem = problemLine();
-    const add = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'add-person' },
-      'Add to the people draft');
-    add.addEventListener('click', () => addPerson(f, d, own, meta, problem, add, epoch));
-    const where = open ? (d.base.number ? `your people draft for proposal #${d.base.number}`
-      : 'your people draft (a new proposal)') : 'the data/people.json draft';
-    paint(epoch, [
-      backToChanges(),
-      h('h1', { text: 'New person' }),
-      h('p', { class: 'cms-muted', text: `A person is one card on the About page. This adds them to ${where}; `
-        + 'you see it, and propose it, on the next page.' }),
-      h('div', { class: 'cms-form' },
-        f.base ? labelled('Start from', f.base, 'Your open proposal gets one more commit; the live site starts a new proposal.') : null,
-        labelled('Group', f.group), labelled('Name', f.name), labelled('Title', f.title, 'For example "Research Associate". May be empty.'),
-        h('div', { class: 'cms-photo' }, h('span', { class: 'cms-label', text: 'Photo (optional)' }), media, photoLine),
-        mediaSlot,
-        labelled('Link (optional)', f.link, 'Their page, http:// or https://.'),
-        problem, h('div', { class: 'cms-action-row' }, add)),
-    ]);
-  }
-
-  /* Adds the form's person to draft d — first reloading data/people.json
-     at my proposal's head when "Start from" picked a different base. */
-  async function addPerson(f, d, own, meta, problem, add, epoch) {
-    const FILE = 'data/people.json';
-    add.disabled = true;
-    try {
-      if (f.base && f.base.value !== (d.base.number ? String(d.base.number) : '')) {
-        const hit = own.find((p) => String(p.number) === f.base.value);
-        d = await loadDraft(d.key, meta, [FILE], hit ? { ref: hit.branch, number: hit.number } : MAIN_BASE);
-        if (epoch !== routeEpoch) return;
-      }
-      const photoProblem = f.photo.value ? await photoBaseProblem(f.photo.value, d.base) : null;
-      if (photoProblem) { showProblem(problem, photoProblem); return; }
-      const out = C.addPersonText(d.files[FILE], { group: f.group.value, name: f.name.value, title: f.title.value,
-        photo: f.photo.value, link: f.link.value });
-      if (out.problem) { showProblem(problem, out.problem); return; }
-      d.files[FILE] = out.text;
-      drafts.put(d);
-      if (d.base.number) chosenBase.set(d.key, { number: d.base.number }); else chosenBase.delete(d.key);
-      if (ed.on && ed.page && ed.page.data && ed.page.pageId === d.key) {
-        // round 2 (R5): added from the Team page's "+": back to the page, the new card on it (marked New)
-        ed.draft = d;
-        ed.peopleFocus = String(f.name.value || '').trim() || null;
-        closeTray();
-        refreshDock();
-        frameTo(ed.route, true);
-        return;
-      }
-      trayGo(`#/edit/${d.key}`);
-    } catch (e) {
-      if (e && (e.message === 'signed out' || e.message === STALE)) return;
-      showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
-    } finally {
-      add.disabled = false;
-    }
+    d.files = out.files;
+    return { d };
   }
 
   // ------------------------------------------------------------- media ---
-  /* U9. #/media lists the site's images on Cloudinary (thumbnails, a next
-     page), uploads, and renames or deletes an image only when the live site
-     does not use it. The token goes to this site's /api/media only
-     (HCCore.createMediaClient); an upload goes straight to Cloudinary with
-     the signed parameters (HCCore.runUpload). A new image is one entry of
-     the data/cloudinary-manifest.json draft, on the same base as the page
-     that uses it, so Propose sends both in one proposal. */
+  /* U9; the image library (#/media) and its chooser went in U0b (plan D18: an image is replaced or added in the
+     page). What stays: the upload path for an image in the page. The token goes to this site's /api/media only
+     (HCCore.createMediaClient); an upload goes straight to Cloudinary with the signed parameters
+     (HCCore.runUpload). A new image is one entry of the data/cloudinary-manifest.json draft, on the same base as
+     the page that uses it, so one send carries both. */
 
   const MANIFEST_META = Object.freeze({ label: C.MANIFEST_LABEL, route: '/' });
   const whereOf = (base) => (base.number ? `your proposal #${base.number}` : 'the live site');
@@ -1993,10 +1201,6 @@
     const d = drafts.get(C.MANIFEST_KEY);
     return d && C.isDirty(d) ? d : null;
   };
-  const draftAssets = () => {
-    const d = openManifestDraft();
-    return d ? C.manifestAssets(C.parseManifest(d.files[C.MANIFEST_FILE])) : [];
-  };
 
   /* The image-list draft on `base`: the changed one when it is on the same
      base, else a fresh one at that base's head. -> {d} | {problem} */
@@ -2005,23 +1209,11 @@
     if (open) {
       if (open.base.ref === base.ref) return { d: open };
       return { problem: `Your image-list draft builds on ${whereOf(open.base)}, and this page on ${whereOf(base)}. `
-        + 'Propose or discard one of them first (the image library on the Data tab can discard the image-list draft).' };
+        + 'Send or discard one of them first (the account menu\'s Data files opens the image-list draft, which can be discarded there).' };
     }
     return { d: await loadDraft(C.MANIFEST_KEY, MANIFEST_META, [C.MANIFEST_FILE], { ref: base.ref, number: base.number }) };
   }
 
-  /* The images a page on `base` may use: my changed image-list draft when
-     it is on that base; else the manifest at the base's head — the live
-     site's for main, the branch's for my open proposal (it may hold images
-     proposed there earlier). */
-  async function baseAssets(base) {
-    const open = openManifestDraft();
-    if (open && open.base.ref === base.ref) return draftAssets();
-    if (!base.number) return liveAssets();
-    const res = await apiResponse(C.contentsPath(C.MANIFEST_FILE, await headOf(base.ref)), { accept: C.RAW_MEDIA, raw: true });
-    if (!res.ok) throw new Error(`GitHub answered HTTP ${res.status} for ${C.MANIFEST_FILE}`);
-    return C.manifestAssets(C.parseManifest(res.data));
-  }
 
   const mediaClient = () => C.createMediaClient({ fetch: netFetch, token: state.session.token });
   // the one signed upload path (the Media panel and an image replaced in the page): sign, Cloudinary, manifest entry
@@ -2038,400 +1230,105 @@
     }
     return out;
   }
-  async function mediaCall(action, ...args) {
-    const gen = sessionGen.current();
-    return checked(gen, await mediaClient()[action](...args));
-  }
   const quiet = (e) => Boolean(e) && (e.message === 'signed out' || e.message === STALE);
 
-  /* A person's photo must be an image of the people draft's base (the live
-     site, my open proposal, or my changed image-list draft on that base). */
-  async function photoBaseProblem(url, base) {
-    if ((await baseAssets(base)).some((a) => a.url === url)) return null;
-    const md = openManifestDraft();
-    return md && md.base.ref !== base.ref && draftAssets().some((a) => a.url === url)
-      ? `The photo is in your image-list draft for ${whereOf(md.base)}: start from the same place, or pick another photo.`
-      : 'The photo is not an image of the site or of your image-list draft any more: pick it again.';
-  }
 
-  /* A button that opens make(close) into slot, and closes it again. */
-  function mediaToggle(label, slot, make) {
-    const btn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-open', 'aria-expanded': 'false' }, label);
-    let panel = null;
-    const close = () => {
-      if (panel) panel.remove();
-      panel = null;
-      btn.setAttribute('aria-expanded', 'false');
-    };
-    btn.addEventListener('click', () => {
-      if (panel) { close(); return; }
-      panel = make(close);
-      slot.appendChild(panel);
-      btn.setAttribute('aria-expanded', 'true');
+
+  /* The images a picker offers, from the base's list (`all`: the manifest at the base's head, or my image-list draft on it) and the live site's (`live`): every one with
+     a url, in order, each with its public id, whether the live site has it, and its label ("<id> (new: not on the
+     live site yet)" when only my draft or my proposal has it). The pure list the old image chooser drew (U0b):
+     U4's "Pick one the site has" builds on it. */
+  function mediaAssets(all, live) {
+    const onSite = new Set((Array.isArray(live) ? live : []).map((a) => a && a.public_id));
+    return (Array.isArray(all) ? all : []).filter((a) => a && typeof a.url === 'string').map((a) => {
+      const site = onSite.has(a.public_id);
+      return Object.freeze({ url: a.url, public_id: a.public_id, onSite: site,
+        label: site ? String(a.public_id) : `${a.public_id} (new: not on the live site yet)` });
     });
-    return btn;
-  }
-
-  /* The image chooser. opts: {mode: 'insert' (alt text + "Insert into
-     page" -> onInsert(markdown)) | 'photo' ("Use as photo" -> onUse(entry))
-     | 'library' (upload only), baseOf() -> the base a new image's manifest
-     entry goes on, folder (the preselected one), onUploaded()}. */
-  function mediaPanel(opts) {
-    const status = h('p', { class: 'cms-media-status', role: 'status', hidden: true });
-    const problem = problemLine();
-    const tell = (text) => { status.textContent = text || ''; status.hidden = !text; };
-    const folder = field('select', 'media-folder', { 'aria-label': 'Folder' });
-    for (const s of C.MEDIA_SUBFOLDERS) folder.appendChild(h('option', { value: s }, s));
-    folder.value = opts.folder || 'setup';
-    const file = h('input', { type: 'file', 'data-field': 'media-file', accept: C.MEDIA_TYPES.join(','), 'aria-label': 'Image file' });
-    const up = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-upload' }, 'Upload');
-    const pick = field('select', 'media-pick', { 'aria-label': 'An image the site has' });
-    const chosenBox = h('div', { class: 'cms-media-chosen', hidden: true });
-    let chosen = null;
-    let known = [];
-
-    function choose(entry) {
-      chosen = entry;
-      const thumb = C.thumbUrl(entry.url);
-      chosenBox.replaceChildren(thumb ? h('img', { class: 'cms-media-thumb', src: thumb, alt: '' }) : null,
-        h('code', { text: entry.url }));
-      chosenBox.hidden = false;
-      showProblem(problem, '');
-    }
-
-    async function fillPick() {
-      const [all, live] = await Promise.all([baseAssets(opts.baseOf()), liveAssets()]);
-      const onSite = new Set(live.map((a) => a.public_id));
-      known = all.filter((a) => typeof a.url === 'string');
-      pick.replaceChildren(h('option', { value: '' }, 'pick an image the site has…'),
-        ...known.map((a) => h('option', { value: a.url }, onSite.has(a.public_id) ? a.public_id
-          : `${a.public_id} (new: not on the live site yet)`)));
-      pick.value = chosen ? chosen.url : '';
-    }
-    pick.addEventListener('change', () => {
-      const hit = known.find((a) => a.url === pick.value);
-      if (hit) { choose(hit); tell(''); }
-    });
-
-    up.addEventListener('click', async () => {
-      showProblem(problem, '');
-      tell('');
-      const f = file.files && file.files[0];
-      const bad = C.mediaFileProblem(f);
-      if (bad) { showProblem(problem, bad); return; }
-      up.disabled = true;
-      tell('Uploading…');
-      try {
-        const md = await manifestDraftOn(opts.baseOf());
-        if (md.problem) { tell(''); showProblem(problem, md.problem); return; }
-        const live = await liveAssets();
-        const gen = sessionGen.current();
-        const out = checked(gen, await uploadImage(f, folder.value, live, md.d.files[C.MANIFEST_FILE]));
-        if (out.kind === 'problem') { tell(''); showProblem(problem, out.message); return; }
-        if (out.kind === 'duplicate') {
-          choose(out.entry);
-          tell(`This image is already ${out.where === 'site' ? 'on the site' : 'in your image-list draft'}: `
-            + `${out.entry.url}. Use that one; nothing was uploaded.`);
-        } else {
-          md.d.files[C.MANIFEST_FILE] = out.text;
-          drafts.put(md.d);
-          choose(out.entry);
-          tell(`Uploaded: ${out.entry.url}. It is in your image-list draft (${C.MANIFEST_FILE}), which goes into `
-            + 'the same proposal as the page that uses it.' + (opts.mode === 'library'
-            ? ' To show it on a page, open the page under Edit and press "Image from Media".' : ''));
-        }
-        await fillPick();
-        if (opts.onUploaded) opts.onUploaded();
-      } catch (e) {
-        if (quiet(e)) return;
-        tell('');
-        showProblem(problem, `Something went wrong: ${(e && e.message) || e}`);
-      } finally {
-        up.disabled = false;
-      }
-    });
-
-    let useRow = null;
-    if (opts.mode === 'insert') {
-      const alt = field('input', 'media-alt', { autocomplete: 'off' });
-      const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-insert' }, 'Insert into page');
-      go.addEventListener('click', () => {
-        const out = C.imageMarkdown(alt.value, chosen && chosen.url);
-        if (out.problem) { showProblem(problem, out.problem); return; }
-        showProblem(problem, '');
-        opts.onInsert(out.text);
-      });
-      useRow = h('div', { class: 'cms-form' }, labelled('Describe the image (alt text)', alt,
-        'What it shows, for people who cannot see it. Required.'), h('div', { class: 'cms-action-row' }, go));
-    } else if (opts.mode === 'photo') {
-      const go = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'media-use' }, 'Use as photo');
-      go.addEventListener('click', () => {
-        if (!chosen) { showProblem(problem, 'Pick an image first.'); return; }
-        opts.onUse(chosen);
-      });
-      useRow = h('div', { class: 'cms-action-row' }, go);
-    }
-
-    fillPick().catch((e) => { if (!quiet(e)) showProblem(problem, `The site's image list could not be read: ${(e && e.message) || e}`); });
-    return h('section', { class: 'cms-media-panel cms-panel', 'aria-label': 'Media' },
-      h('p', { class: 'cms-media-row' }, h('label', null, 'Upload to ', folder), ' ', file, ' ', up),
-      h('p', { class: 'cms-hint', text: C.SIZE_HINT_TEXT }),
-      opts.mode === 'library' ? null : h('p', { class: 'cms-media-row' }, h('label', null, 'Or use one the site has: ', pick)),
-      chosenBox, status, problem, useRow);
-  }
-
-  function sizeText(b) {
-    if (!Number.isInteger(b) || b <= 0) return '';
-    return b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
-  }
-
-  /* One image of the list: thumbnail, name, size, whether the site uses
-     it, and Rename / Delete (only for an image the live site does not use:
-     otherwise the line says to remove it from the page first). */
-  function assetTile(asset, live) {
-    let a = asset;
-    const tile = h('figure', { class: 'cms-media-tile' });
-    const line = h('p', { class: 'cms-problem', role: 'alert', hidden: true });
-    const renameBox = h('div', { class: 'cms-media-rename' });
-    const refusal = () => C.mediaChangeProblem(a.public_id, live, draftAssets());
-
-    async function remove() {
-      const why = refusal();
-      if (why) { showProblem(line, why); return; }
-      if (!window.confirm(`Delete ${a.public_id} from Cloudinary? This cannot be undone.`)) return;
-      try {
-        const out = await mediaCall('destroy', a.public_id);
-        if (!out.ok) { showProblem(line, out.message); return; }
-        tile.remove();
-      } catch (e) {
-        if (!quiet(e)) showProblem(line, `Something went wrong: ${(e && e.message) || e}`);
-      }
-    }
-
-    function openRename() {
-      const why = refusal();
-      if (why) { showProblem(line, why); return; }
-      const box = field('input', 'media-new-name', { autocomplete: 'off', 'aria-label': 'New name' });
-      box.value = a.public_id.split('/').pop();
-      const save = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-rename-save' }, 'Save the name');
-      save.addEventListener('click', async () => {
-        const slug = String(box.value).trim();
-        if (!C.MEDIA_SLUG_RE.test(slug)) { showProblem(line, 'A name is lowercase letters, digits and dashes (at most 80).'); return; }
-        const to = `${a.public_id.slice(0, a.public_id.lastIndexOf('/'))}/${slug}`;
-        if (to === a.public_id) { showProblem(line, 'That is its name already.'); return; }
-        save.disabled = true;
-        try {
-          const out = await mediaCall('rename', a.public_id, to);
-          if (!out.ok) { showProblem(line, out.message); return; }
-          a = Object.assign({}, a, { public_id: typeof out.data.public_id === 'string' ? out.data.public_id : to,
-            url: typeof out.data.url === 'string' ? out.data.url : a.url });
-          showProblem(line, '');
-          renameBox.replaceChildren();
-          draw();
-        } catch (e) {
-          if (!quiet(e)) showProblem(line, `Something went wrong: ${(e && e.message) || e}`);
-        } finally {
-          save.disabled = false;
-        }
-      });
-      showProblem(line, '');
-      renameBox.replaceChildren(h('label', null, 'New name: ', box), save);
-    }
-
-    function draw() {
-      const inUse = live.some((x) => x.public_id === a.public_id);
-      const inDraft = !inUse && draftAssets().some((x) => x.public_id === a.public_id);
-      const thumb = C.thumbUrl(a.url);
-      const ren = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-rename' }, 'Rename');
-      const del = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-delete' }, 'Delete');
-      ren.addEventListener('click', openRename);
-      del.addEventListener('click', remove);
-      const dims = Number.isInteger(a.width) && Number.isInteger(a.height) ? ` · ${a.width}×${a.height}` : '';
-      tile.setAttribute('data-asset', a.public_id);
-      tile.replaceChildren(
-        thumb ? h('img', { class: 'cms-media-thumb', src: thumb, alt: '', loading: 'lazy' })
-          : h('div', { class: 'cms-media-thumb cms-muted', text: 'no preview' }),
-        h('figcaption', null, h('code', { text: a.public_id }), h('span', { class: 'cms-meta',
-          text: `${sizeText(a.bytes)}${dims} · ${inUse ? 'on the site' : (inDraft ? 'in your image-list draft' : 'not used by the site')}` })),
-        h('div', { class: 'cms-action-row' }, ren, del), renameBox, line);
-    }
-    draw();
-    return tile;
-  }
-
-  async function viewMedia(r, epoch) {
-    if (!canEdit()) {
-      paint(epoch, [h('h1', { text: 'Media' }), h('p', { class: 'cms-muted', text: 'View only: managing the site\'s '
-        + 'images needs write access to this site\'s repository.' })]);
-      return;
-    }
-    const live = await liveAssets();
-    const grid = h('div', { class: 'cms-media-grid' });
-    const more = h('div', { class: 'cms-action-row' });
-    const listNote = h('p', { class: 'cms-muted', text: 'Loading the images…' });
-    const draftBox = h('div');
-
-    function renderDraft() {
-      const d = openManifestDraft();
-      if (!d) { draftBox.replaceChildren(); return; }
-      const before = new Set(C.manifestAssets(C.parseManifest(d.originals[C.MANIFEST_FILE])).map((a) => a.public_id));
-      const added = draftAssets().filter((a) => !before.has(a.public_id));
-      const discard = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-discard' }, 'Discard the image-list draft');
-      discard.addEventListener('click', () => {
-        if (!window.confirm('Throw away your image-list draft? The images stay on Cloudinary, unused; you can delete them here.')) return;
-        drafts.remove(C.MANIFEST_KEY);
-        renderDraft();
-      });
-      draftBox.replaceChildren(h('section', { class: 'cms-panel', 'data-manifest-draft': '' },
-        h('h2', { text: 'Your image-list draft, not proposed yet' }),
-        d.base.number ? h('p', { class: 'cms-muted', text: `Building on your proposal #${d.base.number}.` }) : null,
-        h('ul', null, ...added.map((a) => h('li', null, h('code', { text: a.public_id })))),
-        h('p', { class: 'cms-muted', text: 'Use each new image on a page in the same proposal: the site\'s rules refuse '
-          + 'an image nothing uses. Open the page under Edit, press "Image from Media" and pick it.' }),
-        h('div', { class: 'cms-action-row' }, discard)));
-    }
-
-    async function loadPage(cursor) {
-      const out = await mediaCall('list', cursor);
-      if (epoch !== routeEpoch) return;
-      if (!out.ok) { showProblem(listNote, out.message); return; }
-      const assets = Array.isArray(out.data.assets) ? out.data.assets : [];
-      for (const a of assets) {
-        if (a && typeof a === 'object' && typeof a.public_id === 'string') grid.appendChild(assetTile(a, live));
-      }
-      listNote.textContent = grid.childNodes.length ? '' : 'No images on Cloudinary yet.';
-      listNote.hidden = !listNote.textContent;
-      more.replaceChildren();
-      const next = out.data.next_cursor;
-      if (typeof next === 'string' && next) {
-        const btn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'media-more' }, 'More images');
-        btn.addEventListener('click', () => {
-          btn.disabled = true;
-          loadPage(next).catch((e) => { if (!quiet(e)) { btn.disabled = false; showProblem(listNote, `Something went wrong: ${(e && e.message) || e}`); } });
-        });
-        more.appendChild(btn);
-      }
-    }
-
-    if (!paint(epoch, [
-      h('h1', { text: 'Media' }),
-      h('p', { class: 'cms-muted', text: 'The site\'s images, stored on Cloudinary. A new image goes into your image-list '
-        + 'draft and is proposed together with the page that uses it.' }),
-      draftBox,
-      h('h2', { text: 'Upload' }),
-      mediaPanel({ mode: 'library', baseOf: () => (openManifestDraft() || { base: MAIN_BASE }).base, onUploaded: renderDraft }),
-      h('h2', { text: 'On Cloudinary' }),
-      listNote, grid, more,
-    ])) return;
-    renderDraft();
-    await loadPage(null);
   }
 
   function viewNotFound(r, epoch) {
     paint(epoch, [h('h1', { text: 'Not found' }),
-      h('p', null, 'The editor has no page here. ', link('#/', 'Go to the Proposals tab'), '.')]);
+      h('p', null, 'The editor has no page here. ', link(DATA_HASH, 'Go to the data files'), '.')]);
   }
 
-  /* The View tab: my own settings for the frame (plan D-H: localStorage
-     hc-editor-view only, never the repository). A change is saved and the
-     frame is told at once. */
-  function currentView() {
-    return ed.view || C.viewSettings.load(localStore());
-  }
-
-  function setView(key, value) {
-    const next = Object.assign({}, currentView(), { [key]: value });
-    const ls = localStore();
-    if (ls) C.viewSettings.save(ls, next);
-    ed.view = C.viewSettings.load({ getItem: () => JSON.stringify(next) });   // cleaned, kept for this page
-    postEditor();
-    // "Show others' suggestions" changes what the page file IS (the composite or main): reload
-    if (key === 'suggestions' && ed.on) frameTo(ed.route, false);
-    route();
-  }
-
-  function viewSettingsPanel() {
-    const v = currentView();
-    const row = (label, hint, control) => h('div', { class: 'hc-setting' },
-      h('span', null, label, h('small', { text: hint })), control);
-    const toggle = (key, label, hint) => {
-      const on = v[key] === true;
-      const b = h('button', { type: 'button', role: 'switch', class: on ? 'hc-toggle is-on' : 'hc-toggle',
-        'data-setting': key, 'aria-checked': on ? 'true' : 'false', 'aria-label': label });
-      b.addEventListener('click', () => setView(key, !on));
-      return row(label, hint, b);
-    };
-    const seg = h('span', { class: 'hc-seg', role: 'group', 'aria-label': 'Diff style' },
-      ...C.viewSettings.DIFFS.map((d) => {
-        const b = h('button', { type: 'button', 'data-setting': 'diff', 'data-value': d,
-          'aria-pressed': v.diff === d ? 'true' : 'false' }, d === 'side' ? 'Side by side' : 'Inline');
-        b.addEventListener('click', () => setView('diff', d));
-        return b;
-      }));
-    return [
-      h('h2', { text: 'Your view' }),
-      h('div', { class: 'hc-settings' },
-        toggle('suggestions', 'Show others\u2019 suggestions', 'Open proposals drawn on the page'),
-        row('Diff style', 'How a changed block is shown', seg),
-        toggle('compact', 'Compact mode', 'Tighter text and code'),
-        toggle('outlines', 'Mark blocks on hover', 'A faint line beside the block under the pointer')),
-      h('p', { class: 'hc-foot', text: 'These settings are yours only. They live in this browser (localStorage) '
-        + 'and never touch the repository or what visitors see.' }),
-    ];
-  }
+  /* View settings are fixed (U0b, plan D18: the View tab and its localStorage key hc-editor-view are gone):
+     HCCore.viewSettings is the constants {suggestions: true, diff: 'inline', compact: false, outlines: true}. U3
+     decides whose suggestions are drawn (only approvers see others'); until then they are drawn as before. */
+  const currentView = () => C.viewSettings;
 
   const VIEWS = {
-    home: viewProposalList,
-    review: viewProposalList,
-    'review-pr': viewProposals,
-    help: viewHelp,
-    private: viewHelp,
-    pages: viewChanges,
     edit: viewEdit,
-    new: viewNew,
-    media: viewMedia,
     'not-found': viewNotFound,
   };
-  const NEEDS_SIGN_IN = new Set(['home', 'review', 'review-pr', 'pages', 'edit', 'new', 'media']);
+  const NEEDS_SIGN_IN = new Set(['edit']);
 
   // ---------------------------------------------------- the tray's router ---
-  /* The tray's views route on trayHash — the tray's own "#/…" in
-     HCCore.parseRoute's grammar, as /cms/ had them — never on the site's
-     hash, which is the page on screen. A tray link whose href starts "#/"
-     moves the tray (onTrayClick), and the tab follows the view: home,
-     review, review-pr -> Proposals; pages (the Changes home), edit, new ->
-     Changes; media -> Media; help, private -> Guide; '#/view' -> View. Each
-     tab keeps its last hash. The router draws only while Editor mode is on
-     and the tray is open, so nothing is read from GitHub for a tray nobody
-     sees. */
+  /* The thin editor page routes on trayHash — its own "#/…" in HCCore.parseRoute's grammar, never the site's
+     hash, which is the page on screen. A link on it whose href starts "#/" moves it (onTrayClick). It draws only
+     while Editor mode is on and the page is open, so nothing is read from GitHub for a page nobody sees.
 
-  const VIEW_HASH = '#/view';
-  const TAB_OF_VIEW = Object.freeze({ home: 'proposals', review: 'proposals', 'review-pr': 'proposals',
-    'not-found': 'proposals', pages: 'changes', edit: 'changes', new: 'changes', media: 'changes',
-    help: 'guide', private: 'guide' });
-  const tabOfHash = (hash) => (hash === VIEW_HASH ? 'view' : TAB_OF_VIEW[C.parseRoute(hash).name] || 'proposals');
+     REDIRECTS (U0b, plan D18): the addresses of the removed screens. Each lands on the page on screen with the
+     bubble out; #/review/<n> also keeps that proposal drawn on the page (ed.focusPr = n). They are "open the page
+     + bubble" for now: U3 changes only the targets (the bubble's review list, the proposal's first page). A
+     site address's ?editor=… is read the same way (takeEditorParam, onHashChange, start). */
+  const REDIRECTS = Object.freeze([
+    { name: 'review-pr', re: /^\/review\/([1-9][0-9]{0,8})\/?$/, to: 'page', focus: true },   // the review page
+    { name: 'home', re: /^\/?(?:review\/?)?$/, to: 'page' },                            // #/, #/review: the proposals list
+    { name: 'help', re: /^\/(?:help|private)\/?$/, to: 'page' },                         // the Guide
+    { name: 'view', re: /^\/view\/?$/, to: 'page' },                                     // View settings
+    { name: 'media', re: /^\/media\/?$/, to: 'page' },                                   // the image library
+    { name: 'pages', re: /^\/pages\/?$/, to: 'page' },                                   // the page list (the old Changes tab)
+    { name: 'new', re: /^\/new\/[a-z][a-z-]*\/?$/, to: 'page' },                          // New project / New person
+  ].map((r) => Object.freeze(r)));
+
+  /* The redirect an editor address names -> {name, to, focusPr} | null (an address that is not retired). */
+  function redirectOf(hash) {
+    let x = typeof hash === 'string' ? hash : '';
+    if (x.charAt(0) === '#') x = x.slice(1);
+    x = x.split('?')[0];
+    for (const r of REDIRECTS) {
+      const m = r.re.exec(x);
+      if (m) return Object.freeze({ name: r.name, to: r.to, focusPr: r.focus ? Number(m[1]) : null });
+    }
+    return null;
+  }
+
+  /* Follow a redirect: the editor page steps aside, the bubble comes out, and a proposal named by number is drawn
+     on the page on screen (the frame is drawn again when that changes what it shows). */
+  function followRedirect(r) {
+    ed.trayOpen = false;
+    applyTray();
+    D.unfold();
+    if (r.focusPr !== null && r.focusPr !== ed.focusPr) {
+      ed.focusPr = r.focusPr;
+      // already the proposal drawn on the page: nothing to draw again
+      const drawn = Boolean(ed.pv && ed.pv.pr && ed.pv.pr.number === r.focusPr);
+      if (ed.on && !drawn) {
+        ed.show = null;
+        clearSelection();
+        frameTo(currentRoute(), false);
+        return;
+      }
+    }
+    refreshDock();
+  }
 
   function trayGo(hash) {
+    const r = redirectOf(hash);
+    if (r) { followRedirect(r); return; }
     trayHash = hash;
-    const tab = tabOfHash(hash);
-    ed.tabHash[tab] = hash;
-    if (tab !== ed.tab) {
-      ed.tab = tab;
-      saveEditorState();
-    }
-    drawTabs();
+    saveEditorState();
+    drawTitle();
     route();
   }
 
   async function route() {
     if (!tray || !ed.on || !ed.trayOpen) return;
     if (editing && trayHash !== editing.hash && !leaveOk()) {
-      // "stay": the edit page stays on screen, and its tab with it
+      // "stay": the edit page stays on screen
       trayHash = editing.hash;
-      ed.tab = tabOfHash(trayHash);
-      ed.tabHash[ed.tab] = trayHash;
-      saveEditorState();
-      drawTabs();
+      drawTitle();
       return;
     }
     editing = null;
@@ -2439,11 +1336,6 @@
     routeEpoch += 1;
     const epoch = routeEpoch;
     clearPreviews();
-    draftList = null;
-    if (trayHash === VIEW_HASH) {
-      paint(epoch, viewSettingsPanel());
-      return;
-    }
     const r = C.parseRoute(trayHash);
     if (state.access === 'no-access') {
       paint(epoch, h('p', { class: 'cms-no-access', text: C.NO_ACCESS_TEXT }));
@@ -2526,29 +1418,18 @@
      source is THIS frame's window and its nonce is the current load's. */
 
   const EDITOR_KEY = 'hc-editor';
-  // the editor page (Kyle, 2026-10-14: the right tray goes): Proposals and Data, plus View and Guide. Media is
-  // edited in the page (click an image to replace it, drag it to move it); its library view stays reachable at
-  // #/media from the Data tab's forms.
-  const TABS = Object.freeze(['proposals', 'changes', 'view', 'guide']);
-  const TAB_LABEL = Object.freeze({ proposals: 'Proposals', changes: 'Data', view: 'View', guide: 'Guide' });
-  const TAB_HASH = Object.freeze({ proposals: '#/', changes: '#/pages', media: '#/media', view: VIEW_HASH,
-    guide: '#/help' });
+  // the editor page (U0b: only the thin one, #/edit…, is left; the Proposals, View, Guide and Media screens are gone)
   const PHONE_QUERY = '(max-width: 767px)';
   const EDITOR_PARAMS = Object.freeze(['editor', 'pr', 'data', 'new']);
   const ROUTE_RE = /^\/(?!\/)[^\x00-\x1f\x7f]{0,500}$/;
   const MAX_INDEX = 100000;
   const MAX_BLOCK_MD = 200000;          // js/source.js MAX_BLOCK_MD: the longest block the frame may send back
   const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
-  const FRAME_DELAY_MS = 600;
   const ed = {
     on: false,
-    tab: 'proposals',     // the tray's tab
-    trayOpen: false,      // the tray is open (else the handle shows)
-    tabHash: Object.assign({}, TAB_HASH),   // each tab's last tray hash
+    trayOpen: false,      // the thin editor page is open over the frame
     count: null,          // open proposals, once read
     show: null,           // {number, sha, changed: Map file -> 'changed'|'removed'}: "Show on page"
-    view: null,           // the View settings, once changed on this page
-    pendingSelect: null,  // the text range the Changes tab selects once drawn
     frame: null,          // the iframe in #hc-frame-host
     host: null,           // HCCore.createPreviewHost for it
     prefix: null,         // this load's sentinel prefix: the first 16 characters of its nonce
@@ -2562,13 +1443,11 @@
     selected: null,       // the block index the frame shows selected
     inPage: null,         // {index, editor}: the frame said that block is typed in the page (U2), else null
     asMarkdown: null,     // the block index the person chose to edit in the in-place Markdown box (U3)
-    trayEdit: null,       // the block index being edited in the tray's textarea: the frame opens nothing for it
     inPageReason: '',     // why the frame said the selected block must be edited as Markdown
     wholeReason: null,    // why block editing is off for this page, or null
     mainSha: null,        // Promise of main's head sha, once per refresh
     cache: null,          // HCCore.cachedFetcher over this session's token
     pv: null,             // what this load shows (pageView): mode, the proposal, its overlay and marks
-    barNote: null,        // {number, head, text}: Update from main's outcome, said on the bar at that head
     baseNote: null,       // {key, number}: that page's stored draft names a proposal not my own open one
     props: null,          // Promise of the open proposals with their files, once per refresh
     bases: new Map(),     // 'main...head' -> Promise of the merge base sha
@@ -2576,14 +1455,14 @@
     focusPr: null,        // round 2 (R3): the proposal opened from the list, drawn on its page instead of the newest
   };
   let frameTimer = null;
-  let inPageLine = null;    // the draft-state line under "Typing in the page" (blockTyped updates it)
 
   function readEditorState() {
     const s = store();
     try {
       const v = s ? JSON.parse(s.getItem(EDITOR_KEY)) : null;
       if (!v || typeof v !== 'object') return null;
-      return { on: v.on === true, tab: TABS.indexOf(v.tab) >= 0 ? v.tab : 'proposals', tray: v.tray === true };
+      const hash = typeof v.hash === 'string' && C.parseRoute(v.hash).name === 'edit' ? v.hash : null;
+      return { on: v.on === true, tray: v.tray === true && hash !== null, hash };
     } catch (e) {
       return null;
     }
@@ -2592,7 +1471,7 @@
   function saveEditorState() {
     const s = store();
     try {
-      if (s) s.setItem(EDITOR_KEY, JSON.stringify({ on: ed.on, tab: ed.tab, tray: ed.trayOpen }));
+      if (s) s.setItem(EDITOR_KEY, JSON.stringify({ on: ed.on, tray: ed.trayOpen, hash: trayHash }));
     } catch (e) { /* kept in memory for this page */ }
   }
 
@@ -2626,9 +1505,10 @@
   }
   const samePage = (a, b) => Boolean(a && b && a.pageId === b.pageId);
 
-  /* #/<route>?editor=<tab>[&pr=<n>] (D-H, and D-I's data= / new=): read,
-     then stripped from the address with history.replaceState (no
-     hashchange). -> {tab, pr, data, new} | null */
+  /* #/<route>?editor=<anything>[&pr=<n>|&data=<x>|&new=<kind>] (D-H, D-I): read, then stripped from the address
+     with history.replaceState (no hashchange). U0b: every one is a redirect to the page on screen (Editor mode on,
+     the bubble out); pr=<n> keeps that proposal drawn (as #/review/<n>), and data=<registry> still opens that raw
+     data file on the thin editor page, which stays. -> {pr, data} | null */
   function takeEditorParam() {
     const hash = String(window.location.hash || '');
     const q = hash.indexOf('?');
@@ -2648,9 +1528,21 @@
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`);
     } catch (e) { /* the parameter stays in the address; it is harmless */ }
     const pr = get('pr');
-    if (tab === 'media') return { tab: 'changes', media: true, pr: null, data: null, new: null };
-    return { tab: TABS.indexOf(tab) >= 0 ? tab : 'proposals',
-      pr: /^[1-9][0-9]{0,8}$/.test(String(pr)) ? Number(pr) : null, data: get('data'), new: get('new') };
+    const data = get('data');
+    return { pr: /^[1-9][0-9]{0,8}$/.test(String(pr)) ? Number(pr) : null,
+      data: data !== null && C.RAW_REGISTRIES.indexOf(`data/${data}.json`) >= 0 ? data : null };
+  }
+
+  /* A site address's ?editor=… (takeEditorParam's answer): its redirect (the page + the bubble, and the proposal
+     named by pr=), or the raw data file named by data=. */
+  function applyParam(param) {
+    if (param.data) {
+      trayHash = `${DATA_HASH}/data/${param.data}`;
+      ed.trayOpen = true;
+      return;
+    }
+    ed.trayOpen = false;
+    if (param.pr !== null) { ed.focusPr = param.pr; ed.show = null; }
   }
 
   function setEditor(on) {
@@ -2669,7 +1561,6 @@
     }
     if (frameHost) frameHost.hidden = !on;
     applyTray();
-    drawShowBar();
     renderChrome();
     if (!on) {
       clearTimeout(frameTimer);
@@ -2679,8 +1570,8 @@
       membersSoon();             // the page under the frame: members-only detail again
       return;
     }
-    if (ed.trayOpen) renderTray();
-    if (!(ed.trayOpen && ed.tab === 'proposals')) D.loadCount();   // the Proposals tab reads it itself
+    if (ed.trayOpen) trayGo(trayHash);
+    D.loadCount();
     frameTo(currentRoute(), false);
   }
 
@@ -2689,16 +1580,9 @@
     if (!tray) return;
     const open = ed.on && ed.trayOpen;
     tray.hidden = !open;
-    handle.hidden = !ed.on;                                    // the bubble's "Proposals" button
-    handle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    handle.hidden = !ed.on;                                    // the bubble's "Proposals" count (U3 opens its list)
     document.body.classList.toggle('hc-tray-open', open);
     saveEditorState();
-  }
-
-  function openTray() {
-    ed.trayOpen = true;
-    applyTray();
-    renderTray();
   }
 
   function closeTray() {
@@ -2706,32 +1590,16 @@
     applyTray();
   }
 
-  /* The editor page's heading (round 2, R3: no tabs): "Proposals" on the list; elsewhere the view's name with a
-     way back to the list. */
-  const VIEW_TITLE = Object.freeze({ proposals: 'Proposals', changes: 'Edit as Markdown', view: 'View settings', guide: 'Guide' });
-  function drawTabs() {
+  /* The thin editor page's heading: "Data files" on its list and on a raw data file, "Edit as Markdown" on a page. */
+  function drawTitle() {
     if (!trayTitle) return;
-    const onList = ed.tab === 'proposals' && (trayHash === '#/' || C.parseRoute(trayHash).name !== 'review-pr');
-    trayTitle.textContent = ed.tab === 'proposals' && !onList ? 'Proposal' : VIEW_TITLE[ed.tab] || 'Proposals';
-    trayCrumb.hidden = onList;
+    const r = C.parseRoute(trayHash);
+    const kind = r.name === 'edit' && r.params.pageId !== undefined ? C.editKind(r.params.pageId) : null;
+    trayTitle.textContent = kind === 'page' ? 'Edit as Markdown' : 'Data files';
   }
 
-  /* The Data tab's home (the old Changes home). A block picked or inserted is edited IN THE PAGE now, so
-     the editor page opens only when the block needs the Markdown textarea (open = true): the whole page as
-     Markdown, a page the block model refuses, or a block the frame could not open. Otherwise the view is
-     only redrawn if it is on screen. */
-  function showChanges(select, open) {
-    ed.pendingSelect = select || null;
-    if (!open && !ed.trayOpen) return;
-    ed.trayOpen = true;
-    applyTray();
-    trayGo(TAB_HASH.changes);
-  }
 
-  /* Redraw the Changes home when it is on screen (the page moved). */
-  function refreshChanges() {
-    if (ed.on && ed.trayOpen && ed.tab === 'changes' && C.parseRoute(trayHash).name === 'pages') route();
-  }
+
 
   /* "Show on page" (D-G 3): the frame shows proposal n's head — the files
      it changes at its head, every other file at main's — read-only, no
@@ -2747,7 +1615,6 @@
     clearSelection();
     ed.trayOpen = false;                         // the editor page steps aside: the proposal is shown ON the page
     applyTray();
-    drawShowBar();
     if (route2 && ROUTE_RE.test(route2) && route2 !== currentRoute()) {
       window.location.hash = `#${route2}`;       // onHashChange loads the frame there
       return;
@@ -2755,52 +1622,30 @@
     frameTo(currentRoute(), false);
   }
 
+  /* Kept for U3, which re-skins the viewing of a proposal ("Viewing <name>'s changes" · Back): U0b removed the
+     two bars that called these (plan D18). */
   function showOff() {
     ed.show = null;
     say('');
-    drawShowBar();
     frameTo(currentRoute(), false);
   }
 
-  function drawShowBar() {
-    if (!showBar) return;
-    if (!ed.show) { showBar.replaceChildren(); showBar.hidden = true; return; }
-    const back = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'show-off' }, 'Back to your view');
-    back.addEventListener('click', showOff);
-    showBar.replaceChildren(h('span', { text: `Showing proposal #${ed.show.number} on the page (read-only).` }), back);
-    showBar.hidden = false;
-  }
 
   /* While a proposal is shown, nothing on the page is edited. */
   function showing() {
     if (!ed.show) return false;
-    say(`You are looking at proposal #${ed.show.number}. Press "Back to your view" to edit.`);
+    say(`You are looking at proposal #${ed.show.number}: nothing on the page is edited meanwhile.`);
     return true;
   }
 
-  /* ?editor=<tab>[&pr=<n>|&data=<x>|&new=<kind>] (D-H, D-I): the tray opens
-     on that tab, at that proposal's card or that form. */
-  function applyParam(param) {
-    ed.tab = param.tab;
-    // round 2 (R3): "Edit this page" (?editor=changes with nothing named) is Editor mode on the page itself
-    ed.trayOpen = !(param.tab === 'changes' && !param.data && !param.new && !param.media);
-    let hash = TAB_HASH[param.tab];
-    if (param.tab === 'proposals' && param.pr) hash = `#/review/${param.pr}`;
-    else if (param.tab === 'changes' && C.RAW_REGISTRIES.indexOf(`data/${param.data}.json`) >= 0) hash = `#/edit/data/${param.data}`;
-    else if (param.tab === 'changes' && (param.new === 'project' || param.new === 'person')) hash = `#/new/${param.new}`;
-    else if (param.tab === 'changes' && param.media) hash = '#/media';
-    ed.tabHash[param.tab] = hash;
-  }
 
   function mountFrame() {
     const frame = h('iframe', { class: 'hc-frame', title: 'This page, in Editor mode',
       sandbox: 'allow-scripts allow-popups', referrerpolicy: 'no-referrer' });
-    pageBar = h('div', { class: 'hc-pagebar', role: 'status', 'aria-label': 'Proposals on this page' });
-    pageBar.hidden = true;
     rail.el = h('aside', { class: 'hc-rail', 'aria-label': 'Suggested changes on this page' });
     rail.el.hidden = true;
-    // "Showing proposal #N" sits on the page it is about; the review rail (U5b) beside the frame, in the parent
-    frameHost.replaceChildren(showBar, pageBar, h('div', { class: 'hc-frame-row' }, frame, rail.el));
+    // the review rail (U5b) beside the frame, in the parent (U0b: no bar above the frame)
+    frameHost.replaceChildren(h('div', { class: 'hc-frame-row' }, frame, rail.el));
     ed.frame = frame;
     ed.host = C.createPreviewHost({
       getFrameWindow: () => frame.contentWindow,
@@ -2817,8 +1662,6 @@
     rail.el = null;
     if (ed.host) ed.host.dispose();
     if (ed.frame) ed.frame.remove();
-    if (pageBar) pageBar.remove();
-    pageBar = null;
     ed.frame = null;
     ed.host = null;
     ed.prefix = null;
@@ -2850,7 +1693,6 @@
     ed.selected = null;
     ed.inPage = null;
     ed.asMarkdown = null;
-    ed.trayEdit = null;
     ed.inPageReason = '';
     ed.wholeReason = null;
     ed.draft = null;
@@ -2902,7 +1744,6 @@
     const moved = !keep || !samePage(page, ed.page);
     if (moved) {
       clearSelection();
-      ed.barNote = null;
       ed.peopleFocus = null;              // R5: "come back to this person" holds for the Team page's own reloads only
     }
     ed.route = route;
@@ -2931,7 +1772,6 @@
     if (mine !== ed.loads || !sessionGen.isCurrent(gen) || !ed.on || !ed.host) return;
     ed.pv = pv;
     railReset();
-    drawPageBar();
     loadRail(pv, page, sha, mine).catch(shown);
     ed.prefix = null;
     ed.inPage = null;     // the new document reopens the block itself and says so
@@ -2939,10 +1779,6 @@
     const nonce = ed.host.load(route, frameFetcher);
     // frameFetcher reads it at call time: the frame asks only after it loaded
     ed.prefix = nonce.slice(0, 16);
-    if (moved) {
-      markPage();
-      refreshChanges();
-    }
     refreshDock();
   }
 
@@ -3181,12 +2017,11 @@
     return pv;
   }
 
-  /* The reader followed a link inside the frame to another page: its bar
-     follows; a page with a proposal to draw is loaded again with it. */
+  /* The reader followed a link inside the frame to another page: a page with a proposal to draw is loaded
+     again with it. */
   async function viewAfterRoute(page) {
     const mine = ed.loads;
     ed.pv = blankView(page);
-    drawPageBar();
     postEditor();                        // the frame repaints from its last message: the old marks go now
     let pv;
     try {
@@ -3197,7 +2032,6 @@
     if (mine !== ed.loads || ed.page !== page || !ed.on) return;
     if (pv.ov) { frameTo(ed.route, false); return; }
     ed.pv = pv;
-    drawPageBar();
   }
 
   /* A pick in the frame. Over a drawn proposal the index is the
@@ -3225,168 +2059,21 @@
     return insertBlock(j >= 0 ? list[j].mainIndex + 1 : 0, kind);
   }
 
-  /* The proposal's card, open, in the tray's Proposals tab. */
+  /* A proposal's block with no card of its own: its review, which is the #/review/<n> redirect now (U0b: the
+     page + the bubble, that proposal kept drawn; U3 opens its row in the bubble). */
   function openCard(n) {
-    ed.trayOpen = true;
-    applyTray();
     trayGo(`#/review/${n}`);
   }
 
-  /* The bar's Update from main (the one write here; D8 roles, exactly as
-     the card's button). GitHub takes it (202) and moves the branch a moment
-     later: the proposal is read again, a few times a moment apart, until its
-     head moved; then the page view, the bar and the frame are drawn again
-     from it by frameTo, the same path as a route load (its reads are
-     memoized again, so a later edit's reload still asks nothing). The page
-     redrawn is the one on screen THEN (the reader may have moved on while
-     the proposal was read again; it may touch that page too). An error
-     keeps the view on screen, with GitHub's answer beside the button. The
-     tray card's own Update from main follows the same way (act). */
-  const UPDATE_POLLS = 6;
-  const UPDATE_POLL_MS = 1500;
 
-  async function updateFromMain(pull, btn, line) {
-    if (acting || !state.client) return;
-    acting = true;
-    btn.disabled = true;
-    const gen = sessionGen.current();
-    const old = headShaOf(pull);
-    let out;
-    try {
-      out = await C.runReviewAction(state.client, 'update', { number: pull.number, sha: old });
-    } catch (e) {
-      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}`, sent: false };
-    } finally {
-      acting = false;
-    }
-    if (!sessionGen.isCurrent(gen)) return;
-    if (out.status === 401) { endSession('Your sign-in has ended. Please sign in again.'); return; }
-    line.textContent = out.message;
-    line.hidden = false;
-    line.classList.toggle('is-error', !out.ok);
-    if (!out.ok) { btn.disabled = false; return; }
-    const now = await followUpdate(pull.number, old, gen);
-    if (!now && sessionGen.isCurrent(gen) && ed.on) btn.disabled = false;   // "Reload in a moment" stays said
-  }
 
-  /* After GitHub took an Update from main on PR n (head `old`): wait for
-     the head to move, forget the proposal reads (moved or not), and draw
-     the page on screen NOW again from them — whichever page that is, so a
-     page the reader moved to while waiting does not keep the old head's
-     marks. -> the moved pull, or null (not in time, signed out, Editor off:
-     then nothing is redrawn). */
-  async function followUpdate(n, old, gen) {
-    const now = await headMoved(n, old, gen);
-    if (!sessionGen.isCurrent(gen) || !ed.on) return null;
-    forgetProposals();                   // the next load reads the proposal again, moved or not
-    if (!now) return null;
-    ed.barNote = { number: n, head: headShaOf(now),
-      text: `Updated from main: the page shows proposal #${n} as it is now.` };
-    frameTo(ed.route, true);
-    return now;
-  }
 
-  /* PR n read again until its head is no longer `old` (or it closed):
-     -> that pull; null when it did not move in time or could not be read. */
-  async function headMoved(n, old, gen) {
-    for (let i = 0; i < UPDATE_POLLS; i += 1) {
-      await new Promise((r) => { setTimeout(r, UPDATE_POLL_MS); });
-      if (!sessionGen.isCurrent(gen) || !ed.on) return null;
-      let res;
-      try {
-        res = await apiResponse(`${C.REPO_API_PATH}/pulls/${n}`);
-      } catch (e) {
-        return null;
-      }
-      if (!res.ok || !res.data) return null;
-      if (res.data.state !== 'open' || headShaOf(res.data) !== old) return res.data;
-    }
-    return null;
-  }
 
-  const CHECK_WORD = Object.freeze({ pass: 'check green', fail: 'check red', checking: 'check pending',
-    unknown: 'check unknown' });
   const plural = (n, one, many) => (n === 1 ? one : many);
 
-  function pageBarButton(action, n, text, onClick, primary) {
-    const b = h('button', { type: 'button', class: primary ? 'cms-btn cms-btn-primary' : 'cms-btn',
-      'data-action': action, 'data-proposal': n === null ? null : String(n) }, text);
-    b.addEventListener('click', onClick);
-    return b;
-  }
 
-  // "Show on page" for proposal t (its head and files are known), else nothing
-  function showButton(t, text) {
-    const sha = headShaOf(t.pull);
-    if (!sha || !t.files) return null;
-    return pageBarButton('pagebar-show', t.pull.number, text, () => showProposal(t.pull.number, sha, t.files, null));
-  }
 
-  function touchingLine(pv, words) {
-    const n = pv.touching.length;
-    return h('p', { class: 'hc-pagebar-line' }, h('span', { text: words(n) }),
-      ...pv.touching.map((t) => showButton(t, `Show #${t.pull.number} on page`)));
-  }
 
-  /* The page bar above the frame (D-G): who proposes changes to this page,
-     the gate, and the way to the card; the others; my draft's note. All
-     GitHub words go in as text. */
-  function drawPageBar() {
-    if (!pageBar) return;
-    const pv = ed.pv;
-    const rows = [];
-    const back = () => pageBarButton('show-off', null, 'Back to your view', showOff);
-    if (pv && pv.pr) {
-      const n = pv.pr.number;
-      const state2 = pv.check && CHECK_WORD[pv.check.state] ? pv.check.state : 'unknown';
-      rows.push(h('p', { class: 'hc-pagebar-line' },
-        h('b', { text: pv.mode === 'show' ? `Showing proposal #${n} by ${loginOf(pv.pr)} on the page (read-only)`
-          : `${loginOf(pv.pr)} proposes changes to this page` }),
-        h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }), link(prLink(n), `PR #${n}`),
-        h('span', { class: 'hc-pagebar-sep', 'aria-hidden': 'true', text: '·' }),
-        h('span', { class: `hc-pagebar-check is-${state2}`, text: CHECK_WORD[state2] }),
-        pageBarButton('review-in-tray', n, 'Review', () => openCard(n), !railApprovable().length),
-        ...railBarButtons(n),
-        pv.mode === 'show' ? back() : null));
-      const note = ed.barNote;
-      if (note && note.number === n && note.head === headShaOf(pv.pr)) {
-        rows.push(h('p', { class: 'hc-pagebar-line' },
-          h('span', { class: 'hc-pagebar-result', role: 'status', text: note.text })));
-      }
-      if (pv.failed) {
-        rows.push(h('p', { class: 'hc-pagebar-line is-warn',
-          text: `PR #${n}: this proposal can't be shown in place — open it under Proposals.` }));
-      }
-      const conflicts = pv.ov ? pv.ov.conflicts.length : 0;
-      if (conflicts) {
-        const result = h('span', { class: 'hc-pagebar-result', role: 'status' });
-        result.hidden = true;
-        const may = pv.mode === 'overlay' && C.reviewActionsFor(state.role, pv.pr).indexOf('update') >= 0;
-        let btn = null;
-        if (may) {
-          btn = pageBarButton('pagebar-update', n, 'Update from main', () => { updateFromMain(pv.pr, btn, result); });
-        }
-        rows.push(h('p', { class: 'hc-pagebar-line is-warn' },
-          h('span', { text: `${conflicts} ${plural(conflicts, 'block', 'blocks')} marked: main changed this since the `
-            + 'proposal — Update from main to bring it up to date.' }), btn, result));
-      }
-      if (pv.others.length) {
-        rows.push(h('p', { class: 'hc-pagebar-line' }, h('span', { text: 'Also proposing changes here:' }),
-          ...pv.others.map((t) => h('span', { class: 'hc-pagebar-other' },
-            h('span', { text: `#${t.pull.number} by ${loginOf(t.pull)}` }), showButton(t, 'Show on page')))));
-      }
-    } else if (pv && pv.mode === 'show' && ed.show) {
-      rows.push(h('p', { class: 'hc-pagebar-line' },
-        h('b', { text: `Showing proposal #${ed.show.number} on the page (read-only)` }), back()));
-    } else if (pv && pv.mode === 'draft' && pv.touching.length) {
-      rows.push(touchingLine(pv, (k) => `${k} open ${plural(k, 'proposal also touches', 'proposals also touch')} this page`));
-    } else if (pv && pv.mode === 'hidden') {
-      rows.push(touchingLine(pv, (k) => `${k} open ${plural(k, 'proposal touches', 'proposals touch')} this page `
-        + '("Show others’ suggestions" is off in View)'));
-    }
-    pageBar.replaceChildren(...rows);
-    pageBar.hidden = !rows.length;
-  }
 
   // ------------------------------------------------- the review rail (U5b) ---
   /* plan-u5 U5b. When a proposal is drawn over the page, the PARENT shows one card per edit beside the
@@ -3503,36 +2190,6 @@
     return out;
   }
 
-  async function trustedRecordExists(pull, files, comments, access) {
-    const author = loginOf(pull).toLowerCase();
-    if (comments && comments.partial === true && C.proposalEligible(pull, files)) return true;   // unknown: no Merge here
-    const recs = C.parseRecords(comments, { author }).list;
-    if (!recs.length || !C.proposalEligible(pull, files)) return false;
-    const committers = await committersOf(pull.number).catch((e) => { if (quiet(e)) throw e; return null; });
-    if (!committers) return false;                     // unknown: keep Merge (GitHub's own rules still apply)
-    // only a record of an edit in the proposal's CURRENT diff counts (an old head's key is stale to go-live too)
-    const head = headShaOf(pull);
-    const keysOf = new Map();                          // path -> Set of current edit keys
-    try {
-      const main = await mainSha();
-      const base = await mergeBaseOf(main, head);
-      for (const f of files) {
-        const edits = await C.proposalEdits(f.filename, await textAt(base, f.filename, true),
-          await textAt(head, f.filename, true), await textAt(main, f.filename, false));
-        keysOf.set(f.filename, new Set((edits || []).map((e) => e.key)));
-      }
-    } catch (e) {
-      if (quiet(e)) throw e;
-      return false;                                    // unknown: keep Merge (GitHub's own rules still apply)
-    }
-    for (const r of recs) {
-      if (committers.has(r.login)) continue;
-      const role = await roleNameOf(r.login).catch(() => 'none');
-      if (files.some((f) => r.keys.some((k) => keysOf.get(f.filename).has(k))
-        && C.mayApproveEdit({ login: r.login, permission: role, path: f.filename, access, author }))) return true;
-    }
-    return false;
-  }
 
   // ---- U6: conversations on a change (review comments on the proposal; resolve through the GraphQL door)
   const TALK_PAGES = 30;
@@ -3656,20 +2313,7 @@
     return C.reviewCards({ edits: d.edits, overlay: ed.pv && ed.pv.ov ? ed.pv.ov.overlay : [], comments: d.comments,
       author: d.author, headSha: d.head, trusted: d.trusted, may: d.may, eligible: d.eligible, pending: rail.pending });
   }
-  const railApprovable = () => rail.cards.filter((c) => c.acts.indexOf('approve') >= 0);
 
-  function railBarButtons(n) {
-    const out = [];
-    const ready = railApprovable();
-    if (ready.length) {
-      out.push(pageBarButton('approve-all', n, `Approve all (${ready.length})`, () => decide('approved', ready.map((c) => c.key)), true));
-    }
-    const drawn = rail.cards.filter((c) => c.anchor !== null);
-    if (drawn.length && document.body.classList.contains('hc-phone')) {
-      out.push(pageBarButton('rail-sheet', n, `Review ${drawn.length} ${plural(drawn.length, 'change', 'changes')}`, openSheet));
-    }
-    return out;
-  }
 
   const ICON = {
     approve: 'M4 10.5l4 4 8-9',
@@ -3763,7 +2407,6 @@
   function renderRail() {
     if (!rail.el) return;
     rail.cards = railCards();
-    drawPageBar();
     const drawn = rail.cards.filter((c) => c.anchor !== null);
     const on = drawn.length > 0;
     rail.el.hidden = !on;
@@ -3969,7 +2612,6 @@
     const sel = ed.sel;
     const d = ed.draft;
     if (!sel || sel.whole || ed.selected === null || !d || d.key !== sel.key || !canEditKey(d.key) || showing()) return null;
-    if (ed.trayEdit === ed.selected) return null;           // typed in the tray: the tray's textarea owns it
     if (ed.pv && ed.pv.ov) return null;                    // a proposal is drawn over the page
     const md = d.files[sel.file].slice(sel.span.start, sel.span.end);
     if (md.length > MAX_BLOCK_MD) return null;
@@ -3995,20 +2637,9 @@
     // typing: one undo step per burst (histNote); a note box's Remove (md '') is a step of its own
     hist.typing = md !== '';
     try { if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key); } finally { hist.typing = false; }
-    if (inPageLine) inPageLine.textContent = draftStateText(d);
-    drawDraftList(false);
     refreshDock();
   }
 
-  /* "Edit this part as Markdown": the frame closes the typed block (open: null), then opens it again
-     as the in-place Markdown box (open.as = 'markdown'): two messages, in that order. */
-  function closeInFrame() {
-    const keep = ed.selected;
-    ed.selected = null;
-    postEditor();
-    ed.selected = keep;
-    postEditor();
-  }
 
   /* hc-block-state: the frame typed in the page, or needs the Markdown box, or closed the block. */
   function blockState(index, editor, reason) {
@@ -4019,7 +2650,9 @@
       if (editor === 'markdown') ed.inPageReason = reason || '';
       if (editor === 'closed') { ed.selected = null; ed.sel = null; postEditor(); }
     }
-    showChanges(null, editor === 'markdown');
+    // the frame cannot open this block in the page: the whole page as Markdown on the thin editor page (U0b: the
+    // block textarea of the old Changes tab is gone)
+    if (editor === 'markdown') editWholePage().catch(shown);
   }
 
   /* A message from the frame. -> true when it was the frame's (acted on or
@@ -4069,11 +2702,7 @@
     }
     ed.route = route;
     ed.page = page;
-    if (moved && !reload) {
-      markPage();
-      refreshChanges();
-      viewAfterRoute(page);
-    }
+    if (moved && !reload) viewAfterRoute(page);
     refreshDock();                          // the dock counts the page now on screen
     if (currentRoute() === route) {
       if (reload) frameTo(route, true);
@@ -4088,9 +2717,10 @@
     if (param) {
       applyParam(param);
       saveEditorState();
+      D.unfold();                         // the redirect's bubble
       if (!ed.on) { setEditor(true); return; }
       applyTray();
-      renderTray();
+      if (ed.trayOpen) trayGo(trayHash);
     }
     const r = currentRoute();
     const ours = ed.fromFrame !== null && r === ed.fromFrame;
@@ -4123,65 +2753,8 @@
     }
   }
 
-  /* "Start from" for the page on screen (the registries' basePicker, for a
-     block draft): the live site (a new proposal) or one of my open
-     proposals (one more commit on its branch). Switching reads the page at
-     that head and shows it; changes not proposed are thrown away first,
-     after asking. */
-  function pageBasePicker(page, own) {
-    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
-    const sel = h('select', { class: 'cms-base-picker', 'data-base': '', 'aria-label': 'Start from' },
-      h('option', { value: '' }, 'the live site (a new proposal)'),
-      ...own.map((p) => h('option', { value: String(p.number) }, `your proposal #${p.number}: ${p.title}`)));
-    const current = d && d.base.number ? String(d.base.number) : '';
-    sel.value = current;
-    const back = () => { sel.disabled = false; sel.value = current; };
-    sel.addEventListener('change', () => {
-      const v = String(sel.value);
-      const hit = PR_NO.test(v) ? own.find((p) => String(p.number) === v) : null;
-      if ((v && !hit) || v === current) { sel.value = current; return; }
-      if (d && C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) { sel.value = current; return; }
-      sel.disabled = true;
-      switchBase(page, hit, changesOf(page)).then((done) => { if (!done) back(); }, (e) => {
-        back();
-        shown(e);
-      });
-    });
-    return h('p', { class: 'cms-base' }, h('label', null, 'Start from: ', sel));
-  }
 
-  /* The page's changes not proposed, as one string ('' when none): what the
-     member had when a base was picked, against what is there after the read. */
-  function changesOf(page) {
-    const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : drafts.get(page.pageId);
-    return d && C.isDirty(d) ? JSON.stringify([d.base, d.files]) : '';
-  }
 
-  /* The page's draft starts again at `hit`'s head (null: main's). The old
-     draft goes only once the new text was read — and, when the member
-     changed the page while it was read, only after asking again (cancel:
-     the edits stay, the base too). A proposal shown on the page goes
-     ("Back to your view"): the frame then shows the new draft, editable.
-     -> false when nothing was switched. */
-  async function switchBase(page, hit, had) {
-    const at = hit ? { ref: hit.branch, sha: await headOf(hit.branch), number: hit.number } : null;
-    const d = at ? await pageDraft(page, at) : null;
-    if (!samePage(page, ed.page) || !ed.on) return false;
-    const now = changesOf(page);
-    if (now && now !== had && !window.confirm(C.DISCARD_TEXT)) return false;
-    if (ed.show) {
-      ed.show = null;
-      say('');
-      drawShowBar();
-    }
-    drafts.remove(page.pageId);
-    clearSelection();
-    ed.draft = d;
-    drawDraftList(true);
-    refreshChanges();
-    frameTo(ed.route, true);
-    return true;
-  }
 
   /* The index of the block a position starts, in the split of `text`
      (display only: the edit itself is the span). */
@@ -4263,7 +2836,6 @@
     d.files[want.file] = r.text;
     drafts.put(d);
     if (ed.sel && ed.sel.key === d.key && ed.selected === k) ed.sel.span = r.span;
-    drawDraftList(false);
     refreshDock();
     say(out.kind === 'duplicate' ? 'That image is already on the site: the page uses it now. Nothing was uploaded.'
       : 'Image replaced. The new file goes into your proposal with this page.');
@@ -4271,14 +2843,13 @@
   }
   /* Round 2 (R5): the Team page's tools. order: the lists as the frame shows them after a drag, a card-menu move
      or a pin — written into my draft of data/people.json (HCCore.peopleOrderText refuses any add or drop);
-     add: "+" opens the New person form for that list, which comes back to the page. */
+     add: "+" for that list (U0b: a redirect until U5 adds the person in place). */
   async function peopleEdit(m) {
     const page = ed.page;
     if (!page || !page.data || !canEditPage(page) || showing() || (ed.pv && ed.pv.pr)) return;
     if (m.op === 'add') {
+      // the New person form is gone (U0b): "+" follows its redirect (the page + the bubble); U5 adds the person in place
       ed.addGroup = m.group === 'team' ? 'active' : 'alumni';
-      ed.trayOpen = true;
-      applyTray();
       trayGo('#/new/person');
       return;
     }
@@ -4292,7 +2863,6 @@
     drafts.put(d);
     ed.peopleFocus = typeof m.focus === 'string' ? m.focus : null;   // the reloaded page comes back to them
     say('');
-    drawDraftList(false);
     refreshDock();
     frameTo(ed.route, true);
   }
@@ -4312,7 +2882,6 @@
     d.files[page.file] = next;
     drafts.put(d);
     Object.assign(ed, { selected: null, sel: null, inPage: null });
-    drawDraftList(false);
     refreshDock();
     frameTo(ed.route, true);
   }
@@ -4335,16 +2904,17 @@
     const text = d.files[page.file];
     const split = C.splitBlocks(text);
     if (!split.ok) {
+      // the block model refuses this page: it is edited whole, as Markdown, on the thin editor page
       Object.assign(ed, { wholeReason: split.reason, sel: null, selected: null });
-      showChanges(null, true);
+      say(`Block editing is off for this page: ${split.reason}. It opens as Markdown.`);
+      await editWholePage();
       return;
     }
     const span = C.spanOf(text, index);
     if (!span) return;
-    if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, trayEdit: null, inPageReason: '' });
+    if (ed.selected !== index) Object.assign(ed, { inPage: null, asMarkdown: null, inPageReason: '' });
     Object.assign(ed, { wholeReason: null, selected: index,
       sel: { key: d.key, file: page.file, span, whole: false } });
-    showChanges(null, false);
     if (reload) frameTo(ed.route, true);
     else postEditor();
     if (canEditPage(page) && imageParts(text.slice(span.start, span.end))) askImage(index);
@@ -4362,139 +2932,30 @@
     drafts.put(d);
     Object.assign(ed, { wholeReason: null, selected: blockIndexAt(out.text, out.span.start),
       sel: { key: d.key, file: page.file, span: out.span, whole: false } });
-    showChanges({ start: out.select.start - out.span.start, end: out.select.end - out.span.start }, false);
     frameTo(ed.route, true);
     if (kind === 'image' && ed.selected !== null) askImage(ed.selected);     // "+" Image: pick the file now
   }
 
+  /* "Edit whole page as Markdown" (the account menu, U0b; and a page the block model refuses, or a block the
+     frame cannot open): the thin editor page at #/edit/<page>, on the page's own draft. */
   async function editWholePage() {
     const page = ed.page;
-    if (!page || showing() || pageLocked(page)) return;
+    if (!ed.on || !page || showing() || pageLocked(page)) return;
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
     ed.draft = d;
     Object.assign(ed, { selected: null,
       sel: { key: d.key, file: page.file, span: { start: 0, end: d.files[page.file].length }, whole: true } });
-    showChanges(null, true);
     if (ed.pv && ed.pv.ov) frameTo(ed.route, true);    // a proposal was drawn: show the page I edit
     else postEditor();
+    ed.trayOpen = true;
+    applyTray();
+    trayGo(`${DATA_HASH}/${page.pageId}`);
   }
 
-  const draftStateText = (d) => (C.isDirty(d) ? 'Changed — kept as a draft in this browser, not proposed yet.'
-    : 'No changes yet.');
 
-  /* One keystroke in the tray's textarea: the span is replaced (never the
-     text around it), the draft kept, and the frame reloaded a moment later. */
-  function blockChanged(ta, line) {
-    const d = ed.draft;
-    const sel = ed.sel;
-    if (!d || !sel || !canEditKey(d.key) || d.key !== sel.key) return;
-    // typing in the tray's textarea: the tray owns this block (the frame must not open it as well)
-    if (!sel.whole && ed.selected !== null) ed.trayEdit = ed.selected;
-    const out = C.replaceSpan(d.files[sel.file], sel.span, ta.value);
-    d.files[sel.file] = out.text;
-    sel.span = out.span;
-    if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
-    if (sel.whole) sel.span = { start: 0, end: out.text.length };
-    ed.selected = sel.whole ? null : blockIndexAt(out.text, out.span.start);
-    line.textContent = draftStateText(d);
-    drawDraftList(false);
-    clearTimeout(frameTimer);
-    frameTimer = setTimeout(() => frameTo(ed.route, true), FRAME_DELAY_MS);
-  }
 
-  /* The Changes tab: the picked block (or the whole page) as Markdown. */
-  function changesPanel() {
-    const page = ed.page;
-    const out = [h('h2', { class: 'hc-tray-title', text: 'This page' })];
-    let slot = null;
-    const box = (ta) => ({ node: h('section', { class: 'hc-changes', 'aria-label': 'Changes' }, ...out), ta, slot });
-    if (!page) {
-      out.push(h('p', { class: 'cms-muted', text: 'The editor opens setup, project, tool and About pages. '
-        + 'Go to one of them to edit it.' }));
-      return box(null);
-    }
-    out.push(h('p', { class: 'cms-meta' }, h('code', { text: page.file }), ' · ',
-      link(C.pencilUrl(page.file), 'edit on github.com instead')));
-    const projectId = projectIdOf(page);
-    if (projectId) out.push(accessLine(projectId));
-    if (canEdit() && pageLocked(page)) {
-      // the edit gate: a project you may not edit; the dock has why and Request edit access
-      out.push(h('p', { class: 'cms-muted', 'data-page-locked': true, text: `${C.ACCESS_LOCKED_TEXT} ${projectAccess(projectId).text}` }));
-      return box(null);
-    }
-    if (!canEdit()) {
-      out.push(h('p', { class: 'cms-muted' }, 'View only: changing pages needs write access to this site\'s '
-        + 'repository. You can still ', link(C.pencilUrl(page.file), 'propose a change on github.com'), '.'));
-    } else {
-      slot = h('div', { class: 'hc-base-slot' });
-      out.push(slot);
-      const on = ed.draft && ed.draft.key === page.pageId && ed.draft.base.number ? ed.draft.base.number : null;
-      if (on) out.push(h('p', { class: 'cms-muted', text: `Building on your proposal #${on}.` }));
-      const note = ed.baseNote;
-      const kept = note && note.key === page.pageId ? drafts.get(page.pageId) : null;
-      if (!on && kept && kept.base.number === note.number) {
-        out.push(h('p', { class: 'cms-muted', role: 'status', text: `Your saved changes to this page build on `
-          + `proposal #${note.number}, which is not one of your open proposals: the page shows the live site.` }));
-      }
-    }
-    if (ed.wholeReason) {
-      out.push(h('p', { class: 'hc-reason', role: 'status', text: `Block editing is off for this page: ${ed.wholeReason}.` }));
-    }
-    const whole = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-whole-page' },
-      'Edit whole page as Markdown');
-    whole.addEventListener('click', () => { editWholePage().catch(shown); });
-    const sel = ed.sel && ed.draft && ed.sel.key === ed.draft.key ? ed.sel : null;
-    if (!sel) {
-      if (!ed.wholeReason) {
-        out.push(h('p', { class: 'cms-muted', text: 'Click a block on the page to edit it, '
-          + 'or "+" between two blocks to add one.' }));
-      }
-      out.push(h('div', { class: 'cms-action-row' }, whole));
-      return box(null);
-    }
-    if (!sel.whole && ed.inPage && ed.inPage.index === ed.selected) {
-      inPageLine = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: draftStateText(ed.draft) });
-      const md = ed.inPage.editor === 'mdbox';
-      const asMd = md ? null : h('button', { type: 'button', class: 'cms-btn', 'data-action': 'edit-as-markdown' }, 'Edit this part as Markdown');
-      if (asMd) asMd.addEventListener('click', () => { ed.asMarkdown = ed.selected; ed.inPage = null; closeInFrame(); showChanges(null, ed.trayOpen); });
-      out.push(h('p', { class: 'hc-block-label', text: md ? 'Editing as Markdown in the page' : 'Typing in the page' }),
-        h('p', { class: 'cms-muted', 'data-in-page': ed.inPage.editor, text: md
-          ? 'This part is edited as Markdown right in the page, with a live preview. Done shows the result.'
-          : 'Type right in the page: your changes are marked there as suggestions '
-          + '(new text underlined, removed text struck through). Escape stops typing.' }),
-        inPageLine, h('div', { class: 'cms-action-row' }, asMd, whole));
-      return box(null);
-    }
-    if (!sel.whole && ed.inPageReason && ed.asMarkdown !== ed.selected) {
-      out.push(h('p', { class: 'cms-muted', role: 'status', 'data-markdown-reason': true,
-        text: `This part is edited as Markdown: ${ed.inPageReason}.` }));
-    }
-    const ta = h('textarea', { class: 'cms-editor-text hc-block-text', 'data-block-editor': true, rows: 12,
-      spellcheck: 'true', 'aria-label': sel.whole ? `Text of ${sel.file}` : 'This block, as Markdown' });
-    ta.value = ed.draft.files[sel.file].slice(sel.span.start, sel.span.end);
-    ta.readOnly = !canEditPage(page);
-    const line = h('p', { class: 'cms-draft-state cms-muted', role: 'status', text: canEditPage(page)
-      ? draftStateText(ed.draft) : 'View only.' });
-    ta.addEventListener('input', () => blockChanged(ta, line));
-    // a snippet, a link or an image goes in at the cursor, inside the span
-    const replaceText = (next, selStart, selEnd) => {
-      ta.value = next;
-      ta.focus();
-      ta.setSelectionRange(selStart, selEnd);
-      blockChanged(ta, line);
-    };
-    out.push(h('p', { class: 'hc-block-label', text: sel.whole ? 'The whole page, as Markdown' : 'This block, as Markdown' }),
-      canEditPage(page) ? snippetBar(ta, replaceText, ed.draft) : null,
-      ta, line, sel.whole ? null : h('div', { class: 'cms-action-row' }, whole));
-    return box(ta);
-  }
 
-  /* The tray at its tab's last hash. */
-  function renderTray() {
-    if (!tray) return;
-    trayGo(ed.tabHash[ed.tab] || TAB_HASH[ed.tab] || '#/');
-  }
 
   // ----------------------------------------------------------------- boot ---
 
@@ -4518,8 +2979,21 @@
     const signOut = h('button', { type: 'button', role: 'menuitem', class: 'hc-menu-item', 'data-action': 'sign-out' },
       'Sign out');
     signOut.addEventListener('click', () => { closeMenu(); onSignOutClick(); });
+    // U0b (plan D18): the thin editor page's two ways in, while Editor mode is on — the page on screen as Markdown,
+    // and the raw data files (U4 may move "Edit whole page" to the page's own toolbar)
+    menuWhole = h('button', { type: 'button', role: 'menuitem', class: 'hc-menu-item', 'data-action': 'menu-whole' },
+      'Edit whole page as Markdown');
+    menuWhole.addEventListener('click', () => { closeMenu(); editWholePage().catch(shown); });
+    menuData = h('button', { type: 'button', role: 'menuitem', class: 'hc-menu-item', 'data-action': 'menu-data' }, 'Data files');
+    menuData.addEventListener('click', () => {
+      closeMenu();
+      if (!ed.on) return;
+      ed.trayOpen = true;
+      applyTray();
+      trayGo(DATA_HASH);
+    });
     menuWho = h('p', { class: 'hc-menu-who' });
-    menu = h('div', { class: 'hc-menu', role: 'menu', 'aria-label': 'Your account' }, menuWho, signOut);
+    menu = h('div', { class: 'hc-menu', role: 'menu', 'aria-label': 'Your account' }, menuWho, menuWhole, menuData, signOut);
     menu.hidden = true;
     const escape = (e) => { if (e && e.key === 'Escape') closeMenu(); };
     avatarBtn.addEventListener('keydown', escape);
@@ -4529,20 +3003,16 @@
     ({ dock, handle } = D.mount(document.body, dockApi()));
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
-    // round 2 (R3): no tabs; a title says which view this is, and the views other than the list link back to it
-    trayTitle = h('h2', { class: 'hc-tray-title', text: 'Proposals' });
-    trayCrumb = h('a', { href: '#/', class: 'hc-tray-crumb', 'data-tab': 'proposals' }, '← Proposals');
-    trayCrumb.addEventListener('click', (e) => { e.preventDefault(); trayGo('#/'); });
+    // the thin editor page (U0b): its title says which view this is
+    trayTitle = h('h2', { class: 'hc-tray-title', text: 'Data files' });
     const close = h('button', { type: 'button', class: 'hc-tray-close', 'data-action': 'tray-close',
       title: 'Back to the page (Escape)' }, 'Back to the page');
     close.addEventListener('click', closeTray);
-    showBar = h('div', { class: 'hc-showing', role: 'status' });
-    showBar.hidden = true;
     main = h('div', { class: 'hc-tray-view' });
     trayBody = h('div', { class: 'hc-tray-body', role: 'tabpanel' }, main);
     trayBody.addEventListener('click', onTrayClick);
-    tray = h('section', { id: 'hc-tray', class: 'hc-tray', 'aria-label': 'Editor: proposals and data' },
-      h('div', { class: 'hc-tray-head' }, close, h('div', { class: 'hc-tray-heading' }, trayCrumb, trayTitle)),
+    tray = h('section', { id: 'hc-tray', class: 'hc-tray', 'aria-label': 'Editor: the page as Markdown, and the data files' },
+      h('div', { class: 'hc-tray-head' }, close, h('div', { class: 'hc-tray-heading' }, trayTitle)),
       trayBody);
     // the editor's one status line lives in the bubble, which is on screen over the page and the editor page alike
     dock.appendChild(notice);
@@ -4554,7 +3024,9 @@
       if (handle && typeof handle.focus === 'function') handle.focus();
     });
     tray.hidden = true;
-    handle.addEventListener('click', () => { if (ed.trayOpen) closeTray(); else openTray(); });
+    // the bubble's "Proposals" count: the proposals list is gone (U0b), so it follows that list's redirect (the
+    // page + the bubble); U3 opens the bubble's review list from it
+    handle.addEventListener('click', () => trayGo('#/'));
     document.body.appendChild(tray);
     // U4b: another tab wrote this login's drafts (one storage entry per page): read them again. When it changed
     // THIS page, say so; when it REMOVED this page's draft (proposed, discarded, or signed out there), this tab
@@ -4573,7 +3045,6 @@
       } else if (open && theirs && JSON.stringify(theirs.files) !== mineText) {
         say('This page is also being changed in another tab. Each tab keeps its own changes; the tab that saves last wins.', 'error');
       }
-      drawDraftList(false);
       refreshDock();
     });
     // the theme toggle: the open page frame follows at once
@@ -4587,7 +3058,7 @@
     if (mq) {
       const apply = () => {
         document.body.classList.toggle('hc-phone', Boolean(mq.matches));
-        if (rail.data) { closeSheet(); drawPageBar(); layoutRail(); }   // the phone's "Review N changes" comes and goes
+        if (rail.data) { closeSheet(); layoutRail(); }
       };
       apply();
       if (typeof mq.addEventListener === 'function') mq.addEventListener('change', apply);
@@ -5374,8 +3845,8 @@
     });
     const param = takeEditorParam();
     const saved = readEditorState();
-    if (param) applyParam(param);
-    else if (saved) { ed.tab = saved.tab; ed.trayOpen = saved.tray; }
+    if (param) { applyParam(param); D.unfold(); }
+    else if (saved) { ed.trayOpen = saved.tray; if (saved.hash) trayHash = saved.hash; }
     if (!given && !stored) {
       refresh();                 // nobody yet: the controls stay hidden
       onSignInClick(popup);      // completeSignIn turns Editor mode on
@@ -5387,16 +3858,30 @@
     return true;
   }
 
-  /* round 2 (R3): the editor page has no tabs; its other views (View settings, Guide, the Markdown fallback and
-     its forms) open from the list's foot or when the page needs them. openView(tab) opens one by its old tab
-     name — the node tests' way in. -> true when it opened */
-  function openView(tab) {
-    const hash = /^#\//.test(String(tab)) ? String(tab) : null;     // or a view's own address, e.g. '#/review/3'
-    if (!ed.on || (!hash && TABS.indexOf(tab) < 0)) return false;
+  /* openView(where): the node tests' way in (and an old caller's). `where` is an editor address ('#/edit/…', or a
+     retired one, which redirects: '#/review/3') or an old tab name (proposals, changes, view, guide, media).
+     -> true when Editor mode is on and it was followed */
+  const OLD_TABS = Object.freeze({ proposals: '#/', changes: DATA_HASH, view: '#/view', guide: '#/help', media: '#/media' });
+  function openView(where) {
+    const w = String(where);
+    const hash = /^#\//.test(w) ? w : (Object.prototype.hasOwnProperty.call(OLD_TABS, w) ? OLD_TABS[w] : null);
+    if (!ed.on || !hash) return false;
     ed.trayOpen = true;
     applyTray();
-    trayGo(hash || ed.tabHash[tab] || TAB_HASH[tab]);
+    trayGo(hash);
     return true;
   }
-  window.HCEditor = Object.freeze({ start, mountPreview, refresh, openView });
+
+  /* What later units reuse, and the tests read (U0b): the redirect table, the helpers kept from the removed
+     screens, and the editor's view of the page (the proposal kept drawn, the thin editor page's address). */
+  const helpers = Object.freeze({
+    REDIRECTS,
+    redirectOf,
+    mediaAssets,
+    newProjectForm,
+    makeProjectDraft,
+    personFields,
+    state: () => Object.freeze({ focusPr: ed.focusPr, trayOpen: ed.trayOpen, trayHash }),
+  });
+  window.HCEditor = Object.freeze({ start, mountPreview, refresh, openView, helpers });
 }());

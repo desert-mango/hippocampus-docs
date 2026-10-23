@@ -126,7 +126,7 @@ test('hc-ready is answered with hc-editor {nonce, on, settings, selected: null, 
   assert.ok(m);
   assert.equal(m.nonce, page.nonce());
   assert.equal(m.on, true);
-  assert.deepEqual({ ...m.settings }, { ...C.viewSettings.DEFAULTS });
+  assert.deepEqual({ ...m.settings }, { ...C.viewSettings });
   assert.equal(m.selected, null);
   assert.deepEqual([...m.overlay], []);
   assert.equal(page.frame().posted.find((x) => x.m.type === 'hc-editor').target, '*');
@@ -134,49 +134,16 @@ test('hc-ready is answered with hc-editor {nonce, on, settings, selected: null, 
 
 // ------------------------------------------------------ select and edit ---
 
-test('hc-block-select: the tray shows that block\'s Markdown; the frame is told which block', async () => {
-  const page = await editorOn();
-  await page.send({ type: 'hc-ready' });
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  const ta = page.textarea();
-  assert.ok(ta, 'the block editor is open');
-  assert.equal(ta.value, blocksOf(PAGE_TEXT)[i].text);
-  assert.equal(page.editorMessages().at(-1).selected, i);
-});
-
-test('an edit replaces the span, updates the draft, reloads with a NEW nonce and `selected`; zero network', async () => {
-  const page = await editorOn();
-  await page.asks(PAGE_FILE);
-  const i = firstParagraph(PAGE_TEXT);
-  const b = blocksOf(PAGE_TEXT)[i];
-  await page.pick(i);
-  const netBefore = page.github().length;
-  const first = page.nonce();
-  const srcs = page.frame().srcs.length;
-  await page.type(page.textarea(), 'A changed paragraph.\n\n');
-  const want = PAGE_TEXT.slice(0, b.start) + 'A changed paragraph.\n\n' + PAGE_TEXT.slice(b.end);
-  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware');
-  assert.equal(d.files[PAGE_FILE], want, 'the draft holds the text with the span replaced');
-  assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded once');
-  assert.notEqual(page.nonce(), first, 'with a fresh nonce');
-  await page.send({ type: 'hc-ready' });
-  assert.equal(page.editorMessages().at(-1).selected, i, 'and is told the block to show');
-  const served = await page.asks(PAGE_FILE);
-  assert.equal(served.text, C.withSentinels(want, page.nonce().slice(0, 16)));
-  assert.equal(page.github().length, netBefore, 'no network call for the edit or the reload');
-});
-
 test('reload cost (D-D): a counting fetch across two edits reads each path once', async () => {
+  // U0b: the two edits are two inserted blocks (each reloads the frame; the tray's textarea is gone)
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
-  await page.pick(i);
-  await page.type(page.textarea(), 'One.\n\n');
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
-  await page.type(page.textarea(), 'Two.\n\n');
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'warning' });
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
   const reads = page.github().filter((c) => /\/contents\//.test(c.url)).map((c) => c.url);
@@ -191,9 +158,10 @@ test('typing an unclosed fence never touches the text outside the span', async (
   const i = firstParagraph(PAGE_TEXT);
   const b = blocksOf(PAGE_TEXT)[i];
   await page.pick(i);
-  const ta = page.textarea();
+  // U0b: typed in the page (hc-block-md), the one editor left
+  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   for (const typed of ['```', '```bash\n', '```bash\necho', '```bash\necho one\n<div class="adm adm-note">\n']) {
-    await page.type(ta, typed);
+    await page.send({ type: 'hc-block-md', index: i, md: typed });
     const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
     assert.equal(d.slice(0, b.start), PAGE_TEXT.slice(0, b.start), 'before the span: byte-identical');
     assert.equal(d.slice(b.start + typed.length), PAGE_TEXT.slice(b.end), 'after the span: byte-identical');
@@ -209,16 +177,6 @@ test('U2: a picked block goes to the frame as `open` {index, md, kind}: its Mark
   await page.pick(i);
   const m = page.editorMessages().at(-1);
   assert.deepEqual({ ...m.open }, { index: i, md: blocksOf(PAGE_TEXT)[i].text, kind: 'paragraph', as: null });
-});
-
-test('U2: the frame says it types in the page -> the tray drops the Markdown textarea and says so', async () => {
-  const page = await editorOn();
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  assert.ok(page.textarea(), 'the textarea until the frame answers');
-  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
-  assert.equal(page.textarea(), undefined, 'no Markdown textarea while typing in the page');
-  assert.ok(page.one((e) => e.attrs['data-in-page'] === 'visual'), 'the "typing in the page" note');
 });
 
 test('U2: hc-block-md writes the block into the draft by its span: NO frame reload, same nonce, zero network', async () => {
@@ -261,46 +219,15 @@ test('U2: hc-block-md is dropped unless it names the open, in-page block in auth
   assert.match(store().files[PAGE_FILE], /Accepted\./);
 });
 
-test('U2/U3: the frame cannot open the editor -> the tray textarea shows with the reason', async () => {
+test('U2/U3: the frame cannot open the editor -> the whole page opens as Markdown on the thin editor page (U0b)', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const i = firstParagraph(PAGE_TEXT);
   await page.pick(i);
   await page.send({ type: 'hc-block-state', index: i, editor: 'markdown', reason: 'the in-page editor could not load' });
-  assert.ok(page.textarea(), 'the Markdown textarea');
-  assert.match(page.one((e) => e.attrs['data-markdown-reason'] !== undefined).textContent, /could not load/);
-});
-
-test('U3: "Edit this part as Markdown" closes the typed block, then opens it again as the in-place Markdown box', async () => {
-  const page = await editorOn();
-  await page.send({ type: 'hc-ready' });
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
-  const before = page.editorMessages().length;
-  page.action('edit-as-markdown').click();
-  await new Promise((r) => setImmediate(r));
-  const sent = page.editorMessages().slice(before);
-  assert.equal(sent.length, 2);
-  assert.equal(sent[0].open, null, 'first the typed block closes');
-  assert.equal(sent[1].open.index, i);
-  assert.equal(sent[1].open.as, 'markdown', 'then it opens as the Markdown box');
-  await page.send({ type: 'hc-block-state', index: i, editor: 'mdbox', reason: '' });
-  assert.ok(page.one((e) => e.attrs['data-in-page'] === 'mdbox'), '"Editing as Markdown in the page"');
-  assert.equal(page.textarea(), undefined, 'no second editor in the tray');
-  await page.send({ type: 'hc-block-md', index: i, md: '| a | b |\n|---|---|\n| 1 | 2 |\n\n' });
-  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
-  assert.match(d, /\| a \| b \|/, 'the box\'s Markdown, exactly as typed, in the span');
-});
-
-test('U3: typing in the tray textarea keeps the frame from opening the same block (one editor at a time)', async () => {
-  const page = await editorOn();
-  await page.send({ type: 'hc-ready' });
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  await page.type(page.textarea(), 'Typed in the tray.\n\n');
-  await page.send({ type: 'hc-ready' });
-  assert.equal(page.editorMessages().at(-1).open, null, 'the reloaded frame is not told to open it');
+  assert.equal(page.tray().hidden, false, 'the thin editor page');
+  assert.equal(page.trayTitle(), 'Edit as Markdown');
+  assert.equal(page.editorTextarea().value, PAGE_TEXT, 'the whole page');
 });
 
 test('U3: a note box Remove (an empty hc-block-md) takes the block out of the draft by its span', async () => {
@@ -358,7 +285,7 @@ test('R2a (round 2): the bubble is balanced: photo, name with role and the Propo
   assert.equal(link.textContent, 'Proposals1');
 });
 
-test('U4a: the dock counts this page\'s changes; Send for review opens the propose form below the dock', async () => {
+test('U4a: the dock counts this page\'s changes; Send for review is off until there is one (U0b: no Send box)', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   const count = () => page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent;
@@ -371,31 +298,8 @@ test('U4a: the dock counts this page\'s changes; Send for review opens the propo
   await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
   assert.equal(count(), '1 change');
   assert.equal(send().disabled, false);
-  send().click();
-  await new Promise((r) => setTimeout(r, 30));
-  const box = page.one((e) => e.classList.contains('hc-sendbox'));
-  assert.ok(box, 'the send box');
-  assert.ok(findAll(box, (e) => e.classList.contains('hc-propose-slot'))[0].childNodes.length > 0, 'with the propose form in it');
-});
-
-test('U4a: the send box goes away with what it sends: Editor off, or nothing left to send', async () => {
-  const page = await editorOn();
-  await page.send({ type: 'hc-ready' });
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
-  await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
-  page.action('dock-send').click();
-  await new Promise((r) => setTimeout(r, 30));
-  assert.ok(page.one((e) => e.classList.contains('hc-sendbox')), 'open');
-  await page.send({ type: 'hc-block-md', index: i, md: blocksOf(PAGE_TEXT)[i].text });
-  assert.equal(page.one((e) => e.classList.contains('hc-sendbox')), undefined, 'typed back to the original: nothing to send, the box closes');
-  await page.send({ type: 'hc-block-md', index: i, md: 'Changed again.\n\n' });
-  page.action('dock-send').click();
-  await new Promise((r) => setTimeout(r, 30));
-  page.switchBtn().click();
-  await new Promise((r) => setImmediate(r));
-  assert.equal(page.one((e) => e.classList.contains('hc-sendbox')), undefined, 'Editor off: gone');
+  // the click sends at once (tools/tests/test_editor_u0b.mjs follows it to GitHub): no box opens
+  assert.equal(page.created.filter((e) => e.classList.contains('hc-sendbox')).length, 0, 'no Send box');
 });
 
 test('U4a: x tucks the dock into a tag on the right edge, remembered in this browser; the tag brings it back', async () => {
@@ -423,39 +327,37 @@ test('hc-block-insert puts the snippet at that boundary, as its own block, and s
   const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
   const want = C.insertAt(PAGE_TEXT, i, 'note');
   assert.equal(d, want.text);
-  await page.showData();
-  const ta = page.textarea();
-  assert.equal(ta.value, want.text.slice(want.span.start, want.span.end));
-  assert.equal(ta.value.slice(ta.selectionStart, ta.selectionEnd), C.SNIPPET_CATALOG.note.placeholder);
   await page.send({ type: 'hc-ready' });
-  const sel = page.editorMessages().at(-1).selected;
+  const m = page.editorMessages().at(-1);
+  const sel = m.selected;
   assert.equal(blocksOf(want.text)[sel].start, want.span.start, 'the new block is the selected one');
+  assert.equal(m.open.md, want.text.slice(want.span.start, want.span.end), 'and opens in the page with its Markdown');
   // an unknown kind or an index past the end changes nothing
   await page.send({ type: 'hc-block-insert', index: i, kind: 'script' });
   await page.send({ type: 'hc-block-insert', index: 99999, kind: 'note' });
   assert.equal(draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE], want.text);
 });
 
-test('a page the block model refuses (CRLF) offers only "Edit whole page as Markdown", with the reason', async () => {
+test('a page the block model refuses (CRLF) opens whole as Markdown on the thin editor page, with the reason (U0b)', async () => {
   const crlf = PAGE_TEXT.replace(/\n/g, '\r\n');
   const page = await editorOn({ files: { [PAGE_FILE]: crlf } });
   const served = await page.asks(PAGE_FILE);
   assert.equal(served.text, crlf, 'no sentinels on a page the split refuses');
   await page.pick(0);
-  const tray = page.one((e) => e.attrs.id === 'hc-tray');
-  assert.match(tray.textContent, /Edit whole page as Markdown/);
-  assert.match(tray.textContent, new RegExp(C.splitBlocks(crlf).reason.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  const whole = page.one((e) => e.attrs['data-action'] === 'edit-whole-page');
-  whole.click();
-  await settle();
-  assert.equal(page.textarea().value, crlf);
+  const notice = page.one((e) => e.classList.contains('hc-notice'));
+  assert.match(notice.textContent, new RegExp(C.splitBlocks(crlf).reason.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.equal(page.tray().hidden, false);
+  assert.equal(page.trayTitle(), 'Edit as Markdown');
+  assert.equal(page.editorTextarea().value, crlf);
 });
 
 test('read-only role: a picked block is shown read-only, and "+" inserts nothing', async () => {
   const page = await editorOn({ variant: 'readonly' });
   const i = firstParagraph(PAGE_TEXT);
+  await page.send({ type: 'hc-ready' });
   await page.pick(i);
-  assert.equal(page.textarea().readOnly, true);
+  assert.equal(page.editorMessages().at(-1).open, null, 'nothing opens for typing');
+  await page.typeIn(i, 'Typed by a reader.\n\n');
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
   assert.equal(draftsOf(page).list().length, 0);
 });
@@ -486,24 +388,24 @@ test('a forged message — another window, or another nonce — is ignored', asy
   assert.equal(page.location.hash, `#${PAGE_ROUTE}`);
   await page.send({ type: 'hc-block-select', index: i, nonce: 'f'.repeat(32) });
   await page.send({ type: 'hc-block-insert', index: i, kind: 'note' }, { source: { postMessage() {} } });
-  assert.equal(page.textarea(), undefined);
   assert.equal(draftsOf(page).list().length, 0);
   await page.send({ type: 'hc-ready', nonce: 'f'.repeat(32) });
   assert.equal(page.editorMessages().length, 0);
+  await page.send({ type: 'hc-ready' });
+  assert.equal(page.editorMessages().at(-1).selected, null, 'the forged pick selected nothing');
 });
 
 test('the frame hears hc-editor only after the CURRENT load\'s hc-ready; never before, never after a reload alone', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   await page.pick(i);
-  assert.ok(page.textarea(), 'the tray still opens the block');
   assert.equal(page.editorMessages().length, 0, 'no hc-editor before this load said hc-ready');
   await page.send({ type: 'hc-ready' });
   assert.equal(page.editorMessages().length, 1, 'hc-ready is answered once');
   assert.equal(page.editorMessages()[0].selected, i, 'with the state held back meanwhile');
-  // an edit reloads the frame: the new load is not ready until it says so
+  // an edit reloads the frame: the new load is not ready until it says so (U0b: an inserted block)
   const old = page.nonce();
-  await page.type(page.textarea(), 'A changed paragraph.\n\n');
+  await page.send({ type: 'hc-block-insert', index: i, kind: 'note' });
   assert.notEqual(page.nonce(), old, 'the frame reloaded');
   const before = page.frame().posted.filter((x) => x.m.type === 'hc-editor').length;
   await page.pick(i);
@@ -526,7 +428,7 @@ test('?editor=<tab> turns Editor mode on and is stripped from the address', asyn
   assert.deepEqual(page.replaced, ['/#/about']);
   assert.match(page.frame().srcs[0], /&route=%2Fabout$/);
   // round 2 (R3): "Edit this page" is Editor mode on the page itself; no editor page opens
-  assert.deepEqual(JSON.parse(page.storage.getItem('hc-editor')), { on: true, tab: 'changes', tray: false });
+  assert.deepEqual(JSON.parse(page.storage.getItem('hc-editor')), { on: true, tray: false, hash: '#/' });
 });
 
 test('Editor on survives a reload of the tab (sessionStorage hc-editor); Editor off takes the frame away', async () => {
@@ -553,29 +455,14 @@ test('Editor on survives a reload of the tab (sessionStorage hc-editor); Editor 
 const UBUNTU_ROUTE = '/setup/raspberry-pi/ubuntu-24-04-server';
 const UBUNTU_FILE = 'content/setup/raspberry-pi/ubuntu-24-04-server.md';
 const fixtureText = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
-const TAB_IDS = ['proposals', 'changes', 'view', 'guide'];
-const TAB_LABELS = ['Proposals', 'Data', 'View', 'Guide'];
-const selectedTab = (page) => TAB_IDS.find((id) => page.tab(id).getAttribute('aria-selected') === 'true');
-
-async function openTab(page, id) {
-  if (id === 'media') {                                                // V2: no Media tab; the library is linked from Data
-    await page.showData();
-    await page.follow(page.linkTo('#/media'));
-    return;
-  }
-  page.tab(id).click();
-  await settle();
-}
-
-test('editor page (V2): the bubble button opens it (Proposals first); Back to the page and Escape close it; kept for the tab', async () => {
+test('the thin editor page (U0b): the account menu\'s Data files opens it; Back to the page and Escape close it; kept for the tab', async () => {
   const page = await editorOn();
-  page.handle().click();
-  await settle();
+  await page.dataFiles();
   assert.equal(page.tray().hidden, false);
   assert.ok(page.body.classList.contains('hc-tray-open'));
-  assert.equal(page.handle().getAttribute('aria-expanded'), 'true');
-  assert.equal(selectedTab(page), 'proposals');
+  assert.equal(page.trayTitle(), 'Data files');
   assert.equal(JSON.parse(page.storage.getItem('hc-editor')).tray, true);
+  assert.equal(JSON.parse(page.storage.getItem('hc-editor')).hash, '#/edit');
   assert.equal(page.action('tray-close').textContent, 'Back to the page');
   page.action('tray-close').click();
   await settle();
@@ -583,8 +470,8 @@ test('editor page (V2): the bubble button opens it (Proposals first); Back to th
   assert.equal(page.body.classList.contains('hc-tray-open'), false);
   assert.equal(page.handle().hidden, false, 'the button stays in the bubble');
   assert.equal(JSON.parse(page.storage.getItem('hc-editor')).tray, false);
-  page.handle().click();
-  await settle();
+  await page.dataFiles();
+  assert.equal(page.tray().hidden, false);
   for (const fn of page.docListeners('keydown')) fn({ key: 'Escape', defaultPrevented: false });
   await settle();
   assert.equal(page.tray().hidden, true, 'Escape goes back to the page');
@@ -595,125 +482,58 @@ test('editor page (V2): the bubble button opens it (Proposals first); Back to th
   assert.equal(page.tray().hidden, true);
 });
 
-test('editor page (V2): picking a block opens nothing (it is typed in the page); its Markdown is on the Data tab', async () => {
+test('editor page (V2): picking a block opens nothing (it is typed in the page)', async () => {
   const page = await editorOn();
   await page.send({ type: 'hc-ready' });
   await page.send({ type: 'hc-block-select', index: firstParagraph(PAGE_TEXT) });
   assert.equal(page.tray().hidden, true, 'no panel slides in');
   assert.equal(page.editorMessages().at(-1).open.index, firstParagraph(PAGE_TEXT), 'the frame is told to open it');
-  await page.showData();
-  assert.equal(selectedTab(page), 'changes');
-  assert.ok(page.textarea());
 });
 
-test('Proposals: the details page (#/review/1, the bar\'s Review) expands that proposal\'s card', async () => {
-  const page = await editorOn({ hash: `#${UBUNTU_ROUTE}` });
-  await page.review(1);
-  const open = page.one((e) => e.attrs['data-pr'] === '1');
-  assert.ok(open.classList.contains('is-open'), 'expanded in place');
-  assert.equal(selectedTab(page), 'proposals');
-  const here = findAll(open, (e) => e.tagName === 'LI' && e.classList.contains('is-here'));
-  assert.equal(here.length, 1);
-  assert.match(here[0].textContent, /ubuntu-24-04-server\.md/);
-  assert.match(here[0].textContent, /← this page/);
-  const status = findAll(open, (e) => e.classList.contains('cms-check'))[0];
-  assert.ok(status, 'the gate status is shown');
-  for (const a of ['request-changes', 'show-on-page']) {
-    assert.ok(findAll(open, (e) => e.attrs['data-action'] === a).length, `has ${a}`);
-  }
-  // Kyle, 2026-10-14: a Write member does not approve a setup page; the card says who does
-  assert.equal(findAll(open, (e) => e.attrs['data-action'] === 'approve').length, 0, 'no Approve for an Editor on setup');
-  assert.ok(findAll(open, (e) => e.attrs['data-approve-note'] !== undefined).length, 'with the reason');
-  // the old full-width preview frame is not drawn in the tray: "Show on page" replaces it
-  assert.equal(page.all((e) => e.tagName === 'IFRAME' && e.classList.contains('cms-preview-frame')).length, 0);
-  // its title leads back to the list (round 2, R3)
-  await page.follow(findAll(open, (e) => e.tagName === 'A' && e.classList.contains('cms-title'))[0]);
-  assert.equal(page.trayTitle(), 'Proposals');
-});
-
-test('Proposals: "Show on page" shows the proposal\'s head in the frame, read-only, its changes marked; Back returns', async () => {
-  const page = await editorOn({ hash: `#${UBUNTU_ROUTE}` });
-  await page.review(1);
-  const srcs = page.frame().srcs.length;
-  page.action('show-on-page').click();
-  await settle();
-  assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded');
-  // U7 (D-G 3): the base is the PR's head, overlay on — its own changes marked against its merge base
-  const head = C.overlayOnMain(fixtureText('page-ubuntu-24-04-server.at-merge-base.md'),
-    fixtureText('page-ubuntu-24-04-server.at-merge-base.md'), fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'));
-  const served = await page.asks(UBUNTU_FILE);
-  assert.equal(served.text, C.withSentinels(head.text, page.nonce().slice(0, 16), head.overlay), 'the PR head\'s text, marked');
-  const other = await page.asks('data/projects.json');
-  assert.equal(other.text, readRepo('data/projects.json'), 'a file the proposal does not change comes from main');
-  assert.match(page.host.textContent, /Showing proposal #1/, 'the bar sits on the page it is about');
-  assert.equal(page.tray().hidden, true, 'the editor page steps aside for Show on page');
-  await page.pick(0);
-  assert.equal(page.textarea(), undefined, 'no editing while a proposal is shown');
-  assert.equal(draftsOf(page).list().length, 0);
-  page.action('show-off').click();
-  await settle();
-  const back = await page.asks(UBUNTU_FILE);
-  const over = C.overlayOnMain(readRepo(UBUNTU_FILE), fixtureText('page-ubuntu-24-04-server.at-merge-base.md'),
-    fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md'));
-  assert.equal(back.text, C.withSentinels(over.text, page.nonce().slice(0, 16), over.overlay), 'main, PR #1 drawn over it');
-  assert.doesNotMatch(page.host.textContent, /Showing proposal #1/);
-});
-
-test('Changes: the snippet bar (the catalog, image through Media) edits inside the span only', async () => {
+test('the thin editor page\'s snippet bar (the catalog; no image chooser since U0b) inserts at the cursor of the whole page', async () => {
   const page = await editorOn();
-  const i = firstParagraph(PAGE_TEXT);
-  const b = blocksOf(PAGE_TEXT)[i];
-  await page.pick(i);
+  await page.wholePage();
   const kinds = page.all((e) => e.attrs['data-snippet'] !== undefined).map((e) => e.attrs['data-snippet']);
   assert.deepEqual(kinds, Object.keys(C.SNIPPET_CATALOG).filter((k) => !C.SNIPPET_CATALOG[k].media));
-  assert.ok(page.one((e) => e.attrs['data-action'] === 'media-open' && /Image from Media/.test(e.textContent)));
+  assert.equal(page.one((e) => e.attrs['data-action'] === 'media-open'), undefined, 'no "Image from Media" (U0b)');
+  const ta = page.editorTextarea();
+  ta.selectionStart = 0;
+  ta.selectionEnd = 0;
   page.one((e) => e.attrs['data-snippet'] === 'note').click();
   await settle();
-  const want = C.insertSnippet(b.text, 0, 0, 'note');
-  assert.equal(page.textarea().value, want.text);
-  const d = draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE];
-  assert.equal(d, PAGE_TEXT.slice(0, b.start) + want.text + PAGE_TEXT.slice(b.end));
+  const want = C.insertSnippet(PAGE_TEXT, 0, 0, 'note');
+  assert.equal(ta.value, want.text);
+  assert.equal(draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware').files[PAGE_FILE], want.text);
 });
 
-test('Changes: the draft list with Propose… and Discard; Discard drops the draft and reloads the frame', async () => {
+test('the thin editor page: Discard changes drops the page\'s draft and reloads the frame (U0b: the draft list went with the Changes tab)', async () => {
   const page = await editorOn();
   const i = firstParagraph(PAGE_TEXT);
   await page.pick(i);
-  assert.equal(page.all((e) => e.attrs['data-draft'] !== undefined).length, 0, 'no draft yet');
-  await page.type(page.textarea(), 'Changed.\n\n');
-  const row = page.one((e) => e.attrs['data-draft'] === 'setup/hippocampus-bringup/fcu-firmware');
-  assert.ok(row, 'the draft is listed');
-  findAll(row, (e) => e.attrs['data-action'] === 'propose-draft')[0].click();
-  await settle();
-  const send = page.action('send-proposal');
-  assert.ok(send, 'the Propose panel opened');
-  assert.equal(send.disabled, false);
+  await page.typeIn(i, 'Changed.\n\n');
+  assert.ok(draftsOf(page).get('setup/hippocampus-bringup/fcu-firmware'), 'the draft is kept');
+  await page.wholePage();
+  assert.match(page.editorTextarea().value, /^Changed\.$/m, 'the whole page shows the same draft');
+  assert.equal(page.action('propose').disabled, false, 'Send for review is on');
   const srcs = page.frame().srcs.length;
-  findAll(page.one((e) => e.attrs['data-draft'] === 'setup/hippocampus-bringup/fcu-firmware'),
-    (e) => e.attrs['data-action'] === 'discard-draft')[0].click();
+  page.action('discard').click();
   await settle();
   assert.equal(draftsOf(page).list().length, 0);
-  assert.equal(page.textarea(), undefined, 'the selection went with the draft');
   assert.equal(page.frame().srcs.length, srcs + 1);
   const served = await page.asks(PAGE_FILE);
   assert.equal(served.text, C.withSentinels(PAGE_TEXT, page.nonce().slice(0, 16)));
 });
 
-test('Changes: the four registries as raw JSON (locked-ids line) and the New project / New person forms', async () => {
+test('Data files: the four registries as raw JSON (locked-ids line)', async () => {
   const page = await editorOn();
-  await openTab(page, 'changes');
+  await page.dataFiles();
   for (const f of C.RAW_REGISTRIES) assert.ok(page.linkTo(`#/edit/${f.slice(0, -5)}`), f);
   await page.follow(page.linkTo('#/edit/data/people'));
-  assert.equal(selectedTab(page), 'changes');
+  assert.equal(page.trayTitle(), 'Data files');
   assert.ok(page.one((e) => e.attrs['data-locked'] !== undefined), 'the locked-ids line');
-  const ta = page.one((e) => e.tagName === 'TEXTAREA' && e.attrs['data-editor'] !== undefined);
-  assert.equal(ta.value, readRepo('data/people.json'));
-  await page.follow(page.linkTo('#/pages'));      // "← Changes"
-  await page.follow(page.linkTo('#/new/project'));
-  assert.ok(page.action('make-draft'), 'the New project form');
-  await page.follow(page.linkTo('#/pages'));
-  await page.follow(page.linkTo('#/new/person'));
-  assert.ok(page.action('add-person'), 'the New person form');
+  assert.equal(page.editorTextarea().value, readRepo('data/people.json'));
+  await page.follow(page.linkTo('#/edit'));      // "← Data files"
+  assert.ok(page.linkTo('#/edit/data/people'), 'back on the list');
 });
 
 // --------------------------------------- /cms/ parity on content pages ---
@@ -756,33 +576,33 @@ test('js/editor.js Propose: starting from my own proposal adds one commit and mo
     trees: { [HEAD_B]: TREE_B },
   };
   const { writes, onWrite } = recordWrites();
-  const page = await editorOn({ extra, onWrite });
-  await openTab(page, 'changes');
+  // textEncoder: the page then draws my proposal #7, whose review rail hashes its keys; without one it says so on
+  // the outcome line and overwrites it
+  const page = await editorOn({ extra, onWrite, textEncoder: true });
+  await page.wholePage();          // U0b: "Start from" is on the thin editor page (the Changes tab is gone)
   assert.ok(page.linkTo(C.pencilUrl(PAGE_FILE)), 'the pencil link, for Write too');
   const pick = page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
   assert.ok(pick, 'a base picker when I have an open proposal');
   pick.value = '7';
   pick.fire('change');
   await settle();
-  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(onBranch, page.nonce().slice(0, 16)),
-    'the page shows my proposal\'s head');
-  page.action('edit-whole-page').click();
-  await settle();
-  assert.equal(page.textarea().value, onBranch, 'the text at my proposal\'s head');
-  await page.type(page.textarea(), `${onBranch}Even more.\n`);
+  assert.equal(page.editorTextarea().value, onBranch, 'the text at my proposal\'s head');
+  await page.type(page.editorTextarea(), `${onBranch}Even more.\n`);
   const d = draftsOf(page).get(PAGE_ID);
   assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 }, 'the draft keeps its base');
-  findAll(page.one((e) => e.attrs['data-draft'] === PAGE_ID), (e) => e.attrs['data-action'] === 'propose-draft')[0].click();
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(`${onBranch}Even more.\n`, page.nonce().slice(0, 16)),
+    'the page shows the draft on my proposal\'s head');
+  page.action('propose').click();
   await settle();
-  assert.equal(page.action('send-proposal').textContent, 'Add to proposal #7');
-  page.action('send-proposal').click();
-  await settle();
-  assert.deepEqual(writes.map((c) => `${c.method} ${c.url.slice(REPO_API.length)}`),
+  const repoWrites = writes.filter((c) => c.url.startsWith(REPO_API));
+  assert.deepEqual(repoWrites.map((c) => `${c.method} ${c.url.slice(REPO_API.length)}`),
     ['POST /git/blobs', 'POST /git/trees', 'POST /git/commits', `PATCH /git/refs/heads/${OWN}`]);
-  assert.equal(writes[0].body.content, `${onBranch}Even more.\n`);
-  assert.equal(writes[1].body.base_tree, TREE_B);
-  assert.equal(writes[2].body.parents[0], HEAD_B, 'one commit on my proposal\'s head');
-  assert.match(page.tray().textContent, /Added to your proposal #7/);
+  assert.equal(repoWrites[0].body.content, `${onBranch}Even more.\n`);
+  assert.equal(repoWrites[1].body.base_tree, TREE_B);
+  assert.equal(repoWrites[2].body.parents[0], HEAD_B, 'one commit on my proposal\'s head');
+  const notice = page.one((e) => e.classList.contains('hc-notice'));
+  assert.ok(notice, 'an outcome line');
+  assert.match(notice.textContent, /Added to your proposal #7/, 'the user is told where the edit went');
   assert.equal(draftsOf(page).get(PAGE_ID), null, 'the draft went into the proposal');
 });
 
@@ -795,15 +615,15 @@ test('Start from my proposal: a link inside the frame to another page reloads it
     contents: { [HEAD_B]: { [PAGE_FILE]: onBranch } },
   };
   const page = await editorOn({ extra });
-  await openTab(page, 'changes');
+  await page.wholePage();
   const pick = page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
   pick.value = '7';
   pick.fire('change');
   await settle();
   assert.match(page.tray().textContent, /Building on your proposal #7\./);
-  page.action('edit-whole-page').click();
+  await page.type(page.editorTextarea(), `${onBranch}Even more.\n`);
+  page.action('tray-close').click();
   await settle();
-  await page.type(page.textarea(), `${onBranch}Even more.\n`);
   const srcs = page.frame().srcs.length;
   await page.send({ type: 'hc-route', route: OTHER_ROUTE });
   for (const fn of page.listeners.hashchange || []) fn();
@@ -818,19 +638,18 @@ test('Start from my proposal: a link inside the frame to another page reloads it
 
 test('js/editor.js editor: Read-only sees the page and its preview, view-only, with the pencil link', async () => {
   const page = await editorOn({ variant: 'readonly' });
-  await openTab(page, 'changes');
+  await page.wholePage();          // U0b: the page as Markdown on the thin editor page
   const pencil = () => page.all((e) => e.tagName === 'A' && e.attrs.href === C.pencilUrl(PAGE_FILE));
   const viewOnly = page.one((e) => e.tagName === 'P' && /^View only: /.test(e.textContent));
-  assert.ok(viewOnly, 'the view-only line, before any block is picked');
+  assert.ok(viewOnly, 'the view-only line');
   assert.match(viewOnly.textContent, /You can still propose a change on github\.com/);
   const a = findAll(viewOnly, (e) => e.tagName === 'A')[0];
   assert.equal(a.attrs.href, C.pencilUrl(PAGE_FILE), 'it carries the pencil link');
   assert.equal(a.attrs.target, '_blank');
   assert.equal(a.attrs.rel, 'noopener noreferrer');
-  await page.pick(firstParagraph(PAGE_TEXT));
-  const ta = page.textarea();
+  const ta = page.editorTextarea();
   assert.equal(ta.readOnly, true);
-  assert.equal(page.action('propose-draft'), undefined);
+  assert.equal(page.action('propose'), undefined);
   assert.equal(page.one((e) => e.attrs['data-snippet'] === 'note'), undefined);
   assert.equal(page.one((e) => e.attrs['data-base'] !== undefined), undefined, 'no base picker');
   assert.ok(pencil().length, 'the pencil link');
@@ -851,60 +670,6 @@ function ownSeven(onBranch, files) {
     trees: { [HEAD_B]: TREE_B },
   };
 }
-const basePick = (page) => page.one((e) => e.tagName === 'SELECT' && e.attrs['data-base'] !== undefined);
-
-test('Start from while "Show on page" is on: the shown proposal goes, the draft on the picked base is on the page and editable', async () => {
-  const onBranch = `${PAGE_TEXT}More.\n`;
-  const page = await editorOn({ extra: ownSeven(onBranch, [{ filename: PAGE_FILE, status: 'modified' }]) });
-  await page.review(7);
-  page.action('show-on-page').click();
-  await settle();
-  assert.match(page.host.textContent, /Showing proposal #7/);
-  await openTab(page, 'changes');
-  const pick = basePick(page);
-  pick.value = '7';
-  pick.fire('change');
-  await settle();
-  assert.equal(page.action('show-off'), undefined, 'no "Back to your view": show mode is over');
-  assert.doesNotMatch(page.host.textContent, /Showing proposal #7/, 'no show bar');
-  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(onBranch, page.nonce().slice(0, 16)),
-    'the frame serves the draft on the picked base');
-  await page.pick(firstParagraph(onBranch));
-  assert.ok(page.textarea(), 'a block of the page can be edited');
-  await page.type(page.textarea(), 'Changed.\n\n');
-  const d = draftsOf(page).get(PAGE_ID);
-  assert.ok(d && C.isDirty(d), 'the edit is kept');
-  assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
-});
-
-test('Start from: an edit made while the picked base is still being read is never thrown away without asking', async () => {
-  const onBranch = `${PAGE_TEXT}More.\n`;
-  const page = await editorOn({ extra: ownSeven(onBranch, []) });
-  await openTab(page, 'changes');
-  const real = page.win.fetch;
-  let open = null;
-  const gate = new Promise((r) => { open = r; });
-  page.win.fetch = (url, init) => (String(url).endsWith(`/git/ref/heads/${OWN}`)
-    ? gate.then(() => real(url, init)) : real(url, init));
-  const asked = [];
-  page.win.confirm = (text) => { asked.push(text); return false; };
-  const pick = basePick(page);
-  pick.value = '7';
-  pick.fire('change');
-  await settle();
-  // GitHub has not said where my proposal's branch is yet: the member edits meanwhile
-  await page.pick(firstParagraph(PAGE_TEXT));
-  await page.type(page.textarea(), 'Changed during the wait.\n\n');
-  open();
-  await settle();
-  assert.deepEqual(asked, [C.DISCARD_TEXT], 'asked before the edit could go');
-  const d = draftsOf(page).get(PAGE_ID);
-  assert.ok(d && C.isDirty(d), 'the edit is kept');
-  assert.equal(d.base.number, null, 'still on the live site');
-  assert.match(d.files[PAGE_FILE], /Changed during the wait\./);
-  assert.doesNotMatch(page.tray().textContent, /Building on your proposal #7/);
-  assert.match((await page.asks(PAGE_FILE)).text, /Changed during the wait\./);
-});
 
 test('a stored draft naming a proposal that is not my own open one is shown on main, and that branch is never read', async () => {
   const ALICE = 'cms/alice/her-change-260921';
@@ -920,11 +685,8 @@ test('a stored draft naming a proposal that is not my own open one is shown on m
     files: { [PAGE_FILE]: 'Tampered.\n' }, originals: { [PAGE_FILE]: 'Her text.\n' },
     base: { ref: ALICE, sha: HEAD_A, number: 9 } });
   const page = await editorOn({ extra, storage });
-  await openTab(page, 'changes');
   assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(PAGE_TEXT, page.nonce().slice(0, 16)),
     'the page on main');
-  assert.doesNotMatch(page.tray().textContent, /Building on/);
-  assert.match(page.tray().textContent, /proposal #9, which is not one of your open proposals/);
   assert.deepEqual(page.calls.filter((c) => c.url.indexOf(HEAD_A) >= 0 || c.url.indexOf(ALICE) >= 0), [],
     'zero reads of that branch');
 });
@@ -945,44 +707,27 @@ test('a link inside the frame to a page whose stored draft says #7 on another br
   store.put({ key: MOTOR_ID, label: 'Motor configuration', route: `/${MOTOR_ID}`,
     files: { [MOTOR_FILE]: 'Mine on seven.\n' }, originals: { [MOTOR_FILE]: readRepo(MOTOR_FILE) },
     base: { ref: OWN, sha: HEAD_B, number: 7 } });
+  // U0b: this page's draft is on my own #7 from the start (the Changes tab's in-page "Start from" is gone)
+  store.put({ key: PAGE_ID, label: 'FCU firmware', route: PAGE_ROUTE,
+    files: { [PAGE_FILE]: `${onBranch}Mine.\n` }, originals: { [PAGE_FILE]: onBranch },
+    base: { ref: OWN, sha: HEAD_B, number: 7 } });
   const page = await editorOn({ extra: ownSeven(onBranch, []), storage });
-  await openTab(page, 'changes');
-  const pick = basePick(page);
-  pick.value = '7';
-  pick.fire('change');
-  await settle();
-  assert.match(page.tray().textContent, /Building on your proposal #7\./);
+  assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(`${onBranch}Mine.\n`, page.nonce().slice(0, 16)),
+    'on my own #7');
   const srcs = page.frame().srcs.length;
   // first to a page whose draft is on my own #7 (number and branch): the frame already reads there
   await page.send({ type: 'hc-route', route: `/${MOTOR_ID}` });
   for (const fn of page.listeners.hashchange || []) fn();
   await settle();
   assert.equal(page.frame().srcs.length, srcs, 'the same proposal: no reload');
-  assert.match(page.tray().textContent, /Building on your proposal #7\./);
   await page.send({ type: 'hc-route', route: OTHER_ROUTE });
   for (const fn of page.listeners.hashchange || []) fn();
   await settle();
   assert.equal(page.frame().srcs.length, srcs + 1, 'same number, another branch: the frame reloads there');
   assert.equal((await page.asks(OTHER_FILE)).text, C.withSentinels(readRepo(OTHER_FILE), page.nonce().slice(0, 16)),
     'the page on main, not at my proposal\'s head');
-  assert.doesNotMatch(page.tray().textContent, /Building on/);
-  assert.match(page.tray().textContent, /proposal #7, which is not one of your open proposals/);
   assert.deepEqual(page.calls.filter((c) => c.url.indexOf(HEAD_S) >= 0 || c.url.indexOf(STRAY) >= 0), [],
     'zero reads of that branch');
-});
-
-test('Media: the image library, linked from the Data tab', async () => {
-  const page = await editorOn();
-  await openTab(page, 'media');
-  assert.equal(selectedTab(page), 'changes');
-  assert.ok(page.one((e) => e.tagName === 'H1' && e.textContent === 'Media'));
-  // the fake's /api/media list answers from data/cloudinary-manifest.json (the walk's tray-media shot)
-  await settle();
-  const manifest = JSON.parse(readRepo('data/cloudinary-manifest.json'));
-  const first = Object.values(manifest.assets)[0];
-  assert.ok(page.calls.some((c) => c.url === '/api/media' && c.method === 'POST'), 'the list went to /api/media');
-  assert.ok(page.one((e) => e.tagName === 'CODE' && e.textContent === first.public_id)
-    || page.all((e) => (e.attrs.src || '') === first.url).length > 0, 'a manifest image is listed');
 });
 
 test('fake GitHub: /api/media list answers from the manifest; its other actions take no writes', async () => {
@@ -1002,53 +747,6 @@ test('fake GitHub: /api/media list answers from the manifest; its other actions 
     assert.equal(r.status, 405, action);
   }
   assert.equal(fake.calls.filter((c) => c.url === '/api/media').length, 4);
-});
-
-test('View: the settings form saves to localStorage (hc-editor-view) and tells the frame', async () => {
-  const local = memoryStorage();
-  const page = await editorOn({ localStorage: local });
-  await page.send({ type: 'hc-ready' });
-  await openTab(page, 'view');
-  const sw = (k) => page.one((e) => e.attrs['data-setting'] === k && e.attrs.role === 'switch');
-  for (const k of ['suggestions', 'compact', 'outlines']) assert.ok(sw(k), k);
-  assert.equal(sw('compact').getAttribute('aria-checked'), 'false');
-  sw('compact').click();
-  await settle();
-  assert.equal(JSON.parse(local.getItem(C.viewSettings.KEY)).compact, true);
-  assert.equal(page.editorMessages().at(-1).settings.compact, true, 'the frame is told');
-  assert.equal(sw('compact').getAttribute('aria-checked'), 'true');
-  page.one((e) => e.attrs['data-setting'] === 'diff' && e.attrs['data-value'] === 'side').click();
-  await settle();
-  assert.equal(JSON.parse(local.getItem(C.viewSettings.KEY)).diff, 'side');
-  assert.equal(page.editorMessages().at(-1).settings.diff, 'side');
-  assert.equal(page.storage.getItem(C.viewSettings.KEY), null, 'never in sessionStorage');
-});
-
-test('Guide: the new steps, the private line, per-line code diffs out of v1; its link opens the proposals list', async () => {
-  const page = await editorOn();
-  await openTab(page, 'guide');
-  const text = page.tray().textContent;
-  assert.match(text, /Per-line diff inside code blocks is out of v1/);
-  assert.match(text, /[Pp]rivate/);
-  assert.match(text, /\+/);
-  assert.match(text, /Undo and Redo/, 'round 2 (R2b): the keys and the bubble arrows');
-  await page.follow(page.linkTo('#/'));
-  assert.equal(page.trayTitle(), 'Proposals', 'its link leads to the proposals list');
-});
-
-test('?editor=proposals&pr=1 opens the tray on that card; ?editor=changes&data= / &new= open those forms', async () => {
-  let page = openSite({ hash: `#${UBUNTU_ROUTE}?editor=proposals&pr=1` });
-  await settle();
-  assert.equal(page.tray().hidden, false);
-  assert.equal(selectedTab(page), 'proposals');
-  assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'));
-  assert.equal(page.location.hash, `#${UBUNTU_ROUTE}`);
-  page = openSite({ hash: '#/about?editor=changes&data=people' });
-  await settle();
-  assert.ok(page.one((e) => e.attrs['data-locked'] !== undefined));
-  page = openSite({ hash: '#/about?editor=changes&new=person' });
-  await settle();
-  assert.ok(page.action('add-person'));
 });
 
 test('phone: body.hc-phone follows the (max-width: 767px) query', async () => {
@@ -1180,7 +878,7 @@ test('sign-out drops the session\'s file cache and main\'s sha: a pick in flight
   await settle();
   assert.equal(page.storage.getItem(C.SESSION_KEY), null);
   assert.deepEqual(page.github().slice(net), [], 'no GitHub read after the sign-out (the old token\'s cache is gone)');
-  assert.equal(page.textarea(), undefined, 'the pick is dropped');
+  assert.equal(draftsOf(page).list().length, 0, 'the pick is dropped');
   const notice = page.one((e) => e.classList.contains('hc-notice'));
   assert.ok(!notice || !/Something went wrong/.test(notice.textContent), 'quietly');
   // a later sign-in builds a fresh cache: Editor mode works again
@@ -1247,8 +945,6 @@ const UB_BASE = fixtureText('page-ubuntu-24-04-server.at-merge-base.md');
 const UB_HEAD = fixtureText('page-ubuntu-24-04-server.at-d0bdc64.md');
 const PR1 = JSON.parse(fixtureText('pull-1.json'));
 const PR1_HEAD = PR1.head.sha;
-const PR1_LOGIN = PR1.user.login;
-const STATUS_WORD = { pass: 'check green', fail: 'check red', checking: 'check pending', unknown: 'check unknown' };
 
 /* main, moved since PR #1's merge base: one paragraph the PR leaves alone
    is reworded (no mark: it is simply main's text). */
@@ -1353,31 +1049,9 @@ test('overlay: PR #1 at d0bdc64 drawn over a MOVED main — the composite with t
   assert.equal(markAt.get(chrony), 'change', 'the changed cloud-init block is the new version…');
   assert.equal(markAt.get(chrony - 1), 'del', '…right after the old one');
   assert.ok(ov.overlay.some((e, i) => e.source === 'main' && e.text.includes(main.words) && !markAt.has(i)));
-  // the page bar
-  const bar = pageBar(page);
-  assert.ok(bar && !bar.hidden, 'the page bar is shown');
-  const status = C.checkStatus(JSON.parse(fixtureText('check-runs-d0bdc64.json'))).state;
-  assert.match(bar.textContent, new RegExp(`${PR1_LOGIN} proposes changes to this page`));
-  assert.match(bar.textContent, /PR #1/);
-  assert.match(bar.textContent, new RegExp(STATUS_WORD[status]));
-  assert.ok(findAll(bar, (e) => e.attrs['data-action'] === 'review-in-tray').length, 'Review in tray');
-});
-
-test('overlay: "Review in tray" opens PR #1\'s card in the tray; the inline/side setting reaches the frame', async () => {
-  const local = memoryStorage();
-  const page = await ubuntuOn({ localStorage: local });
-  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray')[0].click();
-  await settle();
-  assert.equal(page.tray().hidden, false);
-  assert.equal(selectedTab(page), 'proposals');
-  assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'));
-  assert.equal(page.editorMessages().at(-1).settings.diff, 'inline');
-  await openTab(page, 'view');
-  page.one((e) => e.attrs['data-setting'] === 'diff' && e.attrs['data-value'] === 'side').click();
-  await settle();
-  const m = page.editorMessages().at(-1);
-  assert.equal(m.settings.diff, 'side');
-  assert.ok(F.sidePairs(m.overlay).length > 0, 'the frame can pair old and new blocks side by side');
+  // U0b (plan D18): no bar above the page; the proposer's colour still reaches the frame
+  assert.equal(pageBar(page), undefined, 'no page bar');
+  assert.equal(typeof page.editorMessages().at(-1).tint, 'number');
 });
 
 test('frame: sidePairs pairs a deleted block with the changed block right after it, nothing else', () => {
@@ -1396,271 +1070,11 @@ test('overlay: a block main ALSO changed since the merge base shows main\'s vers
   assert.ok(ov.overlay[k].text.includes('# main moved this line'), 'main\'s version, never a guess');
   const marks = marksOf(page.editorMessages().at(-1));
   assert.deepEqual(marks.filter((x) => x.mark === 'conflict'), [{ index: k, mark: 'conflict' }]);
-  const bar = pageBar(page);
-  assert.match(bar.textContent, /main changed this since the proposal — Update from main/);
-  // Update from main: the one write, pinned to the head sha shown (Write role may)
-  const update = findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0];
-  assert.ok(update, 'Update from main, for a role that may');
-  const writes = [];
-  page.win.fetch = ((orig) => (url, init) => {
-    if (init && init.method && init.method !== 'GET') {
-      writes.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
-      return Promise.resolve(answer(202, { message: 'Updating pull request branch.' }));
-    }
-    return orig(url, init);
-  })(page.win.fetch);
-  update.click();
-  await settle();
-  assert.deepEqual(writes.map((w) => [w.method, w.url.replace('https://api.github.com', '')]),
-    [['PUT', '/repos/desert-mango/hippocampus-docs/pulls/1/update-branch']]);
-  assert.equal(writes[0].body.expected_head_sha, PR1_HEAD);
-  // a read-only role gets the mark and the words, never the button
+  // a read-only role gets the same mark (U0b: the bar's words and its Update from main button went with the bar)
   const ro = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, variant: 'readonly' });
-  assert.match(pageBar(ro).textContent, /main changed this since the proposal/);
-  assert.equal(findAll(pageBar(ro), (e) => e.attrs['data-action'] === 'pagebar-update').length, 0);
+  assert.deepEqual(marksOf(ro.editorMessages().at(-1)).filter((x) => x.mark === 'conflict'), [{ index: k, mark: 'conflict' }]);
 });
 
-/* PR #2 on the Ubuntu page, newest, built on an OLD base where main has
-   since changed a block it changes too (a conflict). Update from main moves
-   its head (the fake's `updates`) to a merge of main: built on main, it only
-   adds a paragraph. */
-function updatableProposal(mainText) {
-  const oldHead = `a1${'0'.repeat(38)}`;
-  const newHead = `a2${'0'.repeat(38)}`;
-  const oldBase = `ba5e${'0'.repeat(36)}`;
-  const merged = secondProposal(mainText);
-  const pull = Object.assign({}, merged.extra.pulls[0], { head: Object.assign({}, merged.extra.pulls[0].head, { sha: oldHead }) });
-  return {
-    oldHead, newHead, newText: merged.text,
-    extra: {
-      pulls: [pull],
-      files: merged.extra.files,
-      contents: { [oldBase]: { [UBUNTU_FILE]: UB_BASE }, [oldHead]: { [UBUNTU_FILE]: UB_HEAD },
-        [newHead]: { [UBUNTU_FILE]: merged.text } },
-      compare: { [oldHead]: oldBase, [newHead]: MAIN_SHA },
-      checks: { [oldHead]: { total_count: 0, check_runs: [] }, [newHead]: { total_count: 0, check_runs: [] } },
-      updates: { 2: newHead },
-    },
-  };
-}
-
-test('overlay: Update from main re-reads the proposal and redraws the bar and the frame on its new head', async () => {
-  const main = conflictingMain();
-  const up = updatableProposal(main.text);
-  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
-  let bar = pageBar(page);
-  assert.match(bar.textContent, /second-author proposes changes to this page/);
-  assert.match(bar.textContent, /main changed this since the proposal/);
-  assert.ok(marksOf(page.editorMessages().at(-1)).some((x) => x.mark === 'conflict'), 'the old head conflicts');
-  const before = page.nonce();
-  const srcs = page.frame().srcs.length;
-  // GitHub refuses first: the old view stays, with the notice
-  const real = page.win.fetch;
-  let refuse = true;
-  page.win.fetch = (url, init) => {
-    if (refuse && init && init.method === 'PUT') {
-      refuse = false;
-      return Promise.resolve(answer(422, { message: 'merge conflict between base and head' }));
-    }
-    return real(url, init);
-  };
-  findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
-  await settle();
-  bar = pageBar(page);
-  assert.equal(page.frame().srcs.length, srcs, 'an error reloads nothing');
-  assert.equal(page.nonce(), before);
-  assert.match(bar.textContent, /main changed this since the proposal/, 'the old view stays');
-  const err = findAll(bar, (e) => e.classList.contains('hc-pagebar-result'))[0];
-  assert.ok(err && !err.hidden && err.classList.contains('is-error'), 'the error is shown');
-  // then it takes it: the head moves, and the page follows
-  findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
-  await settle();
-  const puts = page.calls.filter((c) => c.method === 'PUT').map((c) => c.url.replace('https://api.github.com', ''));
-  assert.equal(refuse, false, 'the first click was refused');
-  assert.deepEqual(puts, ['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch'], 'the second reached GitHub');
-  assert.notEqual(page.nonce(), before, 'the frame reloaded with a fresh nonce');
-  await page.send({ type: 'hc-ready' });
-  const ov = C.overlayOnMain(main.text, main.text, up.newText);
-  assert.equal(ov.conflicts.length, 0);
-  const marks = marksOf(page.editorMessages().at(-1));
-  assert.deepEqual(marks, [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }],
-    'the new head\'s marks: one added paragraph, no conflict');
-  const served = await page.asks(UBUNTU_FILE);
-  assert.equal(served.text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
-  bar = pageBar(page);
-  assert.match(bar.textContent, /second-author proposes changes to this page/);
-  assert.doesNotMatch(bar.textContent, /main changed this since the proposal/, 'no obsolete conflict line');
-  assert.match(bar.textContent, /Updated from main/, 'the outcome is said on the bar');
-  assert.ok(page.github().some((c) => c.url.endsWith(`/compare/${MAIN_SHA}...${up.newHead}`)), 'the new merge base was read');
-  // an unrelated edit after the refresh reloads with zero network
-  const k = ov.overlay.findIndex((e) => e.source === 'main' && blocksOf(main.text)[e.mainIndex].kind === 'paragraph');
-  await page.pick(k);
-  const net = page.github().length;
-  await page.type(page.textarea(), 'An unrelated edit.\n\n');
-  await page.send({ type: 'hc-ready' });
-  assert.equal(page.github().length, net, 'no network call for the edit or its reload');
-});
-
-/* GitHub as it really is: it answers 202 to update-branch at once and moves
-   the head "a moment later" — here, when the editor's first poll wait (a
-   timer of a second or more) has passed. hold() keeps that moment from
-   coming until release(), so the reader can move on meanwhile. */
-function slowUpdate(page) {
-  const real = page.win.fetch;
-  const puts = [];
-  let deferred = null;
-  let gate = null;
-  let open = null;
-  page.win.fetch = (url, init) => {
-    if (init && init.method === 'PUT' && /\/update-branch$/.test(String(url))) {
-      puts.push({ url: String(url).replace('https://api.github.com', ''), body: JSON.parse(init.body) });
-      deferred = [url, init];
-      return Promise.resolve(answer(202, { message: 'Updating pull request branch.' }));
-    }
-    return real(url, init);
-  };
-  page.win.setTimeout = (fn, ms) => setTimeout(async () => {
-    if (ms >= 1000 && deferred) {
-      if (gate) await gate;
-      const d = deferred;
-      deferred = null;
-      await real(...d);          // the fake moves the head now
-    }
-    fn();
-  }, 0);
-  return {
-    puts,
-    hold() { gate = new Promise((r) => { open = r; }); },
-    release() { open(); gate = null; },
-  };
-}
-
-/* Page B (the gantry usage page), touched by the same proposal: at its OLD
-   head it changes a paragraph main has reworded since the old merge base (a
-   conflict); at its NEW head (built on main) it only adds a paragraph. */
-const GANTRY_FILE = 'content/setup/lab-gantry/usage.md';
-function gantryTexts() {
-  const mainText = readRepo(GANTRY_FILE);
-  const bb = blocksOf(mainText);
-  const para = bb.findIndex((b, i) => i > 3 && b.kind === 'paragraph');
-  const b = bb[para];
-  const tail = b.text.match(/\n*$/)[0];
-  const swap = (words) => mainText.slice(0, b.start) + words + tail + mainText.slice(b.end);
-  const at = bb[bb.findIndex((x) => x.kind === 'paragraph')].start;
-  return {
-    mainText,
-    base: swap('The old merge base said this.'),
-    oldHead: swap('The old head changed what the merge base said.'),
-    newHead: `${mainText.slice(0, at)}The new head adds this paragraph.\n\n${mainText.slice(at)}`,
-  };
-}
-
-function updatableOnTwoPages(mainText) {
-  const up = updatableProposal(mainText);
-  const g = gantryTexts();
-  const [oldBase] = Object.keys(up.extra.contents).filter((sha) => sha.startsWith('ba5e'));
-  const extra = Object.assign({}, up.extra, {
-    files: { 2: [...up.extra.files[2], { filename: GANTRY_FILE, status: 'modified', additions: 2, deletions: 0,
-      changes: 2, patch: '@@ -1 +1 @@' }] },
-    contents: {
-      [oldBase]: Object.assign({}, up.extra.contents[oldBase], { [GANTRY_FILE]: g.base }),
-      [up.oldHead]: Object.assign({}, up.extra.contents[up.oldHead], { [GANTRY_FILE]: g.oldHead }),
-      [up.newHead]: Object.assign({}, up.extra.contents[up.newHead], { [GANTRY_FILE]: g.newHead }),
-    },
-  });
-  return Object.assign({}, up, { extra, gantry: g });
-}
-
-test('overlay: Update from main redraws the page the reader moved to while the proposal was read again', async () => {
-  const main = conflictingMain();
-  const up = updatableOnTwoPages(main.text);
-  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
-  assert.match(pageBar(page).textContent, /main changed this since the proposal/);
-  const slow = slowUpdate(page);
-  slow.hold();
-  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'pagebar-update')[0].click();
-  await settle();
-  assert.deepEqual(slow.puts.map((w) => w.url), ['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch']);
-  // while GitHub has not moved the branch yet, the reader opens page B (also in the proposal)
-  await page.go(`#${OTHER_ROUTE}`);
-  await page.send({ type: 'hc-ready' });
-  assert.ok(marksOf(page.editorMessages().at(-1)).some((x) => x.mark === 'conflict'), 'page B at the old head conflicts');
-  assert.match(pageBar(page).textContent, /main changed this since the proposal/);
-  const onB = page.nonce();
-  // then the head moves, the poll sees it, and page B — the page on screen — follows
-  slow.release();
-  await settle();
-  assert.notEqual(page.nonce(), onB, 'page B reloaded with a fresh nonce on the new head');
-  assert.match(page.frame().srcs.at(-1), new RegExp(`&route=${encodeURIComponent(OTHER_ROUTE)}$`), 'still page B');
-  await page.send({ type: 'hc-ready' });
-  const g = up.gantry;
-  const ov = C.overlayOnMain(g.mainText, g.mainText, g.newHead);
-  assert.equal(ov.conflicts.length, 0);
-  assert.deepEqual(marksOf(page.editorMessages().at(-1)),
-    [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }], 'the new head\'s marks on page B');
-  assert.equal((await page.asks(GANTRY_FILE)).text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
-  const bar = pageBar(page);
-  assert.doesNotMatch(bar.textContent, /main changed this since the proposal/, 'no obsolete conflict line on page B');
-  assert.match(bar.textContent, /Updated from main/);
-});
-
-test('tray: the card\'s Update from main waits for the head to move, then redraws the page on it', async () => {
-  const main = conflictingMain();
-  const up = updatableProposal(main.text);
-  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
-  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray' && e.attrs['data-proposal'] === '2')[0].click();
-  await settle();
-  const card = page.one((e) => e.attrs['data-pr'] === '2');
-  assert.ok(card && card.classList.contains('is-open'), 'PR #2\'s card is open');
-  const slow = slowUpdate(page);
-  const before = page.nonce();
-  findAll(card, (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === 'update')[0].click();
-  await settle();
-  assert.deepEqual(slow.puts.map((w) => [w.url, w.body.expected_head_sha]),
-    [['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch', up.oldHead]]);
-  assert.notEqual(page.nonce(), before, 'the frame reloaded');
-  await page.send({ type: 'hc-ready' });
-  const ov = C.overlayOnMain(main.text, main.text, up.newText);
-  assert.deepEqual(marksOf(page.editorMessages().at(-1)),
-    [{ index: ov.overlay.findIndex((e) => e.source === 'pr-add'), mark: 'add' }],
-    'the frame shows the new head\'s marks, not the old head\'s conflict');
-  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov.text, page.nonce().slice(0, 16), ov.overlay));
-  assert.doesNotMatch(pageBar(page).textContent, /main changed this since the proposal/, 'no obsolete conflict line');
-  assert.ok(page.github().some((c) => c.url.endsWith(`/compare/${MAIN_SHA}...${up.newHead}`)), 'the new merge base was read');
-});
-
-test('tray: the card\'s Update from main stays pending until the head moved, then the card is drawn on the new head', async () => {
-  const main = conflictingMain();
-  const up = updatableProposal(main.text);
-  const page = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, extra: up.extra });
-  findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray' && e.attrs['data-proposal'] === '2')[0].click();
-  await settle();
-  const cardOf = () => page.one((e) => e.attrs['data-pr'] === '2');
-  const updateButton = () => findAll(cardOf(), (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === 'update')[0];
-  const slow = slowUpdate(page);
-  slow.hold();                         // GitHub has not moved the branch yet
-  updateButton().click();
-  await settle();
-  // a second click while the first is pending sends nothing
-  updateButton().click();
-  await settle();
-  assert.deepEqual(slow.puts.map((w) => [w.url, w.body.expected_head_sha]),
-    [['/repos/desert-mango/hippocampus-docs/pulls/2/update-branch', up.oldHead]],
-    'one update request while the first is pending');
-  assert.ok(updateButton().disabled, 'the card\'s Update from main is disabled while pending');
-  const pending = findAll(cardOf(), (e) => e.classList.contains('cms-action-result'))[0];
-  assert.ok(pending && !pending.hidden && /Updating…/.test(pending.textContent), 'the card says it is updating');
-  // the head moves: the card is drawn again from the proposal as it is now
-  slow.release();
-  await settle();
-  const btn = updateButton();
-  assert.ok(btn && !btn.disabled, 'the redrawn card\'s Update from main is enabled again');
-  assert.match(cardOf().textContent, /Updated from main/, 'the outcome is said on the card');
-  btn.click();
-  await settle();
-  assert.deepEqual(slow.puts.map((w) => w.body.expected_head_sha), [up.oldHead, up.newHead],
-    'the redrawn card acts on the new head, not the old one');
-});
 
 test('overlay: clicking the block right after a PR-inserted block edits the right main block (composite -> mainIndex)', async () => {
   const main = movedMain();
@@ -1672,26 +1086,19 @@ test('overlay: clicking the block right after a PR-inserted block edits the righ
   assert.notEqual(mi, k, 'composite and main indices differ here');
   const srcs = page.frame().srcs.length;
   await page.pick(k);
-  const ta = page.textarea();
-  assert.ok(ta, 'the block editor is open');
-  assert.equal(ta.value, blocksOf(main.text)[mi].text, 'main\'s block at mainIndex, not the composite\'s k-th');
-  // the frame goes to the draft view (D-G 1): main with plain sentinels, that block selected
+  // the frame goes to the draft view (D-G 1): main with plain sentinels, that block selected and opened in the page
   assert.equal(page.frame().srcs.length, srcs + 1, 'the frame reloaded to the draft view');
   await page.send({ type: 'hc-ready' });
   const m = page.editorMessages().at(-1);
   assert.equal(m.selected, mi);
+  assert.equal(m.open.md, blocksOf(main.text)[mi].text, 'main\'s block at mainIndex, not the composite\'s k-th');
   assert.deepEqual([...m.overlay], []);
   assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(main.text, page.nonce().slice(0, 16)));
-  // an edit changes main's block only
-  await page.type(page.textarea(), 'Edited from the overlay.\n');
+  // an edit changes main's block only (typed in the page; U0b: the tray's textarea is gone, and so is the bar)
+  await page.typeIn(mi, 'Edited from the overlay.\n');
   const b = blocksOf(main.text)[mi];
   const d = draftsOf(page).get('setup/raspberry-pi/ubuntu-24-04-server').files[UBUNTU_FILE];
   assert.equal(d, main.text.slice(0, b.start) + 'Edited from the overlay.\n' + main.text.slice(b.end));
-  // with a draft, the page bar says the proposal also touches this page, with "Show on page"
-  await settle();
-  const bar = pageBar(page);
-  assert.match(bar.textContent, /1 open proposal also touches this page/);
-  assert.ok(findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-show' && e.attrs['data-proposal'] === '1').length);
 });
 
 test('overlay: "+" after a PR-inserted block inserts after the nearest preceding main block', async () => {
@@ -1715,84 +1122,37 @@ test('overlay: clicking a PR-only block opens that proposal\'s card and starts n
     const k = ov.overlay.findIndex((e) => e.source === source);
     const srcs = page.frame().srcs.length;
     await page.send({ type: 'hc-block-select', index: k });
-    assert.equal(page.tray().hidden, false, source);
-    assert.equal(selectedTab(page), 'proposals');
-    assert.ok(page.one((e) => e.attrs['data-pr'] === '1').classList.contains('is-open'), 'PR #1\'s card, open');
-    assert.equal(page.textarea(), undefined, 'no block editor');
+    // U0b: its card is the #/review/1 redirect — the page stays, PR #1 kept drawn (U3 opens its row in the bubble)
+    assert.equal(page.tray().hidden, true, source);
+    assert.equal(page.win.HCEditor.helpers.state().focusPr, 1, 'PR #1 is the proposal on the page');
     assert.equal(draftsOf(page).list().length, 0, 'no draft');
     assert.equal(page.frame().srcs.length, srcs, 'the frame stays on the overlay');
   }
 });
 
-test('roles (D8) exactly as reviewActionsFor: read-only no buttons, Write no Approve/Merge on setup, Maintainer and Admin all', async () => {
-  const actionsIn = async (variant) => {
-    const page = await ubuntuOn({ variant });
-    findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray')[0].click();
-    await settle();
-    const card = page.one((e) => e.attrs['data-pr'] === '1');
-    return ['approve', 'request-changes', 'merge', 'update', 'close']
-      .filter((a) => findAll(card, (e) => e.tagName === 'BUTTON' && e.attrs['data-action'] === a).length);
-  };
-  assert.deepEqual(await actionsIn('readonly'), []);
-  assert.deepEqual(await actionsIn('push'), ['request-changes', 'update', 'close'], 'Write: setup is not its project');
-  assert.deepEqual(await actionsIn('maintain'), ['approve', 'request-changes', 'merge', 'update', 'close']);
-  assert.deepEqual(await actionsIn('admin'), ['approve', 'request-changes', 'merge', 'update', 'close']);
-});
-
-test('two proposals on one page: the newest is overlaid; the bar lists the other with its own "Show on page"', async () => {
+test('two proposals on one page: the newest is overlaid; the other is drawn when named (#/review/<n>, U0b)', async () => {
   const mainText = readRepo(UBUNTU_FILE);
   const two = secondProposal(mainText);
   const page = await ubuntuOn({ extra: two.extra });
   const ov2 = C.overlayOnMain(mainText, mainText, two.text);
   assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov2.text, page.nonce().slice(0, 16), ov2.overlay));
   assert.deepEqual(marksOf(page.editorMessages().at(-1)).map((x) => x.mark), ['add']);
-  const bar = pageBar(page);
-  assert.match(bar.textContent, /second-author proposes changes to this page/);
-  assert.match(bar.textContent, /PR #2/);
-  assert.match(bar.textContent, /check pending/);
-  const other = findAll(bar, (e) => e.attrs['data-action'] === 'pagebar-show' && e.attrs['data-proposal'] === '1')[0];
-  assert.ok(other, 'PR #1 is listed with "Show on page"');
-  assert.match(bar.textContent, new RegExp(`#1 by ${PR1_LOGIN}`));
-  other.click();
+  assert.equal(page.editorMessages().at(-1).tint, 2, 'in #2\'s proposer\'s colour');
+  // U0b: no bar lists the other; #/review/1 (its redirect) draws PR #1 on the page instead
+  page.win.HCEditor.openView('#/review/1');
   await settle();
   await page.send({ type: 'hc-ready' });
-  // "Show on page" (D-G 3): the base is PR #1's head, overlay on, read-only
-  const ov1 = C.overlayOnMain(UB_BASE, UB_BASE, UB_HEAD);
+  const ov1 = C.overlayOnMain(mainText, UB_BASE, UB_HEAD);
   assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov1.text, page.nonce().slice(0, 16), ov1.overlay));
-  assert.match(pageBar(page).textContent, /Showing proposal #1/);
   assert.ok(page.editorMessages().at(-1).overlay.length > 0, 'overlay on');
-  const mainBlock = ov1.overlay.findIndex((e) => e.source === 'main' && e.text.trim());
-  await page.pick(mainBlock);
-  assert.equal(page.textarea(), undefined, 'read-only: no editing');
-  assert.equal(draftsOf(page).list().length, 0);
-  page.action('show-off').click();
-  await settle();
-  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(ov2.text, page.nonce().slice(0, 16), ov2.overlay),
-    'back to the newest proposal over main');
 });
 
-test('"Show others\' suggestions" off: main alone, no marks; the bar still says a proposal touches this page', async () => {
-  const local = memoryStorage();
-  C.viewSettings.save(local, Object.assign({}, C.viewSettings.DEFAULTS, { suggestions: false }));
-  const page = await ubuntuOn({ localStorage: local });
-  assert.equal((await page.asks(UBUNTU_FILE)).text, C.withSentinels(readRepo(UBUNTU_FILE), page.nonce().slice(0, 16)));
-  assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
-  assert.match(pageBar(page).textContent, /1 open proposal touches this page/);
-  // turned on in the View tab: the frame reloads with the overlay
-  await openTab(page, 'view');
-  page.one((e) => e.attrs['data-setting'] === 'suggestions').click();
-  await settle();
-  await page.send({ type: 'hc-ready' });
-  assert.ok(page.editorMessages().at(-1).overlay.length > 0);
-});
-
-test('a proposal whose texts do not split is not drawn: the bar says to open it in the tray', async () => {
+test('a proposal whose texts do not split is not drawn, and the page is main\'s', async () => {
   const crlf = readRepo(UBUNTU_FILE).replace(/\n/g, '\r\n');
   const page = await ubuntuOn({ files: { [UBUNTU_FILE]: crlf } });
   assert.equal((await page.asks(UBUNTU_FILE)).text, crlf);
   assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
-  assert.match(pageBar(page).textContent, /this proposal can't be shown in place — open it under Proposals/);
-  assert.ok(findAll(pageBar(page), (e) => e.attrs['data-action'] === 'review-in-tray').length);
+  assert.equal(pageBar(page), undefined, 'U0b: no bar says so (U3 tells it in the bubble)');
 });
 
 test('a page no proposal touches has no page bar and no marks', async () => {
@@ -1911,11 +1271,9 @@ test('a link inside the frame: to a page a proposal touches reloads with the ove
 
 test('overlay: "Edit whole page as Markdown" edits main and shows it (the draft view), not the composite', async () => {
   const page = await ubuntuOn();
-  await openTab(page, 'changes');
   const srcs = page.frame().srcs.length;
-  page.action('edit-whole-page').click();
-  await settle();
-  assert.equal(page.textarea().value, readRepo(UBUNTU_FILE), 'main\'s whole text');
+  await page.wholePage();          // U0b: from the account menu, onto the thin editor page
+  assert.equal(page.editorTextarea().value, readRepo(UBUNTU_FILE), 'main\'s whole text');
   assert.equal(page.frame().srcs.length, srcs + 1);
   await page.send({ type: 'hc-ready' });
   assert.deepEqual([...page.editorMessages().at(-1).overlay], []);
@@ -2518,56 +1876,36 @@ const REGS_NOW = {
   tools: JSON.parse(readRepo('data/tools.json')),
 };
 const PAGE_LABEL = C.pageList(REGS_NOW).find((p) => p.pageId === PAGE_ID).title;
-const fieldOf = (page, k) => page.one((e) => e.attrs['data-field'] === k);
 const rawEditor = (page) => page.one((e) => e.tagName === 'TEXTAREA' && e.attrs['data-editor'] !== undefined);
-const shownProblem = (page) => page.all((e) => e.attrs['data-problem'] !== undefined).find((e) => !e.hidden);
 const writeSeq = (writes) => writes.map((c) => `${c.method} ${c.url.slice(REPO_API.length)}`);
-const cardOpen = (page, n) => Boolean(page.one((e) => e.attrs['data-pr'] === String(n) && e.classList.contains('is-open')));
-const firedHash = async (page) => {
-  for (const fn of page.listeners.hashchange || []) fn();
-  await settle();
-};
-async function proposeFrom(page, key, summary) {
-  findAll(page.one((e) => e.attrs['data-draft'] === key), (e) => e.attrs['data-action'] === 'propose-draft')[0].click();
-  await settle();
-  const box = fieldOf(page, 'summary');
-  if (summary !== undefined) box.value = summary;
-  return box;
-}
-async function sendIt(page) {
-  page.action('send-proposal').click();
-  await settle();
-}
-function ownPull(branch) {
-  return { number: 7, title: 'Fix typo', state: 'open', user: { login: 'bob' }, created_at: '2026-09-20T10:00:00Z',
-    head: { ref: branch || OWN, sha: HEAD_B, repo: { full_name: 'desert-mango/hippocampus-docs' } }, base: { ref: 'main' } };
-}
 
-test('js/editor.js page tree (#/pages): one edit link per page and registry, plus New project / New person', async () => {
-  const page = await editorOn();
-  await openTab(page, 'changes');
-  // the registries and the New forms: tray links, as on /cms/
-  const links = page.all((e) => e.tagName === 'A' && /^#\/(edit|new)\//.test(e.attrs.href || '')).map((a) => a.attrs.href);
-  // (since 2026-10-14 each project's own facts file follows the registries, in the index's order)
+test('Data files and Edit whole page (U0b): every registry and facts file is listed, and every page opens as Markdown', async () => {
+  const page = await editorOn({ variant: 'maintain' });     // a Maintainer edits every project (the edit gate)
+  await page.dataFiles();
+  // the registries, then each project's own facts file (2026-10-14), in the index's order
+  const links = page.all((e) => e.tagName === 'A' && /^#\/edit\//.test(e.attrs.href || '')).map((a) => a.attrs.href);
   assert.deepEqual(links, [...C.RAW_REGISTRIES.map((f) => `#/edit/${f.slice(0, -5)}`),
-    ...REGS_NOW.projects.projects.map((p) => `#/edit/data/projects/${p.id}`), '#/new/project', '#/new/person']);
-  // every page of the registries' page tree is the site's own page: on screen, it is the Changes tab's page
+    ...REGS_NOW.projects.projects.map((p) => `#/edit/data/projects/${p.id}`)]);
+  page.action('tray-close').click();
+  await settle();
+  // every page of the registries' page tree is the site's own page: on screen, "Edit whole page" opens its file
   for (const p of C.pageList(REGS_NOW)) {
     await page.go(`#${p.route}`);
+    await page.wholePage();
     // round 2 (R5): the Team page (content/about.md's route) is edited as its data, data/people.json
     const file = p.pageId === 'about' ? 'data/people.json' : p.file;
     const head = page.one((e) => e.tagName === 'CODE' && e.textContent === file);
-    assert.ok(head, `${p.pageId}: the Changes tab names ${file}`);
+    assert.ok(head, `${p.pageId}: the thin editor page names ${file}`);
     assert.ok(page.linkTo(C.pencilUrl(file)), `${p.pageId}: and its github.com pencil link`);
+    page.action('tray-close').click();
+    await settle();
   }
 });
 
 test('js/editor.js editor: a heading change reaches the preview frame through the draft, fresh nonce per reload', async () => {
   const page = await editorOn();
-  await openTab(page, 'changes');
-  page.action('edit-whole-page').click();
-  await settle();
-  const ta = page.textarea();
+  await page.wholePage();          // U0b: the thin editor page, from the account menu
+  const ta = page.editorTextarea();
   assert.equal(ta.value, PAGE_TEXT, 'the file at main\'s head');
   assert.equal(ta.readOnly, false);
   const frame = page.frame();
@@ -2596,27 +1934,26 @@ test('js/editor.js editor: a heading change reaches the preview frame through th
 
 test('js/editor.js editor: snippet buttons and the internal link picker insert into the draft', async () => {
   const page = await editorOn();
-  await page.pick(firstParagraph(PAGE_TEXT));
-  const ta = page.textarea();
+  await page.wholePage();          // U0b: the snippet bar is the thin editor page's
+  const ta = page.editorTextarea();
   ta.selectionStart = ta.selectionEnd = 0;
   page.one((e) => e.attrs['data-snippet'] === 'note').click();
   await settle();
-  assert.ok(page.textarea().value.startsWith('<div class="adm adm-note"><p class="adm-title">Note</p>'));
+  assert.ok(ta.value.startsWith('<div class="adm adm-note"><p class="adm-title">Note</p>'));
   const picker = page.one((e) => e.tagName === 'SELECT' && e.attrs['data-link-picker'] !== undefined);
   picker.value = 'setup/bluerov/dvl';
-  page.textarea().selectionStart = page.textarea().selectionEnd = 0;
+  ta.selectionStart = ta.selectionEnd = 0;
   page.action('insert-link').click();
   await settle();
-  assert.match(page.textarea().value, /^\[[^\]]+\]\(#\/setup\/bluerov\/dvl\)/);
-  const media = page.action('media-open');
-  assert.ok(media && !media.disabled, 'Image from Media is live (its rows are the "Image from Media" ones below)');
+  assert.match(ta.value, /^\[[^\]]+\]\(#\/setup\/bluerov\/dvl\)/);
+  assert.equal(page.action('media-open'), undefined, 'no "Image from Media" since U0b ("+" Image in the page)');
   const d = draftsOf(page).get(PAGE_ID).files[PAGE_FILE];
   assert.ok(d.includes('adm-note') && d.includes('(#/setup/bluerov/dvl)'));
 });
 
 test('js/editor.js raw-JSON editor: a trailing comma is refused with line and column; an id change with the rule', async () => {
   const page = await editorOn();
-  await openTab(page, 'changes');
+  await page.dataFiles();
   await page.follow(page.linkTo('#/edit/data/projects'));
   const ta = rawEditor(page);
   const original = readRepo('data/projects.json');
@@ -2647,18 +1984,18 @@ test('js/editor.js editor: leaving a page with a draft that is not proposed asks
   page.win.confirm = (text) => { asked.push(text); return false; };
   // a page's block draft stays when the reader moves on (the draft store, keyed by page): nothing is lost
   await page.pick(firstParagraph(PAGE_TEXT));
-  await page.type(page.textarea(), 'Changed.\n\n');
+  await page.typeIn(firstParagraph(PAGE_TEXT), 'Changed.\n\n');
   await page.go(`#${OTHER_ROUTE}`);
   assert.deepEqual(asked, [], 'nothing to ask: the draft is kept');
   assert.ok(C.isDirty(draftsOf(page).get(PAGE_ID)), 'the draft stays');
   // the raw-JSON editor asks before its draft leaves the screen
-  await openTab(page, 'changes');
+  await page.dataFiles();
   await page.follow(page.linkTo('#/edit/data/site'));
-  await page.follow(page.linkTo('#/pages'));          // no change yet: no question
+  await page.follow(page.linkTo('#/edit'));          // "← Data files", no change yet: no question
   assert.deepEqual(asked, []);
   await page.follow(page.linkTo('#/edit/data/site'));
   await page.type(rawEditor(page), `${readRepo('data/site.json')}\n`);
-  await page.follow(page.linkTo('#/pages'));
+  await page.follow(page.linkTo('#/edit'));
   assert.equal(asked.length, 1);
   assert.equal(asked[0], C.LEAVE_TEXT);
   assert.match(asked[0], /not proposed/);
@@ -2673,177 +2010,23 @@ test('js/editor.js Propose from a setup page: exactly blobs -> tree -> commit ->
   const page = await editorOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
   const asked = [];
   page.win.confirm = (text) => { asked.push(text); return true; };
-  await openTab(page, 'changes');
-  page.action('edit-whole-page').click();
-  await settle();
+  await page.wholePage();          // U0b: the thin editor page; its Send for review sends at once
   const edited = PAGE_TEXT.replace(/^(#+ .*)$/m, '$1 (edited)');
-  await page.type(page.textarea(), edited);
-  const box = await proposeFrom(page, PAGE_ID);
-  assert.equal(box.value, `Edit ${PAGE_LABEL}`);
-  assert.equal(page.action('send-proposal').textContent, 'Propose');
-  box.value = 'Fix the heading';
-  await sendIt(page);
+  await page.type(page.editorTextarea(), edited);
+  assert.equal(page.action('propose').textContent, 'Send for review');
+  page.action('propose').click();
+  await settle();
   assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/trees', 'POST /git/commits', 'POST /git/refs',
     'POST /pulls', 'PATCH /pulls/42']);
   assert.deepEqual(writes[0].body, { content: edited, encoding: 'utf-8' });
   assert.deepEqual(writes[1].body.tree.map((e) => e.path), [PAGE_FILE], 'only that file');
   assert.equal(writes[1].body.base_tree, TREE_M, 'on main\'s tree');
-  assert.match(writes[3].body.ref, /^refs\/heads\/cms\/bob\/fix-the-heading-[0-9]{6}$/);
-  assert.match(writes[5].body.body, /https:\/\/docs\.example\.org\/cms\/#\/review\/42/);
-  assert.ok(cardOpen(page, 42), 'the tray shows proposal #42 (the old #/review/42)');
+  assert.equal(writes[4].body.title, `Edit ${PAGE_LABEL}`, 'titled "Edit <page>" (U2 generates the title)');
+  assert.match(writes[3].body.ref, /^refs\/heads\/cms\/bob\/edit-[a-z0-9-]+-[0-9]{6}$/);
+  assert.match(writes[5].body.body, /https:\/\/docs\.example\.org\/cms\/#\/review\/42/, 'the PR links its review (the redirect lands it)');
+  assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /#42/, 'said in the bubble; no review page opens');
   assert.equal(draftsOf(page).get(PAGE_ID), null, 'the draft went into the proposal');
   assert.deepEqual(asked, [], 'no leave question after proposing');
-});
-
-test('js/editor.js New project: a form -> one draft of two files -> Propose sends one tree with both paths', async () => {
-  const { writes, onWrite } = recordWrites();
-  const page = await editorOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/project'));
-  const field = (k) => fieldOf(page, k);
-  assert.equal(field('story').value, '## What it is\n\n');
-  field('id').value = 'Bad Id';
-  page.action('make-draft').click();
-  await settle();
-  assert.match(shownProblem(page).textContent, /id/);
-  field('id').value = 'sonar-rig';
-  field('name').value = 'Sonar rig';
-  field('status').value = 'active';
-  field('tagline').value = 'A tank rig.';
-  field('repos').value = 'sonar_rig';
-  field('story').value = '## What it is\n\nA rig.\n';
-  page.action('make-draft').click();
-  await settle();
-  const d = draftsOf(page).get('new/project');
-  // three files since 2026-10-14: the index entry, the project's own facts file, its page
-  assert.deepEqual(Object.keys(d.files).sort(), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
-  assert.deepEqual(JSON.parse(d.files['data/projects.json']).projects.at(-1), { id: 'sonar-rig', add: [], remove: [] });
-  assert.equal(JSON.parse(d.files['data/projects/sonar-rig.json']).name, 'Sonar rig');
-  assert.equal(d.route, '/projects/sonar-rig');
-  assert.equal(rawEditor(page).value, '## What it is\n\nA rig.\n', 'the story opens in the editor');
-  // the page on screen becomes the new page: the frame shows it from the draft
-  assert.equal(page.location.hash, '#/projects/sonar-rig');
-  await firedHash(page);
-  assert.match(page.frame().srcs.at(-1), /route=%2Fprojects%2Fsonar-rig$/, 'previewed at the new page');
-  assert.equal((await page.asks('content/projects/sonar-rig.md')).text, '## What it is\n\nA rig.\n');
-  page.action('propose').click();
-  await settle();
-  fieldOf(page, 'summary').value = 'Add the sonar rig';
-  await sendIt(page);
-  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
-    'POST /git/refs', 'POST /pulls', 'PATCH /pulls/42']);
-  assert.deepEqual(writes[3].body.tree.map((e) => e.path), ['content/projects/sonar-rig.md', 'data/projects.json', 'data/projects/sonar-rig.json']);
-  assert.ok(cardOpen(page, 42));
-});
-
-test('js/editor.js New person: the form adds one person to the people draft and opens it', async () => {
-  const page = await editorOn();
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/person'));
-  const field = (k) => fieldOf(page, k);
-  assert.deepEqual(field('group').childNodes.map((o) => o.attrs.value), ['active', 'alumni']);
-  // a photo must be in the site's image list (check.py 6c): it is picked from Media, never typed
-  assert.equal(field('photo'), undefined);
-  const seam = page.action('media-open');
-  assert.ok(seam && !seam.disabled && /Photo from Media/.test(seam.textContent), 'Photo from Media is live');
-  field('group').value = 'alumni';
-  field('name').value = 'Ada Example';
-  field('title').value = 'Student';
-  page.action('add-person').click();
-  await settle();
-  const d = draftsOf(page).get('data/people');
-  assert.deepEqual(JSON.parse(d.files['data/people.json']).groups[1].people.at(-1),
-    { name: 'Ada Example', title: 'Student', photo: null, link: null });
-  assert.equal(rawEditor(page).value, d.files['data/people.json'], 'the people draft opens (the old #/edit/data/people)');
-  assert.ok(page.one((e) => e.attrs['data-locked'] !== undefined));
-  assert.deepEqual(page.calls.filter((c) => c.method !== 'GET'), []);
-});
-
-test('js/editor.js New project can start from my open proposal: one more commit on its branch', async () => {
-  const { writes, onWrite } = recordWrites();
-  const page = await editorOn({ onWrite, extra: { pulls: [ownPull()], files: { 7: [] },
-    contents: { [HEAD_B]: { 'data/projects.json': readRepo('data/projects.json') } },
-    trees: { [MAIN_SHA]: TREE_M, [HEAD_B]: TREE_B } } });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/project'));
-  const field = (k) => fieldOf(page, k);
-  assert.deepEqual(field('base').childNodes.map((o) => o.attrs.value), ['', '7']);
-  field('base').value = '7';
-  field('id').value = 'sonar-rig';
-  field('name').value = 'Sonar rig';
-  field('tagline').value = 'A tank rig.';
-  page.action('make-draft').click();
-  await settle();
-  const d = draftsOf(page).get('new/project');
-  assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
-  page.action('propose').click();
-  await settle();
-  assert.equal(page.action('send-proposal').textContent, 'Add to proposal #7');
-  await sendIt(page);
-  // three files since 2026-10-14 (the index entry, the facts file, the page): three blobs
-  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
-    `PATCH /git/refs/heads/${OWN}`]);
-  assert.equal(writes[3].body.base_tree, TREE_B);
-  assert.ok(cardOpen(page, 7), 'the tray shows proposal #7');
-});
-
-test('js/editor.js New person can start from my open proposal: the person joins its branch, one more commit', async () => {
-  const onMain = readRepo('data/people.json');
-  const reg = JSON.parse(onMain);
-  reg.groups[0].people.push({ name: 'Already Proposed', title: 'Student', photo: null, link: null });
-  const onBranch = C.formatLike(onMain, reg);
-  const { writes, onWrite } = recordWrites();
-  const page = await editorOn({ onWrite, extra: { pulls: [ownPull()], files: { 7: [] },
-    contents: { [HEAD_B]: { 'data/people.json': onBranch } }, trees: { [MAIN_SHA]: TREE_M, [HEAD_B]: TREE_B } } });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/person'));
-  const field = (k) => fieldOf(page, k);
-  assert.deepEqual(field('base').childNodes.map((o) => o.attrs.value), ['', '7']);
-  assert.equal(field('base').value, '', 'the live site unless I pick my proposal');
-  field('base').value = '7';
-  field('group').value = 'alumni';
-  field('name').value = 'Ada Example';
-  page.action('add-person').click();
-  await settle();
-  const d = draftsOf(page).get('data/people');
-  assert.deepEqual({ ...d.base }, { ref: OWN, sha: HEAD_B, number: 7 });
-  const people = JSON.parse(d.files['data/people.json']).groups;
-  assert.equal(people[0].people.at(-1).name, 'Already Proposed', 'built on the proposal\'s people, not main\'s');
-  assert.equal(people[1].people.at(-1).name, 'Ada Example');
-  assert.equal(rawEditor(page).value, d.files['data/people.json'], 'the editor opens the draft on my proposal');
-  page.action('propose').click();
-  await settle();
-  assert.equal(page.action('send-proposal').textContent, 'Add to proposal #7');
-  await sendIt(page);
-  assert.deepEqual(writeSeq(writes), ['POST /git/blobs', 'POST /git/trees', 'POST /git/commits',
-    `PATCH /git/refs/heads/${OWN}`]);
-  assert.equal(writes[1].body.base_tree, TREE_B);
-});
-
-test('js/editor.js New person: with a people draft already open, the person joins that draft on its base', async () => {
-  const people = readRepo('data/people.json');
-  const page = await editorOn({ extra: { pulls: [ownPull()], files: { 7: [] },
-    contents: { [HEAD_B]: { 'data/people.json': people } }, trees: { [MAIN_SHA]: TREE_M, [HEAD_B]: TREE_B } } });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/person'));
-  const field = (k) => fieldOf(page, k);
-  field('base').value = '7';
-  field('group').value = 'alumni';
-  field('name').value = 'First Person';
-  page.action('add-person').click();
-  await settle();
-  await page.follow(page.linkTo('#/pages'));            // leaving the people draft: "leave?" -> yes (it stays)
-  await page.follow(page.linkTo('#/new/person'));
-  assert.equal(field('base'), undefined, 'no second base choice: the open draft decides');
-  assert.match(page.tray().textContent, /proposal #7/);
-  field('group').value = 'alumni';
-  field('name').value = 'Second Person';
-  page.action('add-person').click();
-  await settle();
-  const d = draftsOf(page).get('data/people');
-  assert.equal(d.base.number, 7);
-  assert.deepEqual(JSON.parse(d.files['data/people.json']).groups[1].people.slice(-2).map((p) => p.name),
-    ['First Person', 'Second Person']);
 });
 
 test('js/editor.js Propose: a 401 after the PR opened keeps it proposed (drafts gone) and ends the session', async () => {
@@ -2851,12 +2034,10 @@ test('js/editor.js Propose: a 401 after the PR opened keeps it proposed (drafts 
   const onWrite = (method, url, body) => (method === 'PATCH' && /\/pulls\/42$/.test(url)
     ? (rec.writes.push({ method, url, body }), { status: 401, body: {} }) : rec.onWrite(method, url, body));
   const page = await editorOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
-  await openTab(page, 'changes');
-  page.action('edit-whole-page').click();
+  await page.wholePage();
+  await page.type(page.editorTextarea(), `${PAGE_TEXT}More.\n`);
+  page.action('propose').click();
   await settle();
-  await page.type(page.textarea(), `${PAGE_TEXT}More.\n`);
-  await proposeFrom(page, PAGE_ID, 'Add a line');
-  await sendIt(page);
   assert.deepEqual(writeSeq(rec.writes).slice(-2), ['POST /pulls', 'PATCH /pulls/42'], 'the PR opened');
   assert.equal(draftsOf(page).get(PAGE_ID), null, 'never proposed twice');
   assert.equal(controlsOf(page).hidden, true, 'the session ended');
@@ -2875,11 +2056,8 @@ test('drafts: a /cms/ draft in sessionStorage is the Editor\'s draft of its page
   const page = await editorOn({ storage });
   assert.equal((await page.asks(PAGE_FILE)).text, C.withSentinels(changed, page.nonce().slice(0, 16)),
     'the page shows the draft');
-  await openTab(page, 'changes');
-  assert.ok(page.one((e) => e.attrs['data-draft'] === PAGE_ID), 'listed with Propose… and Discard');
-  page.action('edit-whole-page').click();
-  await settle();
-  assert.equal(page.textarea().value, changed, 'and edited from where it was left');
+  await page.wholePage();
+  assert.equal(page.editorTextarea().value, changed, 'and edited from where it was left');
 });
 
 // ------------------------------------ /cms/ rows, re-homed: source rules ---
@@ -3059,51 +2237,12 @@ test('js/editor.js: a 401 for a list the old session asked for does not end the 
   assert.ok(!page.told.some((t) => /sign-in has ended/.test(t.text)));
 });
 
-// --------------------------------- /cms/ rows, re-homed: the Review card ---
-/* /cms/'s #/, #/review and #/review/<n> are the Proposals tab: a card per
-   open proposal, expanded in place, and "Show on page" for the preview. */
+// --------------------------------- /cms/ rows, re-homed: shared fakes ---
+/* (U0b removed the Review card and the proposals list these rows ran against: /cms/'s #/, #/review and
+   #/review/<n> redirect to the page now, tools/tests/test_editor_u0b.mjs. The fakes below serve the rows left.) */
 
-const T0 = Date.parse('2026-09-21T12:00:00Z');
-const minutesAgo = (m) => new Date(T0 - m * 60000).toISOString();
-const prRow = (number, login, extra) => Object.assign(
-  { number, state: 'open', title: `PR ${number}`, user: { login } }, extra || {});
-function closedRows(from, to, merged) {
-  const rows = [];
-  for (let k = from; k < to; k += 1) {
-    const m = merged ? merged(k) : null;
-    rows.push(prRow(k + 1, 'a', { state: 'closed', updated_at: minutesAgo(k),
-      merged_at: m === null || m === undefined ? null : minutesAgo(m) }));
-  }
-  return rows;
-}
-const CLOSED_PATH = '/repos/desert-mango/hippocampus-docs/pulls'
-  + '?state=closed&sort=updated&direction=desc&per_page=100';
-const pagePaths = (n) => Array.from({ length: n }, (_, i) => `${CLOSED_PATH}&page=${i + 1}`);
 
-/* PR #1's head 825bab4 (its `check` run green) and GET /pulls/1/files, cut
-   down from the real API (read-only, 2026-09-21), as test_cms_core.mjs has them. */
-const HEAD_1 = '825bab4fa43bfb10964621d1e4d8476b5971dc78';
-const RUN_URL = 'https://github.com/desert-mango/hippocampus-docs/actions/runs/35633224472/job/106444242358';
-const ACTIONS_APP = { id: 15368, slug: 'github-actions', name: 'GitHub Actions' };
-function gateRun(extra) {
-  return Object.assign({
-    id: 106444242358, name: 'check', head_sha: HEAD_1, status: 'completed', conclusion: 'success',
-    html_url: RUN_URL, details_url: RUN_URL,
-    started_at: '2026-09-21T17:37:49Z', completed_at: '2026-09-21T17:37:56Z',
-    output: { title: null, summary: null, text: null, annotations_count: 0,
-      annotations_url: `${REPO_API}/check-runs/106444242358/annotations` },
-    app: ACTIONS_APP,
-  }, extra || {});
-}
 const runs = (...rs) => ({ total_count: rs.length, check_runs: rs });
-const fileRow = (filename, extra) => Object.assign({ sha: 'b'.repeat(40), filename, status: 'modified',
-  additions: 1, deletions: 1, changes: 2, patch: '@@ -1 +1 @@\n-old\n+new' }, extra || {});
-const PR1_FILES = ['concepts/colcon', 'concepts/pre-built-packages', 'getting-started/px4-setup',
-  'getting-started/ros-installation', 'lab-cameras/event-cameras', 'raspberry-pi/ethernet',
-  'raspberry-pi/uart-configuration', 'raspberry-pi/ubuntu-24-04-server', 'raspberry-pi/usb-configuration']
-  .map((id) => fileRow(`content/setup/${id}.md`))
-  .concat([fileRow('search/manifest.json'), fileRow('search/site.json')]);
-const HOURS = 3600e3;
 
 // an answer whose body is raw text when given a string (the Contents API's raw media type)
 const wire = (status, body) => {
@@ -3112,366 +2251,24 @@ const wire = (status, body) => {
     text: async () => text, json: async () => JSON.parse(text) };
 };
 
-/* GitHub for the Review card: `login` signed in with `perms`; `pulls` maps
-   number -> {pull, files, runs, annotations, comments}; `contents` maps
-   "<path>@<sha>" -> text; `onWrite(method, url, body)` answers every write
-   (a 200 by default). Anything else (main's head, its files) goes to the
-   fake GitHub. */
-function reviewGithub(o) {
-  return (url, init) => {
-    if (!isGitHub(url)) return null;
-    const method = init.method || 'GET';
-    if (method !== 'GET') return o.onWrite ? o.onWrite(method, url, JSON.parse(init.body)) : wire(200, {});
-    if (url === 'https://api.github.com/user') return wire(200, { login: o.login });
-    if (url === REPO_API) return wire(200, { permissions: o.perms });
-    const rest = url.slice(REPO_API.length);
-    if (rest.startsWith('/pulls?state=open')) return wire(200, Object.values(o.pulls).map((x) => x.pull));
-    if (rest.startsWith('/pulls?state=closed')) {
-      if (o.closedPages) {
-        const m = /[?&]page=(\d+)(?:&|$)/.exec(rest);
-        return wire(200, o.closedPages[(m ? Number(m[1]) : 1) - 1] || []);
-      }
-      return wire(200, o.closed || []);
-    }
-    let m = /^\/pulls\/(\d+)(\/files\?.*)?$/.exec(rest);
-    if (m && o.pulls[m[1]]) return wire(200, m[2] ? o.pulls[m[1]].files : o.pulls[m[1]].pull);
-    m = /^\/commits\/([0-9a-f]{40})\/check-runs\?/.exec(rest);
-    if (m) {
-      const hit = Object.values(o.pulls).find((x) => x.pull.head.sha === m[1]);
-      return wire(200, (hit && hit.runs) || runs());
-    }
-    m = /^\/check-runs\/(\d+)\/annotations\?/.exec(rest);
-    if (m) {
-      const hit = Object.values(o.pulls).find((x) => x.runs && x.runs.check_runs.some((r) => String(r.id) === m[1]));
-      return wire(200, (hit && hit.annotations) || []);
-    }
-    m = /^\/issues\/(\d+)\/comments\?/.exec(rest);
-    if (m) return wire(200, (o.pulls[m[1]] && o.pulls[m[1]].comments) || []);
-    m = /^\/contents\/(.+)\?ref=([0-9a-f]{40})$/.exec(rest);
-    if (m && o.contents && o.contents[`${m[1]}@${m[2]}`] === null) return wire(404, { message: 'Not Found' });
-    if (m && o.contents && o.contents[`${m[1]}@${m[2]}`] !== undefined) return wire(200, o.contents[`${m[1]}@${m[2]}`]);
-    return null;
-  };
-}
 
-function openPull(number, login, sha, extra) {
-  return Object.assign({ number, state: 'open', merged: false, merged_at: null, title: `Proposal ${number}`,
-    user: { login }, created_at: new Date(Date.now() - 3 * 24 * HOURS).toISOString(),
-    head: { sha, ref: `cms/${login}/fix-${number}` }, base: { ref: 'main' }, html_url: C.undoOnGitHubUrl(number) },
-  extra || {});
-}
-function greenPr1(extra) {
-  return { pull: openPull(1, 'kyle-nelson-berkeley', HEAD_1), files: PR1_FILES, runs: runs(gateRun()),
-    comments: [{ user: { login: 'vercel[bot]' }, html_url: `${C.undoOnGitHubUrl(1)}#issuecomment-5696197254` }],
-    ...extra };
-}
-const PR1_CONTENTS = { [`data/setup.json@${HEAD_1}`]: JSON.stringify(REGS_NOW.setup),
-  [`content/setup/concepts/colcon.md@${HEAD_1}`]: '# Colcon\n\nThe fixed text.' };
-
-/* The site on #/ with ?editor=proposals[&pr=n] (the redirect's landing for
-   /cms/#/review[/n]): Editor on, the tray open on that card. */
-async function reviewSite(login, o, n) {
-  const page = openSite({ hash: n ? `#/?editor=proposals&pr=${n}` : '#/?editor=proposals',
-    session: C.makeSession(TOKEN_A, null, login, Date.now()), intercept: reviewGithub(Object.assign({ login }, o)) });
-  await settle();
-  return page;
-}
-const reviewBox = (page) => page.one((e) => e.tagName === 'SECTION' && e.attrs['aria-label'] === 'Review actions');
-const actionButtons = (page) => (reviewBox(page) ? findAll(reviewBox(page), (e) => e.attrs['data-action'] !== undefined) : []);
-const actionButton = (page, key) => actionButtons(page).find((e) => e.attrs['data-action'] === key);
-const ghWrites = (page) => page.github().filter((c) => c.method !== 'GET');
-const trayText = (page) => page.tray().textContent;
-
-test('js/editor.js: the list finds a merge on the second page of closed PRs', async () => {
-  const closedPages = [closedRows(0, 100), closedRows(100, 120, (k) => (k === 110 ? 110 : null))];
-  closedPages[1][10].title = 'Fix the wiring diagram';
-  const page = await reviewSite('bob', { perms: { push: true }, pulls: {}, closedPages });
-  // round 2 (R3): the list's merged rows say Live
-  const row = page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === '111');
-  assert.ok(row && /Fix the wiring diagram/.test(row.textContent) && /Live/.test(row.textContent), trayText(page));
-  assert.deepEqual(page.calls.filter((c) => c.url.includes('state=closed')).map((c) => c.url),
-    pagePaths(2).map((p) => `https://api.github.com${p}`));
-});
-
-test('js/editor.js the proposals list: newest first, who, which page, when, status; a title stays text', async () => {
-  const pulls = {
-    5: { pull: openPull(5, 'alice', 'c'.repeat(40), { title: '<script>alert(1)</script> fix the nav' }),
-      files: [fileRow('js/app.js')] },
-    6: { pull: openPull(6, 'bob', 'd'.repeat(40)), files: [fileRow('content/about.md'), fileRow('search/site.json')] },
-  };
-  const page = await reviewSite('bob', { perms: { push: true }, pulls });
-  // round 2 (R3): the list — newest first (same day: the higher number), who, where, when, status
-  const row = (n) => page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === String(n));
-  const rows = page.all((e) => e.classList.contains('hc-prow')).map((e) => e.attrs['data-pr']);
-  assert.ok(rows.indexOf('6') < rows.indexOf('5'), 'newest first');
-  assert.match(row(6).textContent, /^BProposal 6bob \(you\)·(About|Team)Open.*opened 3 days ago$/);
-  assert.match(row(5).textContent, /^A<script>alert\(1\)<\/script> fix the navalice·code and data only.*opened 3 days ago$/);
-  assert.equal(row(6).attrs['data-slot'], '0', 'mine: slot 0');
-  assert.equal(page.all((e) => e.tagName === 'SCRIPT').length, 0, 'the title is text');
-  assert.deepEqual(ghWrites(page), []);
-  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/pulls/5/files?per_page=100&page=1`));
-});
-
-test('js/editor.js Review PR: green ✓, the diff as text, Vercel\'s comment, and the preview at the PR head', async () => {
-  const page = await reviewSite('desert-mango-robotics', { perms: { admin: true, push: true },
-    pulls: { 1: greenPr1() }, contents: PR1_CONTENTS }, 1);
-  const text = trayText(page);
-  assert.match(text, /✓site rules pass/);
-  assert.match(text, /content\/setup\/concepts\/colcon\.md/);
-  assert.match(text, /-old\n\+new/, 'the patch is shown as text');
-  assert.match(text, /derived files/);
-  assert.equal(page.one((e) => e.classList.contains('cms-preview-scope')), undefined,
-    'a content-only proposal: "Show on page" shows every change, no "content only" note');
-  const vercel = page.all((e) => e.tagName === 'A' && /issuecomment/.test(e.attrs.href || ''));
-  assert.equal(vercel.length, 1);
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']),
-    ['approve', 'request-changes', 'merge', 'update', 'close']);
-  assert.equal(actionButton(page, 'merge').disabled, false, 'green: Merge is live');
-  assert.doesNotMatch(text, /Merge anyway/, 'green asks no confirmation');
-  // the preview: "Show on page" puts the first changed page, at the PR head, in the sandboxed frame
-  page.action('show-on-page').click();
-  await settle();
-  assert.equal(page.location.hash, '#/setup/concepts/colcon');
-  await firedHash(page);
-  const frame = page.frame();
-  assert.equal(frame.attrs.sandbox, 'allow-scripts allow-popups');
-  const m = /^index\.html#preview=([0-9a-f]{32})&route=(.+)$/.exec(frame.srcs.at(-1));
-  assert.ok(m, frame.srcs.at(-1));
-  assert.equal(decodeURIComponent(m[2]), '/setup/concepts/colcon');
-  const hit = await page.asks('content/setup/concepts/colcon.md');
-  assert.deepEqual([hit.type, hit.nonce, hit.ok, hit.status, hit.text],
-    ['hc-file', m[1], true, 200, '# Colcon\n\nThe fixed text.']);
-  assert.ok(!JSON.stringify(frame.posted).includes(TOKEN_A), 'the token never reaches the frame');
-  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/contents/content/setup/concepts/colcon.md?ref=${HEAD_1}`));
-  // navigable: another changed page re-loads the frame there with a fresh nonce
-  page.one((e) => e.attrs['data-route'] === '/setup/raspberry-pi/ethernet').click();
-  await settle();
-  await firedHash(page);
-  const m2 = /#preview=([0-9a-f]{32})&route=(.+)$/.exec(page.frame().srcs.at(-1));
-  assert.notEqual(m2[1], m[1]);
-  assert.equal(decodeURIComponent(m2[2]), '/setup/raspberry-pi/ethernet');
-  assert.deepEqual(ghWrites(page), [], 'looking writes nothing');
-});
-
-test('js/editor.js Review PR: a proposal that changes the site\'s code labels its preview "content only"', async () => {
-  const files = PR1_FILES.concat([fileRow('js/app.js')]);
-  const page = await reviewSite('desert-mango-robotics', { perms: { admin: true, push: true },
-    pulls: { 1: greenPr1({ files }) }, contents: PR1_CONTENTS }, 1);
-  const scope = page.one((e) => e.classList.contains('cms-preview-scope'));
-  assert.ok(scope, 'the note');
-  assert.equal(scope.textContent, C.PREVIEW_CONTENT_ONLY_TEXT);
-  // still a preview of the head's content, in the same sandboxed frame: no proposal code runs
-  const show = findAll(scope.parent, (e) => e.attrs['data-action'] === 'show-on-page');
-  assert.equal(show.length, 1, 'the note leads "Show on page"');
-  show[0].click();
-  await settle();
-  await firedHash(page);
-  assert.match(page.frame().srcs.at(-1), /^index\.html#preview=[0-9a-f]{32}&route=/);
-  assert.equal(page.frame().attrs.sandbox, 'allow-scripts allow-popups');
-  assert.deepEqual(ghWrites(page), []);
-});
-
-/* Red or still checking: Merge is live; the first click sends nothing and
-   asks once; "Merge anyway" sends exactly the one PUT, pinned to the sha. */
-async function confirmThenMerge(page, sha) {
-  const merge = actionButton(page, 'merge');
-  assert.equal(merge.disabled, false, 'Merge is never disabled');
-  assert.doesNotMatch(trayText(page), /Merge anyway/);
-  merge.click();
-  await settle();
-  assert.deepEqual(ghWrites(page), [], 'the first click sends nothing');
-  assert.match(trayText(page), new RegExp(C.MERGE_CONFIRM_TEXT.replace(/[.()?]/g, '\\$&')));
-  const anyway = actionButton(page, 'merge-anyway');
-  assert.equal(anyway.textContent, 'Merge anyway');
-  anyway.click();
-  await settle();
-  assert.deepEqual(page.writeLog.map((c) => [c.method, c.url, c.body]),
-    [['PUT', `${REPO_API}/pulls/1/merge`, { merge_method: 'squash', sha }]]);
-}
 const logged = (o) => {
   const log = [];
   return { log, onWrite: (method, url, body) => { log.push({ method, url, body }); return o ? o(method, url, body) : wire(200, {}); } };
 };
 
-test('js/editor.js Review PR: red ✗ with each annotation as "file, line, what to fix" and a link to the run', async () => {
-  const red = greenPr1({ runs: runs(gateRun({ conclusion: 'failure' })), annotations: [
-    { path: 'data/tools.json', start_line: 12, annotation_level: 'failure', message: 'trailing comma' },
-    { path: 'content/about.md', start_line: null, annotation_level: 'failure', message: 'no title line' }] });
-  const w = logged();
-  const page = await reviewSite('nathalie', { perms: { maintain: true, push: true }, pulls: { 1: red },
-    contents: PR1_CONTENTS, onWrite: w.onWrite }, 1);
-  page.writeLog = w.log;
-  const text = trayText(page);
-  assert.match(text, /✗site rules fail/);
-  assert.match(text, /data\/tools\.json, line 12: trailing comma/);
-  assert.match(text, /content\/about\.md: no title line/);
-  assert.ok(page.calls.some((c) => c.url === `${REPO_API}/check-runs/106444242358/annotations?per_page=100&page=1`));
-  assert.equal(page.all((e) => e.tagName === 'A' && e.attrs.href === RUN_URL).length, 1);
-  await confirmThenMerge(page, HEAD_1);
-});
-
-test('js/editor.js Review PR: no finished run yet is "still checking", and asks for no annotations', async () => {
-  const waiting = () => greenPr1({ runs: runs(gateRun({ status: 'in_progress', conclusion: null })) });
-  const page = await reviewSite('nathalie', { perms: { push: true }, pulls: { 1: waiting() }, contents: PR1_CONTENTS }, 1);
-  assert.match(trayText(page), /still checking/);
-  const w = logged();
-  const boss = await reviewSite('nathalie', { perms: { maintain: true, push: true }, pulls: { 1: waiting() },
-    contents: PR1_CONTENTS, onWrite: w.onWrite }, 1);
-  boss.writeLog = w.log;
-  await confirmThenMerge(boss, HEAD_1);
-  assert.ok(!page.calls.some((c) => c.url.includes('/annotations')));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']),
-    ['request-changes', 'update', 'close'], 'an Editor gets no Merge, and no Approve outside its own projects');
-});
-
-test('js/editor.js Review PR: Merge sends exactly one PUT pinned to the shown sha; a 409 says reload', async () => {
-  const w = logged(() => wire(409, { message: 'Head branch was modified.' }));
-  const github = reviewGithub({ login: 'desert-mango-robotics', perms: { admin: true, push: true }, pulls: { 1: greenPr1() },
-    contents: PR1_CONTENTS, onWrite: w.onWrite });
-  const writeInits = [];                                   // the init of each write, for its Authorization header
-  const page = openSite({ hash: '#/?editor=proposals&pr=1',
-    session: C.makeSession(TOKEN_A, null, 'desert-mango-robotics', Date.now()),
-    intercept: (url, init) => { if ((init.method || 'GET') !== 'GET') writeInits.push(init); return github(url, init); } });
-  await settle();
-  const before = page.calls.filter((c) => c.url === `${REPO_API}/pulls/1`).length;
-  actionButton(page, 'merge').click();                    // green: one click, one PUT
-  await settle();
-  assert.deepEqual(w.log, [{ method: 'PUT', url: `${REPO_API}/pulls/1/merge`, body: { merge_method: 'squash', sha: HEAD_1 } }]);
-  assert.equal(actionButton(page, 'merge-anyway'), undefined, 'no confirmation step on green');
-  assert.equal(ghWrites(page).length, 1);
-  assert.equal(bearer(writeInits[0]), TOKEN_A, 'the merge carries the signed-in token');
-  assert.match(trayText(page), /Not merged: it changed since you looked, reload\./);
-  assert.equal(page.calls.filter((c) => c.url === `${REPO_API}/pulls/1`).length, before + 1, 'the card was read again');
-});
-
-test('js/editor.js Review PR: approving your own proposal shows GitHub\'s refusal in the tab\'s words', async () => {
-  const w = logged(() => wire(422, { message: 'Unprocessable Entity', errors: ['Review Can not approve your own pull request'] }));
-  const page = await reviewSite('kyle-nelson-berkeley', { perms: { admin: true, push: true }, pulls: { 1: greenPr1() },
-    contents: PR1_CONTENTS, onWrite: w.onWrite }, 1);
-  actionButton(page, 'approve').click();
-  await settle();
-  assert.deepEqual(w.log.map((c) => [c.method, c.url, c.body]),
-    [['POST', `${REPO_API}/pulls/1/reviews`, { event: 'APPROVE', commit_id: HEAD_1 }]]);
-  assert.match(trayText(page), /GitHub does not let you approve your own proposal\./);
-});
-
-test('js/editor.js Review PR: request changes needs a comment; close and update send their one write', async () => {
-  const seen = [];
-  const page = await reviewSite('nathalie', { perms: { maintain: true, push: true }, pulls: { 1: greenPr1() },
-    contents: PR1_CONTENTS,
-    onWrite: (method, url, body) => { seen.push([method, url.slice(REPO_API.length), body]); return wire(200, {}); } }, 1);
-  actionButton(page, 'request-changes').click();
-  await settle();
-  assert.deepEqual(seen, [], 'no comment, nothing sent');
-  assert.match(trayText(page), /write what should change/);
-  const box = findAll(reviewBox(page), (e) => e.tagName === 'TEXTAREA')[0];
-  box.value = 'Please keep the old heading.';
-  actionButton(page, 'request-changes').click();
-  await settle();
-  assert.match(trayText(page), /Changes requested\./);
-  actionButton(page, 'update').click();
-  await settle();
-  // Update from main stays pending while the card waits for the head to move (here it never does)
-  for (let i = 0; i < 30 && /Updating…/.test(trayText(page)); i += 1) await settle();
-  assert.doesNotMatch(trayText(page), /Updating…/, 'the wait is over: the card is drawn again');
-  actionButton(page, 'close').click();
-  await settle();
-  assert.deepEqual(seen, [
-    ['POST', '/pulls/1/reviews', { event: 'REQUEST_CHANGES', body: 'Please keep the old heading.', commit_id: HEAD_1 }],
-    ['PUT', '/pulls/1/update-branch', { expected_head_sha: HEAD_1 }],
-    ['PATCH', '/pulls/1', { state: 'closed' }],
-  ]);
-});
-
-test('js/editor.js Review PR: Read-only sees the proposal and its preview, and no button at all', async () => {
-  const page = await reviewSite('visitor', { perms: { pull: true }, pulls: { 1: greenPr1() }, contents: PR1_CONTENTS }, 1);
-  assert.match(trayText(page), /site rules pass/);
-  assert.deepEqual(actionButtons(page), [], 'no review button');
-  assert.match(trayText(page), /You can read this proposal\. Reviewing it needs write access/);
-  assert.ok(page.action('show-on-page'), 'its preview: "Show on page"');
-  assert.equal(page.frames().length, 1, 'the page frame');
-  assert.deepEqual(ghWrites(page), []);
-});
-
-test('js/editor.js Review PR: a merged proposal offers one button, Undo on GitHub, and nothing else', async () => {
-  const merged = { pull: openPull(3, 'alice', 'e'.repeat(40),
-    { state: 'closed', merged: true, merged_at: '2026-09-20T10:00:00Z' }), files: [fileRow('content/about.md')] };
-  const page = await reviewSite('nathalie', { perms: { maintain: true, push: true }, pulls: { 3: merged } }, 3);
-  const card = page.one((e) => e.attrs['data-pr'] === '3');
-  const undo = findAll(card, (e) => e.attrs['data-action'] !== undefined);
-  assert.deepEqual(undo.map((b) => [b.tagName, b.attrs['data-action'], b.textContent, b.attrs.href]),
-    [['A', 'undo', 'Undo on GitHub', 'https://github.com/desert-mango/hippocampus-docs/pull/3']]);
-  assert.equal(undo[0].attrs.rel, 'noopener noreferrer');
-  assert.match(card.textContent, /Revert/);
-  assert.ok(!page.calls.some((c) => c.url.includes('/check-runs') && c.url.includes('e'.repeat(40))));
-  assert.deepEqual(ghWrites(page), []);
-});
-
-test('js/editor.js the proposals list: a merged proposal says Live and opens on GitHub (where Undo is)', async () => {
-  const closed = [openPull(3, 'alice', 'e'.repeat(40), { state: 'closed', merged: true,
-    merged_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-20T10:00:00Z', title: 'Fix the nav' })];
-  const page = await reviewSite('nathalie', { perms: { push: true }, pulls: {}, closed });
-  // round 2 (R3): a merged row says Live; with nothing to show on the site it opens on GitHub (where Undo is)
-  const row = page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === '3');
-  assert.match(row.textContent, /Fix the nav.*Live/);
-  findAll(row, (e) => e.attrs['data-action'] === 'open-proposal')[0].click();
-  await settle();
-  assert.deepEqual(page.opens.map((o) => o[0]), ['https://github.com/desert-mango/hippocampus-docs/pull/3']);
-});
-
-/* Edit access (2026-10-19): an open proposal that changes only data/projects.json's add or remove lists gets a
-   label in the list: "Access request" (someone asking for themselves) or "Access change", and one line per
-   change, "<login>: add|remove on <project>". Judged from the file's two texts (merge base and head), never the
-   title. */
-test('js/editor.js the proposals list: access proposals get a label from the diff, never from the title', async () => {
-  const main = readRepo('data/projects.json');
-  const BASE = 'a1'.repeat(20);
-  const H1 = 'b1'.repeat(20);
-  const H2 = 'c1'.repeat(20);
-  const H3 = 'd1'.repeat(20);
-  const one = [fileRow('data/projects.json')];
-  const at = (sha, text) => ({ [`data/projects.json@${sha}`]: text });
-  const pulls = {
-    11: { pull: openPull(11, 'new-person', H1, { title: 'Please', base: { ref: 'main', sha: BASE } }), files: one },
-    12: { pull: openPull(12, 'an-admin', H2, { title: 'Tidy up', base: { ref: 'main', sha: BASE } }), files: one },
-    13: { pull: openPull(13, 'sneaky', H3, { title: 'Edit access request: sneaky for Core', base: { ref: 'main', sha: BASE } }),
-      files: one },
-  };
-  const intro = JSON.parse(main); intro.intro = 'Changed.';
-  const contents = Object.assign({}, at(BASE, main),
-    at(H1, C.accessRequestDraft(main, 'core-stack', 'new-person', 'add').text),
-    at(H2, C.accessRequestDraft(main, 'scalar-field', 'someone', 'remove').text),
-    at(H3, C.formatLike(main, intro)));
-  const page = await reviewSite('nathalie', { perms: { push: true }, pulls, contents });
-  await settle();
-  const row = (n) => page.one((e) => e.classList.contains('hc-prow') && e.attrs['data-pr'] === String(n));
-  const label = (n) => findAll(row(n), (e) => e.classList.contains('hc-prow-access') && !e.hidden)[0];
-  assert.ok(label(11), trayText(page));
-  assert.equal(findAll(label(11), (e) => e.classList.contains('hc-access-kind'))[0].textContent, 'Access request');
-  assert.match(label(11).textContent, /new-person: add on core-stack/);
-  assert.match(findAll(row(11), (e) => e.attrs['data-action'] === 'open-proposal')[0].attrs['aria-label'],
-    /Access request: new-person: add on core-stack/);
-  assert.equal(findAll(label(12), (e) => e.classList.contains('hc-access-kind'))[0].textContent, 'Access change');
-  assert.match(label(12).textContent, /someone: remove on scalar-field/);
-  assert.equal(label(13), undefined, 'a title alone never makes an access proposal');
-});
-
 // ----------------------------------------- /cms/ rows, re-homed: Media ---
-/* The js/cms.js rows of test_cms_media.mjs: the Media tab, "Image from
-   Media" in the Changes tab's block editor, and New person's "Photo from
-   Media", over a fake /api/media and a fake Cloudinary. */
+/* The js/cms.js rows of test_cms_media.mjs went with the Media tab, "Image from Media" and New person's "Photo
+   from Media" (U0b). The fakes stay for the in-page image rows (V2 images): a fake /api/media and a fake
+   Cloudinary. */
 
 const MANIFEST_TEXT = readRepo('data/cloudinary-manifest.json');
 const LIVE = JSON.parse(MANIFEST_TEXT);
 const CLOUD = LIVE.cloud;
-const USED = LIVE.assets[0];
-const FREE_ID = 'hippocampus-docs/setup/old-sketch';
-const FREE_URL = `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000000/${FREE_ID}.png`;
 const TS = '1790000000';
 const SIG = 'a'.repeat(64);
 const API_KEY = '123456789012345';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
-const shaOf = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const fakeFile = (bytes, o) => Object.assign({ name: 'Hippo Mark.png', type: 'image/png', size: bytes.length,
   arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }, o || {});
 function signed(mode, sub, slug) {
@@ -3512,247 +2309,7 @@ function mediaWorld(o) {
   };
   return { intercept, media: () => log.filter((c) => c.side === 'media'), cloud: () => log.filter((c) => c.side === 'cloudinary') };
 }
-const uploadFile = async (page, file, folder) => {
-  fieldOf(page, 'media-folder').value = folder || 'setup';
-  fieldOf(page, 'media-file').files = [file];
-  page.action('media-upload').click();
-  await settle();
-};
 const draftOfKey = (page, key) => draftsOf(page).get(key);
-/* Editor on, the first paragraph picked, its "Image from Media" open. */
-async function mediaInBlock(opts) {
-  const page = await editorOn(opts);
-  const i = firstParagraph(PAGE_TEXT);
-  await page.pick(i);
-  page.action('media-open').click();
-  await settle();
-  return { page, b: blocksOf(PAGE_TEXT)[i] };
-}
-
-test('js/editor.js #/media: the images with c_limit,w_240 thumbnails, "on the site" marks, and a next page on next_cursor', async () => {
-  const pages = {
-    first: { assets: [{ public_id: USED.public_id, url: USED.url, bytes: USED.bytes, width: 800, height: 600, format: 'jpg' },
-      { public_id: FREE_ID, url: FREE_URL, bytes: 1200, width: 300, height: 200, format: 'png' }], next_cursor: 'c2' },
-    c2: { assets: [{ public_id: 'hippocampus-docs/brand/spare', url: `https://res.cloudinary.com/${CLOUD}/image/upload/v1/hippocampus-docs/brand/spare.png`,
-      bytes: 10, width: 1, height: 1, format: 'png' }], next_cursor: null },
-  };
-  const w = mediaWorld({ pages });
-  const page = await editorOn({ intercept: w.intercept });
-  assert.equal(page.all((e) => e.attrs.role === 'tab').length, 0, 'R3: no tabs at all');
-  await openTab(page, 'media');
-  const tiles = () => page.all((e) => e.attrs['data-asset'] !== undefined);
-  assert.deepEqual(tiles().map((t) => t.attrs['data-asset']), [USED.public_id, FREE_ID]);
-  const thumbs = page.all((e) => e.tagName === 'IMG' && /c_limit,w_240/.test(e.attrs.src || ''));
-  assert.deepEqual(thumbs.map((i) => i.attrs.src), [C.thumbUrl(USED.url), C.thumbUrl(FREE_URL)]);
-  assert.match(tiles()[0].textContent, /on the site/);
-  assert.match(tiles()[1].textContent, /not used by the site/);
-  // the folder picker is the fixed list
-  assert.deepEqual(fieldOf(page, 'media-folder').childNodes.map((o) => o.attrs.value), C.MEDIA_SUBFOLDERS);
-  page.action('media-more').click();
-  await settle();
-  assert.deepEqual(w.media().map((c) => c.body), [{ action: 'list' }, { action: 'list', cursor: 'c2' }]);
-  assert.equal(tiles().length, 3);
-  assert.equal(page.action('media-more'), undefined, 'no more pages');
-  for (const c of w.media()) assert.equal(c.init.headers.authorization, `Bearer ${TOKEN}`);
-  assert.deepEqual(page.github().filter((c) => c.method !== 'GET'), []);
-});
-
-test('js/editor.js #/media: delete of an image the site uses says the verbatim line and calls nothing; a free one asks, then deletes', async () => {
-  const pages = { first: { assets: [{ public_id: USED.public_id, url: USED.url, bytes: 1 },
-    { public_id: FREE_ID, url: FREE_URL, bytes: 1 }], next_cursor: null } };
-  const w = mediaWorld({ pages });
-  const page = await editorOn({ intercept: w.intercept });
-  const asked = [];
-  page.win.confirm = (text) => { asked.push(text); return true; };
-  await openTab(page, 'media');
-  const tile = (id) => page.one((e) => e.attrs['data-asset'] === id);
-  const inTile = (id, action) => findAll(tile(id), (e) => e.attrs['data-action'] === action)[0];
-  inTile(USED.public_id, 'media-delete').click();
-  await settle();
-  assert.ok(tile(USED.public_id).textContent.includes('remove it from the page first, merge, then delete'));
-  inTile(USED.public_id, 'media-rename').click();
-  await settle();
-  assert.equal(fieldOf(page, 'media-new-name'), undefined, 'no rename form for an image in use');
-  assert.deepEqual(w.media().map((c) => c.body.action), ['list'], 'no destroy or rename was sent');
-  assert.deepEqual(asked, []);
-  inTile(FREE_ID, 'media-delete').click();
-  await settle();
-  assert.equal(asked.length, 1);
-  assert.match(asked[0], /old-sketch/);
-  assert.deepEqual(w.media().at(-1).body, { action: 'destroy', public_id: FREE_ID });
-  assert.equal(tile(FREE_ID), undefined, 'the deleted image leaves the list');
-});
-
-test('js/editor.js #/media: a 409 from the gateway (the site started using it) shows the same line; rename sends {from, to}', async () => {
-  const pages = { first: { assets: [{ public_id: FREE_ID, url: FREE_URL, bytes: 1 }], next_cursor: null } };
-  const w = mediaWorld({ pages, media: {
-    destroy: () => wire(409, { error: `${FREE_ID} is still referenced by the site` }),
-    rename: (b) => wire(200, { public_id: b.to, url: FREE_URL.replace('old-sketch', 'new-sketch') }),
-  } });
-  const page = await editorOn({ intercept: w.intercept });
-  await openTab(page, 'media');
-  const tile = () => page.one((e) => e.attrs['data-asset'] !== undefined);
-  const inTile = (action) => findAll(tile(), (e) => e.attrs['data-action'] === action)[0];
-  inTile('media-delete').click();
-  await settle();
-  assert.ok(tile().textContent.includes(C.IN_USE_TEXT));
-  inTile('media-rename').click();
-  await settle();
-  fieldOf(page, 'media-new-name').value = 'New Sketch!';
-  page.action('media-rename-save').click();
-  await settle();
-  assert.match(tile().textContent, /lowercase letters, digits and dashes/);
-  fieldOf(page, 'media-new-name').value = 'new-sketch';
-  page.action('media-rename-save').click();
-  await settle();
-  assert.deepEqual(w.media().at(-1).body, { action: 'rename', from: FREE_ID, to: 'hippocampus-docs/setup/new-sketch' });
-  assert.equal(tile().attrs['data-asset'], 'hippocampus-docs/setup/new-sketch');
-});
-
-test('js/editor.js editor: Image from Media uploads (sign -> Cloudinary), adds ONE manifest entry, inserts ![alt](url), proposes both files', async () => {
-  const w = mediaWorld();
-  const { writes, onWrite } = recordWrites();
-  const { page, b } = await mediaInBlock({ intercept: w.intercept, onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
-  assert.match(page.tray().textContent, /Keep images under 5 MB/);
-  await uploadFile(page, fakeFile(PNG));
-  assert.deepEqual(w.media().map((c) => c.body), [{ action: 'sign', subfolder: 'setup', filename: 'Hippo Mark.png' }]);
-  assert.equal(w.cloud().length, 1);
-  const post = w.cloud()[0];
-  assert.equal(post.url, `https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`);
-  assert.deepEqual(post.body.entries.map((e) => e[0]), ['folder', 'overwrite', 'public_id', 'timestamp', 'api_key', 'signature', 'file']);
-  assert.equal(post.init.headers, undefined, 'no Authorization, no headers at all');
-  assert.ok(!JSON.stringify(post.body.entries.slice(0, -1)).includes(TOKEN));
-  // the manifest draft gained exactly one entry
-  const md = draftOfKey(page, C.MANIFEST_KEY);
-  const assets = JSON.parse(md.files[C.MANIFEST_FILE]).assets;
-  assert.equal(assets.length, LIVE.assets.length + 1);
-  const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000001/hippocampus-docs/setup/hippo-mark.png`;
-  assert.deepEqual(assets.at(-1), { source: null, folder: 'hippocampus-docs/setup', public_id: 'hippocampus-docs/setup/hippo-mark',
-    url, bytes: 2048, sha256: shaOf(PNG) });
-  assert.equal(md.base.ref, 'main');
-  // the alt text is asked for: empty inserts nothing
-  const ta = page.textarea();
-  ta.selectionStart = ta.selectionEnd = 0;
-  page.action('media-insert').click();
-  await settle();
-  assert.equal(page.textarea().value, b.text);
-  assert.match(page.tray().textContent, /Describe the image first/);
-  fieldOf(page, 'media-alt').value = 'The hippo mark';
-  page.action('media-insert').click();
-  await settle();
-  assert.equal(page.textarea().value, `![The hippo mark](${url})${b.text}`);
-  assert.equal(draftOfKey(page, PAGE_ID).files[PAGE_FILE],
-    `${PAGE_TEXT.slice(0, b.start)}![The hippo mark](${url})${PAGE_TEXT.slice(b.start)}`, 'inside the block\'s span');
-  // Propose lists the page and the image list together, and sends both in one tree
-  await proposeFrom(page, PAGE_ID);
-  assert.match(page.tray().textContent, /What goes in \(2 files\):/);
-  assert.ok(page.tray().textContent.includes(C.MANIFEST_FILE) && page.tray().textContent.includes(PAGE_FILE));
-  await sendIt(page);
-  const tree = writes.find((c) => c.url.endsWith('/git/trees'));
-  assert.deepEqual(tree.body.tree.map((e) => e.path), [C.MANIFEST_FILE, PAGE_FILE].sort());
-  assert.ok(cardOpen(page, 42));
-  assert.equal(draftOfKey(page, C.MANIFEST_KEY), null, 'the image list went into the proposal');
-});
-
-test('js/editor.js editor: a duplicate (same sha256 as a site image) offers the site\'s URL and uploads nothing', async () => {
-  const live = JSON.parse(MANIFEST_TEXT);
-  live.assets[2].sha256 = shaOf(PNG);
-  const w = mediaWorld();
-  const { page, b } = await mediaInBlock({ intercept: w.intercept, hc: { 'data/cloudinary-manifest.json': live } });
-  await uploadFile(page, fakeFile(PNG));
-  assert.deepEqual(w.media(), [], 'not signed');
-  assert.deepEqual(w.cloud(), [], 'not uploaded');
-  assert.ok(page.tray().textContent.includes(live.assets[2].url), 'the existing URL is offered');
-  assert.match(page.tray().textContent, /already on the site/);
-  assert.equal(draftOfKey(page, C.MANIFEST_KEY), null, 'the image list is unchanged');
-  const ta = page.textarea();
-  ta.selectionStart = ta.selectionEnd = 0;
-  fieldOf(page, 'media-alt').value = 'A photo';
-  page.action('media-insert').click();
-  await settle();
-  assert.equal(page.textarea().value, `![A photo](${live.assets[2].url})${b.text}`);
-});
-
-test('js/editor.js editor: an image the site has can be picked without uploading; a file over 5 MB is refused before any call', async () => {
-  const w = mediaWorld();
-  const { page } = await mediaInBlock({ intercept: w.intercept });
-  await uploadFile(page, fakeFile(PNG, { size: C.MEDIA_MAX_BYTES + 1 }));
-  assert.match(page.tray().textContent, /Keep images under 5 MB: make it smaller/);
-  assert.deepEqual([w.media().length, w.cloud().length], [0, 0]);
-  const pick = fieldOf(page, 'media-pick');
-  pick.value = USED.url;
-  pick.fire('change');
-  await settle();
-  fieldOf(page, 'media-alt').value = 'IMU';
-  const ta = page.textarea();
-  ta.selectionStart = ta.selectionEnd = 0;
-  page.action('media-insert').click();
-  await settle();
-  assert.ok(page.textarea().value.startsWith(`![IMU](${USED.url})`));
-});
-
-test('js/editor.js New person: Photo from Media sets the photo to a site image', async () => {
-  const w = mediaWorld();
-  const page = await editorOn({ intercept: w.intercept });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/person'));
-  page.action('media-open').click();
-  await settle();
-  const pick = fieldOf(page, 'media-pick');
-  pick.value = USED.url;
-  pick.fire('change');
-  await settle();
-  page.action('media-use').click();
-  await settle();
-  fieldOf(page, 'group').value = 'alumni';
-  fieldOf(page, 'name').value = 'Ada Example';
-  page.action('add-person').click();
-  await settle();
-  assert.ok(rawEditor(page), 'the people draft opens (the old #/edit/data/people)');
-  const d = draftOfKey(page, 'data/people');
-  assert.equal(JSON.parse(d.files['data/people.json']).groups[1].people.at(-1).photo, USED.url);
-  assert.deepEqual(page.github().filter((c) => c.method !== 'GET'), []);
-});
-
-test('js/editor.js #/media: read-only people see why they cannot manage images, and no gateway call is made', async () => {
-  const w = mediaWorld();
-  const page = await editorOn({ intercept: w.intercept, variant: 'readonly' });
-  await openTab(page, 'media');
-  assert.match(page.tray().textContent, /View only: managing the site's images needs write access/);
-  assert.deepEqual(w.media(), []);
-});
-
-test('js/editor.js New person on my open proposal: an image already proposed on that branch can be picked as the photo', async () => {
-  const onBranch = JSON.parse(MANIFEST_TEXT);
-  const proposed = { source: null, folder: 'hippocampus-docs/people', public_id: 'hippocampus-docs/people/ada',
-    url: `https://res.cloudinary.com/${CLOUD}/image/upload/v1790000002/hippocampus-docs/people/ada.png`, bytes: 99, sha256: 'b'.repeat(64) };
-  onBranch.assets.push(proposed);
-  const w = mediaWorld();
-  const page = await editorOn({ intercept: w.intercept, extra: { pulls: [ownPull()], files: { 7: [] },
-    contents: { [HEAD_B]: { 'data/cloudinary-manifest.json': `${JSON.stringify(onBranch, null, 2)}\n`,
-      'data/people.json': readRepo('data/people.json') } }, trees: { [MAIN_SHA]: TREE_M, [HEAD_B]: TREE_B } } });
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/person'));
-  fieldOf(page, 'base').value = '7';
-  page.action('media-open').click();
-  await settle();
-  const pick = fieldOf(page, 'media-pick');
-  assert.ok(pick.childNodes.some((o) => o.attrs.value === proposed.url), 'the proposal\'s own image is offered');
-  pick.value = proposed.url;
-  pick.fire('change');
-  await settle();
-  page.action('media-use').click();
-  await settle();
-  fieldOf(page, 'group').value = 'alumni';
-  fieldOf(page, 'name').value = 'Ada Example';
-  page.action('add-person').click();
-  await settle();
-  assert.ok(rawEditor(page), page.tray().textContent);
-  const d = draftOfKey(page, 'data/people');
-  assert.equal(d.base.number, 7);
-  assert.equal(JSON.parse(d.files['data/people.json']).groups[1].people.at(-1).photo, proposed.url);
-  assert.deepEqual(page.github().filter((c) => c.method !== 'GET'), []);
-});
 
 /* V2 (Kyle, 2026-10-14): images are edited IN the page. "+" Image, or a click on an image, asks for a file
    (the browser's dialog); the file goes through the Media gateway (one manifest entry in the image-list draft)
@@ -3892,67 +2449,27 @@ const accessText = (editors, removed) => `${JSON.stringify({ note: 'test', proje
     removed: (removed || []).map((login) => ({ login, had_commits: true })) },
   'core-stack': { repos: 15, editors: editors.map((login) => ({ login, why: 'commits', repos_with_commits: 2 })),
     removed: (removed || []).map((login) => ({ login, had_commits: true })) } } }, null, 1)}\n`;
-const accessAtMain = (editors, removed) => ({ [`${ACCESS_FILE}@${MAIN_SHA}`]: accessText(editors, removed) });
-
-// (the title keeps its old word "owner": docs/cms-v2-plan.md's parity table names this test by its title)
-test('owners: Approve and Merge for a Write owner on its own project\'s proposal by someone else; not on its own', async () => {
-  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
-  const ed = 'kyle-nelson-berkeley';
-  const contents = accessAtMain([ed], ['removed-one']);
-  const site = (login, pr) => reviewSite(login, { perms: { push: true }, contents, pulls: { 1: pr } }, 1);
-  let page = await site(ed, projectPr('nathalie', ['content/projects/learning-to-swim.md']));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['approve', 'request-changes', 'merge', 'update', 'close']);
-  page = await site(ed, projectPr(ed, ['content/projects/learning-to-swim.md']));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'merge', 'update', 'close'], 'its own: no Approve');
-  assert.match(trayText(page), /Someone else approves your own proposal/);
-  page = await site(ed, projectPr('nathalie', ['content/projects/learning-to-swim.md', 'content/about.md']));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About is not its project');
-  page = await site('someone-else', projectPr('nathalie', ['content/projects/learning-to-swim.md']));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not an editor');
-  assert.match(trayText(page), /for a project's editors on that project's pages/);
-  page = await site('removed-one', projectPr('nathalie', ['content/projects/learning-to-swim.md']));
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'removed by an admin');
-  // no access file on main (not built yet, or the read failed): fails closed
-  page = await reviewSite(ed, { perms: { push: true }, contents: { [`${ACCESS_FILE}@${MAIN_SHA}`]: null },
-    pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'no access file: no Approve');
-});
 
 test('edit access: a granting copy of edit-access.json served by the site (the deployment) is ignored: only main\'s, through GitHub', async () => {
-  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
-  const ed = 'kyle-nelson-berkeley';
-  const granting = JSON.parse(accessText([ed, 'bob']));                 // what a branch's preview deployment might serve
-  const hc = { [ACCESS_FILE]: granting };
-  const page = openSite({ hash: '#/?editor=proposals&pr=1', hc, session: C.makeSession(TOKEN_A, null, ed, Date.now()),
-    intercept: reviewGithub({ login: ed, perms: { push: true }, contents: accessAtMain([]),
-      pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }) });
-  await settle();
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'],
-    'main lists no editor: no Approve, no Merge');
+  // U0b: seen through the edit gate on the project page (the review card that showed Approve is gone)
+  const granting = JSON.parse(accessText(['bob']));                       // what a branch's preview deployment might serve
+  const page = await editorOn({ hash: '#/projects/core-stack', hc: { [ACCESS_FILE]: granting }, files: { [ACCESS_FILE]: accessText([]) } });
   assert.ok(!page.hcReads.includes(ACCESS_FILE), 'the site\'s own copy is never even read');
-  // the Changes tab of the project page says the same
-  const p2 = await editorOn({ hash: '#/projects/core-stack', hc, files: { [ACCESS_FILE]: accessText([]) } });
-  await p2.showData();
-  const line = p2.one((e) => e.classList.contains('hc-access-line') && !e.hidden);
-  assert.equal(line.textContent, 'You have no commits in this project\'s repos yet.');
+  assert.ok(page.calls.some((c) => /\/contents\/data\/graph\/edit-access\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
+  const lock = page.one((e) => e.classList.contains('hc-dock-lock') && !e.hidden);
+  assert.match(lock.textContent, /You can't edit this project\./, 'main lists no editor: the page stays locked');
+  assert.match(lock.textContent, /You have no commits in this project's repos yet\./);
 });
 
 test('edit access: read again from the site after a minute, so a changed list shows without a reload', async () => {
-  const projectPr = (author, files) => ({ pull: openPull(1, author, HEAD_1), files: files.map((f) => fileRow(f)), runs: runs(gateRun()), comments: [] });
-  const page = await reviewSite('kyle-nelson-berkeley', { perms: { push: true }, contents: accessAtMain(['kyle-nelson-berkeley']),
-    pulls: { 1: projectPr('nathalie', ['content/projects/learning-to-swim.md']) } }, 1);
-  // the access file comes from main through GitHub: each read asks where main points now (the file itself is
-  // cached by commit, so an unchanged main costs one small read)
-  const reads = () => page.calls.filter((c) => /\/git\/ref\/heads\/main$/.test(c.url)).length;
+  // U0b: the edit gate reads it (the review card that read it for Approve is gone)
+  const page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText(['bob']) } });
+  const reads = () => page.calls.filter((c) => /\/contents\/data\/graph\/edit-access\.json\?ref=/.test(c.url)
+    || /\/git\/ref\/heads\/main$/.test(c.url)).length;
   assert.ok(page.calls.some((c) => /\/contents\/data\/graph\/edit-access\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
-  assert.ok(!page.calls.some((c) => c.url.includes(`/contents/data/projects.json?ref=${MAIN_SHA}`)),
-    'main\'s index is not read for Approve any more');
-  const redraw = async () => { page.tab('changes').click(); await settle(); page.tab('proposals').click(); await settle(); };
+  const redraw = async () => { await page.go(`#${OTHER_ROUTE}`); await page.go('#/projects/core-stack'); };
   const first = reads();
-  assert.ok(first >= 1, 'the access file was read');
-  assert.ok(actionButton(page, 'approve'), 'drawn with Approve');
   await redraw();
-  assert.ok(actionButton(page, 'approve'), 'the card is drawn again');
   assert.equal(reads(), first, 'kept for a minute');
   const D = vm.runInContext('Date', page.win);                    // the editor's own clock
   const realNow = D.now;
@@ -3963,43 +2480,24 @@ test('edit access: read again from the site after a minute, so a changed list sh
   assert.ok(reads() > first, 'read again after the minute');
 });
 
-test('edit access: the Changes tab on a project page says what you can do there, in one line', async () => {
-  const line = (page) => page.one((e) => e.classList.contains('hc-access-line') && !e.hidden);
+test('edit access: the bubble on a project page says what you can do there, in one line (U0b: the Changes tab\'s line is gone)', async () => {
+  const line = (page) => { const l = page.one((e) => e.classList.contains('hc-dock-lock') && !e.hidden); return l ? l.textContent : null; };
   let page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText(['bob']) } });
-  await page.showData();
-  assert.ok(line(page), trayText(page));
-  assert.equal(line(page).textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
+  assert.equal(line(page), 'You can edit this project: you have commits in 2 of its 15 repos.');
   page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([]) } });
-  await page.showData();
-  assert.equal(line(page).textContent, 'You have no commits in this project\'s repos yet.');
+  assert.match(line(page), /You have no commits in this project's repos yet\./);
   page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([], ['bob']) } });
-  await page.showData();
-  assert.equal(line(page).textContent, 'An admin removed your access to this project.');
+  assert.match(line(page), /An admin removed your access to this project\./);
   page = await editorOn({ hash: '#/projects/core-stack', variant: 'maintain', files: { [ACCESS_FILE]: accessText([]) } });
-  await page.showData();
-  assert.equal(line(page).textContent, 'You can edit every project (Maintainer).');
+  assert.equal(line(page), 'You can edit every project (Maintainer).');
   // not a project page: no line
   page = await editorOn({ files: { [ACCESS_FILE]: accessText(['bob']) } });
-  await page.showData();
-  assert.equal(line(page), undefined);
+  assert.equal(line(page), null);
 });
 
-test('edit access: a rename out of a file it may not edit, or a file list GitHub cut short, gives no Approve or Merge', async () => {
-  const owner = 'kyle-nelson-berkeley';
-  const contents = accessAtMain([owner]);
-  const renamed = { pull: openPull(1, 'nathalie', HEAD_1), runs: runs(gateRun()), comments: [],
-    files: [Object.assign(fileRow('content/projects/learning-to-swim.md'), { status: 'renamed', previous_filename: 'content/about.md' })] };
-  let page = await reviewSite(owner, { perms: { push: true }, contents, pulls: { 1: renamed } }, 1);
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'About moved into the project');
-  const cut = { pull: openPull(1, 'nathalie', HEAD_1, { changed_files: 4000 }), runs: runs(gateRun()), comments: [],
-    files: [fileRow('content/projects/learning-to-swim.md')] };
-  page = await reviewSite(owner, { perms: { push: true }, contents, pulls: { 1: cut } }, 1);
-  assert.deepEqual(actionButtons(page).map((b) => b.attrs['data-action']), ['request-changes', 'update', 'close'], 'not every file was listed');
-});
-
-test('Data tab (2026-10-14): each project\'s facts file is listed and opens as raw JSON; the index stays in the registries list', async () => {
+test('Data files (2026-10-14): each project\'s facts file is listed and opens as raw JSON; the index stays in the registries list', async () => {
   const page = await editorOn();
-  await page.showData();
+  await page.dataFiles();
   const link = page.linkTo('#/edit/data/projects/learning-to-swim');
   assert.ok(link, 'the facts file of Learning to Swim is listed');
   assert.match(link.textContent, /data\/projects\/learning-to-swim\.json/);
@@ -4011,16 +2509,14 @@ test('Data tab (2026-10-14): each project\'s facts file is listed and opens as r
 });
 
 test('New project (2026-10-14): a repository another project already holds in its facts file is refused before any draft', async () => {
+  // U0b: the form is gone; its draft rule is HCEditor.helpers.makeProjectDraft (U6's dialog builds on it)
   const page = await editorOn();
-  await openTab(page, 'changes');
-  await page.follow(page.linkTo('#/new/project'));
   const taken = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/projects/acoustics.json'), 'utf8')).repos.find((r) => !r.external).name;
-  for (const [k, v] of [['id', 'sonar-rig'], ['name', 'Sonar rig'], ['status', 'active'], ['tagline', 'A tank rig.'], ['repos', taken]]) {
-    fieldOf(page, k).value = v;
-  }
-  page.action('make-draft').click();
-  await settle();
-  assert.match(shownProblem(page).textContent, new RegExp(`${taken}.*already listed in project 'acoustics'`));
+  const H = page.win.HCEditor.helpers;
+  const out = await H.makeProjectDraft(Object.assign({}, H.newProjectForm().defaults,
+    { id: 'sonar-rig', name: 'Sonar rig', status: 'active', tagline: 'A tank rig.', repos: taken }), { ref: 'main', number: null });
+  assert.match(out.problem, new RegExp(`${taken}.*already listed in project 'acoustics'`));
+  assert.equal(out.d, undefined);
   assert.equal(draftsOf(page).get('new/project'), null);
 });
 
@@ -4030,8 +2526,7 @@ test('New project (2026-10-14): a repository another project already holds in it
 async function typedDraft(page) {
   const i = firstParagraph(PAGE_TEXT);
   await page.pick(i);
-  const ta = page.textarea();
-  await page.type(ta, `${ta.value} One more line.`);
+  await page.typeIn(i, `${blocksOf(PAGE_TEXT)[i].text.trimEnd()} One more line.\n\n`);   // U0b: typed in the page
   return i;
 }
 
@@ -4196,50 +2691,6 @@ test('edit palette: blue chrome, the change colour only on change marks, Kyle\'s
 });
 
 // ---- round 2, R3: the editor page is one plain list of proposals (Kyle 2026-10-15, item 4) ----
-test('R3: the editor page is a plain list — who, which page, when, status — no tabs; View settings and Guide in its foot', async () => {
-  const two = secondProposal(readRepo(UBUNTU_FILE));
-  const page = await ubuntuOn({ extra: two.extra });
-  page.handle().click();
-  await settle();
-  assert.equal(page.tray().hidden, false);
-  assert.equal(page.all((e) => e.attrs.role === 'tab' || e.attrs.role === 'tablist').length, 0, 'no tabs');
-  assert.equal(page.one((e) => e.classList.contains('hc-tray-title')).textContent, 'Proposals');
-  const rows = page.all((e) => e.classList.contains('hc-prow'));
-  assert.deepEqual(rows.map((r) => r.attrs['data-pr']), ['2', '1', '3', '2'].slice(0, rows.length));
-  const r2 = rows[0];
-  assert.equal(r2.attrs['data-state'], 'open');
-  assert.equal(r2.attrs['data-slot'], '2', 'second-author: PR #1\'s author (bob is the viewer) is slot 1, then slot 2');
-  const text = r2.textContent;
-  assert.ok(text.includes('second-author'), 'who');
-  assert.ok(text.includes('Ubuntu 24.04 Server'), `which page (${text})`);
-  assert.ok(/opened|ago|Sep|Oct/.test(text), 'when');
-  assert.ok(/Open/.test(text), 'status');
-  const merged = rows.filter((r) => r.attrs['data-state'] === 'merged');
-  assert.ok(merged.length >= 1 && merged.every((r) => /Live/.test(r.textContent)), 'merged rows say Live');
-  assert.ok(page.one((e) => e.attrs['data-action'] === 'foot-view'), 'View settings in the foot');
-  assert.ok(page.one((e) => e.attrs['data-action'] === 'foot-guide'), 'Guide in the foot');
-  assert.ok(page.one((e) => e.tagName === 'A' && /github\.com\/desert-mango\/hippocampus-docs\/tree\/main\/data/.test(e.attrs.href || '')),
-    'data files: on GitHub');
-});
-
-test('R3: a row opens its page with THAT proposal drawn, in its proposer\'s colour; the list closes', async () => {
-  const two = secondProposal(readRepo(UBUNTU_FILE));
-  const page = await ubuntuOn({ extra: two.extra });
-  assert.equal(page.editorMessages().at(-1).tint, 2, 'the newest (#2, second-author) is drawn first, in slot 2');
-  page.handle().click();
-  await settle();
-  const r1 = page.all((e) => e.classList.contains('hc-prow')).find((r) => r.attrs['data-pr'] === '1' && r.attrs['data-state'] === 'open');
-  findAll(r1, (e) => e.attrs['data-action'] === 'open-proposal')[0].click();
-  await settle();
-  await page.send({ type: 'hc-ready' });
-  await settle();
-  assert.equal(page.tray().hidden, true, 'the list steps aside');
-  const m = page.editorMessages().at(-1);
-  assert.equal(m.tint, 1, 'PR #1 (kyle-nelson-berkeley, the oldest other proposer): slot 1');
-  assert.ok(m.overlay.length > 0, 'its marks');
-  assert.ok(/#1/.test(pageBar(page).textContent), `the bar names PR #1 (${pageBar(page).textContent})`);
-});
-
 test('R3: "Edit this page" (?editor=changes) turns Editor mode on in place; no editor page opens', async () => {
   const page = openSite({ hash: `#${PAGE_ROUTE}?editor=changes` });
   await settle();
@@ -4248,16 +2699,8 @@ test('R3: "Edit this page" (?editor=changes) turns Editor mode on in place; no e
   assert.equal(page.tray().hidden, true);
 });
 
-test('R3: the list reads the gate\'s status for at most 10 open proposals (codex r1)', async () => {
-  const pulls = {};
-  for (let n = 20; n < 34; n += 1) pulls[n] = { pull: openPull(n, `p${n}`, n.toString(16).padStart(40, '0')), files: [fileRow('js/app.js')] };
-  const page = await reviewSite('bob', { perms: { push: true }, pulls });
-  assert.equal(page.all((e) => e.classList.contains('hc-prow')).length, 14);
-  assert.equal(page.calls.filter((c) => /\/check-runs/.test(c.url)).length, 10);
-});
-
 // ---- round 2, R5: the Team page in Editor mode (Kyle 2026-10-15, items 5 and 10) ----
-test('R5: on the Team page the card tools are on, no blocks; an order from the frame becomes my people draft; "+" opens New person for that list', async () => {
+test('R5: on the Team page the card tools are on, no blocks; an order from the frame becomes my people draft; "+" follows the New person redirect (U0b)', async () => {
   const page = await editorOn({ hash: '#/team' });
   await page.send({ type: 'hc-ready' });
   const m = page.editorMessages().at(-1);
@@ -4281,11 +2724,13 @@ test('R5: on the Team page the card tools are on, no blocks; an order from the f
   await page.send({ type: 'hc-people', op: 'order', team: team.slice(1), alumni });
   await settle();
   assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /would be dropped/);
-  // "+" on the alumni list: the New person form, its group set
+  // "+" on the alumni list: the New person form is gone (U0b), so it follows #/new/person's redirect — the page
+  // stays, nothing is added (U5 adds the person in place)
+  const before = draftsOf(page).get('data/people').files['data/people.json'];
   await page.send({ type: 'hc-people', op: 'add', group: 'alumni' });
   await settle();
-  assert.equal(page.tray().hidden, false);
-  assert.equal(page.one((e) => e.tagName === 'SELECT' && e.attrs['data-field'] === 'group').value, 'alumni');
+  assert.equal(page.tray().hidden, true);
+  assert.equal(draftsOf(page).get('data/people').files['data/people.json'], before);
 });
 
 // ---- round 2, R2b: Undo / Redo (Kyle 2026-10-15, item 1) ----
@@ -4402,9 +2847,9 @@ async function cannotTouch(page, why) {
   assert.equal(page.editorMessages().at(-1).selected, null, `${why}: no block is selected`);
   assert.equal(draftsOf(page).get(GATE_PAGE), null, `${why}: no draft was made`);
   assert.equal(page.action('dock-send').hidden, true, `${why}: no Send for review`);
-  await page.showData();
-  assert.equal(page.textarea(), undefined, `${why}: no block editor`);
-  assert.equal(page.action('edit-whole-page'), undefined, `${why}: no whole-page Markdown`);
+  assert.equal(page.editorMessages().at(-1).open, null, `${why}: nothing opens for typing`);
+  await page.wholePage();
+  assert.equal(page.tray().hidden, true, `${why}: no whole-page Markdown`);
 }
 
 test('edit gate: an Editor without access to a project cannot select, insert, edit the whole page or send; the dock says so', async () => {
@@ -4450,8 +2895,7 @@ test('edit gate: an Editor with access edits the project page; the dock says why
   assert.equal(lastLocked(page), false);
   const i = firstParagraph(GATE_TEXT);
   await page.pick(i);
-  assert.ok(page.textarea(), 'the block editor is open');
-  assert.equal(page.textarea().readOnly, false);
+  assert.equal(page.editorMessages().at(-1).open.index, i, 'it opens for typing in the page');
   assert.equal(page.editorMessages().at(-1).selected, i);
   assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
   assert.equal(page.action('dock-send').hidden, false);
@@ -4459,7 +2903,7 @@ test('edit gate: an Editor with access edits the project page; the dock says why
   assert.ok(lock, 'one short line');
   assert.equal(lock.textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
   assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'nothing to request');
-  await page.type(page.textarea(), 'A changed paragraph.\n\n');
+  await page.typeIn(i, 'A changed paragraph.\n\n');
   assert.ok(draftsOf(page).get(GATE_PAGE), 'the draft is kept');
   assert.equal(page.action('dock-send').disabled, false, 'and can be sent');
 });
@@ -4471,8 +2915,7 @@ test('edit gate: Admin and Maintainer edit every project, with or without the ac
       await page.send({ type: 'hc-ready' });
       assert.equal(lastLocked(page), false, variant);
       await page.pick(firstParagraph(GATE_TEXT));
-      assert.ok(page.textarea(), `${variant}: the block editor is open`);
-      assert.equal(page.textarea().readOnly, false);
+      assert.ok(page.editorMessages().at(-1).open, `${variant}: the block opens for typing`);
       assert.match(dockLock(page).textContent, /You can edit every project/);
     }
   }
@@ -4488,7 +2931,7 @@ test('edit gate: until the access file is read an Editor cannot edit a project; 
   await settle();
   assert.equal(lastLocked(page), false, 'the frame is told again');
   await page.pick(firstParagraph(GATE_TEXT));
-  assert.ok(page.textarea(), 'now the block editor opens');
+  assert.ok(page.editorMessages().at(-1).open, 'now the block opens for typing');
   assert.equal(page.action('dock-send').hidden, false);
 });
 
@@ -4505,11 +2948,12 @@ test('edit gate: a page that is not a project is edited as before, whatever the 
   await page.send({ type: 'hc-ready' });
   assert.equal(lastLocked(page), false);
   await page.pick(firstParagraph(PAGE_TEXT));
-  assert.ok(page.textarea());
+  assert.ok(page.editorMessages().at(-1).open, 'it opens for typing');
   assert.equal(dockLock(page), undefined, 'no access line in the dock');
   const failed = await editorOn({ intercept: heldAccess(500).intercept });
+  await failed.send({ type: 'hc-ready' });
   await failed.pick(firstParagraph(PAGE_TEXT));
-  assert.ok(failed.textarea(), 'a failed access read does not touch other pages');
+  assert.ok(failed.editorMessages().at(-1).open, 'a failed access read does not touch other pages');
 });
 
 test('edit gate: a project\'s facts file opened in the editor is view only without access; editable with it', async () => {
@@ -4530,17 +2974,15 @@ test('edit gate: a project\'s facts file opened in the editor is view only witho
   assert.ok(page.action('propose'));
 });
 
-test('edit gate: a draft of a locked project kept from before is listed, but cannot be proposed', async () => {
+test('edit gate: a draft of a locked project kept from before stays kept, but cannot be sent (U0b: the draft list is gone)', async () => {
   const storage = memoryStorage();
   const local = localFor(storage);
   const store = C.createDraftStore(local, C.draftsKey('bob'));
   store.put({ key: GATE_PAGE, label: 'Core stack', route: GATE_ROUTE, files: { [GATE_FILE]: `${GATE_TEXT}\nMore.\n` },
     originals: { [GATE_FILE]: GATE_TEXT }, base: { ref: 'main', sha: MAIN_SHA, number: null } });
   const page = await gateOn({ storage, files: { [ACCESS_FILE]: accessText([]) } });
-  await page.showData();
-  const row = page.one((e) => e.attrs['data-draft'] === GATE_PAGE);
-  assert.ok(row, 'the draft is listed');
-  assert.equal(findAll(row, (e) => e.attrs['data-action'] === 'propose-draft').length, 0, 'no Propose…');
-  assert.ok(findAll(row, (e) => e.attrs['data-action'] === 'discard-draft')[0], 'Discard stays');
+  assert.ok(C.createDraftStore(local, C.draftsKey('bob')).get(GATE_PAGE), 'the draft is kept');
   assert.equal(page.action('dock-send').hidden, true, 'no Send for review');
+  await page.wholePage();
+  assert.equal(page.tray().hidden, true, 'and no whole-page editor to send it from');
 });

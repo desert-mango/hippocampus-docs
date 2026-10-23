@@ -26,6 +26,17 @@
        that tested js/cms-core.js alone keep their names, the js/cms.js rows
        are named "js/editor.js …", and each of them is green too.
 
+   U0b of the editor UI/UX build (plan D18) removed the editor screens most of
+   those routes had become (the proposals list, the review page, the Guide,
+   the image library, the page list, the New forms). Their routes left
+   HCCore.ROUTES (only edit stays) and their addresses redirect to the page
+   (js/editor.js REDIRECTS): REMOVED_ROUTES maps each removed route to its
+   redirect test in tools/tests/test_editor_u0b.mjs, run here and required
+   green. A retired row whose re-homed test went with a removed screen is in
+   REMOVED_U0B (the removed function, and the test that now covers the
+   address or the kept rule), and must be GONE from test_editor.mjs; the rows
+   U0b renamed are in RENAMED_U0B, old -> new.
+
      node --test tools/tests/test_parity_table.mjs
 */
 import test from 'node:test';
@@ -41,7 +52,7 @@ const C = require(path.join(ROOT, 'js', 'cms-core.js'));
 const PLAN = 'docs/cms-v2-plan.md';
 const START = '<!-- parity-table:start -->';
 const END = '<!-- parity-table:end -->';
-const FILES = ['test_editor.mjs', 'test_members_gating.mjs', 'test_cms_redirect.mjs'];
+const FILES = ['test_editor.mjs', 'test_members_gating.mjs', 'test_cms_redirect.mjs', 'test_editor_u0b.mjs'];
 
 /* The rows: [{what, home, tests: [{file, name}]}]. */
 function parityRows() {
@@ -58,7 +69,7 @@ function parityRows() {
     const cells = line.slice(1, -1).split(/\s\|\s/).map((c) => c.trim());
     assert.equal(cells.length, 3, `three cells: ${line}`);
     const tests = cells[2].split('<br>').map((t) => t.trim()).filter(Boolean).map((t) => {
-      const m = /^`([a-z_]+\.mjs)`: (.+)$/.exec(t);
+      const m = /^`([a-z0-9_]+\.mjs)`: (.+)$/.exec(t);
       assert.ok(m, `a test is "\`file.mjs\`: name": ${t}`);
       return { file: m[1], name: m[2] };
     });
@@ -89,7 +100,7 @@ function runSuites() {
   return results;
 }
 
-/* HCCore's routes (the /cms/ hash routes), as the table's first column
+/* The /cms/ hash routes (HCCore's route table before U0b), as the table's first column
    writes them; a new route without a row here fails the first test. */
 const ROUTE_ROWS = {
   home: ['`#/`'],
@@ -102,14 +113,26 @@ const ROUTE_ROWS = {
   media: ['`#/media`'],
   private: ['`#/private`'],
 };
+/* U0b: each removed route -> its redirect test (test_editor_u0b.mjs), never skipped. */
+const REMOVED_ROUTES = Object.freeze({
+  home: 'redirect #/ (the proposals list): the page on screen, the bubble out, no proposal picked',
+  review: 'redirect #/review (the proposals list): the page on screen, the bubble out, no proposal picked',
+  'review-pr': 'redirect #/review/<n>: lands on the page on screen with that proposal drawn (ed.focusPr = n), the bubble out',
+  help: 'redirect #/help: the page on screen, the bubble out; the old screen (.hc-guide) is never drawn',
+  pages: 'redirect #/pages: the page on screen, the bubble out; the old screen (.hc-changes) is never drawn',
+  new: 'redirect #/new/project: the page on screen, the bubble out; the old screen (.cms-form) is never drawn',
+  media: 'redirect #/media: the page on screen, the bubble out; the old screen (.cms-media-grid) is never drawn',
+  private: 'redirect #/private: the page on screen, the bubble out; the old screen (.hc-guide) is never drawn',
+});
 // the actions the plan's U8 lists beside the routes
 const ACTION_ROWS = ['sign-in popup', '`state` check', 'drafts across the move', '`beforeunload`',
   'several open proposals on one page', 'any other `/cms/` address'];
 
 test('the parity table: every /cms/ route of HCCore.ROUTES, and every action the plan lists, has a row', () => {
   const rows = parityRows();
-  assert.deepEqual(C.ROUTES.map((r) => r.name).sort(), Object.keys(ROUTE_ROWS).sort(),
-    'every /cms/ route has its rows here (a new route needs a row and a test)');
+  // HCCore.ROUTES holds what stays (U0b: edit); every other /cms/ route was removed and redirects
+  assert.deepEqual([...C.ROUTES.map((r) => r.name), ...Object.keys(REMOVED_ROUTES)].sort(), Object.keys(ROUTE_ROWS).sort(),
+    'every /cms/ route has its rows here (a new route needs a row and a test), kept or removed with its redirect');
   for (const [name, starts] of Object.entries(ROUTE_ROWS)) {
     for (const s of starts) {
       assert.ok(rows.some((r) => r.what.startsWith(s)), `${name}: a row starting ${s}`);
@@ -125,6 +148,15 @@ test('every row names at least one test, in an Editor-mode test file, and none s
     assert.ok(r.home.length > 0, `${r.what}: its Editor-mode home is named`);
     assert.ok(!/untested/i.test(`${r.what} ${r.home}`), r.what);
     for (const t of r.tests) assert.ok(FILES.indexOf(t.file) >= 0, `${r.what}: ${t.file} is one of ${FILES.join(', ')}`);
+  }
+});
+
+test('U0b: every removed /cms/ route has its redirect test, and it is green', () => {
+  const { ok, bad } = runSuites();
+  for (const [route, name] of Object.entries(REMOVED_ROUTES)) {
+    const k = `test_editor_u0b.mjs: ${name}`;
+    assert.ok(!bad.has(k), `${route}: not green: ${name}`);
+    assert.ok(ok.has(k), `${route}: no such green redirect test: ${name}`);
   }
 });
 
@@ -218,8 +250,51 @@ const RENAMED_R3 = Object.freeze({
 });
 const rehomed = (old) => {
   const name = old === SHELL_OLD ? SHELL_NEW : old.replace(/^js\/cms\.js/, 'js/editor.js');
-  return RENAMED_R3[name] || name;
+  return RENAMED_U0B[RENAMED_R3[name] || name] || RENAMED_R3[name] || name;
 };
+/* U0b (editor UI/UX build, plan D18): re-homed rows whose test went with a removed screen. Each names the removed
+   function(s) and what covers the address or the kept rule now (a test in test_editor_u0b.mjs or test_editor.mjs). */
+const U = (name) => ({ file: 'test_editor_u0b.mjs', name });
+const E = (name) => ({ file: 'test_editor.mjs', name });
+const REDIR_PR = U('redirect #/review/<n>: lands on the page on screen with that proposal drawn (ed.focusPr = n), the bubble out');
+const REDIR_MEDIA = U('redirect #/media: the page on screen, the bubble out; the old screen (.cms-media-grid) is never drawn');
+const REDIR_PERSON = U('redirect #/new/person: the page on screen, the bubble out; the old screen (.cms-form) is never drawn');
+const MAKE_DRAFT = U('makeProjectDraft: the form at a base -> one draft of three files (index entry, facts file, story); a taken id is refused');
+const MAKE_ON_MINE = U('makeProjectDraft on my open proposal: the draft builds on its branch head (one more commit when sent)');
+const HELPERS = U('kept helpers: mediaAssets, newProjectForm, makeProjectDraft, personFields');
+const V2_IMAGE = E('V2 images: "+" Image asks for a file at once; the upload replaces the address (alt from the file name); nothing opens');
+const REMOVED_U0B = Object.freeze({
+  'js/editor.js New project: a form -> one draft of two files -> Propose sends one tree with both paths': { removed: 'newProjectPage', now: MAKE_DRAFT },
+  'js/editor.js New person: the form adds one person to the people draft and opens it': { removed: 'newPersonPage, addPerson', now: HELPERS },
+  'js/editor.js New project can start from my open proposal: one more commit on its branch': { removed: 'newProjectPage', now: MAKE_ON_MINE },
+  'js/editor.js New person can start from my open proposal: the person joins its branch, one more commit': { removed: 'newPersonPage, addPerson', now: REDIR_PERSON },
+  'js/editor.js New person: with a people draft already open, the person joins that draft on its base': { removed: 'newPersonPage, addPerson', now: REDIR_PERSON },
+  'js/editor.js: the list finds a merge on the second page of closed PRs': { removed: 'viewProposalList', now: U('redirect #/ (the proposals list): the page on screen, the bubble out, no proposal picked') },
+  'js/editor.js the proposals list: newest first, who, which page, when, status; a title stays text': { removed: 'viewProposalList, proposalRow', now: U('redirect #/ (the proposals list): the page on screen, the bubble out, no proposal picked') },
+  'js/editor.js Review PR: green ✓, the diff as text, Vercel\'s comment, and the preview at the PR head': { removed: 'prDetail, statusBlock, filesBlock', now: REDIR_PR },
+  'js/editor.js Review PR: a proposal that changes the site\'s code labels its preview "content only"': { removed: 'showOnPage', now: REDIR_PR },
+  'js/editor.js Review PR: red ✗ with each annotation as "file, line, what to fix" and a link to the run': { removed: 'statusBlock', now: REDIR_PR },
+  'js/editor.js Review PR: no finished run yet is "still checking", and asks for no annotations': { removed: 'statusBlock, prDetail', now: REDIR_PR },
+  'js/editor.js Review PR: Merge sends exactly one PUT pinned to the shown sha; a 409 says reload': { removed: 'actionsBlock, askToMerge, act', now: REDIR_PR },
+  'js/editor.js Review PR: approving your own proposal shows GitHub\'s refusal in the tab\'s words': { removed: 'actionsBlock, act', now: REDIR_PR },
+  'js/editor.js Review PR: request changes needs a comment; close and update send their one write': { removed: 'actionsBlock, act', now: REDIR_PR },
+  'js/editor.js Review PR: Read-only sees the proposal and its preview, and no button at all': { removed: 'actionsBlock', now: REDIR_PR },
+  'js/editor.js Review PR: a merged proposal offers one button, Undo on GitHub, and nothing else': { removed: 'mergedPanel', now: REDIR_PR },
+  'js/editor.js the proposals list: a merged proposal says Live and opens on GitHub (where Undo is)': { removed: 'proposalRow, openFromList', now: U('redirect #/ (the proposals list): the page on screen, the bubble out, no proposal picked') },
+  'js/editor.js #/media: the images with c_limit,w_240 thumbnails, "on the site" marks, and a next page on next_cursor': { removed: 'viewMedia, assetTile, sizeText', now: REDIR_MEDIA },
+  'js/editor.js #/media: delete of an image the site uses says the verbatim line and calls nothing; a free one asks, then deletes': { removed: 'assetTile, mediaCall', now: REDIR_MEDIA },
+  'js/editor.js #/media: a 409 from the gateway (the site started using it) shows the same line; rename sends {from, to}': { removed: 'assetTile, mediaCall', now: REDIR_MEDIA },
+  'js/editor.js editor: Image from Media uploads (sign -> Cloudinary), adds ONE manifest entry, inserts ![alt](url), proposes both files': { removed: 'mediaPanel, mediaToggle', now: V2_IMAGE },
+  'js/editor.js editor: a duplicate (same sha256 as a site image) offers the site\'s URL and uploads nothing': { removed: 'mediaPanel', now: V2_IMAGE },
+  'js/editor.js editor: an image the site has can be picked without uploading; a file over 5 MB is refused before any call': { removed: 'mediaPanel', now: HELPERS },
+  'js/editor.js New person: Photo from Media sets the photo to a site image': { removed: 'newPersonPage, mediaPanel, photoBaseProblem', now: REDIR_PERSON },
+  'js/editor.js #/media: read-only people see why they cannot manage images, and no gateway call is made': { removed: 'viewMedia', now: REDIR_MEDIA },
+  'js/editor.js New person on my open proposal: an image already proposed on that branch can be picked as the photo': { removed: 'newPersonPage, mediaPanel, baseAssets', now: REDIR_PERSON },
+});
+const RENAMED_U0B = Object.freeze({
+  'js/editor.js page tree (#/pages): one edit link per page and registry, plus New project / New person':
+    'Data files and Edit whole page (U0b): every registry and facts file is listed, and every page opens as Markdown',
+});
 
 test('every row of the retired test files is re-homed by name in test_editor.mjs, and green', () => {
   assert.equal(RETIRED.length, 59, '32 + 18 + 9 rows');
@@ -228,7 +303,21 @@ test('every row of the retired test files is re-homed by name in test_editor.mjs
     assert.equal(fs.existsSync(path.join(ROOT, gone)), false, `${gone} is deleted`);
   }
   const { ok } = runSuites();
-  for (const old of RETIRED) assert.ok(ok.has(`test_editor.mjs: ${rehomed(old)}`), `re-homed and green: ${rehomed(old)}`);
+  const editorSrc = fs.readFileSync(path.join(ROOT, 'tools', 'tests', 'test_editor.mjs'), 'utf8');
+  const removedNames = new Set(Object.keys(REMOVED_U0B));
+  for (const old of RETIRED) {
+    const name = old === SHELL_OLD ? SHELL_NEW : RENAMED_R3[old.replace(/^js\/cms\.js/, 'js/editor.js')] || old.replace(/^js\/cms\.js/, 'js/editor.js');
+    if (removedNames.has(name)) {
+      // U0b: its screen is gone; the test went with it, and what covers it now is green
+      const r = REMOVED_U0B[name];
+      assert.ok(!ok.has(`test_editor.mjs: ${name}`) && !editorSrc.includes(name.replace(/'/g, "\\'")), `deleted with ${r.removed}: ${name}`);
+      assert.ok(r.removed && r.now, name);
+      assert.ok(ok.has(`${r.now.file}: ${r.now.name}`), `${name}: its replacement is green: ${r.now.name}`);
+      continue;
+    }
+    assert.ok(ok.has(`test_editor.mjs: ${rehomed(old)}`), `re-homed and green: ${rehomed(old)}`);
+  }
+  assert.equal(removedNames.size, 26, 'the 26 rows U0b removed, each listed once');
   // and gone from the files that still run: nothing tests js/cms.js any more
   for (const f of ['test_cms_core.mjs', 'test_cms_media.mjs']) {
     const src = fs.readFileSync(path.join(ROOT, 'tools', 'tests', f), 'utf8');

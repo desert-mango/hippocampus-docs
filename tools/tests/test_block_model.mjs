@@ -445,21 +445,14 @@ function memStorage(init) {
   };
 }
 
-test('viewSettings: defaults, a round trip, bad values fall back one by one, a throwing storage is survived', () => {
+/* U0b (editor UI/UX build, plan D18): View settings went with the View tab, so HCCore.viewSettings is fixed constants
+   now; this replaces 'viewSettings: defaults, a round trip, bad values fall back one by one, a throwing storage is
+   survived' (the load/save/KEY/DEFAULTS/DIFFS it tested are removed). */
+test('viewSettings: fixed constants (U0b) — suggestions on, inline marks, normal density, the hover line on; no storage', () => {
   const V = C.viewSettings;
-  assert.equal(V.KEY, 'hc-editor-view');
-  assert.deepEqual(V.DEFAULTS, { suggestions: true, diff: 'inline', compact: false, outlines: true });
-  const s = memStorage();
-  assert.deepEqual(V.load(s), V.DEFAULTS);
-  assert.equal(V.save(s, { suggestions: false, diff: 'side', compact: true, outlines: false }), true);
-  assert.deepEqual(V.load(s), { suggestions: false, diff: 'side', compact: true, outlines: false });
-  const odd = memStorage({ 'hc-editor-view': JSON.stringify({ suggestions: 'false', diff: 'split', compact: 1, outlines: false, x: 1 }) });
-  assert.deepEqual(V.load(odd), { suggestions: true, diff: 'inline', compact: false, outlines: false });
-  assert.deepEqual(V.load(memStorage({ 'hc-editor-view': '{not json' })), V.DEFAULTS);
-  const boom = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
-  assert.deepEqual(V.load(boom), V.DEFAULTS);
-  assert.equal(V.save(boom, V.DEFAULTS), false);
-  assert.deepEqual(V.load(null), V.DEFAULTS);
+  assert.deepEqual({ ...V }, { suggestions: true, diff: 'inline', compact: false, outlines: true });
+  assert.ok(Object.isFrozen(V));
+  for (const gone of ['KEY', 'DEFAULTS', 'DIFFS', 'load', 'save']) assert.equal(V[gone], undefined, gone);
 });
 
 test('membersOnly: Admin, Maintainer and Editor (push: true); Read-only and junk are not members', () => {

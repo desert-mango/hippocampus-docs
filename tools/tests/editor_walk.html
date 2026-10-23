@@ -32,13 +32,6 @@
                      js/editor-frame.js's test-only walk hook (below)
     inserted         on + the frame says hc-block-insert {index, 'note'}: the
                      note inserted, selected, its Markdown in the tray
-    view             on + the tray's View tab (the settings form)
-    tray-proposals   on + the tray opened at Proposals, PR #1's card OPEN in
-                     place (a click on its title, #/review/1): the check
-                     status, Show on page, the review buttons, the files
-                     (mockup a-2)
-    tray-media       on + the tray's Media tab (images from the manifest)
-    tray-guide       on + the tray's Guide tab
     phone            on + the tray open, under 768 px (the bottom sheet); the
                      site's frame is 390 px wide (smoke.mjs shoots it at 390)
     overlay-inline   (U7) on, with a synthetic open proposal #2 on this page
@@ -69,9 +62,6 @@
                        access-nowrite   read-only, commits (the issue link)
                        access-none      Write, not listed (Request shown)
                        access-admin     Admin: Remove per person, Add person
-                       access-proposals Editor ON, the proposals list with an
-                                        "Access request" and an "Access
-                                        change" row (labels from the diff)
 
   The synthetic proposals (U7) are built here from the page's own Markdown
   with HCCore.splitBlocks and handed to the fake GitHub as `extra`; PR #1
@@ -237,7 +227,7 @@
   // The access steps set their own (access-sitewide takes &variant=admin too).
   const ACCESS_VARIANT = { 'access-sitewide': params.get('variant') === 'admin' ? 'admin' : 'maintain', 'access-commits': undefined,
     'access-added': undefined, 'access-removed': undefined, 'access-nowrite': 'readonly', 'access-none': undefined,
-    'access-admin': 'admin', 'access-proposals': undefined };
+    'access-admin': 'admin' };
   const variant = Object.prototype.hasOwnProperty.call(ACCESS_VARIANT, step) ? ACCESS_VARIANT[step]
     : (['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant') : undefined);
   // U5b: an approval record written by the page is kept as proposal #2's comment (window.walkWrites lists every write)
@@ -285,8 +275,7 @@
   });
 
   /* Edit access: main's data/graph/edit-access.json (the shape tools/build_edit_access.py writes) and
-     data/projects.json for the project of the page, with the walk's login in the step's state; for
-     access-proposals, two open proposals that change only data/projects.json's add/remove lists. */
+     data/projects.json for the project of the page, with the walk's login in the step's state. */
   async function accessExtra(login) {
     const m = /^\/projects\/([a-z0-9][a-z0-9-]*)$/.exec(page);
     const id = m ? m[1] : 'core-stack';
@@ -310,23 +299,6 @@
         removed: removed.sort(byLogin).map(([l, had]) => ({ had_commits: had, login: l })) } } };
     const extra = { contents: { [MAIN]: { 'data/graph/edit-access.json': `${JSON.stringify(doc, null, 1)}\n`, 'data/projects.json': index } },
       trees: { [MAIN]: 'e'.repeat(40) } };
-    if (step === 'access-proposals') {
-      const pull1 = JSON.parse(await readText('fixtures/github-data/pull-1.json'));
-      const sha = (c) => c.repeat(40).slice(0, 40);
-      const pull = (n, who, created, headSha, title) => Object.assign({}, pull1, { number: n, title, created_at: created,
-        user: Object.assign({}, pull1.user, { login: who }),
-        head: Object.assign({}, pull1.head, { sha: headSha, ref: `cms/${who}/walk-access-${n}` }) });
-      const row = { filename: 'data/projects.json', status: 'modified', additions: 1, deletions: 0, changes: 1, patch: '@@ -1 +1 @@' };
-      const name = facts && facts.name ? facts.name : id;
-      extra.pulls = [pull(4, 'walk-student', '2026-10-18T09:00:00Z', sha('a4'), C.accessProposalTitle({ kind: 'request', login: 'walk-student', name })),
-        pull(5, 'walk-admin', '2026-10-19T09:00:00Z', sha('a5'), C.accessProposalTitle({ kind: 'change', op: 'remove', login: 'lab-lead', name }))];
-      extra.files = { 4: [row], 5: [row] };
-      extra.contents[sha('a4')] = { 'data/projects.json': C.accessRequestDraft(index, id, 'walk-student', 'add').text };
-      extra.contents[sha('a5')] = { 'data/projects.json': C.accessRequestDraft(index, id, 'lab-lead', 'remove').text };
-      extra.compare = { [sha('a4')]: MAIN, [sha('a5')]: MAIN };
-      extra.checks = { [sha('a4')]: { total_count: 0, check_runs: [] }, [sha('a5')]: { total_count: 0, check_runs: [] } };
-      extra.comments = { 4: [], 5: [] };
-    }
     return extra;
   }
 
@@ -425,18 +397,6 @@
     return frameReady(null);
   }
 
-  async function openTray(tab) {
-    const handle = await until(() => $('[data-action="tray-open"]'), 'the tray handle');
-    if (!SD.body.classList.contains('hc-tray-open')) handle.click();
-    await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
-    if (tab) {
-      // round 2 (R3): no tabs; the old tab's view opens through HCEditor.openView
-      SW.HCEditor.openView(tab);
-      const title = { proposals: 'Proposals', changes: 'Edit as Markdown', view: 'View settings', guide: 'Guide' }[tab];
-      await until(() => { const t = $('#hc-tray .hc-tray-title'); return t && t.textContent === title; }, `the ${tab} view`);
-    }
-  }
-
   const blockEditor = () => $('textarea[data-block-editor]');
 
   // what a failure line carries: the page frame, the hc-ready count, the tray's notice
@@ -449,9 +409,7 @@
     } catch (e) { return 'no site document'; }
   }
 
-  const pageBar = () => { const b = $('#hc-frame-host .hc-pagebar'); return b && !b.hidden ? b : null; };
-
-  // Edit access: Editor OFF, the box at the top of a project page's aside (access-proposals: Editor on, the list)
+  // Edit access: Editor OFF, the box at the top of a project page's aside
   const accessBoxReady = async (check) => {
     await until(() => $('[data-editor-switch]') && !$('[data-editor-switch]').disabled, 'the role read (the switch enabled)');
     const box = await until(() => $('.aside-box .hc-access'), 'the Edit access box on the project page');
@@ -504,41 +462,11 @@
         await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
         await frameReady(before);
       },
-      view: async () => {
-        await editorOn();
-        await openTray('view');
-        await until(() => $('#hc-tray [data-setting="suggestions"]'), 'the View settings');
-      },
-      'tray-proposals': async () => {
-        await editorOn();
-        await openTray('proposals');
-        const title = await until(() => $('#hc-tray article.hc-card[data-pr="1"] a.cms-title'), 'proposal #1\'s card');
-        title.click();                       // #/review/1: the card opens in place
-        const card = await until(() => {
-          const d = $('#hc-tray article.hc-card.is-open[data-pr="1"] .hc-card-detail');
-          return d && d.querySelector('ul.hc-files li .hc-here') && d.querySelector('.cms-actions button[data-action]')
-            && d.querySelector('button[data-action="show-on-page"]') && d.querySelector('.cms-check') ? d.parentNode : null;
-        }, 'proposal #1\'s card open: the check, Show on page, a review button, the files');
-        // the card's top at the tray's top, then (only as far as needed) down to the review buttons:
-        // at 900 px the files below them are off screen (the card lists them; the shot cannot hold all)
-        card.scrollIntoView({ block: 'start', behavior: 'instant' });
-        card.querySelector('.cms-actions .cms-action-row').scrollIntoView({ block: 'nearest', behavior: 'instant' });
-      },
-      'tray-media': async () => {
-        await editorOn();
-        await openTray('media');
-        await until(() => { const g = $('#hc-tray .cms-media-grid'); return g && g.children.length; }, 'the Media grid');
-      },
-      'tray-guide': async () => {
-        await editorOn();
-        await openTray('guide');
-        await until(() => $('#hc-tray ol.hc-guide'), 'the Guide');
-      },
+      // U0b: the proposals list is gone; the phone shows the dock (U2 re-points this step to the sheet)
       phone: async () => {
         await editorOn();
-        await openTray('proposals');
         await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
-        await until(() => $('#hc-tray article.hc-card'), 'a proposal card');
+        await until(() => { const d = $('.hc-dock'); return d && !d.hidden ? d : null; }, 'the dock');
       },
       scroll: async () => {
         await editorOn();
@@ -581,21 +509,19 @@
           clearInterval(siteTimer);
         }
       },
+      // U0b: no page bar; proposal #2 is on the page when its review cards are (the conflict one among them)
       'overlay-inline': async () => {
         await editorOn();
-        await until(() => { const b = pageBar(); return b && /walk-proposer proposes changes to this page/.test(b.textContent); },
-          'the page bar for proposal #2');
-        await until(() => /main changed this since the proposal/.test(pageBar().textContent), 'the conflict line');
+        await until(() => $('#hc-frame-host .hc-rcard[aria-label$="suggested by walk-proposer"]'), 'proposal #2\'s review cards');
+        await until(() => $('#hc-frame-host .hc-rcard.is-conflict'), 'the change main also changed (its card)');
       },
       'overlay-side': async () => {
         await REGISTRY['overlay-inline']();
       },
+      // U0b: no page bar listing the other; the newest (#3) is the one drawn (its review cards)
       'two-prs': async () => {
         await editorOn();
-        await until(() => { const b = pageBar(); return b && /newer-proposer proposes changes to this page/.test(b.textContent); },
-          'the page bar for the newest proposal, #3');
-        await until(() => /Also proposing changes here:\s*#2 by walk-proposer/.test(pageBar().textContent)
-          && $('.hc-pagebar [data-action="pagebar-show"][data-proposal="2"]'), '#2 listed with its own Show on page');
+        await until(() => $('#hc-frame-host .hc-rcard[aria-label$="suggested by newer-proposer"]'), 'the newest proposal\'s (#3) review cards');
       },
       // U4: Editor stays OFF; the members-only detail under the page's public GitHub surfaces
       members: async () => {
@@ -618,7 +544,7 @@
         await until(() => box.querySelector('.hc-m-line') || box.querySelector('.hc-m-error'), 'a counts line');
         box.closest('.hc-authors').scrollIntoView({ block: 'start', behavior: 'instant' });
       },
-      // Edit access: Editor OFF, the box at the top of a project page's aside (access-proposals: Editor on, the list)
+      // Edit access: Editor OFF, the box at the top of a project page's aside
       'access-sitewide': () => accessBoxReady((b) => /^You can edit every project \((Maintainer|Admin)\)\.$/.test(accessText(b))),
       'access-commits': () => accessBoxReady((b) => /^You can edit this project: you have commits in/.test(accessText(b))),
       'access-added': () => accessBoxReady((b) => accessText(b) === 'An admin gave you access to this project.'),
@@ -630,16 +556,7 @@
         && b.querySelector('button[data-action="access-request"]')),
       'access-admin': () => accessBoxReady((b) => accessText(b) === 'You can edit every project (Admin).'
         && b.querySelector('button[data-action="access-remove"]') && b.querySelector('button[data-action="access-add"]')),
-      'access-proposals': async () => {
-        // the list needs no page frame: Editor on, then the Proposals view (not editorOn's wait for the frame)
-        const sw = await until(() => { const b = $('[data-editor-switch]'); return b && !b.disabled ? b : null; },
-          'the Editor switch (GitHub access confirmed)');
-        sw.click();
-        await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
-        await openTray('proposals');
-        await until(() => $('#hc-tray .hc-prow[data-pr="4"] .hc-prow-access:not([hidden])')
-          && $('#hc-tray .hc-prow[data-pr="5"] .hc-prow-access:not([hidden])'), 'the two access labels in the list');
-      },
+      // (U0b removed 'access-proposals': its proposals list with the access labels is gone)
 
       /* ---- U2 ---- */
 

@@ -707,8 +707,10 @@ test('U4a walk: the dock (top right since V1) in a real Chrome (switch, avatar, 
     await sleep(300);
     assert.equal(await S("querySelector('.hc-dock-count').textContent"), '1 change');
     await shot('u4a-dock');
+    // U0b (plan D18): Send for review sends at once; no Send box opens (U2 draws the sent row)
     await ev(`${site}.document.querySelector('.hc-dock-send').click()`);
-    await until(() => S("querySelector('.hc-sendbox .hc-propose-slot') && document.querySelector('iframe').contentWindow.document.querySelector('.hc-sendbox .hc-propose-slot').childElementCount > 0"), 'the send box with the propose form');
+    await sleep(500);
+    assert.equal(await S("querySelector('.hc-sendbox')"), null, 'no Send box');
     await shot('u4a-send');
     // a 320-px phone: every dock control stays on screen
     await ev(`(() => { const f = document.querySelector('iframe'); f.style.width = '320px'; })()`);
@@ -841,7 +843,7 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
    editor page and Escape closes it; a REAL click on an image (trusted input, through the sandboxed frame)
    opens the browser's file dialog in the parent (the click's activation reaches it); Alt+ArrowDown on a
    focused image moves it in the draft. */
-test('V2 walk: the editor page from the bubble, an image click opens the file dialog, Alt+Down moves the image', { timeout: 150000 }, async () => {
+test('V2 walk: the editor page from the account menu, an image click opens the file dialog, Alt+Down moves the image', { timeout: 150000 }, async () => {
   const scratch = mkdtempSync(path.join(tmpdir(), 'hc-v2-walk-'));
   let W = null;
   try {
@@ -852,18 +854,15 @@ test('V2 walk: the editor page from the bubble, an image click opens the file di
     const S = (x) => ev(`${site}.eval(${JSON.stringify(x)})`);
     assert.equal(await S("document.querySelectorAll('.hc-handle').length"), 0, 'no edge handle');
     assert.equal(await S("document.querySelector('#hc-tray').hidden"), true, 'no panel at the start');
-    // the editor page
-    await S("document.querySelector('.hc-dock-pages').click()");
+    // the thin editor page (U0b: only Data files and the whole page as Markdown, from the account menu)
+    await S("document.querySelector('.hc-avatar').click()");
+    await S("document.querySelector('[data-action=menu-data]').click()");
     await until(() => S("!document.querySelector('#hc-tray').hidden"), 'the editor page opens');
     const cover = await S("(() => { const t = document.querySelector('#hc-tray').getBoundingClientRect(); return { left: t.left, right: innerWidth - t.right }; })()");
     assert.ok(cover.left <= 1 && cover.right <= 1, `a full page, not a side panel (${JSON.stringify(cover)})`);
-    await shot('v2-editor-page');
-    // round 2 (R3): the editor page is the proposals list: no tabs; its foot opens View settings
     assert.equal(await S("document.querySelectorAll('#hc-tray [role=tab]').length"), 0, 'no tabs');
-    await until(() => S("!!document.querySelector('#hc-tray [data-action=foot-view]')"), 'the list foot');
-    await S("document.querySelector('#hc-tray [data-action=foot-view]').click()");
-    await until(() => S("document.querySelector('#hc-tray .hc-tray-title').textContent === 'View settings'"), 'View settings');
-    await shot('v2-editor-page-view');
+    await until(() => S("document.querySelector('#hc-tray .hc-tray-title').textContent === 'Data files'"), 'Data files');
+    await shot('v2-editor-page');
     await S("document.querySelector('#hc-tray').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
     await until(() => S("document.querySelector('#hc-tray').hidden"), 'Escape goes back to the page');
     // a trusted click on the first image block opens the file dialog
@@ -889,7 +888,7 @@ test('V2 walk: the editor page from the bubble, an image click opens the file di
     await until(async () => (await draft(KEY, FILE)) === want, 'the image moved below the next block, in the draft, byte for byte');
     await sleep(600);
     await shot('v2-image-moved');
-    console.log('V2 walk: full editor page from the bubble, Escape back; trusted image click -> file dialog; Alt+Down moves the image');
+    console.log('V2 walk: full editor page from the account menu, Escape back; trusted image click -> file dialog; Alt+Down moves the image');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });
@@ -944,22 +943,11 @@ test('U5b walk: the review rail beside the page, cards on their lines, Approve w
     assert.deepEqual(w.body, { body: `hc-approved ${key}` });
     await until(() => S(`/Going live/.test(document.querySelector('.hc-rcard[data-key="${key}"]').textContent)`), 'the card says it is going live');
     await shot('u5b-going-live-dark-1280');
-    // round 2 (R3): the proposals list, a row per proposal in its proposer's colour (dark, then light)
-    const listShot = async (name) => {
-      await S("document.querySelector('.hc-dock-pages').click()");
-      await until(() => S("document.querySelectorAll('#hc-tray .hc-prow').length > 0"), 'the proposals list');
-      assert.equal(await S("document.querySelectorAll('#hc-tray [role=tab]').length"), 0, 'no tabs');
-      await sleep(300);
-      await shot(name);
-      await S("document.querySelector('#hc-tray .hc-tray-close').click()");
-      await until(() => S("document.querySelector('#hc-tray').hidden"), 'back to the page');
-    };
-    await listShot('r3-list-dark-1280');
+    // (U0b removed the proposals list these two shots were of: r3-list-dark-1280 / r3-list-light-1280)
     // light theme
     await S("document.getElementById('theme-toggle').click()");
     await sleep(500);
     await shot('u5b-rail-light-1280');
-    await listShot('r3-list-light-1280');
     // narrow: markers; a click opens the card beside the marker
     await send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 900, deviceScaleFactor: 1, mobile: false });
     await until(() => S("document.querySelector('.hc-rail').classList.contains('is-markers')"), 'markers when narrow');
@@ -969,22 +957,9 @@ test('U5b walk: the review rail beside the page, cards on their lines, Approve w
     const pop = await S("(() => { const c = document.querySelector('.hc-rslot.is-active .hc-rcard'); if (!c) return null; const b = c.getBoundingClientRect(); return { w: b.width, right: b.right, vis: getComputedStyle(c).display }; })()");
     assert.ok(pop && pop.vis === 'block' && pop.w > 200, `the marker opens its card (${JSON.stringify(pop)})`);
     await shot('u5b-markers-light-1024');
-    W.close();
-    W = null;
-    // a phone (the site 390 px wide): no rail; the page bar's "Review N changes" opens them as a bottom sheet
-    W = await editorWalk('/setup/lab-gantry/usage', scratch, '&variant=admin&width=390&theme=light', 'overlay-inline');
-    const P = (x) => W.ev(`${W.site}.eval(${JSON.stringify(x)})`);
-    await W.until(() => P("!!document.querySelector('[data-action=rail-sheet]')"), 'the page bar offers the sheet');
-    assert.equal(await P("getComputedStyle(document.querySelector('.hc-rail')).display"), 'none', 'no rail on a phone');
-    await P("document.querySelector('[data-action=rail-sheet]').click()");
-    await W.until(() => P("document.querySelectorAll('.hc-rsheet .hc-rcard').length >= 2"), 'the sheet with the cards');
-    const sheet = await P("(() => { const r = document.querySelector('.hc-rsheet').getBoundingClientRect(); return { left: r.left, right: innerWidth - r.right, bottom: innerHeight - r.bottom, focus: document.activeElement && document.activeElement.dataset.action }; })()");
-    assert.ok(sheet.left <= 12 && sheet.right <= 12 && sheet.bottom <= 12, `a bottom sheet (${JSON.stringify(sheet)})`);
-    assert.equal(sheet.focus, 'rail-sheet-close', 'the focus moves into the sheet');
-    await W.shot('u5b-sheet-light-390');
-    await P("document.querySelector('.hc-rsheet').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
-    await W.until(() => P("!document.querySelector('.hc-rsheet')"), 'Escape closes the sheet');
-    console.log('U5b walk: rail beside the frame, cards on their lines without overlap, hover lights the block, guard holds, Enter approves with one record, markers at 1024, a bottom sheet at 390');
+    // (U0b: the phone's bottom sheet opened from the page bar's "Review N changes", which went with the bar; U2/U3
+    // give the sheet its new way in, and their walk checks it)
+    console.log('U5b walk: rail beside the frame, cards on their lines without overlap, hover lights the block, guard holds, Enter approves with one record, markers at 1024');
   } finally {
     if (W) W.close();
     rmSync(scratch, { recursive: true, force: true });
@@ -1166,12 +1141,12 @@ test('R5 walk: the Team page in Editor mode — card tools (no block line), the 
     assert.equal(await ev("document.querySelector('.hc-pmenu [data-pact=\"other\"]').textContent", F), 'Move to the current team');
     await ev("document.querySelector('.hc-pmenu').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))", F);
     await until(() => ev("!document.querySelector('.hc-pmenu')", F), 'the menu closed');
-    // "+" on the alumni list opens the New person form with that list chosen; Escape comes back
+    // "+" on the alumni list: the New person form is gone (U0b), so it follows that address's redirect — the page
+    // stays (U5 adds the person in place)
     await ev("document.querySelector('.hc-padd[data-hc-padd=\"alumni\"]').click()", F);
-    await until(() => S("!document.querySelector('#hc-tray').hidden && document.querySelector('#hc-tray select[data-field=group]') && document.querySelector('#hc-tray select[data-field=group]').value === 'alumni'"), 'New person for the alumni');
+    await sleep(500);
+    assert.equal(await S("document.querySelector('#hc-tray').hidden"), true, 'no New person form');
     await shot('r5-team-add-light-1280');
-    await S("document.querySelector('#hc-tray').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
-    await until(() => S("document.querySelector('#hc-tray').hidden"), 'back to the page');
     // Alt+Down on the first card: my draft of data/people.json changes, the bubble counts it
     await ev(`(() => { const c = document.querySelector('[data-hc-list="team"] .person-card[data-hc-ptools]'); c.focus();
       c.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true, cancelable: true })); })()`, F);

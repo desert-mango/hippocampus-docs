@@ -41,7 +41,9 @@
        <PR head sha>); U7b uses draftFetcher(files, refFetcher(token, <main
        sha>)) for the in-memory draft.
      - The route table ROUTES names each route's owner; the views live in
-       js/editor.js's VIEWS map (the tray's routes).
+       js/editor.js's VIEWS map (the thin editor page's routes; U0b of the
+       editor UI/UX build left only #/edit…, and js/editor.js's REDIRECTS
+       sends the retired addresses to the page).
      - The Review tab's logic (badges, check status, annotations, the action
        requests and what their answers mean, the Undo-on-GitHub URL, the
        changed page -> preview route map) is the "review" section below.
@@ -100,19 +102,13 @@
 
   // ------------------------------------------------------------ routes ---
 
-  /* The hash routes of cms/index.html. `owner` is the unit that builds the
-     real view; `placeholder` routes render one line until that unit ships. */
+  /* The hash routes of the thin editor page (js/editor.js's tray). `owner` is the unit that built the view.
+     U0b (editor UI/UX build, plan D18) removed home, review, review-pr, help, pages, new, media and private
+     with their screens; js/editor.js's REDIRECTS sends those addresses to the page. What stays is edit:
+     #/edit/<pageId> (the whole page as Markdown, or a raw data file) and #/edit alone (the data files). */
   const PAGE_ID_RE = /^[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*)*$/;
   const ROUTES = Object.freeze([
-    { name: 'home', re: /^\/?$/, keys: [], owner: 'U7a' },
-    { name: 'review', re: /^\/review\/?$/, keys: [], owner: 'U8' },
-    { name: 'review-pr', re: /^\/review\/([1-9][0-9]{0,8})\/?$/, keys: ['number'], owner: 'U8' },
-    { name: 'help', re: /^\/help\/?$/, keys: [], owner: 'U7a' },
-    { name: 'pages', re: /^\/pages\/?$/, keys: [], owner: 'U7b' },
-    { name: 'edit', re: /^\/edit\/(.+)$/, keys: ['pageId'], owner: 'U7b' },
-    { name: 'new', re: /^\/new\/([a-z][a-z-]*)\/?$/, keys: ['kind'], owner: 'U7b' },
-    { name: 'media', re: /^\/media\/?$/, keys: [], owner: 'U9' },
-    { name: 'private', re: /^\/private\/?$/, keys: [], owner: 'U10', placeholder: true },
+    { name: 'edit', re: /^\/edit(?:\/(.+))?$/, keys: ['pageId'], owner: 'U7b' },
   ].map((r) => Object.freeze(r)));
 
   function parseRoute(hash) {
@@ -125,7 +121,7 @@
         const m = r.re.exec(h);
         if (!m) continue;
         const params = {};
-        r.keys.forEach((k, i) => { params[k] = m[i + 1]; });
+        r.keys.forEach((k, i) => { if (m[i + 1] !== undefined) params[k] = m[i + 1]; });
         if ('number' in params) params.number = Number(params.number);
         if ('pageId' in params && !PAGE_ID_RE.test(params.pageId)) break;
         return { name: r.name, params };
@@ -3570,39 +3566,10 @@
 
   // ------------------------------------------- view settings + members ---
 
-  /* Plan D-H: the View tab's settings live in localStorage only. A stored
-     value of the wrong type falls back to its default, one by one. */
-  const VIEW_DEFAULTS = Object.freeze({ suggestions: true, diff: 'inline', compact: false, outlines: true });
-  const VIEW_DIFFS = Object.freeze(['inline', 'side']);
-
-  function cleanView(v) {
-    const o = isObj(v) ? v : {};
-    const bool = (k) => (typeof o[k] === 'boolean' ? o[k] : VIEW_DEFAULTS[k]);
-    return { suggestions: bool('suggestions'), diff: VIEW_DIFFS.indexOf(o.diff) >= 0 ? o.diff : VIEW_DEFAULTS.diff,
-      compact: bool('compact'), outlines: bool('outlines') };
-  }
-
-  const viewSettings = Object.freeze({
-    KEY: 'hc-editor-view',
-    DEFAULTS: VIEW_DEFAULTS,
-    DIFFS: VIEW_DIFFS,
-    load(storage) {
-      try {
-        const raw = storage.getItem('hc-editor-view');
-        return cleanView(raw ? JSON.parse(raw) : null);
-      } catch (e) {
-        return cleanView(null);
-      }
-    },
-    save(storage, settings) {
-      try {
-        storage.setItem('hc-editor-view', JSON.stringify(cleanView(settings)));
-        return true;
-      } catch (e) {
-        return false;
-      }
-    },
-  });
+  /* The view settings are fixed (U0b, editor UI/UX build, plan D18: the View tab and its localStorage key
+     hc-editor-view are gone): others' suggestions drawn (U3 shows them to approvers only), inline marks, normal
+     density, the hover line on. js/editor.js tells the frame these (hc-editor.settings). */
+  const viewSettings = Object.freeze({ suggestions: true, diff: 'inline', compact: false, outlines: true });
 
   /* Members-only detail (plan D-A, D-C) is for Admin, Maintainer and Editor:
      a role from roleFromPermissions whose push is a real true. */

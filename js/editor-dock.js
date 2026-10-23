@@ -33,6 +33,9 @@
                     a named slot under the pill: renderFn(view) -> a node, an array of nodes, or null, drawn into
                     div.hc-dock-panel[data-dock-panel=<name>] on every refresh; renderFn null removes the slot.
                     No panel is registered today (later units add theirs).
+     sent(number)   a proposal was just sent (opened, or one more commit on it): js/editor.js calls it after every
+                    send. A no-op today (U0b removed the review page that opened then); U2 fills it (the bubble's
+                    sent row).
      setCount(n)    the open proposals' count on the "Proposals" link (api.onCount(n) hears it first)
      loadCount()    asks api.openCount() for the count, then setCount; a failure keeps the link's word
      lockParts(a, projectId, name)
@@ -50,7 +53,7 @@
      draft()                  the draft on screen, or null
      canSend(d)               may draft d be sent from this page now (edit rights and at least one change)
      myProposals()            Promise of my open proposals (for "Add to proposal #n")
-     propose(d, slot, own)    draws the propose form for d into slot
+     propose(d)               sends draft d for review at once (U0b: the propose form and the Send box are gone)
      shown(error)             says a failure on the status line
      avatar(login, first)     the face node for a login (committed avatar or the first letter)
      accessAsk(a, projectId, name, result)   the Request edit access control (or null), its result line `result`
@@ -69,8 +72,6 @@
   let dockUndo = null;     // round 2 (R2b): Undo / Redo in the dock
   let dockRedo = null;
   let dockLock = null;     // the edit gate (2026-10-21): on a project page, what you can do there, in one or two lines
-  let sendBox = null;      // the box above the dock that Send opens (the propose form)
-  let sendKey = null;      // the draft that box was opened for
   let handle = null;       // the tray's handle while it is closed
   const panels = new Map();   // name -> {render, slot}
 
@@ -97,7 +98,10 @@
     api = a;
     dockCount = h('span', { class: 'hc-dock-count', 'data-dock-count': true });
     dockSend = h('button', { type: 'button', class: 'cms-btn cms-btn-primary hc-dock-send', 'data-action': 'dock-send' }, 'Send for review');
-    dockSend.addEventListener('click', () => { openSendBox().catch(api.shown); });
+    dockSend.addEventListener('click', () => {
+      const d = api.draft();
+      if (d && api.canSend(d)) Promise.resolve(api.propose(d)).catch(api.shown);
+    });
     const x = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'dock-collapse', 'aria-label': 'Hide the editor controls',
       title: 'Hide (the tag on the right edge brings it back)' }, '×');
     x.addEventListener('click', () => collapseDock(true));
@@ -122,7 +126,6 @@
     dockTag.addEventListener('click', () => collapseDock(false));
     host.appendChild(dock);
     host.appendChild(dockTag);
-    if (typeof window.addEventListener === 'function') window.addEventListener('resize', placeSendBox);   // the bubble rewraps
     let collapsed = false;
     try { const s = api.store(); collapsed = Boolean(s && s.getItem(DOCK_KEY) === 'collapsed'); } catch (e) { collapsed = false; }
     document.body.classList.toggle('hc-dock-collapsed', collapsed);
@@ -131,7 +134,6 @@
   function collapseDock(on) {
     document.body.classList.toggle('hc-dock-collapsed', on);
     try { const s = api.store(); if (s) s.setItem(DOCK_KEY, on ? 'collapsed' : 'open'); } catch (e) { /* this page only */ }
-    if (on) closeSendBox();
     api.redraw();
     const next = on ? dockTag : api.switchBtn;
     if (next && typeof next.focus === 'function') next.focus();
@@ -167,7 +169,6 @@
     dockLock.classList.toggle('is-locked', !a.can);
     dockLock.hidden = false;
   }
-  function closeSendBox() { if (sendBox) { sendBox.remove(); sendBox = null; sendKey = null; } }
   function refreshDock(v) {
     if (!dock) return;
     const signedIn = v.signedIn;
@@ -191,9 +192,6 @@
       bs.setProperty('--hc-dock-w', `${Math.round(dock.offsetWidth || 0)}px`);
       bs.setProperty('--hc-dock-h', `${Math.round(dock.offsetHeight || 0)}px`);
     }
-    // Editor off, signed out, nothing left to send, or another page's draft on screen: the box goes
-    if (!signedIn || !editing || n === 0 || (sendBox && (!v.draftKey || v.draftKey !== sendKey))) closeSendBox();
-    else placeSendBox();
     if (signedIn) {
       const login = String(v.login);
       const kids = [api.avatar(login, login)];
@@ -202,37 +200,6 @@
     }
     drawPanels(v);
   }
-  /* The send box sits below the bubble, whatever its height (two rows; wrapped on a narrow screen); measured again
-     whenever the bubble is redrawn and on the next frame, so a bubble that grew after the box opened is never covered. */
-  function placeSendBox() {
-    if (!sendBox || !dock || typeof dock.getBoundingClientRect !== 'function') return;
-    const put = () => {
-      const below = sendBox && dock.getBoundingClientRect();
-      if (below && below.bottom > 0) sendBox.style.top = `${Math.round(below.bottom + 8)}px`;
-    };
-    put();
-    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(put);
-  }
-  /* Send for review: the page's draft goes through the same propose form the tray uses, in a box
-     below the dock. */
-  async function openSendBox() {
-    if (sendBox) { closeSendBox(); return; }
-    const d = api.draft();
-    if (!d || !api.canSend(d)) return;
-    const slot = h('div', { class: 'hc-propose-slot' });
-    const close = h('button', { type: 'button', class: 'hc-dock-x', 'data-action': 'send-close', 'aria-label': 'Close' }, '×');
-    close.addEventListener('click', closeSendBox);
-    sendBox = h('div', { class: 'hc-sendbox', role: 'dialog', 'aria-label': 'Send for review' },
-      h('div', { class: 'hc-sendbox-head' }, h('strong', { text: 'Send for review' }), close), slot);
-    sendKey = d.key;
-    document.body.appendChild(sendBox);
-    placeSendBox();
-    const own = await api.myProposals();
-    const now = api.draft();
-    if (!sendBox || sendKey !== d.key || !now || now.key !== d.key) return;   // closed or moved on meanwhile
-    api.propose(d, slot, own);
-  }
-
   // ---- panel slots: later units register named panels drawn under the pill ----
   function panel(name, renderFn) {
     const key = String(name);
@@ -273,6 +240,7 @@
     fold: (on) => collapseDock(on !== false),
     unfold: unfoldDock,
     panel,
+    sent: () => {},
     setCount,
     loadCount,
     lockParts,
