@@ -28,7 +28,7 @@ taste-skill · emil-design-eng · web-design-guidelines · wcag-accessibility-au
 | **member walk total** | **65** |
 | admin walk (`desert-mango-robotics`): review accept/deny, admin-only screens, sign-out | NOT YET WALKED — continues after a compact |
 
-Status: member walk complete (2026-10-21 → 23); admin walk pending. The build starts only after this line says "walk complete".
+Status: member walk complete (2026-10-21 → 23). Kyle (2026-10-23): the FIRST build covers ED1–ED65 and starts now. The admin walk continues in parallel and appends ED66+ under "Admin walk"; those go to a SECOND build.
 
 ## Findings
 
