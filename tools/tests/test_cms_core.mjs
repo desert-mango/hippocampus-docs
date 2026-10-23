@@ -580,7 +580,7 @@ test('GitHub client: get() sends the bearer token and parses JSON; errors are st
   assert.equal(gh.calls.length, 4, 'the refused path never reached fetch');
   // GET, plus the verbs of the write allowlist (each scoped to exact paths)
   assert.deepEqual([...C.createGitHubClient({ fetch: gh.fetch, token: TOKEN }).methods],
-    ['GET', 'POST', 'PUT', 'PATCH']);
+    ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 });
 
 // ------------------------------------------------ page id -> file on GitHub --
@@ -1057,18 +1057,24 @@ test('action requests: one exact write each, pinned to the head sha that was sho
 test('write allowlist: the client sends a write verb only to the exact paths listed', async () => {
   const gh = fakeFetch(() => reply(200, {}));
   const client = C.createGitHubClient({ fetch: gh.fetch, token: TOKEN });
-  assert.deepEqual([...client.methods], ['GET', 'POST', 'PUT', 'PATCH']);
+  assert.deepEqual([...client.methods], ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
   assert.ok(C.WRITE_METHODS.every((w) => w.unit && w.path instanceof RegExp));
+  // U2a: each allowed write carries its row's own valid body (a ref move is exactly {sha, force}; a delete has none)
+  const MOVE = { sha: 'c'.repeat(40), force: false };
   const R = C.REPO_API_PATH;
   const allowed = [['POST', `${R}/pulls/7/reviews`], ['PUT', `${R}/pulls/7/merge`],
     ['PUT', `${R}/pulls/123456789/update-branch`], ['PATCH', `${R}/pulls/7`],
     // U7b Propose: blobs, one tree, one commit, a new ref, a fast-forward of MY cms/ branch, the PR
     ['POST', `${R}/git/blobs`], ['POST', `${R}/git/trees`], ['POST', `${R}/git/commits`], ['POST', `${R}/git/refs`],
-    ['PATCH', `${R}/git/refs/heads/cms/bob/fix-typo-260921`], ['PATCH', `${R}/git/refs/heads/cms/bob/a.b/c_d-2`],
-    ['POST', `${R}/pulls`]];
-  for (const [m, p] of allowed) {
-    assert.equal(C.isAllowedWrite(m, p), true, `${m} ${p}`);
-    await client.send(m, p, { body: { x: 1 } });
+    ['PATCH', `${R}/git/refs/heads/cms/bob/fix-typo-260921`, MOVE], ['PATCH', `${R}/git/refs/heads/cms/bob/a.b/c_d-2`, MOVE],
+    ['POST', `${R}/pulls`],
+    // U2a undo: rewind (the one force move) and drop-ref, on a cms/ branch only
+    ['PATCH', `${R}/git/refs/heads/cms/bob/fix-typo-260921`, { sha: 'c'.repeat(40), force: true }],
+    ['DELETE', `${R}/git/refs/heads/cms/bob/fix-typo-260921`, undefined]];
+  for (const [m, p, b] of allowed) {
+    const body = b === undefined && m !== 'DELETE' ? { x: 1 } : b;
+    assert.equal(C.isAllowedWrite(m, p, body), true, `${m} ${p}`);
+    await client.send(m, p, body === undefined ? undefined : { body });
   }
   const refused = [
     ['POST', `${R}/pulls/7/merge`], ['PUT', `${R}/pulls/7/reviews`],
@@ -1085,6 +1091,10 @@ test('write allowlist: the client sends a write verb only to the exact paths lis
     ['PATCH', `${R}/issues/7`], ['POST', `${R}/merges`], ['PUT', `${R}/pulls/1234567890/merge`],
     ['POST', '/user'], ['PUT', '/repos/desert-mango/other/pulls/7/merge'],
     ['PUT', `${R}/pulls/7/../../other/pulls/7/merge`], ['POST', `${R}/pulls/7/reviews#x`],
+    // U2a: DELETE only a cms/ branch: never a proposal, main, any other ref, an issue or a comment
+    ['DELETE', `${R}/pulls/7`], ['DELETE', `${R}/git/refs/heads/main`], ['DELETE', `${R}/git/refs/heads/feature/x`],
+    ['DELETE', `${R}/git/refs/heads/cms/bob`], ['DELETE', `${R}/git/refs/tags/cms/bob/x`], ['DELETE', `${R}/issues/comments/1`],
+    ['DELETE', `${R}/git/refs/heads/cms/bob/%2e%2e/main`],
   ];
   for (const [m, p] of refused) {
     assert.equal(C.isAllowedWrite(m, p), false, `${m} ${p}`);

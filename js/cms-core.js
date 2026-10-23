@@ -448,6 +448,11 @@
   // U6: a person's comment text: 1..COMMENT_MAX characters, and never a record or a go-live note (those are machine text)
   const commentText = (t) => typeof t === 'string' && t.trim().length > 0 && t.length <= COMMENT_MAX
     && !/^hc-(approved|declined|go-live-failed)\b/.test(t.trim());
+  /* U2a: a branch of the editor's own (refs/heads/cms/<seg>(/<seg>)+), and a ref move's body: keys
+     exactly sha and force, sha a full 40-hex commit, force exactly the given boolean. */
+  const CMS_REF_PATH = /^\/git\/refs\/heads\/cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/;
+  const refMoveBody = (force) => (b) => isObj(b) && Object.keys(b).sort().join() === 'force,sha'
+    && typeof b.sha === 'string' && /^[0-9a-f]{40}$/.test(b.sha) && b.force === force;
   const WRITE_METHODS = Object.freeze([
     // U8: approve, or request changes (the review's `event` says which)
     { method: 'POST', path: new RegExp(`^/pulls/${PULL_N}/reviews$`), unit: 'U8' },
@@ -463,8 +468,12 @@
     { method: 'POST', path: /^\/git\/commits$/, unit: 'U7b' },
     // U7b: a new proposal branch (proposeRequest names only refs/heads/cms/…)
     { method: 'POST', path: /^\/git\/refs$/, unit: 'U7b' },
-    // U7b: move MY proposal's branch to the added commit (fast-forward only)
-    { method: 'PATCH', path: /^\/git\/refs\/heads\/cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/, unit: 'U7b' },
+    // U7b: move MY proposal's branch to the added commit (fast-forward only: the body is exactly {sha, force: false})
+    { method: 'PATCH', path: CMS_REF_PATH, unit: 'U7b', body: refMoveBody(false) },
+    // U2a undo (`rewind`): move my send's branch back to the commit it had; the ONE row that allows force
+    { method: 'PATCH', path: CMS_REF_PATH, unit: 'U2a', body: refMoveBody(true) },
+    // U2a undo (`drop-ref`): delete the branch the same click made (only cms/<seg>/<seg>…; no body)
+    { method: 'DELETE', path: CMS_REF_PATH, unit: 'U2a', body: (b) => b === undefined },
     // U7b: open the proposal
     { method: 'POST', path: /^\/pulls$/, unit: 'U7b' },
     // U6: a conversation on one suggested change (a review comment on a page line of the proposal's head or base)
@@ -2189,7 +2198,252 @@
     for (const p of listOf(x.pages)) if (isObj(p)) lines.push(`- ${p.label} (\`${p.file}\`)`);
     lines.push('', 'Made in the site editor.');
     if (typeof x.reviewUrl === 'string' && x.reviewUrl) lines.push(`Review it in the editor: ${x.reviewUrl}`);
-    return `${lines.join('\n')}\n`;
+    const text = `${lines.join('\n')}\n`;
+    return listOf(x.notes).length ? notesSection.serialise(text, x.notes) : text;
+  }
+
+  /* ---- U2a: notes travel with a send (D8), in ONE machine section of the PR body:
+     <!-- hc-notes [{"key": <64-hex block key>, "text": <plain text, at most NOTE_MAX>}] -->
+     The body is untrusted text: parse returns [] on anything malformed, and the JSON is written with
+     <, > and - escaped, so no note can end the comment early or carry markup. The rest of the body (the
+     human part) is never changed. */
+  const NOTE_MAX = 2000;
+  const NOTE_KEY_RE = /^[0-9a-f]{64}$/;
+  const NOTES_RE = /<!-- hc-notes ([\s\S]*?) -->\n?/;
+  const NOTES_ALL_RE = /<!-- hc-notes [\s\S]*? -->\n?/g;
+  const isNote = (n) => isObj(n) && Object.keys(n).sort().join() === 'key,text' && typeof n.key === 'string'
+    && NOTE_KEY_RE.test(n.key) && typeof n.text === 'string' && n.text.length <= NOTE_MAX;
+  /* A list of notes -> the clean list: a 64-hex key and some text (trimmed, capped), one per key (the later wins). */
+  function cleanNotes(list) {
+    const by = new Map();
+    for (const n of listOf(list)) {
+      if (!isObj(n) || typeof n.key !== 'string' || !NOTE_KEY_RE.test(n.key) || typeof n.text !== 'string') continue;
+      const text = n.text.trim().slice(0, NOTE_MAX);
+      if (text) { by.delete(n.key); by.set(n.key, { key: n.key, text }); }
+    }
+    return [...by.values()];
+  }
+  const notesSection = Object.freeze({
+    parse(body) {
+      if (typeof body !== 'string') return [];
+      const m = body.match(NOTES_RE);
+      if (!m) return [];
+      let list;
+      try { list = JSON.parse(m[1]); } catch (e) { return []; }
+      return Array.isArray(list) && list.every(isNote) ? list.map((n) => ({ key: n.key, text: n.text })) : [];
+    },
+    serialise(body, notes) {
+      const text = typeof body === 'string' ? body : '';
+      const clean = cleanNotes(notes);
+      const json = JSON.stringify(clean).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/-/g, '\\u002d');
+      const section = clean.length ? `<!-- hc-notes ${json} -->\n` : '';
+      const at = text.search(NOTES_RE);
+      if (at >= 0) {
+        const rest = text.replace(NOTES_ALL_RE, '');
+        return rest.slice(0, at) + section + rest.slice(at);
+      }
+      if (!section) return text;
+      return `${text}${text && !/\n$/.test(text) ? '\n' : ''}\n${section}`;
+    },
+  });
+  /* Two note lists merged by key: the newer text wins, the order of first appearance stays. */
+  function mergeNotes(older, newer) {
+    const by = new Map(cleanNotes(older).map((n) => [n.key, n]));
+    for (const n of cleanNotes(newer)) by.set(n.key, n);
+    return [...by.values()];
+  }
+
+  /* ---- U2a: Send for review (D4). One click sends everything, as ONE proposal PER KIND, because go-live
+     applies edits one by one only when every changed file is a modified content/**.md:
+       page    every MODIFIED content/**.md page and every notes-only page together — go-live eligible, except
+               that the image list (data/cloudinary-manifest.json) travels with the page group whenever that
+               base's send holds a page edit (the gate's 6a rule needs an image entry and the page using it in
+               one change): that page group is then reviewed whole
+       site    every other file in ONE group per send: data/site.json, data/tools.json, a data/projects.json
+               change that is not an access change, the image list when no page is edited, a NEW page, any
+               other data file — reviewed whole ("Update site data", or "New page: <label>" when it holds only
+               new pages)
+     Each group says `eligible`: proposalEligible's content-only rule on its files (every change a modified
+     content/**.md page, at least one) — true = goes live edit by edit on approval, false = reviewed whole.
+       facts   one per data/projects/<id>.json
+       people  data/people.json
+       project a new project (its index entry, facts file and story), one per draft
+       access  an add/remove change of data/projects.json (classifyAccessProposal), one per draft
+     Titles and commit texts are generated (proposalTitle, proposalCommit). */
+  const SEND_KINDS = Object.freeze(['page', 'site', 'facts', 'people', 'project', 'access']);
+  const NOTHING_TEXT = 'Nothing to propose: no page has changes';
+  const PEOPLE_FILE = 'data/people.json';
+  const PROJECTS_FILE = 'data/projects.json';
+  const draftNotes = (d) => cleanNotes(isObj(d) ? d.notes : null);
+  const dirtyPaths = (d) => Object.keys(d.files).filter((p) => d.files[p] !== d.originals[p]);
+  /* A page edit: a content/**.md file that existed and still exists (go-live applies only these). */
+  const isPageEdit = (d, p) => /^content\/.+\.md$/.test(p) && typeof d.originals[p] === 'string' && typeof d.files[p] === 'string';
+  const isNewPage = (d, p) => /^content\/.+\.md$/.test(p) && d.originals[p] === null && typeof d.files[p] === 'string';
+  const pageFileOf = (d) => Object.keys(d.files).find((p) => /^content\/.+\.md$/.test(p)) || Object.keys(d.files)[0];
+  /* The same draft with only `paths` (and its notes when `notes`). */
+  function partOf(d, paths, notes) {
+    const files = {};
+    const originals = {};
+    for (const p of paths) { files[p] = d.files[p]; originals[p] = d.originals[p]; }
+    const out = Object.assign({}, d, { files, originals });
+    if (notes) out.notes = draftNotes(d); else delete out.notes;
+    return out;
+  }
+  const parsedOr = (text) => { try { const v = JSON.parse(text); return isObj(v) ? v : null; } catch (e) { return null; } };
+  const isNewProjectDraft = (d) => dirtyPaths(d).some((p) => PROJECT_FACTS_FILE_RE.test(p) && d.originals[p] === null);
+  const accessOf = (d, login) => (d.files[PROJECTS_FILE] === undefined ? null : classifyAccessProposal(
+    [{ filename: PROJECTS_FILE, status: 'modified' }], d.originals[PROJECTS_FILE], d.files[PROJECTS_FILE], login || null));
+
+  /* The commit text of a send: its title, then where it was made. */
+  const proposalCommit = (title) => `${String(title)}\n\nMade in the site editor.`;
+
+  /* A send's title from its kind and its drafts. opts: {login (the sender: one add of their own is a
+     request), names: {projectId: name}} for access titles. */
+  function proposalTitle(kind, drafts, opts) {
+    const o = opts || {};
+    let list = listOf(drafts).filter(isObj);
+    const label = (d) => textOr(d.label, textOr(d.key, 'a page'));
+    const factsName = (d) => {
+      const p = Object.keys(isObj(d.files) ? d.files : {}).find((f) => PROJECT_FACTS_FILE_RE.test(f));
+      const doc = p ? parsedOr(d.files[p]) : null;
+      return textOr(doc && doc.name, label(d));
+    };
+    switch (kind) {
+      case 'page': {
+        const onlyImages = (d) => isObj(d.files) && Object.keys(d.files).length > 0
+          && Object.keys(d.files).every((f) => f === MANIFEST_FILE);
+        if (list.some((d) => !onlyImages(d))) list = list.filter((d) => !onlyImages(d));   // the image list is no page
+        if (list.length === 1) return String(list[0].key).indexOf('new/') === 0 ? label(list[0]) : `Edit ${label(list[0])}`;
+        const names = list.slice(0, 3).map(label).join(', ');
+        return `Edit ${list.length} pages: ${names}${list.length > 3 ? ` and ${list.length - 3} more` : ''}`;
+      }
+      case 'site': {
+        const fresh = list.filter((d) => isObj(d.files) && isObj(d.originals));
+        const onlyNew = fresh.length > 0 && fresh.length === list.length
+          && fresh.every((d) => dirtyPaths(d).length > 0 && dirtyPaths(d).every((f) => isNewPage(d, f)));
+        if (!onlyNew) return 'Update site data';
+        const bare = (d) => label(d).replace(/^New [^:]{1,40}:\s*/, '') || label(d);
+        if (list.length === 1) return `New page: ${bare(list[0])}`;
+        const names = list.slice(0, 3).map(bare).join(', ');
+        return `New pages: ${names}${list.length > 3 ? ` and ${list.length - 3} more` : ''}`;
+      }
+      case 'facts': return `Update ${list.length ? factsName(list[0]) : 'project'} facts`;
+      case 'people': return 'Update the team';
+      case 'project': return `New project: ${list.length ? factsName(list[0]).replace(/^New project: /, '') : 'project'}`;
+      case 'access': {
+        const a = list.length && validDraft(list[0]) ? accessOf(list[0], o.login) : null;
+        if (!a) return 'Edit access change';
+        const names = isObj(o.names) ? o.names : {};
+        const nameOf = (id) => textOr(Object.prototype.hasOwnProperty.call(names, id) ? names[id] : '', id);
+        if (a.changes.length === 1) {
+          const c = a.changes[0];
+          return accessProposalTitle({ kind: a.kind, login: c.login, op: c.op, name: nameOf(c.project) });
+        }
+        return `Edit access change: ${a.changes.map(accessChangeLine).join('; ')}`;
+      }
+      default: throw new Error(`no such kind: ${String(kind).slice(0, 20)}`);
+    }
+  }
+
+  /* drafts -> [{kind, drafts, title, commit, target, changes, pages, eligible, notes, problems}], page first, then
+     site, facts, people, project, access. drafts are the parts of the given drafts that go into this send (one
+     draft may give a page part and a facts part); target null (a new send from main) or {branch, number}
+     (my open send the drafts were opened on); changes/pages/problems as collectProposal gives them; notes
+     the page notes ({key, text}). Untouched drafts make no group. opts: as proposalTitle's. */
+  function splitSend(drafts, opts) {
+    const groups = new Map();
+    const keyOf = (kind, id, b) => `${SEND_KINDS.indexOf(kind)}|${id}|${b.ref}|${b.number === null ? '' : b.number}`;
+    const add = (kind, id, d, part) => {
+      const k = keyOf(kind, id, d.base);
+      if (!groups.has(k)) groups.set(k, { kind, base: d.base, drafts: [], edits: false });   // one per kind, id and base
+      groups.get(k).drafts.push(part);
+      return groups.get(k);
+    };
+    const later = [];                                       // site parts, placed once every page edit is known
+    listOf(drafts).forEach((d, i) => {
+      if (!validDraft(d)) return;
+      const dirty = dirtyPaths(d);
+      const notes = draftNotes(d);
+      if (isNewProjectDraft(d)) { add('project', `#${i}`, d, partOf(d, dirty, false)); return; }
+      const page = [];
+      const site = [];
+      let images = false;
+      for (const p of dirty) {
+        if (PROJECT_FACTS_FILE_RE.test(p)) add('facts', p, d, partOf(d, [p], false));
+        else if (p === PEOPLE_FILE) add('people', p, d, partOf(d, [p], false));
+        else if (p === PROJECTS_FILE && accessOf(d, null)) add('access', `#${i}`, d, partOf(d, [p], false));
+        else if (isPageEdit(d, p)) page.push(p);
+        else if (p === MANIFEST_FILE) images = true;
+        else site.push(p);
+      }
+      if (page.length) add('page', '', d, partOf(d, images ? page.concat(MANIFEST_FILE) : page, true)).edits = true;
+      else if (notes.length) add('page', '', d, partOf(d, [pageFileOf(d)], true));
+      later.push({ d, site, images: images && !page.length });
+    });
+    for (const { d, site, images } of later) {
+      const pageGroup = groups.get(keyOf('page', '', d.base));
+      const withPage = images && pageGroup && pageGroup.edits;
+      if (withPage) pageGroup.drafts.push(partOf(d, [MANIFEST_FILE], false));
+      const rest = images && !withPage ? site.concat(MANIFEST_FILE) : site;
+      if (rest.length) add('site', '', d, partOf(d, rest, false));
+    }
+    const rank = (g) => SEND_KINDS.indexOf(g.kind);
+    return [...groups.values()].sort((a, b) => rank(a) - rank(b)).map((g) => {
+      const plan = collectProposal(g.drafts);
+      const notes = mergeNotes([], [].concat(...g.drafts.map(draftNotes)));
+      const pages = [];                                     // in draft order; a notes-only page by its page file
+      for (const d of g.drafts) {
+        const files = plan.pages.filter((x) => Object.prototype.hasOwnProperty.call(d.files, x.file) && x.label === d.label);
+        pages.push(...(files.length ? files : dirtyPaths(d).length ? [] : [{ label: textOr(d.label, d.key), file: pageFileOf(d) }]));
+      }
+      const title = proposalTitle(g.kind, g.drafts, opts);
+      return {
+        kind: g.kind, drafts: g.drafts, title, commit: proposalCommit(title),
+        target: Number.isInteger(g.base.number) ? { branch: g.base.ref, number: g.base.number } : null,
+        changes: plan.changes, pages,
+        eligible: plan.changes.length > 0 && plan.changes.every((c) => typeof c.original === 'string'
+          && typeof c.text === 'string' && GO_LIVE_PAGE_RE.test(c.path)),
+        notes: g.kind === 'page' ? notes : [],
+        problems: notes.length && !plan.changes.length ? plan.problems.filter((t) => t !== NOTHING_TEXT) : plan.problems,
+      };
+    });
+  }
+
+  /* ED45: the number of changed PAGES (drafts with a changed file or a note), not files or blocks. */
+  const pageChangeCount = (drafts) => listOf(drafts).filter((d) => validDraft(d)
+    && (dirtyPaths(d).length > 0 || draftNotes(d).length > 0)).length;
+
+  /* D5: a send's status for its sender. pr: a GitHub pull, which the caller may mark with `applied: true`
+     (go-live put at least one of its edits live) and `notesOnly: true` (or GitHub's changed_files: 0).
+     -> 'waiting' (open) | 'live' (merged, or applied by go-live) | 'seen' (a notes-only send closed with Done)
+     | 'declined' (closed otherwise: closed, or every edit declined) | null (closed more than 14 days ago,
+     or no pull). */
+  const OWN_SENDS_DAYS = 14;
+  function sentStatus(pr, now) {
+    if (!isPull(pr)) return null;
+    if (pr.state === 'open') return 'waiting';
+    if (pr.state !== 'closed') return null;
+    const closed = Date.parse(pr.closed_at || pr.merged_at || '');
+    const t = Number.isFinite(now) ? now : Date.now();
+    if (!Number.isFinite(closed) || t - closed > OWN_SENDS_DAYS * 24 * 3600 * 1000) return null;
+    if (pr.merged_at || pr.applied === true) return 'live';
+    if (pr.notesOnly === true || pr.changed_files === 0) return 'seen';
+    return 'declined';
+  }
+
+  /* D5: MY sends (opened by `login` on a cms/<login>/ branch of this repository), open or closed in the last
+     14 days, newest first -> [{number, title, branch, status, at, url}]. Nobody else's. */
+  function ownSends(login, proposals, now) {
+    const me = typeof login === 'string' ? login.toLowerCase() : '';
+    if (!me) return [];
+    return listOf(proposals).filter((p) => isPull(p) && loginOf(p) === me && isObj(p.head)
+      && isProposalBranch(p.head.ref) && p.head.ref.indexOf(`cms/${me}/`) === 0
+      && isObj(p.head.repo) && p.head.repo.full_name === REPO_FULL)
+      .map((p) => ({ number: p.number, title: String(p.title || ''), branch: p.head.ref, status: sentStatus(p, now),
+        at: String((p.state === 'open' ? p.created_at : p.closed_at || p.merged_at) || ''),
+        url: typeof p.html_url === 'string' ? p.html_url : '' }))
+      .filter((x) => x.status !== null)
+      .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0) || b.number - a.number);
   }
 
   /* My open proposals I can add to: open, opened by me, on a cms/<login>/
@@ -2265,6 +2519,14 @@
       case 'pull-body':
         if (!Number.isInteger(c.number) || c.number < 1) throw new Error('no proposal number');
         return { method: 'PATCH', path: `${R}/pulls/${c.number}`, body: { body: String(c.body) } };
+      // U2a undo: close the send this click opened, delete its branch, or move an extended send's branch back
+      case 'close':
+        if (!Number.isInteger(c.number) || c.number < 1) throw new Error('no proposal number');
+        return { method: 'PATCH', path: `${R}/pulls/${c.number}`, body: { state: 'closed' } };
+      case 'drop-ref':
+        return { method: 'DELETE', path: `${R}/git/refs/heads/${branch()}` };
+      case 'rewind':
+        return { method: 'PATCH', path: `${R}/git/refs/heads/${branch()}`, body: { sha: sha(c.sha, 'commit'), force: true } };
       default:
         throw new Error(`no such step: ${String(step).slice(0, 40)}`);
     }
@@ -2281,8 +2543,9 @@
   /* Sends one proposal. opts: {login, summary, now, origin (for the review
      link), target: null (a new proposal from main) | {branch, number} (my
      open proposal), changes (collectProposal's), pages}.
-     -> {ok: true, number, branch, added, message, signedOut?} | {ok: false, status, message}
-     (signedOut: the PR opened, then GitHub answered 401 to the review-link edit).
+     -> {ok: true, number, branch, added, message, created, sha, parent, prevBody?, drafts?, warning?: 'notes', signedOut?}
+     | {ok: false, status, message} (warning 'notes': the commit landed but the notes write failed)
+     (signedOut: the send landed, then GitHub answered 401 to the review-link or notes edit).
      Before any write, each file opened at an older base commit is read at
      the base's head now and refused when it differs from the text the draft
      started from. A 401 stops at once (status 401: the page ends the session). */
@@ -2290,7 +2553,8 @@
     const o = opts || {};
     const fail = (status, message) => ({ ok: false, status, message });
     const changes = listOf(o.changes);
-    if (!changes.length) return fail(0, 'Nothing was sent: nothing to propose.');
+    const notes = cleanNotes(o.notes);                     // U2a: a notes-only send is one empty commit
+    if (!changes.length && !notes.length) return fail(0, 'Nothing was sent: nothing to propose.');
     for (const ch of changes) {
       const why = proposalPathProblem(ch && ch.path);
       if (why) return fail(0, `Nothing was sent: ${why}.`);
@@ -2300,7 +2564,9 @@
     if (own && (!isProposalBranch(own.branch) || !Number.isInteger(own.number))) {
       return fail(0, `Nothing was sent: not a proposal branch: ${String(own.branch).slice(0, 80)}.`);
     }
-    const summary = textOr(o.summary, 'Edit pages').slice(0, 120);
+    let titled = null;
+    try { titled = o.kind ? proposalTitle(o.kind, o.drafts, { login: o.login, names: o.names }) : null; } catch (e) { titled = null; }
+    const summary = textOr(o.summary, titled || 'Edit pages').slice(0, 120);
     let branch = null;
     if (!own) {
       try { branch = proposalBranch(o.login, summary, o.now); } catch (e) { return fail(0, `Nothing was sent: ${e.message}.`); }
@@ -2326,24 +2592,48 @@
       if (!isSha(head)) stop(502, `Stopped: GitHub did not say where ${baseRef} is.`);
       const commit = need(await send('GET', `${R}/git/commits/${head}`), `reading ${baseRef}'s commit`);
       const baseTree = commit && commit.tree && commit.tree.sha;
+      let prevBody = null;                                  // U2a: the extended send's body, for its notes and undo
+      if (own && notes.length) {
+        const pr = need(await send('GET', `${R}/pulls/${own.number}`), `reading your proposal #${own.number}`);
+        prevBody = isObj(pr) && typeof pr.body === 'string' ? pr.body : '';
+      }
       for (const ch of changes) {
         if (ch.baseSha === head) continue;
         const res = await send('GET', contentsPath(ch.path, head), { accept: RAW_MEDIA, raw: true });
         const now = res.status === 404 ? null : need(res, `reading ${ch.path}`);
         if (now !== ch.original) stop(409, `Not proposed: ${ch.path} ${STALE_DRAFT_TEXT}.`);
       }
-      const blobs = {};
-      for (const ch of changes.slice().sort((a, b) => (a.path < b.path ? -1 : 1))) {
-        const b = need(await write(proposeRequest('blob', { content: ch.text })), `saving ${ch.path}`);
-        blobs[ch.path] = b && b.sha;
+      let treeSha = baseTree;                               // notes only: the base's own tree, no blob, no tree
+      if (changes.length) {
+        const blobs = {};
+        for (const ch of changes.slice().sort((a, b) => (a.path < b.path ? -1 : 1))) {
+          const b = need(await write(proposeRequest('blob', { content: ch.text })), `saving ${ch.path}`);
+          blobs[ch.path] = b && b.sha;
+        }
+        const tree = need(await write(proposeRequest('tree', { baseTree, blobs })), 'making the tree');
+        treeSha = tree && tree.sha;
       }
-      const tree = need(await write(proposeRequest('tree', { baseTree, blobs })), 'making the tree');
-      const made = need(await write(proposeRequest('commit', { message: `${summary}\n\nMade in the site editor.`,
-        tree: tree && tree.sha, parent: head })), 'making the commit');
+      const made = need(await write(proposeRequest('commit', { message: proposalCommit(summary),
+        tree: treeSha, parent: head })), 'making the commit');
       const sha = made && made.sha;
+      const undo = Object.assign({ sha, parent: head }, Array.isArray(o.drafts) ? { drafts: o.drafts } : {});
       if (own) {
         need(await write(proposeRequest('move', { branch: own.branch, sha })), `adding to your proposal #${own.number}`);
-        return { ok: true, number: own.number, branch: own.branch, added: true, message: `Added to your proposal #${own.number}.` };
+        const added = Object.assign({ ok: true, number: own.number, branch: own.branch, added: true,
+          message: `Added to your proposal #${own.number}.`, created: false }, undo, { prevBody });
+        if (notes.length) {
+          const body = notesSection.serialise(prevBody, mergeNotes(notesSection.parse(prevBody), notes));
+          const notSaved = { warning: 'notes', message: `Added to your proposal #${own.number}, but your notes were not saved.` };
+          try {
+            const res = await write(proposeRequest('pull-body', { number: own.number, body }));
+            if (!res.ok) Object.assign(added, notSaved);
+          } catch (e) {
+            // the commit landed: the send and its undo info stand; a 401 still ends the session
+            Object.assign(added, notSaved);
+            if (e && e.proposeStop && e.proposeStop.status === 401) added.signedOut = true;
+          }
+        }
+        return added;
       }
       let name = null;
       for (let i = 1; i <= REF_TRIES && !name; i += 1) {
@@ -2354,14 +2644,14 @@
       }
       if (!name) stop(422, `Not proposed: the branch names ${branch} to -${REF_TRIES} are all taken. Change the summary and try again.`);
       const pages = listOf(o.pages);
-      const pull = need(await write(proposeRequest('pull', { branch: name, title: summary, body: prBody({ summary, pages }) })),
+      const pull = need(await write(proposeRequest('pull', { branch: name, title: summary, body: prBody({ summary, pages, notes }) })),
         `opening the proposal (the branch ${name} is on GitHub)`);
       const n = pull && pull.number;
       if (!Number.isInteger(n)) stop(502, `Stopped: GitHub opened the proposal for ${name} but gave no number.`);
-      const done = { ok: true, number: n, branch: name, added: false, message: `Proposed as #${n}.` };
+      const done = Object.assign({ ok: true, number: n, branch: name, added: false, message: `Proposed as #${n}.`, created: true }, undo);
       if (typeof o.origin === 'string' && o.origin) {
         try {
-          await write(proposeRequest('pull-body', { number: n, body: prBody({ summary, pages, reviewUrl: reviewUrl(o.origin, n) }) }));
+          await write(proposeRequest('pull-body', { number: n, body: prBody({ summary, pages, notes, reviewUrl: reviewUrl(o.origin, n) }) }));
         } catch (e) {
           // the proposal stands without the link; a 401 still ends the session
           if (e && e.proposeStop && e.proposeStop.status === 401) done.signedOut = true;
@@ -2372,6 +2662,59 @@
       if (e && e.proposeStop) return e.proposeStop;
       return fail(0, `Stopped: ${(e && e.message) || e}.`);
     }
+  }
+
+  /* ---- U2a: Undo a send (D4), for a few seconds after the click. undo: what runPropose returned (with
+     the drafts it was given). A new send: close it, delete its branch (drop-ref), give the drafts back.
+     An extended send: read the branch first; only when its tip is still the commit this click made, and
+     that commit's parent is the saved sha, move the branch back (rewind) and put the earlier body back;
+     then read the branch again (GitHub's ref update has no compare-and-set: a commit landing between the
+     read and the move would be dropped, and that is said, not hidden).
+     -> {ok: true, drafts, warning?: 'kept'|'dropped'|'body', message?} | {ok: false, reason: 'changed'|'failed'|'bad', message, status?} */
+  const UNDO_CHANGED_TEXT = "Can't undo: the send changed since";
+  const UNDO_DROPPED_TEXT = 'Undo may have dropped a change; check the send';
+  const UNDO_BODY_TEXT = "Undone, but the send's notes could not be put back; check the send";
+  const UNDO_FAILED_TEXT = "Can't undo: GitHub did not take it. Your send is still there";
+  async function runUndo(client, undo) {
+    const u = isObj(undo) ? undo : {};
+    const bad = { ok: false, reason: 'bad', message: "Can't undo: nothing to undo" };
+    const sha40 = (x) => typeof x === 'string' && /^[0-9a-f]{40}$/.test(x);
+    if (!isProposalBranch(u.branch) || !Number.isInteger(u.number) || u.number < 1 || typeof u.created !== 'boolean') return bad;
+    if (!u.created && !(sha40(u.sha) && sha40(u.parent))) return bad;
+    const drafts = listOf(u.drafts);
+    const failed = (res) => ({ ok: false, reason: 'failed', message: UNDO_FAILED_TEXT,
+      status: res && Number.isInteger(res.status) ? res.status : 0 });
+    const R = REPO_API_PATH;
+    const call = async (req) => {
+      try {
+        return req.method === 'GET' ? await client.get(req.path) : await client.send(req.method, req.path,
+          req.body === undefined ? undefined : { body: req.body });
+      } catch (e) { return { ok: false, status: 0, data: null }; }
+    };
+    const tipOf = async () => {
+      const res = await call({ method: 'GET', path: `${R}/git/ref/heads/${u.branch}` });
+      return res.ok && isObj(res.data) && isObj(res.data.object) ? res.data.object.sha : null;
+    };
+    if (u.created) {
+      const closed = await call(proposeRequest('close', { number: u.number }));
+      if (!closed.ok) return failed(closed);
+      const dropped = await call(proposeRequest('drop-ref', { branch: u.branch }));
+      return dropped.ok || dropped.status === 422 ? { ok: true, drafts } : { ok: true, drafts, warning: 'kept' };
+    }
+    const tip = await tipOf();
+    if (tip !== u.sha) return { ok: false, reason: 'changed', message: UNDO_CHANGED_TEXT };
+    const made = await call({ method: 'GET', path: `${R}/git/commits/${u.sha}` });
+    const parents = made.ok && isObj(made.data) ? listOf(made.data.parents) : [];
+    if (parents.length !== 1 || !isObj(parents[0]) || parents[0].sha !== u.parent) {
+      return { ok: false, reason: 'changed', message: UNDO_CHANGED_TEXT };
+    }
+    const moved = await call(proposeRequest('rewind', { branch: u.branch, sha: u.parent }));
+    if (!moved.ok) return failed(moved);
+    const body = typeof u.prevBody === 'string'
+      ? await call(proposeRequest('pull-body', { number: u.number, body: u.prevBody })) : { ok: true };
+    if (await tipOf() !== u.parent) return { ok: true, warning: 'dropped', message: UNDO_DROPPED_TEXT, drafts };
+    if (!body.ok) return { ok: true, warning: 'body', message: UNDO_BODY_TEXT, drafts };
+    return { ok: true, drafts };
   }
 
   /* ---- Media (U9): the site's images on Cloudinary, through this site's
@@ -3776,6 +4119,8 @@
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     ownProposals, collectProposal, proposeRequest, runPropose,
+    NOTE_MAX, notesSection, mergeNotes, SEND_KINDS, splitSend, proposalTitle, proposalCommit, pageChangeCount,
+    OWN_SENDS_DAYS, sentStatus, ownSends, UNDO_CHANGED_TEXT, UNDO_DROPPED_TEXT, UNDO_BODY_TEXT, UNDO_FAILED_TEXT, runUndo,
     MEDIA_FUNCTION, MEDIA_ROOT, MEDIA_SUBFOLDERS, MANIFEST_FILE, MANIFEST_KEY, MANIFEST_LABEL, MEDIA_MAX_BYTES,
     MEDIA_TYPES, SIZE_HINT_TEXT, REMOVE_FIRST_TEXT, IN_USE_TEXT, IN_DRAFT_TEXT, THUMB_TRANSFORM, MEDIA_SLUG_RE,
     thumbUrl, parseManifest, manifestAssets, findBySha, mediaChangeProblem, mediaFileProblem, mediaFailure,

@@ -1756,7 +1756,9 @@ test('Propose: blobs -> one tree on main\'s tree -> one commit -> one ref -> one
   const gh = recorded(editorGithub(baseGithub({ onWrite: writeAnswers() })));
   const out = await C.runPropose(gh.client, proposeOpts());
   const branch = 'cms/bob/fix-the-dvl-heading-260921';
-  assert.deepEqual(out, { ok: true, number: 42, branch, added: false, message: 'Proposed as #42.' });
+  // U2a: plus the undo info (created, the new tip and its parent)
+  assert.deepEqual(out, { ok: true, number: 42, branch, added: false, message: 'Proposed as #42.',
+    created: true, sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4', parent: MAIN_SHA });
   const paths = ['content/about.md', SETUP_FILE].sort();
   assert.deepEqual(gh.seq(), ['GET /git/ref/heads/main', `GET /git/commits/${MAIN_SHA}`,
     'POST /git/blobs', 'POST /git/blobs', 'POST /git/trees', 'POST /git/commits', 'POST /git/refs',
@@ -1785,7 +1787,9 @@ test('Propose: adding to my own open proposal is one more commit on its branch a
   const gh = recorded(editorGithub(ownGithub({ onWrite: writeAnswers() })));
   const out = await C.runPropose(gh.client, proposeOpts({ target: { branch: OWN, number: 7 },
     changes: [{ path: SETUP_FILE, text: 'again\n', original: 'x\n', baseSha: HEAD_B }] }));
-  assert.deepEqual(out, { ok: true, number: 7, branch: OWN, added: true, message: 'Added to your proposal #7.' });
+  // U2a: plus the undo info (not created; the new tip, its parent; no notes, so no earlier body read)
+  assert.deepEqual(out, { ok: true, number: 7, branch: OWN, added: true, message: 'Added to your proposal #7.',
+    created: false, sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3', parent: HEAD_B, prevBody: null });
   assert.deepEqual(gh.seq(), [`GET /git/ref/heads/${OWN}`, `GET /git/commits/${HEAD_B}`, 'POST /git/blobs',
     'POST /git/trees', 'POST /git/commits', `PATCH /git/refs/heads/${OWN}`]);
   assert.equal(gh.calls[3].body.base_tree, TREE_B, 'on the branch head\'s tree');
@@ -2082,8 +2086,9 @@ test('js/editor.js reaches GitHub only through cms-core; every write is an allow
   const core = readRepo('js/cms-core.js');
   const verbs = core.match(/method:\s*'[A-Z]+'/g) || [];
   assert.deepEqual([...new Set(verbs)].sort(),
-    ["method: 'GET'", "method: 'PATCH'", "method: 'POST'", "method: 'PUT'"]);
-  assert.ok(!/\bDELETE\b/.test(core), 'nothing in the CMS deletes');
+    ["method: 'DELETE'", "method: 'GET'", "method: 'PATCH'", "method: 'POST'", "method: 'PUT'"]);
+  // U2a: the one delete is undo's drop-ref of a cms/ branch: in the allowlist and the Propose requests only
+  assert.deepEqual(core.match(/method:\s*'DELETE'/g), ["method: 'DELETE'", "method: 'DELETE'"]);
   // the write verbs appear only in the allowlist and the review / Propose requests it admits
   const allow = core.slice(core.indexOf('const WRITE_METHODS'), core.indexOf('function isAllowedWrite'));
   const review = core.slice(core.indexOf('function reviewRequest'), core.indexOf('const DONE_TEXT'));
@@ -2096,6 +2101,7 @@ test('js/editor.js reaches GitHub only through cms-core; every write is an allow
   assert.deepEqual(media.match(/method:\s*'(POST|PUT|PATCH)'/g), ["method: 'POST'", "method: 'POST'"]);
   assert.deepEqual(media.match(/\bfetch\((\w|\.)+,/g), ['fetch(MEDIA_FUNCTION,', 'fetch(plan.url,']);
   const rest = core.replace(allow, '').replace(review, '').replace(propose, '').replace(media, '');
+  assert.ok(!/\bDELETE\b/.test(rest), 'outside the allowlist and the Propose requests, nothing deletes');
   assert.deepEqual((rest.match(/method:\s*'(POST|PUT|PATCH)'/g) || []), ["method: 'POST'"],
     'outside them, one POST: the sign-in exchange to /api/auth');
   for (const src of [ui, core]) {
