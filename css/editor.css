@@ -182,21 +182,53 @@ button.hc-m-row:focus-visible { outline: 2px solid var(--hc-edit); outline-offse
 
 /* ==== frame layout (U7) ==== */
 
-/* The frame shows content only: the parent's header, sidebar and footer are
-   the ones on screen. */
+/* Plan D12 (ED3, ED23): Editor on changes nothing in the page's geometry. The frame is exactly #content's slot
+   (its grid column), so fixed and centred things inside it (the graph view, a popover, a dialog) and its own
+   scrollbar are all on screen. Inside it only the page column is drawn: no header, footer, sidebar, Contents
+   button or drawer backdrop (the parent's are the ones on screen), and the content box is the whole frame.
+   The column's place does not come from the frame's own media queries (the frame is narrower than the window,
+   so they answer differently): the frame keeps the page's 900 px side padding and its desktop top padding, and
+   the PARENT, under its own media queries, adds what the page has beyond that (css/site.css .content: 2.2rem
+   3rem 5rem above 900 px, 1.5rem 1.2rem 4rem at 900 px and below):
+     - above 900 px the host pads the frame by 3rem - 1.2rem each side (the frame's scrollbar, --hc-sb, set by
+       js/editor.js mountFrame, sits in the right one);
+     - at 900 px and below the slot is the window's width, as is the frame, and the host lifts the frame by
+       2.2rem - 1.5rem into the hidden Contents row on pages with a sidebar (the row the page's Contents button
+       keeps above #content), so the text starts 1.5rem below, as on the page. */
+body.hc-framed { --header-h: 0px; }                     /* sticky things stick to the frame's top, as under the header */
 body.hc-framed .site-header,
-body.hc-framed .sidebar,
 body.hc-framed .site-footer,
+body.hc-framed .sidebar,
+body.hc-framed .sidebar-toggle,
+body.hc-framed .drawer-backdrop,
 body.hc-framed .skip-link { display: none !important; }
-body.hc-framed .layout { display: block; width: auto; max-width: none; padding: 0; }
-body.hc-framed .content { padding: 1.4rem 1.6rem 3rem; max-width: 52rem; margin: 0 auto; }
+body.hc-framed .layout { display: block; width: auto; max-width: none; margin: 0; }
+body.hc-framed .content { padding: 2.2rem 1.2rem 5rem; }
 
-/* Editor on: the frame takes the content cell; the site's own content is hidden. */
-body.hc-editor-on #content { display: none; }
+/* Editor on (ED22): the frame host takes #content's place only once the frame has painted (body.hc-frame-live,
+   js/editor.js frameReady). Until then #content stays on screen and the host is laid out in the same grid column
+   (so the frame boots at its final size) but unseen: out of the flow, transparent, behind, no pointer. The swap
+   is instant, with no animation (it happens every time Editor turns on). */
+body.hc-editor-on.hc-frame-live #content { display: none; }
 .hc-frame-host[hidden] { display: none; }
-.hc-frame-host { min-width: 0; display: flex; flex-direction: column; height: calc(100vh - var(--header-h)); }
-.hc-frame { display: block; width: 100%; height: calc(100vh - var(--header-h)); flex: 1 1 auto; min-height: 0; border: 0;
-  background: var(--bg); }
+body.hc-editor-on .layout { position: relative; }
+.hc-frame-host { position: relative; grid-column: -2 / -1; min-width: 0; height: calc(100vh - var(--header-h)); }
+body:not(.hc-frame-live) .hc-frame-host { position: absolute; top: 0; left: 0; right: 0; z-index: -1; opacity: 0; pointer-events: none; }
+.hc-frame-row { height: 100%; overflow: clip; }
+.hc-frame-row > .hc-frame { display: block; width: 100%; height: 100%; min-height: 0; border: 0; background: var(--bg); }
+@media (min-width: 901px) {
+  body.hc-editor-on .hc-frame-host { padding: 0 calc(3rem - 1.2rem - var(--hc-sb, 0px)) 0 calc(3rem - 1.2rem); }
+  /* the window keeps its scrollbar's place (review minor 4): a short page and a long one sit the same */
+  html:has(> body.hc-editor-on) { overflow-y: scroll; scrollbar-gutter: stable; }
+}
+@media (max-width: 900px) {
+  body.hc-editor-on .hc-frame-host { margin-top: calc(1.5rem - 2.2rem); height: calc(100vh - var(--header-h) + 2.2rem - 1.5rem); }
+  /* the frame is the window's width here: ITS scrollbar is the one at the window's edge, where the page's was;
+     the window still scrolls (to its footer), without a second bar taking the frame's width */
+  html:has(> body.hc-editor-on) { scrollbar-width: none; }
+  /* its WebKit twin, here only: at every width it would hide Safari's classic scrollbar above 900 px too */
+  html:has(> body.hc-editor-on)::-webkit-scrollbar { width: 0; }
+}
 
 /* ==== typing (U4) ==== */
 
@@ -671,6 +703,24 @@ body.hc-dock-collapsed .hc-dock-tag { transform: none; }
 /* One block per unit, in this order. A rule goes here only when it must win over a rule in an earlier section
    (same specificity, later in the file); everything else goes in the unit's own section. */
 /* ==== override: U7 ==== */
+/* Plan D12 (ED3): the review rail is an overlay in the right gutter, beside the frame host, never a layout
+   column: the layout keeps the site's width (the rail/margin section's full-width rule and its dark band go),
+   the row is the slot (no flex row beside a rail) and the frame keeps its padding on phones too. */
+body.hc-has-rail .layout { width: 80%; max-width: 110rem; }
+@media (max-width: 900px) { body.hc-has-rail .layout { width: 100%; } }
+.hc-frame-row { display: block; height: 100%; overflow: clip; }
+.hc-frame-row > .hc-frame { flex: none; width: 100%; height: 100%; }
+.hc-rail { position: absolute; top: 0; bottom: 0; left: 100%; z-index: 30;
+  width: min(18.5rem, calc(max(10vw, (100vw - 110rem) / 2) - .75rem)); background: none; border-left: 0; }
+.hc-rail.is-markers { width: 3.25rem; }
+body.hc-framed .content { padding: 2.2rem 1.2rem 5rem; }
+/* review round 1 (MAJOR 2): at 900 px and below there is no gutter (the slot is the window's width): the
+   markers lie inside the host, at its right edge, never past the window (no sideways scroll) */
+@media (max-width: 900px) { .hc-rail { left: auto; right: 0; } }
+/* review round 2 (minor B): the markers rail lies over the frame's right edge at 768-900 px; only its slots
+   (a marker, its card) take the pointer, so clicks and the wheel in the empty strip reach the frame */
+.hc-rail { pointer-events: none; }
+.hc-rslot { pointer-events: auto; }
 
 /* ==== override: U2 ==== */
 

@@ -463,6 +463,7 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
   .aside-box { position: static; }
   .site-nav a { padding: 0.35rem 0.45rem; }
   .brand-soft { display: none; }
+  body.hc-editor-on .brand-soft { display: inline-grid; }   /* ED60: "HippoCampus Editor" at every width */
 }
 /* Below 768 the header stops being one row. The arithmetic forces it: brand
    (161px once " Robotics" is gone) + the four nav labels (273px) + the search
@@ -1086,6 +1087,18 @@ body.hc-drawer-open .drawer-backdrop { opacity: 1; visibility: visible; transiti
   .layout:has(.sidebar:empty) .sidebar-toggle { display: none; }
   .drawer-backdrop { display: block; }
 }
+/* Editor mode (plan D12, ED36/ED59): no Contents button; the page's "On this page" fold-out is enough. The
+   button keeps its place, unseen, so the page under it does not move when Editor turns on (ED3). */
+body.hc-editor-on #sidebar-toggle { visibility: hidden; pointer-events: none; }
+/* ED60: "Editor" is back below 901 px, so the header's row must make room for it while Editor is on (a
+   signed-in reader has no sign-in button, which gives back its width too): 768-900 the search box gives a
+   little more way, 360-399 the TUHH mark steps out (as it does for everyone below 360), below 360 the brand
+   text is a step smaller. */
+@media (min-width: 768px) and (max-width: 900px) {
+  body.hc-editor-on #search-form { width: clamp(6rem, 100vw - 650px, 15rem); }
+}
+@media (max-width: 399px) { body.hc-editor-on .tuhh-link { display: none; } }
+@media (max-width: 359px) { body.hc-editor-on .brand-text { font-size: 0.875rem; } }
 
 /* uiux F4 (header half): below 768 px the header's search box is an icon button; open, the form
    lies over the nav row at full width. On #/ the hero owns search, so the toggle hides there. */

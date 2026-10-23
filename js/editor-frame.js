@@ -492,7 +492,26 @@
       const link = doc.createElement('link');
       link.rel = 'stylesheet';
       link.href = CSS_HREF;
+      link.onload = link.onerror = () => { cssIn = true; paintSignal(); };
       doc.head.appendChild(link);
+    }
+
+    /* U7 (plan D12): the first paint. The parent keeps its own page on screen until this load has drawn
+       the page in Editor mode, then swaps them (js/editor.js frameReady). So, ONCE per load, a second
+       hc-ready: Editor mode applied (body.hc-framed), css/editor.css in (loaded or failed) and #content
+       holding the page (an element other than the noscript note), two animation frames later (on screen). */
+    let cssIn = false;
+    let painted = false;
+    function paintSignal() {
+      const s = state;
+      if (painted || !cssIn || !s || !s.on) return;
+      const content = doc.getElementById('content');
+      const drawn = content && Array.from(content.childNodes || []).some((n) => n.nodeType === ELEMENT && n.tagName !== 'NOSCRIPT');
+      if (!drawn) return;
+      painted = true;
+      const next = typeof win.requestAnimationFrame === 'function' ? (fn) => win.requestAnimationFrame(fn)
+        : (fn) => win.setTimeout(fn, 16);
+      next(() => next(() => HC.post('hc-ready')));
     }
 
     let scrolledTo = null;
@@ -518,6 +537,7 @@
       syncOpen(s);
       queueRects();
       syncPeople(s);
+      paintSignal();
     }
 
     /* A block (partly) on screen is never scrolled: the reader clicked it where it is. */
@@ -968,14 +988,17 @@
            `index` — the real click path — scrolls it into view and answers
            {type: 'hc-walk-picker-open', index, open, kinds};
          - {type: 'hc-walk-scroll'} answers {type: 'hc-walk-scroll-samples',
-           samples, log, loadedAt, nonce16, now}: this document's scrollY
+           samples, log, loadedAt, nonce16, now, rects}: this document's scrollY
            since it loaded, as 16 ms samples [msSinceLoad, scrollY] (sample 0
            taken here, at create) and as an ordered event log {seq, why,
            scrollY, scrollHeight, innerHeight} written on create, on every
            change inside #content and on every scroll event (timers do not
            fire under headless Chrome's virtual time while fetches are
            pending; the log still keeps the order). Both stop growing at
-           WALK_CAP entries; `now` is scrollY at the moment of the answer.
+           WALK_CAP entries; `now` is scrollY at the moment of the answer;
+           `rects` {content, heading} is where #content (with its computed
+           padding, `pad`) and its first h1 are drawn in this document (the
+           walk's on-geometry step).
            It measures the page jumping while a block is edited.
        The parent is told nothing; anywhere else no listener, timer or
        observer exists. */
@@ -1012,8 +1035,21 @@
         const d = e && e.data;
         if (!e || e.source !== win.top || !d || typeof d !== 'object') return;
         if (d.type === 'hc-walk-scroll') {
+          // U7's on-geometry step: where this document's content column and its first heading are drawn
+          const box = (n) => {
+            if (!n || typeof n.getBoundingClientRect !== 'function') return null;
+            const r = n.getBoundingClientRect();
+            return { left: r.left, top: r.top, width: r.width, height: r.height };
+          };
+          const col = doc.getElementById('content');
+          const rects = { content: box(col), heading: box(col && col.querySelector ? col.querySelector('h1') : null) };
+          if (rects.content && typeof win.getComputedStyle === 'function') {
+            const cs = win.getComputedStyle(col);
+            rects.content.pad = { left: parseFloat(cs.paddingLeft) || 0, right: parseFloat(cs.paddingRight) || 0,
+              top: parseFloat(cs.paddingTop) || 0 };
+          }
           e.source.postMessage({ type: 'hc-walk-scroll-samples', samples: samples.map((x) => x.slice()),
-            log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow() }, e.origin);
+            log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow(), rects }, e.origin);
           return;
         }
         if (d.type !== 'hc-walk-picker' || !Number.isInteger(d.index)) return;

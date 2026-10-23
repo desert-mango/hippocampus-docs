@@ -1455,6 +1455,7 @@
     focusPr: null,        // round 2 (R3): the proposal opened from the list, drawn on its page instead of the newest
   };
   let frameTimer = null;
+  let liveTimer = null;     // U7: the frame takes the page's place after LIVE_FALLBACK_MS even without its paint signal
 
   function readEditorState() {
     const s = store();
@@ -1559,7 +1560,17 @@
       if (on) { robotics.setAttribute('aria-hidden', 'true'); editorWord.removeAttribute('aria-hidden'); }
       else { editorWord.setAttribute('aria-hidden', 'true'); robotics.removeAttribute('aria-hidden'); }
     }
-    if (frameHost) frameHost.hidden = !on;
+    // U7 (plan D12): the frame host is laid out at once but unseen (css/editor.css: in #content's grid column,
+    // out of the flow, transparent, behind) so the frame boots and paints at its final size; #content stays
+    // on screen until its first paint (frameReady). Until then the unseen host is inert (review round 2, minor
+    // C): no Tab stop and nothing in the accessibility tree; frameLive lifts it. Off, the host is hidden.
+    document.body.classList.remove('hc-frame-live');
+    if (frameHost) { frameHost.hidden = !on; frameHost.inert = on; }
+    clearTimeout(liveTimer);
+    if (on) {
+      const since = Date.now();
+      liveTimer = setTimeout(() => { if (Date.now() - since >= LIVE_FALLBACK_MS) frameLive(); }, LIVE_FALLBACK_MS);
+    }
     applyTray();
     renderChrome();
     if (!on) {
@@ -1639,13 +1650,32 @@
   }
 
 
+  /* U7: the width a scroll container's classic scrollbar takes here (0 with overlay scrollbars, or no layout) */
+  function scrollbarWidth() {
+    try {
+      const p = document.createElement('div');
+      p.style.cssText = 'position:absolute;top:-200px;left:0;width:100px;height:100px;overflow:scroll;visibility:hidden';
+      document.body.appendChild(p);
+      const w = p.offsetWidth - p.clientWidth;
+      p.remove();
+      return Number.isFinite(w) && w > 0 && w < 40 ? w : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   function mountFrame() {
     const frame = h('iframe', { class: 'hc-frame', title: 'This page, in Editor mode',
       sandbox: 'allow-scripts allow-popups', referrerpolicy: 'no-referrer' });
     rail.el = h('aside', { class: 'hc-rail', 'aria-label': 'Suggested changes on this page' });
     rail.el.hidden = true;
-    // the review rail (U5b) beside the frame, in the parent (U0b: no bar above the frame)
-    frameHost.replaceChildren(h('div', { class: 'hc-frame-row' }, frame, rail.el));
+    // U7 (plan D12): the host takes #content's slot and the frame is exactly that wide (css/editor.css frame
+    // layout); the review rail lies over the right gutter beside it. --hc-sb: the window's classic scrollbar
+    // width (0 for overlay scrollbars), so the frame's own scrollbar sits in the page's right padding
+    frameHost.replaceChildren(h('div', { class: 'hc-frame-row' }, frame), rail.el);
+    if (frameHost.style && typeof frameHost.style.setProperty === 'function') {
+      frameHost.style.setProperty('--hc-sb', `${scrollbarWidth()}px`);
+    }
     ed.frame = frame;
     ed.host = C.createPreviewHost({
       getFrameWindow: () => frame.contentWindow,
@@ -1761,31 +1791,50 @@
     // R2b: the undo history belongs to this page's draft; another page starts its own
     if (!page || hist.key !== page.pageId) histReset(page);
     else if (ed.draft && ed.draft.key === page.pageId) hist.last = ed.draft.files[page.file];
-    // what this load shows (D-G): the reads are memoized, so a reload after an edit asks nothing
-    let pv;
-    try {
-      pv = await pageView(page, sha);
-    } catch (e) {
-      if (quiet(e)) return;
-      pv = blankView(page);
-    }
-    if (mine !== ed.loads || !sessionGen.isCurrent(gen) || !ed.on || !ed.host) return;
-    ed.pv = pv;
+    // U7 (plan D12): the frame loads AT ONCE, at main's sha with my draft; what the open proposals add (a
+    // proposal drawn over the page, its marks, the review cards) arrives when they are read, by a later
+    // postEditor. Only the page file itself waits for them when a proposal may be drawn over it (no draft of
+    // mine, or a proposal opened or shown): it is then drawn once, with them, and never reloaded for them.
+    // The reads are memoized, so a reload after an edit asks nothing.
+    ed.pv = blankView(page);
     railReset();
-    loadRail(pv, page, sha, mine).catch(shown);
     ed.prefix = null;
     ed.inPage = null;     // the new document reopens the block itself and says so
     ed.ready = false;     // a new document: it hears nothing until its own hc-ready
+    ed.readies = 0;
+    let viewIn = null;
+    ed.pvWait = !ed.draft || ed.focusPr !== null || ed.show ? new Promise((r) => { viewIn = r; }) : null;
+    const waited = ed.pvWait;
     const nonce = ed.host.load(route, frameFetcher);
     // frameFetcher reads it at call time: the frame asks only after it loaded
     ed.prefix = nonce.slice(0, 16);
     refreshDock();
+    let pv;
+    try {
+      pv = await pageView(page, sha);
+    } catch (e) {
+      pv = quiet(e) ? null : blankView(page);
+    }
+    const current = mine === ed.loads && sessionGen.isCurrent(gen) && ed.on && ed.host;
+    if (current && pv) {
+      ed.pv = pv;
+      loadRail(pv, page, sha, mine).catch(shown);
+    }
+    if (ed.pvWait === waited) ed.pvWait = null;
+    if (viewIn) viewIn();
+    if (current && pv) { postEditor(); refreshDock(); }
   }
 
   /* What the frame reads: the drafts on the same commit from memory (this
      page's first), everything else at that commit through the session's
      cache — and the page on screen with this load's sentinels. */
   async function frameFetcher(p) {
+    // U7: the page file waits for this load's view of the open proposals (frameTo); every other file is at once
+    if (ed.pvWait && ed.page && p === ed.page.file) {
+      const load = ed.loads;
+      await ed.pvWait;
+      if (load !== ed.loads) return { ok: false, status: 503, text: '' };    // that document is gone
+    }
     const prefix = ed.prefix;
     const page = ed.page;
     const show = ed.show;
@@ -2583,6 +2632,23 @@
     rail.timer = setTimeout(tick, POLL_MS);
   }
 
+  /* U7 (plan D12): a load says hc-ready twice. The first is the handshake (its script runs: it may hear
+     hc-editor now); the second is its first paint (Editor mode applied, its style sheet in, the page drawn,
+     js/editor-frame.js paintSignal). Only then does the frame take #content's place (body.hc-frame-live), so
+     switching Editor on never blanks the page. Once on screen the frame stays there for the session's later
+     loads; Editor off undoes it (setEditor). A frame that never paints gives way after LIVE_FALLBACK_MS. */
+  const LIVE_FALLBACK_MS = 8000;
+  function frameReady() {
+    ed.readies = (ed.readies || 0) + 1;
+    if (ed.readies === 1) { ed.ready = true; postEditor(); return; }
+    frameLive();
+  }
+  function frameLive() {
+    if (!ed.on || !ed.frame) return;
+    document.body.classList.add('hc-frame-live');
+    if (frameHost) frameHost.inert = false;
+  }
+
   /* hc-editor goes to the frame only once THIS load said hc-ready: before
      that the window may still hold another document. A post held back is
      not queued: the hc-ready answer carries the state as it is then. */
@@ -2665,7 +2731,7 @@
     if (m.type === 'hc-fetch') { ed.host.handleMessage(event); return true; }
     if (typeof m.nonce !== 'string' || m.nonce !== ed.host.nonce()) return true;   // another load's, or forged
     const index = Number.isInteger(m.index) && m.index >= 0 && m.index <= MAX_INDEX ? m.index : null;
-    if (m.type === 'hc-ready') { ed.ready = true; postEditor(); }
+    if (m.type === 'hc-ready') frameReady();
     else if (m.type === 'hc-route' && typeof m.route === 'string' && ROUTE_RE.test(m.route)) frameRouted(m.route);
     else if (m.type === 'hc-block-select' && index !== null) pick(index).catch(shown);
     else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') pickInsert(index, m.kind).catch(shown);

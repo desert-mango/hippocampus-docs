@@ -18,14 +18,20 @@
     select           on + the frame says hc-block-select (a paragraph block)
     edit             select + typing in the tray's block editor; the frame
                      reloads with a NEW nonce, the block still selected
-    scroll           on + select the page's LAST paragraph (low on the page),
-                     then measure the page jumping while typing: ask the frame
-                     (hc-walk-scroll, the TEST-ONLY hook below) until its
-                     scrollY is >= 100 px and steady over 3 answers (before),
-                     type one character into the tray, wait for any reload
-                     and ~1 s, ask again (after). The site window's own
-                     scrollY is recorded too (same origin, read directly).
-                     Writes data-walk-scroll-before / -after / -site (JSON)
+    on-geometry      (U7) Editor on changes nothing in the page's geometry:
+                     the text column (#content inside its padding), the h1
+                     and the sidebar before; the frame's own column and h1
+                     (hc-walk-scroll's rects) and the sidebar after the frame
+                     is on screen (body.hc-frame-live; the sidebar only when
+                     it was on screen before: never on a phone or with the
+                     drawer closed, at 900 px and below); ready only when equal
+                     within 1 px, #content is display:none, and the swap came
+                     from this load's second hc-ready, before the 8 s
+                     fallback. Writes data-walk-geometry
+    scroll           (U7) on + select the page's LAST paragraph (low on the
+                     page); ask the frame (hc-walk-scroll, the TEST-ONLY hook
+                     below) until its scrollY is >= 100 px and steady over 3
+                     answers. No typing (U4's). Writes data-walk-scroll-before
     insert           on + the "+" rail before the first paragraph with its
                      picker OPEN (the kinds, before one is chosen; mockup
                      a-3): the frame's own rail button is clicked through
@@ -394,7 +400,10 @@
       'the Editor switch (GitHub access confirmed)');
     sw.click();
     await until(() => SD.body.classList.contains('hc-editor-on'), 'body.hc-editor-on');
-    return frameReady(null);
+    const nonce = await frameReady(null);
+    // U7 (plan D12): the page stays on screen until the frame's first paint; every step shoots the frame
+    await until(() => SD.body.classList.contains('hc-frame-live'), 'the frame on screen (body.hc-frame-live)');
+    return nonce;
   }
 
   const blockEditor = () => $('textarea[data-block-editor]');
@@ -468,47 +477,6 @@
         await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
         await until(() => { const d = $('.hc-dock'); return d && !d.hidden ? d : null; }, 'the dock');
       },
-      scroll: async () => {
-        await editorOn();
-        const siteSamples = [];
-        const siteLog = [];
-        const t0 = Date.now();
-        const siteTimer = setInterval(() => { if (siteSamples.length < 2000) siteSamples.push([Date.now() - t0, SW.scrollY]); }, 16);
-        const onSiteScroll = () => { if (siteLog.length < 2000) siteLog.push([Date.now() - t0, SW.scrollY]); };
-        SW.addEventListener('scroll', onSiteScroll);
-        try {
-          frameSays('hc-block-select', { index: await lastParagraphIndex() });
-          const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
-          // before: the frame has scrolled the selected block into view and holds still (3 answers in a row, +-2 px)
-          const end = Date.now() + LIMIT_MS;
-          const run = [];
-          let before = null;
-          while (!before) {
-            if (Date.now() > end) throw new Error(`the frame never held still at >= 100 px (last ${JSON.stringify(run)})`);
-            const r = await askScroll('before typing');
-            if (r.now >= 100 && run.length && Math.abs(r.now - run[run.length - 1].now) <= 2) run.push(r);
-            else run.splice(0, run.length, r);
-            if (run.length >= 3 && run[0].now >= 100) before = r;
-            else await sleep(100);
-          }
-          const nonceBefore = nonceOf(pageFrame());
-          ta.value += 'x';
-          ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
-          // a reload (the old editor) shows as a NEW nonce's hc-ready; no reload is fine too (the fix)
-          try { await frameReady(nonceBefore); } catch (e) { /* no reload within the limit */ }
-          await sleep(1000);
-          const after = await askScroll('after typing');
-          body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(before)));
-          body.setAttribute('data-walk-scroll-after', JSON.stringify(scrollSummary(after)));
-          const ys = siteSamples.map((x) => x[1]);
-          body.setAttribute('data-walk-scroll-site', JSON.stringify({ count: ys.length, first: ys.length ? ys[0] : null,
-            last: ys.length ? ys[ys.length - 1] : null, max: ys.length ? Math.max(...ys) : null,
-            samples: siteSamples.slice(0, 40), events: siteLog.slice(0, 300) }));
-        } finally {
-          SW.removeEventListener('scroll', onSiteScroll);
-          clearInterval(siteTimer);
-        }
-      },
       // U0b: no page bar; proposal #2 is on the page when its review cards are (the conflict one among them)
       'overlay-inline': async () => {
         await editorOn();
@@ -569,6 +537,90 @@
       /* ---- U6 ---- */
 
       /* ---- U7 ---- */
+      // plan D12 (ED3, ED22, ED23): Editor on changes nothing in the page's geometry. Before: #content and the
+      // sidebar as the signed-out page draws them; after the frame took #content's place (body.hc-frame-live,
+      // its first paint): the frame's own #content (through the hc-walk-scroll hook's rects, moved into this
+      // page's coordinates by the frame's position) and the sidebar again. Ready only when equal within 1 px.
+      'on-geometry': async () => {
+        SW.scrollTo({ top: 0, behavior: 'instant' });
+        const box = (n) => { if (!n) return null; const r = n.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+        // the text column: #content's box inside its padding (above 900 px the frame host holds part of it)
+        const column = (r, pad) => (r && pad ? { left: r.left + pad.left, top: r.top + pad.top, width: r.width - pad.left - pad.right } : null);
+        const padOf = (n) => { const cs = SW.getComputedStyle(n); return { left: parseFloat(cs.paddingLeft), right: parseFloat(cs.paddingRight), top: parseFloat(cs.paddingTop) }; };
+        const heading = $('#content h1');
+        if (!heading) throw new Error(`the walk page ${page} has no h1 in #content: nothing to measure`);
+        // the sidebar is compared only when it is on screen before (the orchestrator's 390 px walk, round 2): on a
+        // phone (body.hc-phone) or with the drawer closed (at 900 px and below the sidebar is a drawer off the
+        // left edge) the parent's sidebar is off screen and the frame's is hidden; there only the column and h1 count
+        const onScreen = (n) => {
+          if (!n || SD.body.classList.contains('hc-phone')) return false;
+          if (SW.matchMedia('(max-width: 900px)').matches && !SD.body.classList.contains('hc-drawer-open')) return false;
+          const r = n.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.right > 0 && r.left < SW.innerWidth && r.bottom > 0 && r.top < SW.innerHeight;
+        };
+        const before = { content: box($('#content')), heading: box(heading), sidebar: box($('#sidebar')), sidebarShown: onScreen($('#sidebar')) };
+        before.column = column(before.content, padOf($('#content')));
+        // the swap: when body.hc-frame-live came, and how many hc-ready the current load had said by then
+        const LIVE_FALLBACK_MS = 8000;       // js/editor.js frameReady: the frame takes over without its paint signal
+        let onAt = null;                     // Editor on (the click), then the swap
+        let swap = null;
+        const watch = new SW.MutationObserver(() => {
+          if (onAt === null && SD.body.classList.contains('hc-editor-on')) onAt = Date.now();
+          if (swap || onAt === null || !SD.body.classList.contains('hc-frame-live')) return;
+          const n = nonceOf(pageFrame());
+          swap = { ms: Date.now() - onAt, readies: readies.filter((x) => x === n).length };
+        });
+        watch.observe(SD.body, { attributes: true, attributeFilter: ['class'] });
+        let nonce;
+        try { nonce = await editorOn(); } finally { watch.disconnect(); }
+        await sleep(SETTLE_MS);
+        const reply = await askScroll('the frame\'s content column');
+        const f = box(pageFrame());
+        const shift = (r) => (r ? { left: r.left + f.left, top: r.top + f.top, width: r.width, height: r.height } : null);
+        const inner = reply.rects && reply.rects.content;
+        const after = { content: shift(inner), heading: shift(reply.rects && reply.rects.heading),
+          sidebar: box($('#sidebar')), frame: f, contentShown: $('#content') ? SW.getComputedStyle($('#content')).display : null };
+        after.column = column(after.content, inner && inner.pad);
+        const off = [];
+        const near = (a, b, keys, what) => {
+          if (!a || !b) { off.push(`${what}: missing`); return; }
+          for (const k of keys) if (Math.abs(a[k] - b[k]) > 1) off.push(`${what}.${k} ${a[k]} -> ${b[k]}`);
+        };
+        near(before.column, after.column, ['left', 'top', 'width'], 'column');
+        near(before.heading, after.heading, ['left', 'top', 'width'], 'heading');
+        if (before.sidebarShown) near(before.sidebar, after.sidebar, ['left', 'top', 'width', 'height'], 'sidebar');
+        // review minor 7: the page itself is gone once the frame is on screen
+        if (after.contentShown !== 'none') off.push(`#content still drawn (display ${after.contentShown})`);
+        // review minor 6: the swap came from THIS load's paint signal (its second hc-ready), not the 8 s fallback
+        const said = readies.filter((x) => x === nonce).length;
+        if (!swap) off.push('no swap seen');
+        else if (swap.readies !== 2) off.push(`swap after ${swap.readies} hc-ready of this load (want 2: handshake, paint)`);
+        if (swap && swap.ms >= LIVE_FALLBACK_MS) off.push(`swap at ${swap.ms} ms: the ${LIVE_FALLBACK_MS} ms fallback, not the paint`);
+        if (said !== 2) off.push(`this load said hc-ready ${said} times (want 2)`);
+        const scrollbars = { window: SW.innerWidth - SD.documentElement.clientWidth,
+          host: SW.getComputedStyle($('#hc-frame-host')).getPropertyValue('--hc-sb').trim() };
+        body.setAttribute('data-walk-geometry', JSON.stringify({ before, after, swap, readies: said, scrollbars, off }));
+        if (off.length) throw new Error(`the page moved when Editor turned on: ${off.join('; ')}`);
+      },
+      // the frame scrolls the selected block (the page's LAST paragraph, low on the page) into view and holds
+      // still there: its scrollY (the hc-walk-scroll hook) is >= 100 px and steady over 3 answers (+-2 px).
+      // No typing here (U4 owns typing). Writes data-walk-scroll-before (JSON).
+      scroll: async () => {
+        await editorOn();
+        frameSays('hc-block-select', { index: await lastParagraphIndex() });
+        const end = Date.now() + LIMIT_MS;
+        const run = [];
+        let steady = null;
+        while (!steady) {
+          if (Date.now() > end) throw new Error(`the frame never held still at >= 100 px (last ${JSON.stringify(run.map((r) => r.now))})`);
+          const r = await askScroll('after the pick');
+          if (r.now >= 100 && run.length && Math.abs(r.now - run[run.length - 1].now) <= 2) run.push(r);
+          else run.splice(0, run.length, r);
+          if (run.length >= 3 && run[0].now >= 100) steady = r;
+          else await sleep(100);
+        }
+        body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(steady)));
+      },
     };
   }
 
