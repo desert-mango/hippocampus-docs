@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-23",
+ "read_at": "2026-10-24",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 199,
+  "commits_365d": 205,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -645,13 +645,55 @@
     1,
     1,
     3,
+    6,
     0,
-    null,
     null
    ]
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_belief",
+   "sha": "c6fbbe2",
+   "date": "2026-10-23",
+   "msg": "feat(launch): move top_field_sim_stack.launch.py here, depend on scalar_field_sim",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_sim",
+   "sha": "fc00990",
+   "date": "2026-10-23",
+   "msg": "refactor(launch): move belief launch to scalar_field_belief",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "ce08363",
+   "date": "2026-10-23",
+   "msg": "feat(belief tool): add interactive Qt belief visualization",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "6897106",
+   "date": "2026-10-23",
+   "msg": "feat(gmrf): port of Finns gmrf with tests and examples, python bindings and ROS node",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "692a8dd",
+   "date": "2026-10-23",
+   "msg": "feat(belief node): support wall-aware mode, add pip packaging",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "20779a1",
+   "date": "2026-10-23",
+   "msg": "feat(belief): add wall-aware GP variant",
+   "author": "NBauschmann"
+  },
   {
    "repo": "ipp_rig",
    "sha": "7180d5f",
@@ -784,48 +826,6 @@
    "date": "2026-10-15",
    "msg": "Merge pull request #2 from Latfoo/main",
    "author": "NBauschmann"
-  },
-  {
-   "repo": "ir_field_hardware",
-   "sha": "a6e80a4",
-   "date": "2026-09-17",
-   "msg": "add circuit diagram for sensor",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "ir_field_hardware",
-   "sha": "e736e06",
-   "date": "2026-09-16",
-   "msg": "add cad files",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "docs",
-   "sha": "1063769",
-   "date": "2026-09-11",
-   "msg": "updated pinout colors",
-   "author": "FinnBreu"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "58264ef",
-   "date": "2026-09-01",
-   "msg": "Add correct sim params to launch file",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "docs",
-   "sha": "0b28923",
-   "date": "2026-09-01",
-   "msg": "added new pinout for uuv02",
-   "author": "FinnBreu"
-  },
-  {
-   "repo": "ipp_interfaces",
-   "sha": "49c43fc",
-   "date": "2026-09-01",
-   "msg": "Add README",
-   "author": "Latfoo"
   }
  ],
  "most_active_repos": [
@@ -842,16 +842,16 @@
    "pushed_at": "2026-07-28"
   },
   {
-   "name": "scalar_field_sim",
-   "commits": 23,
+   "name": "scalar_field_belief",
+   "commits": 25,
    "language": "Python",
-   "pushed_at": "2026-10-22"
+   "pushed_at": "2026-10-23"
   },
   {
-   "name": "scalar_field_belief",
-   "commits": 20,
+   "name": "scalar_field_sim",
+   "commits": 24,
    "language": "Python",
-   "pushed_at": "2026-10-15"
+   "pushed_at": "2026-10-23"
   },
   {
    "name": "docs",
