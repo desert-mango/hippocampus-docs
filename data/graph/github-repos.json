@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-24",
+ "read_at": "2026-10-25",
  "org": "HippoCampusRobotics",
  "repos": {
   ".github": {
