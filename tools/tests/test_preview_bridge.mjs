@@ -505,7 +505,8 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
     overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, locked: false, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null,
     focus: null, anchors: [],      // U3: the two new fields, empty
-    peopleOwn: null, peopleAct: null, peopleAlert: null });   // U5
+    peopleOwn: null, peopleAct: null, peopleAlert: null,   // U5
+    facts: { edit: false, lock: false, create: false, statuses: [] } });   // U6
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
@@ -514,7 +515,8 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
     { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, locked: false, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null,
     focus: null, anchors: [],      // U3: the two new fields, empty
-    peopleOwn: null, peopleAct: null, peopleAlert: null });   // U5
+    peopleOwn: null, peopleAct: null, peopleAlert: null,   // U5
+    facts: { edit: false, lock: false, create: false, statuses: [] } });   // U6
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
   // round 2, R1: the proposer's colour slot, a whole number 0..5, else 0
   for (const [v, want] of [[3, 3], [5, 5], [0, 0], [6, 0], [-1, 0], [2.5, 0], ['2', 0], [null, 0]]) {
@@ -785,3 +787,35 @@ test('U5 hc-editor (parent -> frame): people.own, people.act and people.alert, c
 });
 
 /* ---- U6 ---- */
+// plan D17: hc-facts {field, value}; hc-new-project and hc-access-ask (no fields); hc-editor.facts
+test('U6 hc-facts (frame -> parent): each field passes well-formed and is dropped malformed', () => {
+  const f = (d) => SRC.frameMessage('hc-facts', d);
+  assert.deepEqual(f({ field: 'name', value: 'Core stack', x: 1 }), { type: 'hc-facts', field: 'name', value: 'Core stack' });
+  assert.deepEqual(f({ field: 'tagline', value: '' }), { type: 'hc-facts', field: 'tagline', value: '' }, 'the parent says why it is refused');
+  assert.equal(f({ field: 'name', value: 'x'.repeat(301) }), null);
+  assert.equal(f({ field: 'name', value: 7 }), null);
+  assert.deepEqual(f({ field: 'status', value: 'legacy' }), { type: 'hc-facts', field: 'status', value: 'legacy' });
+  assert.equal(f({ field: 'status', value: 'Legacy!' }), null);
+  assert.deepEqual(f({ field: 'repos', value: ['hippo_core', 'a.b-c'] }), { type: 'hc-facts', field: 'repos', value: ['hippo_core', 'a.b-c'] });
+  assert.deepEqual(f({ field: 'repos', value: [] }), { type: 'hc-facts', field: 'repos', value: [] });
+  assert.equal(f({ field: 'repos', value: ['a b'] }), null);
+  assert.equal(f({ field: 'repos', value: 'hippo_core' }), null);
+  assert.equal(f({ field: 'repos', value: Array(201).fill('a') }), null);
+  assert.equal(f({ field: 'file', value: 'content/x.md' }), null);
+  assert.equal(f(null), null);
+});
+
+test('U6 hc-new-project and hc-access-ask (frame -> parent): the type alone, any other field dropped', () => {
+  assert.deepEqual(SRC.frameMessage('hc-new-project', { id: 'x' }), { type: 'hc-new-project' });
+  assert.deepEqual(SRC.frameMessage('hc-access-ask', { login: 'x' }), { type: 'hc-access-ask' });
+});
+
+test('U6 hc-editor.facts (parent -> frame): booleans only when true, the statuses as plain words', () => {
+  const f = (facts) => SRC.editorMessage({ type: 'hc-editor', on: true, facts }).facts;
+  assert.deepEqual(f({ edit: true, lock: false, create: true, statuses: ['active', 'legacy'] }),
+    { edit: true, lock: false, create: true, statuses: ['active', 'legacy'] });
+  assert.deepEqual(f({ edit: 'yes', lock: 1, create: 'true', statuses: ['<b>', 'archive', 3] }),
+    { edit: false, lock: false, create: false, statuses: ['archive'] });
+  assert.deepEqual(f(undefined), { edit: false, lock: false, create: false, statuses: [] });
+  assert.equal(f({ statuses: Array(20).fill('active') }).statuses.length, 12);
+});

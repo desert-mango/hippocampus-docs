@@ -590,6 +590,7 @@
       const s = state;
       if (!s) return;
       setBodyClasses(s);
+      factsFor(win, doc, HC).sync(s);   // U6 (plan D17): a project page's facts, lock line and "+ New project"
       if (!s.on) return;
       addCss();
       const root = doc.getElementById('content') || doc.body;
@@ -1335,4 +1336,339 @@
     window.HCEditorFrame = Object.freeze(api);
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
+
+  // ===================================================================== facts (U6, plan D17 and D11) ===
+  /* A project page in Editor mode. js/app.js marks the title, the one-line description, the status and the
+     repositories with data-hc-fact (name | tagline | status | repos; status and repos carry data-hc-value).
+     hc-editor.facts says what this person may do here:
+       edit    a click on a fact edits it in place: the title and the line become one-line text (Enter or
+               leaving keeps it, Escape puts it back), the status a small menu of facts.statuses, the
+               repositories a list to remove from and add to by name (Done keeps it). A change posts
+               hc-facts {field, value}; the parent writes the facts draft and draws the page again.
+       lock    a quiet line under the title, "Only this project's editors can change it · Request edit
+               access" (the button posts hc-access-ask), the not-allowed cursor (css/editor.css), and the
+               same line as a short notice on a click in the page.
+       create  the Projects page's "+ New project" card is shown; a click posts hc-new-project.
+     One instance per document (factsFor); sync(state) runs on every apply and changes the page only where
+     it differs, so the MutationObserver that calls apply settles. */
+  const FACTS_TOOLS = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function factsFor(win, doc, HC) {
+    let f = FACTS_TOOLS && FACTS_TOOLS.get(doc);
+    if (!f) {
+      f = factsTools(win, doc, HC);
+      if (FACTS_TOOLS) FACTS_TOOLS.set(doc, f);
+    }
+    return f;
+  }
+  const FACT_FIELDS = Object.freeze(['name', 'tagline', 'status', 'repos']);
+  const FACT_LABELS = Object.freeze({ name: 'the title', tagline: 'the one-line description', status: 'the status',
+    repos: 'the repositories' });
+  const LOCK_TEXT = 'Only this project\'s editors can change it';
+  const ACCESS_LABEL = 'Request edit access';
+  const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
+  const TOAST_MS = 3200;
+
+  function factsTools(win, doc, HC) {
+    let st = null;
+    let open = null;               // {field, node, close(keep)}
+    let toast = null;
+    let toastTimer = null;
+    let docWired = false;
+    const wired = typeof WeakSet === 'function' ? new WeakSet() : new Set();
+    const textWired = typeof WeakSet === 'function' ? new WeakSet() : new Set();
+    const isEl = (n) => n && n.nodeType === ELEMENT;
+    const walk = (root, pred, out) => {
+      for (const c of Array.from((root && root.childNodes) || [])) {
+        if (!isEl(c)) continue;
+        if (pred(c)) out.push(c);
+        walk(c, pred, out);
+      }
+      return out;
+    };
+    const content = () => (doc.getElementById ? doc.getElementById('content') : null);
+    const facts = () => {
+      const out = {};
+      for (const n of walk(content(), (c) => FACT_FIELDS.indexOf(c.getAttribute('data-hc-fact')) >= 0, [])) {
+        const f = n.getAttribute('data-hc-fact');
+        if (!out[f]) out[f] = n;
+      }
+      return out;
+    };
+    const el = (tag, cls, text) => {
+      const e = doc.createElement(tag);
+      if (cls) e.className = cls;
+      if (text) e.textContent = text;
+      return e;
+    };
+    const btn = (cls, text, label) => {
+      const b = el('button', cls, text);
+      b.type = 'button';
+      b.setAttribute('type', 'button');
+      if (label) b.setAttribute('aria-label', label);
+      return b;
+    };
+    const stop = (e) => { if (e && e.stopPropagation) e.stopPropagation(); if (e && e.preventDefault) e.preventDefault(); };
+    const detach = (n) => { if (n && n.parentNode) n.parentNode.removeChild(n); };
+    const may = () => Boolean(st && st.on && st.facts && st.facts.edit);
+    const locked = () => Boolean(st && st.on && st.facts && st.facts.lock);
+    const valueOf = (n) => String(n.getAttribute('data-hc-value') || '');
+    const post = (field, value) => HC.post('hc-facts', { field, value });
+
+    // ---- the title and the one-line description: one line of text in place
+    function openText(field, node) {
+      const was = node.textContent;
+      node.setAttribute('contenteditable', 'true');
+      node.setAttribute('spellcheck', 'true');
+      node.classList.add('hc-fact-editing');
+      const close = (keep) => {
+        if (!open || open.node !== node) return;
+        open = null;
+        node.removeAttribute('contenteditable');
+        node.removeAttribute('spellcheck');
+        node.classList.remove('hc-fact-editing');
+        const now = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!keep || now === was.trim()) { node.textContent = was; return; }
+        post(field, now);
+      };
+      open = { field, node, close };
+      if (!textWired.has(node)) {
+        textWired.add(node);
+        node.addEventListener('keydown', (e) => {
+          if (!open || open.node !== node) return;
+          if (e.key === 'Enter') { stop(e); open.close(true); } else if (e.key === 'Escape') { stop(e); open.close(false); }
+        });
+        node.addEventListener('blur', () => { if (open && open.node === node) open.close(true); });
+      }
+      if (typeof node.focus === 'function') node.focus();
+      const sel = doc.getSelection ? doc.getSelection() : null;
+      if (sel && doc.createRange) {
+        const r = doc.createRange();
+        r.selectNodeContents(node);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
+
+    // ---- the status: a small menu of the allowed values
+    function openStatus(node) {
+      const now = valueOf(node);
+      const menu = el('div', 'hc-fact-menu');
+      menu.setAttribute('role', 'menu');
+      menu.setAttribute('aria-label', 'Status');
+      const close = () => { if (open && open.node === node) open = null; detach(menu); node.classList.remove('hc-fact-editing'); };
+      for (const s of (st.facts.statuses || [])) {
+        const b = btn('hc-fact-opt', s);
+        b.setAttribute('role', 'menuitemradio');
+        b.setAttribute('aria-checked', s === now ? 'true' : 'false');
+        b.setAttribute('data-status', s);
+        b.addEventListener('click', (e) => { stop(e); close(); if (s !== now) post('status', s); });
+        menu.appendChild(b);
+      }
+      menu.addEventListener('click', stop);
+      menu.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') { stop(e); close(); } });
+      node.classList.add('hc-fact-editing');
+      node.appendChild(menu);
+      open = { field: 'status', node, close };
+      const first = menu.childNodes[0];
+      if (first && typeof first.focus === 'function') first.focus();
+    }
+
+    // ---- the repositories: remove by name, add by name, Done
+    function openRepos(node) {
+      const was = valueOf(node).split(/\s+/).filter(Boolean);
+      let names = was.slice();
+      const panel = el('div', 'hc-fact-repos');
+      panel.setAttribute('role', 'group');
+      panel.setAttribute('aria-label', 'Repositories');
+      const list = el('ul', 'hc-fact-repo-list');
+      const input = el('input', 'hc-fact-repo-input');
+      input.setAttribute('type', 'text');
+      input.setAttribute('placeholder', 'Repository name');
+      input.setAttribute('aria-label', 'Add a repository by name');
+      input.setAttribute('autocomplete', 'off');
+      const add = btn('hc-fact-btn', 'Add');
+      const problem = el('p', 'hc-fact-problem');
+      problem.hidden = true;
+      const done = btn('hc-fact-btn hc-fact-done', 'Done');
+      const cancel = btn('hc-fact-btn', 'Cancel');
+      const draw = () => {
+        while (list.childNodes.length) list.removeChild(list.childNodes[0]);
+        for (const n of names) {
+          const li = el('li', 'hc-fact-repo');
+          li.setAttribute('data-repo', n);
+          li.appendChild(el('span', 'hc-fact-repo-name', n));
+          const x = btn('hc-fact-x', '×', `Remove ${n}`);
+          x.addEventListener('click', (e) => { stop(e); names = names.filter((m) => m !== n); draw(); });
+          li.appendChild(x);
+          list.appendChild(li);
+        }
+      };
+      const say = (t) => { problem.textContent = t || ''; problem.hidden = !t; };
+      const addNow = () => {
+        const n = String(input.value || '').trim();
+        if (!n) return;
+        if (!REPO_NAME.test(n)) { say(`"${n.slice(0, 60)}" is not a repository name (letters, digits, . _ -)`); return; }
+        if (names.indexOf(n) >= 0) { say(`${n} is already listed`); return; }
+        names.push(n);
+        input.value = '';
+        say('');
+        draw();
+      };
+      const close = (keep) => {
+        if (open && open.node === node) open = null;
+        detach(panel);
+        node.classList.remove('hc-fact-editing');
+        if (keep && names.join(' ') !== was.join(' ')) post('repos', names.slice());
+      };
+      add.addEventListener('click', (e) => { stop(e); addNow(); });
+      input.addEventListener('keydown', (e) => { if (e && e.key === 'Enter') { stop(e); addNow(); } });
+      done.addEventListener('click', (e) => { stop(e); close(true); });
+      cancel.addEventListener('click', (e) => { stop(e); close(false); });
+      panel.addEventListener('click', (e) => { if (e && e.stopPropagation) e.stopPropagation(); });
+      panel.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') { stop(e); close(false); } });
+      const row = el('div', 'hc-fact-repo-add');
+      row.appendChild(input);
+      row.appendChild(add);
+      const actions = el('div', 'hc-fact-actions');
+      actions.appendChild(cancel);
+      actions.appendChild(done);
+      [list, row, problem, actions].forEach((n) => panel.appendChild(n));
+      draw();
+      node.classList.add('hc-fact-editing');
+      node.appendChild(panel);
+      open = { field: 'repos', node, close };
+      if (typeof input.focus === 'function') input.focus();
+    }
+
+    function openFact(field, node) {
+      if (!may() || (open && open.node === node)) return;
+      if (open) open.close(open.field === 'name' || open.field === 'tagline');   // typed text is kept; a menu or list is not
+      if (field === 'name' || field === 'tagline') openText(field, node);
+      else if (field === 'status') openStatus(node);
+      else if (field === 'repos') openRepos(node);
+    }
+
+    function wire(field, node) {
+      if (wired.has(node)) return;
+      wired.add(node);
+      node.addEventListener('click', (e) => {
+        if (!may()) return;
+        // inside the open field (its text, its menu, its panel) the click is the field's own
+        if (open && open.node === node) return;
+        stop(e);
+        openFact(field, node);
+      });
+      node.addEventListener('keydown', (e) => {
+        if (!may() || (open && open.node === node) || !e || (e.key !== 'Enter' && e.key !== ' ')) return;
+        stop(e);
+        openFact(field, node);
+      });
+    }
+
+    // ---- the lock line and its notice
+    function lockLine() {
+      const p = el('p', 'hc-lock-line');
+      p.setAttribute('data-hc-lock', '');
+      p.appendChild(el('span', 'hc-lock-text', `${LOCK_TEXT} · `));
+      const ask = btn('hc-lock-ask', ACCESS_LABEL);
+      ask.setAttribute('data-action', 'access-ask');
+      ask.addEventListener('click', (e) => { stop(e); HC.post('hc-access-ask'); });
+      p.appendChild(ask);
+      return p;
+    }
+    function showToast() {
+      if (!doc.body) return;
+      if (!toast) {
+        toast = el('div', 'hc-lock-toast', `${LOCK_TEXT}.`);
+        toast.setAttribute('role', 'status');
+        doc.body.appendChild(toast);
+      }
+      toast.hidden = false;
+      if (toastTimer !== null && typeof win.clearTimeout === 'function') win.clearTimeout(toastTimer);
+      toastTimer = win.setTimeout(() => { toastTimer = null; if (toast) toast.hidden = true; }, TOAST_MS);
+    }
+    const inside = (n, pred) => { for (let x = n; x && x !== doc.body; x = x.parentNode) if (isEl(x) && pred(x)) return true; return false; };
+    function onDocClick(e) {
+      const t = e && e.target;
+      if (open && !(t && inside(t, (x) => x === open.node))) open.close(true);
+      if (!locked() || !t) return;
+      if (inside(t, (x) => x.tagName === 'A' || x.tagName === 'BUTTON' || classesOf(x).indexOf('hc-lock-line') >= 0)) return;
+      if (inside(t, (x) => classesOf(x).indexOf('project-page') >= 0)) showToast();
+    }
+
+    function sync(s) {
+      st = s;
+      if (!docWired && doc.addEventListener) { docWired = true; doc.addEventListener('click', onDocClick); }
+      const f = facts();
+      const can = may();
+      if (!can && open) open.close(false);
+      for (const field of FACT_FIELDS) {
+        const node = f[field];
+        if (!node) continue;
+        if (can) {
+          wire(field, node);
+          if (!node.classList.contains('hc-fact')) node.classList.add('hc-fact');
+          if (node.getAttribute('tabindex') !== '0') node.setAttribute('tabindex', '0');
+          const tip = `Click to change ${FACT_LABELS[field]}`;
+          if (node.getAttribute('title') !== tip) node.setAttribute('title', tip);
+        } else if (node.classList.contains('hc-fact')) {
+          node.classList.remove('hc-fact');
+          node.removeAttribute('tabindex');
+          node.removeAttribute('title');
+        }
+      }
+      if (!walkWired && (Object.keys(f).length || walk(content(), (c) => c.getAttribute('data-hc-new-project') !== null, []).length)) wireWalk();
+      // the lock line, right under the title
+      const title = f.name;
+      const had = walk(content(), (c) => classesOf(c).indexOf('hc-lock-line') >= 0, []);
+      if (locked() && title && title.parentNode) {
+        if (!had.length) title.parentNode.insertBefore(lockLine(), title.nextSibling);
+      } else had.forEach(detach);
+      if (!locked() && toast) toast.hidden = true;
+      // "+ New project" on the Projects page
+      const card = walk(content(), (c) => c.getAttribute('data-hc-new-project') !== null, [])[0];
+      if (card) {
+        const show = Boolean(s.on && s.facts && s.facts.create);
+        const row = card.parentNode;
+        if (row && show && row.getAttribute('hidden') !== null) { row.removeAttribute('hidden'); row.hidden = false; }
+        if (row && !show && row.getAttribute('hidden') === null) { row.setAttribute('hidden', ''); row.hidden = true; }
+        if (!wired.has(card)) {
+          wired.add(card);
+          card.addEventListener('click', (e) => { if (st && st.on && st.facts && st.facts.create) { stop(e); HC.post('hc-new-project'); } });
+        }
+      }
+    }
+
+    /* TEST-ONLY, for the localhost walk (tools/tests/editor_walk.html, the U6 steps), on the same terms as the
+       picker hook above (localhost / 127.0.0.1, a top window that is not the parent): {type: 'hc-walk-facts',
+       click} clicks that fact (name | tagline | status | repos) or the "+ New project" card (new-project) the
+       real way and answers {type: 'hc-walk-facts-state', fields (the facts that can be changed), editing (the
+       open one), lock (the lock line's text), cursor (the title's computed cursor), card (the card shown)}.
+       The listener is added on the first sync that finds a fact or the card (a project page, the Projects
+       page), so other pages keep the picker's one listener. Anywhere else no listener exists. */
+    let walkWired = false;
+    function wireWalk() {
+      if (walkWired) return;
+      walkWired = true;
+      const host = String((win.location && win.location.hostname) || '');
+      if (!((host === 'localhost' || host === '127.0.0.1') && win.top && win.parent && win.top !== win.parent)) return;
+      win.addEventListener('message', (e) => {
+        const d = e && e.data;
+        if (!e || e.source !== win.top || !d || typeof d !== 'object' || d.type !== 'hc-walk-facts') return;
+        const f = facts();
+        const node = FACT_FIELDS.indexOf(d.click) >= 0 ? f[d.click] : null;
+        if (node && !(open && open.node === node)) node.click();
+        if (node && typeof node.scrollIntoView === 'function') { try { node.scrollIntoView({ block: 'center' }); } catch (x) { /* a courtesy */ } }
+        const line = walk(content(), (c) => classesOf(c).indexOf('hc-lock-line') >= 0, [])[0];
+        const card = walk(content(), (c) => c.getAttribute('data-hc-new-project') !== null, [])[0];
+        if (d.click === 'new-project' && card) card.click();
+        e.source.postMessage({ type: 'hc-walk-facts-state', fields: FACT_FIELDS.filter((x) => f[x] && f[x].classList.contains('hc-fact')),
+          editing: open ? open.field : null, lock: line ? line.textContent : null,
+          cursor: f.name && typeof win.getComputedStyle === 'function' ? String(win.getComputedStyle(f.name).cursor || '') : null,
+          card: Boolean(card && card.parentNode && card.parentNode.getAttribute('hidden') === null) }, e.origin);
+      });
+    }
+
+    return Object.freeze({ sync, open: () => (open ? open.field : null) });
+  }
 }());

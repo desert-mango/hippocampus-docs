@@ -1078,6 +1078,14 @@ body.hc-signin-hidden .hc-signin {
 .sidebar .sb-group[open] { margin-bottom: 0.6rem; }
 .sb-suffix { color: var(--muted); }
 .sidebar a.active .sb-suffix { color: inherit; opacity: 0.75; }
+/* U6 (ED51): "+ New page" closes each side-menu group in Editor mode only (a prefilled issue, js/app.js
+   newPageLink), and the Projects page's "+ New project" card waits hidden until the Editor's frame shows it. */
+.sb-new-page { display: none; }
+body.hc-editor-on .sb-new-page { display: block; }
+.sidebar a.sb-new-page { color: var(--muted); font-style: italic; }
+.sidebar a.sb-new-page:hover { color: var(--accent); }
+.project-new-row[hidden] { display: none; }
+.project-new { font: inherit; text-align: left; color: inherit; cursor: pointer; border-style: dashed; }
 
 /* uiux F1: the phone drawer's toggle and backdrop (the drawer itself is in the 900 px block). */
 .sidebar-toggle, .drawer-backdrop { display: none; }

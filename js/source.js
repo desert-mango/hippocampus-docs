@@ -411,6 +411,24 @@
     }
 
     /* ---- U6 ---- */
+    // plan D17: a project page's fact changed in place (the parent checks the value against FACTS_RULES)
+    const MAX_FACT_TEXT = 300;
+    const MAX_FACT_REPOS = 200;
+    const FACT_STATUS_RE = /^[a-z]{1,30}$/;
+    const FACT_REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+    if (type === 'hc-facts') {
+      if (d.field === 'name' || d.field === 'tagline') {
+        return typeof d.value === 'string' && d.value.length <= MAX_FACT_TEXT ? { type, field: d.field, value: d.value } : null;
+      }
+      if (d.field === 'status') return typeof d.value === 'string' && FACT_STATUS_RE.test(d.value) ? { type, field: 'status', value: d.value } : null;
+      if (d.field === 'repos') {
+        if (!Array.isArray(d.value) || d.value.length > MAX_FACT_REPOS || !d.value.every((n) => typeof n === 'string' && FACT_REPO_RE.test(n))) return null;
+        return { type, field: 'repos', value: d.value.slice() };
+      }
+      return null;
+    }
+    // "+ New project" on the Projects page, "Request edit access" under a locked project's title: no fields
+    if (type === 'hc-new-project' || type === 'hc-access-ask') return { type };
     return null;
   }
 
@@ -497,6 +515,13 @@
       peopleAlert: m.people && typeof m.people === 'object' && typeof m.people.alert === 'string' ? m.people.alert.slice(0, 300) : null,
 
       /* ---- U6 ---- */
+      // plan D17: on a project page — edit its facts in place (edit), or the lock line (lock); "+ New project" (create)
+      facts: (() => {
+        const f = m.facts && typeof m.facts === 'object' ? m.facts : {};
+        const statuses = Array.isArray(f.statuses)
+          ? f.statuses.slice(0, 12).filter((x) => typeof x === 'string' && /^[a-z]{1,30}$/.test(x)) : [];
+        return { edit: f.edit === true, lock: f.lock === true, create: f.create === true, statuses };
+      })(),
     };
   }
 

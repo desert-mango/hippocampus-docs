@@ -2004,6 +2004,87 @@
       [projectFactsFile(id)]: formatLike(projectsText, facts), [file]: `${story}\n` } };
   }
 
+  /* ---- U6 (plan D17): a project's facts edited in its page ----
+     FACTS_RULES: the gate's rules for data/projects/<id>.json — PROJECT_FACTS_SPEC in tools/check.py (keys every
+     reader needs, the typed and list-valued keys, the objects inside each list) and the statuses section 4
+     accepts. A COPY: tools/tests/test_facts_rules.py reads both files and fails when they differ. */
+  const FACTS_RULES = deepFreeze(/* facts-rules: strict JSON, read by tools/tests/test_facts_rules.py */ {
+    "keys": ["name", "tagline", "status", "file", "repos"],
+    "types": {"file": "str"},
+    "lists": ["hardware"],
+    "each": {"repos": {"keys": ["name", "url"]}, "links": {"keys": ["href", "label"]}},
+    "statuses": ["active", "maintained", "legacy", "archive"]
+  } /* end facts-rules */);
+  function deepFreeze(o) {
+    Object.values(o).forEach((v) => { if (v && typeof v === 'object') deepFreeze(v); });
+    return Object.freeze(o);
+  }
+  const FACT_TYPES = Object.freeze({ str: (v) => typeof v === 'string' });
+  const FACTS_NEVER = Object.freeze(['id', 'add', 'remove', 'owners']);   // a facts file never widens access (check.py)
+
+  /* A facts file's parsed value against FACTS_RULES -> null, or the first broken rule in words. */
+  function validFacts(doc) {
+    const R = FACTS_RULES;
+    if (!isObj(doc)) return 'a project\'s facts must be one JSON object';
+    const missing = R.keys.find((k) => !Object.prototype.hasOwnProperty.call(doc, k));
+    if (missing !== undefined) return `the facts need '${missing}'`;
+    const never = FACTS_NEVER.find((k) => Object.prototype.hasOwnProperty.call(doc, k));
+    if (never !== undefined) return `'${never}' does not belong in a facts file (who can edit is kept in data/projects.json)`;
+    for (const [k, t] of Object.entries(R.types)) {
+      if (Object.prototype.hasOwnProperty.call(doc, k) && !FACT_TYPES[t](doc[k])) return `'${k}' must be text`;
+    }
+    for (const k of R.lists.concat(Object.keys(R.each))) {
+      if (Object.prototype.hasOwnProperty.call(doc, k) && !Array.isArray(doc[k])) return `'${k}' must be a list`;
+    }
+    for (const [k, spec] of Object.entries(R.each)) {
+      for (const [i, item] of listOf(doc[k]).entries()) {
+        const gap = isObj(item) ? spec.keys.find((x) => !Object.prototype.hasOwnProperty.call(item, x)) : spec.keys[0];
+        if (gap !== undefined) return `${k}[${i}] needs '${gap}'`;
+      }
+    }
+    if (R.statuses.indexOf(doc.status) < 0) return `the status must be one of ${R.statuses.join(', ')}`;
+    return null;
+  }
+
+  const FACT_TEXT_MAX = Object.freeze({ name: 200, tagline: 300 });
+  const FACT_LABEL = Object.freeze({ name: 'name', tagline: 'one-line description' });
+  /* One fact of a project changed in its facts file's text: field 'name' | 'tagline' (one line of text, trimmed),
+     'status' (one of FACTS_RULES.statuses) or 'repos' (the repository names in order: a kept one keeps its
+     fields, a new one is {name, url} in the org). Pure: the key order and the file's own format stay
+     (formatLike), so only the changed value differs. -> {text, problem} (text null when refused). */
+  function factsDraftText(text, field, value) {
+    const fail = (problem) => ({ text: null, problem });
+    const p = jsonProblem(text);
+    if (p) return fail(jsonProblemText('the facts file', p));
+    const doc = JSON.parse(text);
+    if (!isObj(doc)) return fail('the facts file must be one JSON object');
+    if (field === 'name' || field === 'tagline') {
+      const v = typeof value === 'string' ? value.trim() : '';
+      if (!v) return fail(`the project needs a ${FACT_LABEL[field]}`);
+      if (/[\r\n]/.test(v)) return fail(`the ${FACT_LABEL[field]} is one line`);
+      if (v.length > FACT_TEXT_MAX[field]) return fail(`the ${FACT_LABEL[field]} is at most ${FACT_TEXT_MAX[field]} characters`);
+      doc[field] = v;
+    } else if (field === 'status') {
+      if (FACTS_RULES.statuses.indexOf(value) < 0) return fail(`the status must be one of ${FACTS_RULES.statuses.join(', ')}`);
+      doc.status = value;
+    } else if (field === 'repos') {
+      if (!Array.isArray(value)) return fail('the repositories must be a list of names');
+      const names = value.map((n) => (typeof n === 'string' ? n.trim() : ''));
+      const odd = names.find((n) => !REPO_NAME_RE.test(n));
+      if (odd !== undefined) return fail(`'${odd.slice(0, 60)}' is not a repository name (as on github.com/HippoCampusRobotics)`);
+      const dup = names.find((n, i) => names.indexOf(n) !== i);
+      if (dup !== undefined) return fail(`the repository '${dup}' is listed twice`);
+      const had = listOf(doc.repos).filter(isObj);
+      doc.repos = names.map((n) => had.find((r) => r.name === n) || { name: n, url: `${ORG_WEB}/${n}` });
+    } else {
+      return fail(`'${String(field).slice(0, 40)}' cannot be changed here: only the name, the one-line description, the status and the repositories`);
+    }
+    const bad = validFacts(doc);
+    if (bad) return fail(bad);
+    const out = formatLike(text, doc);
+    return { text: JSON.stringify(JSON.parse(text)) === JSON.stringify(doc) ? text : out, problem: null };
+  }
+
   /* Access proposals (Kyle, 2026-10-19): asking for edit access, or an admin adding or removing a person,
      is ONE commit that changes only data/projects.json: the login goes into that project's `add` list (and
      out of `remove`), or into `remove` (and out of `add`). Logins compare lowercased; the file keeps its
@@ -4437,7 +4518,7 @@
     editKind, pageTree, pageList, pageIdForFile, routeForPage,
     jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
-    PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
+    PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, FACTS_RULES, validFacts, factsDraftText, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     GITHUB_LINKS_FILE, PERSON_FIELDS, PEOPLE_ADMIN_TEXT, PEOPLE_ADMIN_ONLY_TEXT, peopleFieldText, peopleRemoveText, githubLinksText, peopleDraftProblem,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, pageForFile,

@@ -533,6 +533,69 @@ body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb
 .hc-access-result[hidden] { display: none; }
 .hc-access-result a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
+/* U6 (plan D17, ED37): a project page's facts in Editor mode (js/editor-frame.js, the facts section). A fact you may
+   change shows the same quiet line the blocks show on hover; the open one is outlined in the editing blue. */
+body.hc-edit-on .hc-fact { cursor: text; border-radius: 6px; outline: 1px dashed transparent; outline-offset: 3px;
+  transition: outline-color .12s ease-out; }
+body.hc-edit-on .hc-fact:hover, body.hc-edit-on .hc-fact:focus-visible { outline-color: var(--edge); }
+body.hc-edit-on dd.hc-fact, body.hc-edit-on div.hc-fact { cursor: pointer; position: relative; }
+body.hc-edit-on .hc-fact.hc-fact-editing { outline: 2px solid var(--hc-edit); outline-offset: 3px; }
+body.hc-edit-on .hc-fact[contenteditable] { cursor: text; caret-color: var(--hc-edit); }
+.hc-fact-menu { position: absolute; z-index: 30; top: calc(100% + .35rem); left: 0; display: grid; min-width: 9rem; padding: .3rem;
+  background: var(--surface); border: 1px solid var(--edge); border-radius: 10px; box-shadow: 0 10px 26px rgba(0, 0, 0, .28); }
+[data-theme="light"] .hc-fact-menu { box-shadow: 0 10px 26px rgba(0, 0, 0, .1); }
+.hc-fact-opt { font: inherit; font-size: .82rem; text-align: left; padding: .35rem .6rem; border: 0; border-radius: 6px;
+  background: transparent; color: var(--body); cursor: pointer; text-transform: capitalize; }
+.hc-fact-opt:hover, .hc-fact-opt:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
+.hc-fact-opt[aria-checked="true"] { color: var(--heading); font-weight: 600; }
+.hc-fact-opt[aria-checked="true"]::before { content: "✓ "; color: var(--hc-edit-ink); }
+.hc-fact-repos { display: grid; gap: .45rem; margin-top: .5rem; padding: .6rem; border: 1px solid var(--edge); border-radius: 8px;
+  background: var(--surface); cursor: auto; font-size: .8rem; }
+.hc-fact-repo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .2rem; }
+.hc-fact-repo { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.hc-fact-repo-name { flex: 1 1 auto; min-width: 0; font-family: var(--mono); font-size: .76rem; color: var(--heading); overflow-wrap: anywhere; }
+.hc-fact-x { font: inherit; line-height: 1; padding: .15rem .4rem; border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); cursor: pointer; }
+.hc-fact-x:hover, .hc-fact-x:focus-visible { color: var(--danger); background: var(--surface-2); outline: none; }
+.hc-fact-repo-add, .hc-fact-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+.hc-fact-actions { justify-content: flex-end; }
+.hc-fact-repo-input { flex: 1 1 8rem; min-width: 0; font: inherit; font-size: .78rem; padding: .25rem .45rem; color: var(--heading);
+  background: var(--bg); border: 1px solid var(--edge); border-radius: 6px; }
+.hc-fact-repo-input:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-fact-btn { font: inherit; font-size: .76rem; padding: .25rem .6rem; border: 1px solid var(--edge); border-radius: 6px;
+  background: transparent; color: var(--body); cursor: pointer; }
+.hc-fact-btn:hover, .hc-fact-btn:focus-visible { color: var(--heading); border-color: var(--hc-edit); outline: none; }
+.hc-fact-done { background: var(--hc-edit-ink); border-color: transparent; color: var(--hc-edit-on); font-weight: 600; }
+.hc-fact-problem { margin: 0; color: var(--danger); font-size: .76rem; }
+.hc-fact-problem[hidden] { display: none; }
+
+/* ED38: a project you cannot edit says so under its title, quietly, and once more as a short notice on a click */
+.hc-lock-line { margin: -.2rem 0 .9rem; color: var(--muted); font-size: .84rem; }
+.hc-lock-ask { font: inherit; padding: 0; border: 0; background: none; color: var(--hc-edit-ink); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px; }
+.hc-lock-ask:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; border-radius: 3px; }
+.hc-lock-toast { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 90; max-width: calc(100vw - 32px);
+  padding: .55rem .9rem; border-radius: 10px; background: var(--surface); border: 1px solid var(--edge); color: var(--heading);
+  font-size: .84rem; box-shadow: 0 10px 26px rgba(0, 0, 0, .3); }
+.hc-lock-toast[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .hc-lock-toast:not([hidden]) { animation: hc-toast-in .16s ease-out; } }
+@keyframes hc-toast-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ED51: the New project dialog (js/editor.js openNewProject), over the page */
+.hc-np { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45); }
+.hc-np[hidden] { display: none; }
+.hc-np-card { width: min(28rem, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: .7rem; padding: 1.1rem 1.2rem;
+  background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; color: var(--body);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .45); }
+[data-theme="light"] .hc-np-card { box-shadow: 0 18px 44px rgba(0, 0, 0, .14); }
+.hc-np-card h2 { margin: 0; font-size: 1.1rem; color: var(--heading); }
+.hc-np-hint { margin: 0; color: var(--muted); font-size: .8rem; }
+.hc-np-field { display: grid; gap: .25rem; font-size: .8rem; color: var(--body-soft); }
+.hc-np-field input, .hc-np-field select { font: inherit; font-size: .88rem; padding: .4rem .55rem; color: var(--heading);
+  background: var(--bg); border: 1px solid var(--edge); border-radius: 7px; min-width: 0; }
+.hc-np-field input:focus-visible, .hc-np-field select:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-np-actions { display: flex; justify-content: flex-end; gap: .45rem; }
+
 /* ==== rail/margin (U3) ==== */
 
 /* Proposal marks (the overlay; U7 draws the composite), the highlight: --hc-hl, blue for the viewer's own and the
@@ -941,3 +1004,7 @@ body.hc-editor-on, body.hc-edit-on { --hc-edit-on: #fff; }
 /* ==== override: U5 ==== */
 
 /* ==== override: U6 ==== */
+/* ED38 (plan D17): a locked project page answers a click with the not-allowed cursor (U4's locked blocks say auto) */
+body.hc-edit-on.hc-edit-locked .page-body > .hc-block,
+body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block,
+body.hc-edit-on.hc-edit-locked .project-page [data-hc-fact] { cursor: not-allowed; }

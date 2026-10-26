@@ -172,13 +172,15 @@
   }
   const REGISTRY = stepRegistry();   // the steps, by unit (below)
   const STEPS = Object.keys(REGISTRY);
-  const ACCESS_STEPS = STEPS.filter((s) => s.indexOf('access-') === 0);
+  // U6: project-edit and project-locked use the access steps' edit-access data (commits / none) on core-stack
+  const ACCESS_STEPS = STEPS.filter((s) => s.indexOf('access-') === 0 || s === 'project-edit' || s === 'project-locked');
   // U3: the review steps draw the same synthetic proposals (review-list / review-page with #3 too)
   const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs', 'review-list', 'review-page', 'review-viewing', 'review-notes'];
   const TWO_PR_STEPS = ['two-prs', 'review-list', 'review-page'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
-  const page = params.get('page') || (/^access-/.test(step) ? '/projects/core-stack' : '/setup/hippocampus-bringup/fcu-firmware');
+  const page = params.get('page') || (/^(access-|project-(edit|locked)$)/.test(step) ? '/projects/core-stack'
+    : (step === 'project-new' ? '/projects' : '/setup/hippocampus-bringup/fcu-firmware'));
   const LIMIT_MS = 20000;
   const SETTLE_MS = 900;
 
@@ -356,7 +358,7 @@
     let index = mainText;
     const put = (who, op) => { const d = C.accessRequestDraft(index, id, who, op); if (d.text) index = d.text; };
     put('new-student', 'add');
-    if (step === 'access-commits' || step === 'access-nowrite') editors.push([login, 'commits', Math.min(2, repos)]);
+    if (step === 'access-commits' || step === 'access-nowrite' || step === 'project-edit') editors.push([login, 'commits', Math.min(2, repos)]);
     if (step === 'access-added') { editors.push([login, 'added', 0]); put(login, 'add'); }
     if (step === 'access-removed') { removed.push([login, true]); put(login, 'remove'); }
     const byLogin = (a, b) => (a[0].toLowerCase() < b[0].toLowerCase() ? -1 : 1);
@@ -583,6 +585,26 @@
       store.put({ key, label, files: { [file]: `${text}\nThe walk added this paragraph.\n` }, originals: { [file]: text },
         base: { ref: 'main', sha: window.HCFakeGitHub.MAIN_SHA, number: null } });
     }
+  }
+
+  /* U6: ask the page frame's facts hook (js/editor-frame.js, hc-walk-facts) to click `click` (a fact, or
+     new-project) and answer its state; resolves on the first answer that `ok` accepts. */
+  const factsReplies = [];
+  window.addEventListener('message', (e) => {
+    const f = SD ? pageFrame() : null;
+    const m = e.data;
+    if (f && e.source === f.contentWindow && m && typeof m === 'object' && m.type === 'hc-walk-facts-state') factsReplies.push(m);
+  });
+  async function askFacts(what, click, ok) {
+    const base = factsReplies.length;
+    return until(() => {
+      const f = pageFrame();
+      const fresh = factsReplies.length > base;      // an answer came: a message carrying the click was handled
+      const last = factsReplies[factsReplies.length - 1];
+      if (fresh && ok(last)) return last;
+      if (f && f.contentWindow) f.contentWindow.postMessage(Object.assign({ type: 'hc-walk-facts' }, !fresh && click ? { click } : {}), '*');
+      return null;
+    }, `the frame's hc-walk-facts answer (${what})`);
   }
 
   /* The walk's steps, one labelled block per unit (editor UI/UX build, U0): a unit adds its steps in its own block.
@@ -854,6 +876,29 @@
       })(),
 
       /* ---- U6 ---- */
+      // plan D17 (ED37): Editor on, an editor of core-stack (commits, as access-commits): the title open in place
+      'project-edit': async () => {
+        await editorOn();
+        const r = await askFacts('the title open for editing', 'name', (a) => a.editing === 'name');
+        if (r.fields.join(' ') !== 'name tagline status repos') throw new Error(`facts to change: ${r.fields.join(' ')}`);
+        SW.scrollTo({ top: 0, behavior: 'instant' });
+      },
+      // ED38/ED39: Editor on, no commits in core-stack (as access-none): the lock line under the title, the
+      // not-allowed cursor on the facts, and nothing to change
+      'project-locked': async () => {
+        await editorOn();
+        const r = await askFacts('the lock line', null, (a) => /^Only this project's editors can change it · Request edit access$/.test(a.lock || ''));
+        if (r.fields.length) throw new Error(`a locked page offers facts to change: ${r.fields.join(' ')}`);
+        if (r.cursor !== 'not-allowed') throw new Error(`the title's cursor is ${r.cursor}, not not-allowed`);
+        SW.scrollTo({ top: 0, behavior: 'instant' });
+      },
+      // ED51: Editor on, the Projects page (Write): "+ New project" shown; its click opens the New project dialog
+      'project-new': async () => {
+        await editorOn();
+        await askFacts('the "+ New project" card shown', null, (a) => a.card === true);
+        await askFacts('the card clicked', 'new-project', () => true);
+        await until(() => $('.hc-np[data-new-project]:not([hidden]) #hc-np-title'), 'the New project dialog');
+      },
 
       /* ---- U7 ---- */
       // plan D12 (ED3, ED22, ED23): Editor on changes nothing in the page's geometry. Before: #content and the

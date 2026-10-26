@@ -3307,7 +3307,8 @@
       focus: ed.focusOut, anchors: rail.data && Array.isArray(rail.data.notes)
         ? rail.data.notes.filter((x) => x.anchor !== null).map((x) => x.anchor) : [],
       // U4 (D6, D8, D11): the marks to restore after a load, the notes beside their blocks, the site's images
-      marks: marksMessage(), notes: notesMessage(), media: ed.mediaOut || null }, '*');
+      marks: marksMessage(), notes: notesMessage(), media: ed.mediaOut || null,
+      facts: factsState() }, '*');   // U6 (plan D17)
     ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
 
@@ -3607,6 +3608,9 @@
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
     else if (m.type === 'hc-people') peopleEdit(m).catch(shown);    // js/source.js admits only the people ops
+    else if (m.type === 'hc-facts' && typeof m.field === 'string') factsEdit(m).catch(shown);       // U6 (plan D17)
+    else if (m.type === 'hc-access-ask') accessAskInPage();
+    else if (m.type === 'hc-new-project') openNewProject();
     else if (m.type === 'hc-history' && index !== null && typeof m.snap === 'string') {
       if (ed.page && hist.key === ed.page.pageId) hist.pending = { index, snap: m.snap };   // the next typed change's restore point
     } else if (m.type === 'hc-key' && (m.op === 'undo' || m.op === 'redo')) undoRedo(m.op);
@@ -4016,6 +4020,121 @@
     peopleWrote(d, want.name, null);
     say(out.kind === 'duplicate' ? 'That photo is already on the site: the card uses it now. Nothing was uploaded.'
       : 'Photo replaced. It goes into your proposal with the Team page.');
+  }
+
+  // ---------------------------------------------- project pages (U6, plan D17 and D11) ---
+  /* What the frame may do on this page (hc-editor.facts): edit the project's facts in place (an editor of the
+     project, my own edits only, never over a drawn proposal), the lock line (a project I may not edit, once the
+     access list is read or failed), and "+ New project" on the Projects page (Write or higher). */
+  function factsState() {
+    const id = projectIdOf(ed.page);
+    const free = !showing() && !(ed.pv && ed.pv.pr);
+    const lock = Boolean(id) && pageLocked(ed.page) && projectAccess(id).status !== 'unread';
+    return { edit: Boolean(id) && free && canEditPage(ed.page), lock, create: canEdit(), statuses: C.FACTS_RULES.statuses.slice() };
+  }
+  const factsKey = (id) => `data/projects/${id}`;
+
+  /* hc-facts {field, value}: one fact of this project, written into its facts draft (data/projects/<id>.json,
+     key data/projects/<id>; HCCore.factsDraftText checks it against FACTS_RULES). The draft sits on the story
+     draft's base when there is one (the frame is served both from one tree), else on main; it is sent as its own
+     proposal (HCCore.splitSend's facts group). Back to what it was, the draft goes. The page is drawn again. */
+  async function factsEdit(m) {
+    const page = ed.page;
+    const id = projectIdOf(page);
+    if (!id || !factsState().edit) return;
+    const key = factsKey(id);
+    const file = C.projectFactsFile(id);
+    let d = drafts.get(key);
+    if (d && !C.isDirty(d)) { drafts.remove(key); d = null; }
+    if (!d) {
+      const story = ed.draft && ed.draft.key === page.pageId ? ed.draft.base : null;
+      const base = story || { ref: 'main', sha: await mainSha(), number: null };
+      const answer = await sessionCache().get(base.sha, file);
+      if (!answer || !answer.ok) throw new Error(`GitHub answered HTTP ${answer ? answer.status : 0} for ${file}`);
+      d = { key, label: `${page.label} facts`, route: page.route, files: { [file]: answer.text },
+        originals: { [file]: answer.text }, base: { ref: base.ref, sha: base.sha, number: base.number } };
+    }
+    if (ed.page !== page) return;
+    const out = C.factsDraftText(d.files[file], m.field, m.value);
+    if (out.problem) { say(`Not changed: ${out.problem}.`, 'error'); frameTo(ed.route, true); return; }
+    if (out.text === d.files[file]) return;
+    d.files[file] = out.text;
+    if (C.isDirty(d)) drafts.put(d); else drafts.remove(key);
+    say('');
+    refreshDock();
+    frameTo(ed.route, true);
+  }
+
+  /* hc-access-ask: "Request edit access" on a locked project's lock line runs the bubble's own control
+     (accessAsk, drawn in the dock's lock lines): the access proposal for a Write role, else the prefilled issue
+     in a new tab. The bubble comes out, where the answer is said. */
+  function accessAskInPage() {
+    if (!ed.on || !pageLocked(ed.page)) return;
+    refreshDock();
+    unfoldDock();
+    const ask = findDown(dock, (e) => /^access-(request|issue)$/.test(e.getAttribute('data-action') || ''));
+    if (!ask) return;                                  // the list is not read yet: the bubble says so
+    if (ask.getAttribute('data-action') === 'access-request') ask.click();
+    else window.open(ask.getAttribute('href'), '_blank', 'noopener');
+  }
+  function findDown(root, pred) {
+    for (const c of Array.from((root && root.childNodes) || [])) {
+      if (!c || typeof c.getAttribute !== 'function') continue;
+      if (pred(c)) return c;
+      const hit = findDown(c, pred);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  /* hc-new-project: "+ New project" on the Projects page opens a small dialog — id, name, one-line description,
+     status (HCEditor.helpers.newProjectForm) — whose button makes the 3-file draft (makeProjectDraft, on main),
+     kept with my other changes and sent like them. A refused field is said in the dialog. */
+  let newProjectBox = null;
+  function closeNewProject() {
+    if (newProjectBox) { newProjectBox.hidden = true; newProjectBox.remove(); }
+    newProjectBox = null;
+  }
+  function openNewProject() {
+    if (!ed.on || !canEdit()) return;
+    if (newProjectBox) return;
+    const form = newProjectForm();
+    const field = (name, label, el) => h('label', { class: 'hc-np-field' }, h('span', { text: label }), el);
+    const input = (name, hint) => h('input', { type: 'text', name, autocomplete: 'off', spellcheck: 'false', placeholder: hint });
+    const id = input('id', 'sonar-rig');
+    const name = input('name', 'Sonar rig');
+    const tagline = input('tagline', 'One line: what the project is');
+    const status = h('select', { name: 'status' }, ...form.statuses.map((x) => h('option', { value: x, selected: x === form.defaults.status }, x)));
+    const problem = h('p', { class: 'hc-np-problem cms-problem', role: 'alert' });
+    problem.hidden = true;
+    const make = h('button', { type: 'button', class: 'cms-btn cms-btn-primary', 'data-action': 'new-project-make' }, 'Add the project');
+    const cancel = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'new-project-cancel' }, 'Cancel');
+    const box = h('div', { class: 'hc-np', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'hc-np-title', 'data-new-project': true },
+      h('div', { class: 'hc-np-card' },
+        h('h2', { id: 'hc-np-title', text: 'New project' }),
+        h('p', { class: 'hc-np-hint', text: 'It is kept with your changes; Send for review in the bubble sends it.' }),
+        field('id', 'Address (lowercase letters, digits, dashes)', id), field('name', 'Name', name),
+        field('tagline', 'One-line description', tagline), field('status', 'Status', status),
+        problem, h('div', { class: 'hc-np-actions' }, cancel, make)));
+    cancel.addEventListener('click', closeNewProject);
+    box.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') closeNewProject(); });
+    make.addEventListener('click', async () => {
+      const values = Object.assign({}, form.defaults, { id: id.value, name: name.value, tagline: tagline.value,
+        status: status.value || form.defaults.status });
+      make.disabled = true;
+      let out;
+      try { out = await makeProjectDraft(values, { ref: 'main', number: null }); } catch (e) { out = { problem: (e && e.message) || String(e) }; }
+      make.disabled = false;
+      if (out.problem) { problem.textContent = `Not added: ${out.problem}.`; problem.hidden = false; return; }
+      drafts.put(out.d);
+      closeNewProject();
+      say(`New project "${values.name.trim()}" is in your changes.`);
+      refreshDock();
+      frameTo(ed.route, true);
+    });
+    newProjectBox = box;
+    document.body.appendChild(box);
+    if (typeof id.focus === 'function') id.focus();
   }
 
   async function moveImage(from, to) {

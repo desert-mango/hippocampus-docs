@@ -1436,6 +1436,21 @@
       },
       "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
     },
+    "tools/tests/test_facts_rules.py": {
+      "classification": "included",
+      "evidence": {
+        "baseline_sha256": "ad8e8a99ac006bf8a5947328d2f39f33ae46af6a998e596f5b8014c162fd9e5a",
+        "commit": "new-in-this-change"
+      },
+      "header": {
+        "author": "Kyle Nelson",
+        "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
+        "last_substantive_modification": "23 October 2026",
+        "affiliation": "TUHH HippoCampus Robotics",
+        "purpose": "Test that the editor's facts rules (js/cms-core.js FACTS_RULES) match the gate's project facts spec."
+      },
+      "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U6); the baseline is the file as introduced."
+    },
     "tools/tests/test_editor_layout.mjs": {
       "classification": "included",
       "evidence": {
