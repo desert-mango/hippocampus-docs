@@ -560,15 +560,16 @@ test('U2 D14: on a phone a round photo button opens the bubble as a bottom sheet
   assert.match(phone, /\.hc-dock-tag \{[^}]*width: 48px; height: 48px/);
 });
 
-test('U2 D14: the sheet\'s "N to review" row opens the page\'s review sheet when the page has cards', async () => {
+test('U2 D14: the sheet\'s "N to review" row hands the click to the editor\'s review list, which sits in the sheet', async () => {
   const dock = bareDock({ phone: true, count: 2, openReview: true });
   dock.D.loadCount();
   await settle();
   dock.one((e) => e.classList.contains('hc-dock-tag')).click();
   assert.equal(dock.row('review').hidden, false);
   dock.action('tray-open').click();
-  assert.equal(dock.seen.review, 1, 'the review sheet asked for');
-  assert.equal(dock.body.classList.contains('hc-sheet-open'), false, 'the bubble sheet makes way');
+  assert.equal(dock.seen.review, 1, 'the review list asked for');
+  // U3 (plan D2, D14): the list is the bubble's own content, so the sheet stays open around it
+  assert.equal(dock.body.classList.contains('hc-sheet-open'), true, 'the bubble sheet stays');
 });
 
 test('U2: HCDock.escape() closes one layer — an open list — and says false when nothing is open', () => {

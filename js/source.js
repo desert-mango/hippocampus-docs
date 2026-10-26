@@ -417,6 +417,14 @@
         return { n: c.n, op: 'restore', index: c.index, snap: c.snap, save: c.save };
       })(),
       /* Per-unit blocks (editor UI/UX build, U0): a new hc-editor field goes in its unit's block. */
+      /* ---- U3 ---- */
+      // the block to scroll into view, once per n (the first change of a proposal opened from its review row)
+      focus: (() => {
+        const f = m.focus && typeof m.focus === 'object' ? m.focus : null;
+        return f && Number.isInteger(f.n) && f.n >= 1 && isIndex(f.index) ? { n: f.n, index: f.index } : null;
+      })(),
+      // the blocks a margin note card sits beside: reported in hc-block-rects like the marked ones
+      anchors: Array.isArray(m.anchors) ? m.anchors.filter(isIndex).slice(0, 500) : [],    // at most 500 note cards on one page
       /* ---- U4 ---- */
 
       /* ---- U5 ---- */

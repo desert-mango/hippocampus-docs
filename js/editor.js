@@ -658,24 +658,6 @@
     if (typeof to === 'string' && to) window.location.hash = `#${to}`;
     else say('That send changed no page on this site.');
   }
-  /* The review count until U3's list: the open sends of others I may approve (Admin and Maintainer: every one;
-     a Writer: those wholly inside projects that list them, HCCore.ownsAll). */
-  async function reviewable(pulls) {
-    const r = state.role;
-    if (!r || r.canPush !== true) return 0;
-    const login = sessionLogin().toLowerCase();
-    const others = C.orderOpenPulls(pulls, null).filter((p) => !(p.user && String(p.user.login).toLowerCase() === login));
-    if (r.key === 'admin' || r.key === 'maintain') return others.length;
-    const doc = accessDocNow();
-    if (!doc || !approvable().length) return 0;
-    let n = 0;
-    for (const p of others) {
-      const files = await filesOrNull(p.number);
-      if (Array.isArray(files) && C.ownsAll({ login, files: files.map((f) => f && f.filename), access: doc })) n += 1;
-    }
-    return n;
-  }
-
   /* U2 (plan D4, ED43, ED44): Send for review — one click, no box. The drafts I may send (only the draft `key`
      for Send this page) are split by kind (HCCore.splitSend: page edits together, go-live eligible; each facts
      file, the team, a new project, an access change on its own); each group is one send with its generated
@@ -825,19 +807,15 @@
       go: (route) => { window.location.hash = `#${route}`; },
       loadSends: () => loadSends(),
       openSend: (item) => openSend(item).catch(shown),
-      openReview: () => {
-        if (!rail.cards.some((c) => c.anchor !== null)) return false;
-        openSheet(null);
-        return true;
-      },
+      // U3: the review row's one click owner — the list in the bubble (on a phone, its .hc-rsheet); the dock never toggles it
+      openReview: () => { if (rv.open) closeReview(); else openReview(); return true; },
+      reviewOpen: () => rv.open,
       shown: (e) => shown(e),
       avatar: (login, first) => avatarFace(login, first),
       accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
-      onCount: (n) => { ed.count = n; },
-      openCount: () => {
-        const gen = sessionGen.current();
-        return openPulls().then((pulls) => reviewable(pulls)).then((n) => (sessionGen.isCurrent(gen) ? n : null));
-      },
+      // U3 (ED11): the count is what this viewer may review; nobody else sees one
+      onCount: (n) => { ed.count = n; },                 // the dock alone shows or hides the row (and its button) by the count
+      openCount: () => loadReview().then((list) => (list === null ? null : list.length)),
     };
   }
 
@@ -1552,21 +1530,14 @@
 
   /* Follow a redirect: the editor page steps aside, the bubble comes out, and a proposal named by number is drawn
      on the page on screen (the frame is drawn again when that changes what it shows). */
+  /* U3 (plan D18): #/review/<n> opens that proposal on its first page with the bubble's review list open on
+     its row; #/ and #/review open the list; the others bring the bubble out over the page on screen. */
   function followRedirect(r) {
     ed.trayOpen = false;
     applyTray();
     D.unfold();
-    if (r.focusPr !== null && r.focusPr !== ed.focusPr) {
-      ed.focusPr = r.focusPr;
-      // already the proposal drawn on the page: nothing to draw again
-      const drawn = Boolean(ed.pv && ed.pv.pr && ed.pv.pr.number === r.focusPr);
-      if (ed.on && !drawn) {
-        ed.show = null;
-        clearSelection();
-        frameTo(currentRoute(), false);
-        return;
-      }
-    }
+    if (r.name === 'home' || r.focusPr !== null) openReview();
+    if (r.focusPr !== null) { focusProposal(r.focusPr).catch(shown); return; }
     refreshDock();
   }
 
@@ -1709,6 +1680,12 @@
     bases: new Map(),     // 'main...head' -> Promise of the merge base sha
     checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
     focusPr: null,        // round 2 (R3): the proposal opened from the list, drawn on its page instead of the newest
+    plain: null,          // U3: the page id whose others' proposals Back put away (until the route changes)
+    keepFocus: null,      // U3: the route a review row is taking us to: its hashchange keeps the proposal on screen
+    focusWant: null,      // U3: the proposal whose first change the next margin-card read scrolls into view
+    focusOut: null,       // U3: {n, index} the frame scrolls into view once per n (hc-editor focus)
+    focusSeq: 0,
+    count: 0,             // U3: how many proposals wait for this viewer's review
   };
   let frameTimer = null;
   let liveTimer = null;     // U7: the frame takes the page's place after LIVE_FALLBACK_MS even without its paint signal
@@ -1786,7 +1763,7 @@
     } catch (e) { /* the parameter stays in the address; it is harmless */ }
     const pr = get('pr');
     const data = get('data');
-    return { pr: /^[1-9][0-9]{0,8}$/.test(String(pr)) ? Number(pr) : null,
+    return { tab, pr: /^[1-9][0-9]{0,8}$/.test(String(pr)) ? Number(pr) : null,
       data: data !== null && C.RAW_REGISTRIES.indexOf(`data/${data}.json`) >= 0 ? data : null };
   }
 
@@ -1799,7 +1776,15 @@
       return;
     }
     ed.trayOpen = false;
-    if (param.pr !== null) { ed.focusPr = param.pr; ed.show = null; }
+    // U3: ?editor=review (and the old ?editor=proposals) opens the review list; pr=<n> opens that proposal there
+    if (param.pr !== null || param.tab === 'review' || param.tab === 'proposals') rv.open = true;
+    if (param.pr !== null) {
+      ed.focusPr = param.pr;
+      ed.focusWant = param.pr;
+      ed.show = null;
+      Promise.resolve().then(() => focusProposal(param.pr)).catch(shown);
+    }
+    if (rv.open) Promise.resolve().then(() => loadReview()).catch(shown);
   }
 
   function setEditor(on) {
@@ -1808,7 +1793,7 @@
       return;
     }
     ed.on = on;
-    if (!on) { ed.show = null; ed.focusPr = null; histReset(null); }
+    if (!on) { Object.assign(ed, { show: null, focusPr: null, focusWant: null, plain: null, keepFocus: null }); rv.open = false; histReset(null); }
     document.body.classList.toggle('hc-editor-on', on);
     // the title: "HippoCampus Editor" while Editor mode is on (css/site.css slides the word); the reader hears the visible word
     const [robotics, editorWord] = [document.querySelector('.brand-robotics'), document.querySelector('.brand-editor')];
@@ -1847,7 +1832,6 @@
     if (!tray) return;
     const open = ed.on && ed.trayOpen;
     tray.hidden = !open;
-    handle.hidden = !ed.on;                                    // the bubble's "Proposals" count (U3 opens its list)
     document.body.classList.toggle('hc-tray-open', open);
     saveEditorState();
   }
@@ -1865,43 +1849,21 @@
     trayTitle.textContent = kind === 'page' ? 'Edit as Markdown' : 'Data files';
   }
 
-
-
-
-  /* "Show on page" (D-G 3): the frame shows proposal n's head — the files
-     it changes at its head, every other file at main's — read-only, no
-     sentinels. route: where to show it (null: the page on screen). */
-  function showProposal(n, sha, files, route2) {
-    const changed = new Map();
-    for (const f of files) {
-      if (!f || typeof f.filename !== 'string') continue;
-      changed.set(f.filename, f.status === 'removed' ? 'removed' : 'changed');
-      if (typeof f.previous_filename === 'string') changed.set(f.previous_filename, 'removed');
-    }
-    ed.show = { number: n, sha, changed };
-    clearSelection();
-    ed.trayOpen = false;                         // the editor page steps aside: the proposal is shown ON the page
-    applyTray();
-    if (route2 && ROUTE_RE.test(route2) && route2 !== currentRoute()) {
-      window.location.hash = `#${route2}`;       // onHashChange loads the frame there
-      return;
-    }
-    frameTo(currentRoute(), false);
-  }
-
-  /* Kept for U3, which re-skins the viewing of a proposal ("Viewing <name>'s changes" · Back): U0b removed the
-     two bars that called these (plan D18). */
+  /* Back (U3, ED46, ED48): the page with my own changes again — the proposal on screen is put away, and this
+     page draws nobody else's until its page is left (ed.plain). */
   function showOff() {
-    ed.show = null;
+    Object.assign(ed, { show: null, focusPr: null, focusWant: null, plain: ed.page ? ed.page.pageId : null });
     say('');
+    clearSelection();
     frameTo(currentRoute(), false);
+    refreshDock();
   }
 
 
   /* While a proposal is shown, nothing on the page is edited. */
   function showing() {
     if (!ed.show) return false;
-    say(`You are looking at proposal #${ed.show.number}: nothing on the page is edited meanwhile.`);
+    say('You are viewing someone\'s changes: nothing on the page is edited meanwhile. Back, in the bubble, returns to your page.');
     return true;
   }
 
@@ -2240,7 +2202,7 @@
   }
 
   const blankView = (page) => ({ mode: ed.show ? 'show' : 'main', file: page ? page.file : null, pr: null, files: null,
-    ov: null, tint: 0, marks: [], touching: [], others: [], check: null, failed: false, people: [], peopleHead: null });
+    ov: null, tint: 0, marks: [], touching: [], others: [], check: null, failed: false, people: [], peopleHead: null, notes: false });
 
   async function pageView(page, main) {
     const pv = blankView(page);
@@ -2252,7 +2214,10 @@
       if (quiet(e)) throw e;
       return pv;                         // no proposals to draw: the page works without them
     }
-    pv.touching = all.filter((t) => fileRow(t.files, page.file)).sort(newestFirst);
+    // U3 (ED11): others' proposals only for a viewer who may approve them (HCCore.mayReviewProposal); my own always
+    const access = needsAccess(all.filter((t) => touches(t, page.file))) ? await accessRegistry() : null;
+    const me = viewerOf();
+    pv.touching = all.filter((t) => touches(t, page.file) && (isMine(t.pull) || C.mayReviewProposal(me, t, access))).sort(newestFirst);
     if (page.data) return peopleView(pv, page, main);
     let t = null;
     const focus = ed.focusPr !== null ? pv.touching.find((x) => x.pull.number === ed.focusPr) || null : null;
@@ -2266,10 +2231,12 @@
     } else if (ed.draft) {
       pv.mode = 'draft';
     } else if (pv.touching.length) {
-      pv.mode = currentView().suggestions ? 'overlay' : 'hidden';
+      // the newest that changes the page (a note waits for its row), unless Back put them away on this page
+      const first = pv.touching.find((x) => !isNotes(x)) || null;
+      pv.mode = first && ed.plain !== page.pageId ? 'overlay' : 'hidden';
       if (pv.mode === 'overlay') {
-        t = pv.touching[0];
-        pv.others = pv.touching.slice(1);
+        t = first;
+        pv.others = pv.touching.filter((x) => x !== first);
       }
     }
     if (!t) return pv;
@@ -2277,6 +2244,7 @@
     pv.files = t.files;
     // round 2 (R1): the proposer's own colour; the viewer's own proposal is blue like their draft
     pv.tint = C.slotOf(C.proposerSlots(all.map((x) => x.pull), state.session && state.session.login), loginOf(t.pull));
+    if (isNotes(t)) { pv.notes = true; return pv; }        // U3: a notes-only send: main's page, its notes in the margin
     const head = headShaOf(t.pull);
     const [ov, check] = await Promise.all([
       proposalOverlay(t, page.file, main, pv.mode === 'show' ? 'head' : 'main')
@@ -2301,7 +2269,7 @@
       pv.people = C.peopleMarks(d.originals[page.file], d.files[page.file]);
       return pv;
     }
-    const t = focus || (pv.touching.length && currentView().suggestions ? pv.touching[0] : null);
+    const t = focus || (pv.touching.length && ed.plain !== page.pageId ? pv.touching[0] : null);
     if (!t) { if (pv.touching.length) pv.mode = 'hidden'; return pv; }
     pv.mode = 'overlay';
     pv.pr = t.pull;
@@ -2387,12 +2355,31 @@
      functions; the frame only reports where the marked blocks are (hc-block-rects, numbers) and lights the
      one whose card is hovered or active (hot). Every write is HCCore.runRecord: one approval record on the
      proposal, which .github/workflows/go-live.yml turns into a change on main.
-       wide (>= RAIL_WIDE px)   cards in a column beside the frame, each on its block's line
-       narrow                   an avatar marker per change; a click opens its card beside the marker
-       phone (PHONE_QUERY)      "Review N changes" in the page bar opens them as a bottom sheet
+     U3 (plan D3, ED10): margin comments. Each card has the proposer's photo, the change in words, Approve,
+     Deny and Comment (the conversation, inline); a note the proposer left on a block (the proposal body's
+     hc-notes, HCCore.notesSection) is a card of its own beside that block ("<name>'s note", plain text).
+       cards    the gutter beside the page is at least a card wide: cards on their blocks' lines
+       markers  a narrower gutter (railModeFor): an avatar marker per change; a click opens its card
+       below    phones (PHONE_QUERY): the marker sits under its block, and its card opens there
      Card safety (plan §7): a card's buttons ignore activation for CLICK_GUARD_MS after it appears or
      moves, so a frame that moves a block under the pointer cannot turn a click into an approval. */
-  const RAIL_WIDE = 1100;
+  const CARD_REM = 18.5;                 // a margin card's width (css/editor.css .hc-rslot)
+  /* U3 (U7's ask): cards when the gutter right of the page — max(10vw, (100vw - 110rem) / 2), the layout's own
+     margin — holds a card; markers when it is narrower; below the block on phones. */
+  function railModeFor(width, rem, phone) {
+    if (phone) return 'below';
+    const w = Number(width) || 0;
+    const r = Number(rem) > 0 ? Number(rem) : 16;
+    return Math.max(0.1 * w, (w - 110 * r) / 2) < CARD_REM * r ? 'markers' : 'cards';
+  }
+  function railMode() {
+    let rem = 16;
+    try {
+      const fs = window.getComputedStyle ? parseFloat(window.getComputedStyle(document.documentElement).fontSize) : NaN;
+      if (fs > 0) rem = fs;
+    } catch (e) { rem = 16; }
+    return railModeFor(window.innerWidth, rem, document.body.classList.contains('hc-phone'));
+  }
   const CLICK_GUARD_MS = 400;
   const POLL_MS = 15000;
   const POLL_LIMIT_MS = 5 * 60 * 1000;
@@ -2406,7 +2393,7 @@
     if (rail.timer) clearTimeout(rail.timer);
     Object.assign(rail, { data: null, cards: [], rects: new Map(), view: 0, active: null, hover: null, pending: new Map(),
       pollUntil: 0, timer: null, nodes: new Map(), stale: false, busy: false });
-    closeSheet();
+    ed.focusOut = null;
     if (rail.el) { rail.el.replaceChildren(); rail.el.hidden = true; }
     document.body.classList.remove('hc-has-rail');
   }
@@ -2424,7 +2411,9 @@
 
   /* Everything the cards need, read once per load (texts through the session's sha cache). */
   async function loadRail(pv, page, main, mine) {
-    if (!pv || pv.mode !== 'overlay' || !pv.ov || !pv.pr || !page || !rail.el) return;
+    if (!pv || pv.mode !== 'overlay' || !pv.pr || !page || !rail.el || page.data) return;
+    if (pv.notes) { await loadNotesRail(pv, page, main, mine); return; }
+    if (!pv.ov) return;
     const pull = pv.pr;
     const n = pull.number;
     const head = headShaOf(pull);
@@ -2452,8 +2441,66 @@
       && C.mayApproveEdit({ login, permission, path: page.file, access, author });
     rail.data = { n, pull, file: page.file, head, base, baseText, headText, edits, comments: list, author, talk,
       eligible: C.proposalEligible(pull, pv.files), trusted: (login) => rule(login, roles.get(login)),
-      may: () => Boolean(me) && rule(me, myRole), main };
+      may: () => Boolean(me) && rule(me, myRole), main, notes: [] };
+    rail.data.notes = await noteAnchors(page.file, C.notesSection.parse(pull.body), railCards(), pv.ov.overlay);
+    if (mine !== ed.loads || ed.pv !== pv) return;
+    wantFocus();
     renderRail();
+  }
+
+  /* U3: a notes-only send drawn on its page: main's own blocks, the notes beside theirs; nothing to approve. */
+  async function loadNotesRail(pv, page, main, mine) {
+    const notes = C.notesSection.parse(pv.pr.body);
+    if (!notes.length) return;
+    const split = C.splitBlocks(await textAt(main, page.file, false));
+    if (!split.ok || mine !== ed.loads || ed.pv !== pv) return;
+    const entries = split.blocks.map((b) => (b.kind === 'space' ? null : b));
+    const anchors = await noteAnchors(page.file, notes, [], entries);
+    if (mine !== ed.loads || ed.pv !== pv) return;
+    rail.data = { n: pv.pr.number, pull: pv.pr, file: page.file, head: headShaOf(pv.pr), edits: [], comments: [], author: loginOf(pv.pr).toLowerCase(),
+      talk: { comments: [], resolved: new Map(), ok: true, partial: false }, eligible: false, trusted: () => false, may: () => false, main,
+      notes: anchors, notesOnly: true, baseText: '', headText: '' };
+    wantFocus();
+    renderRail();
+  }
+
+  /* Each note -> {key, text, anchor}: the frame index of its block — the card of the edit it names, else the
+     block whose note key (HCCore.noteKey) it carries; null when no block on this page matches (not drawn). */
+  async function noteAnchors(file, notes, cards, entries) {
+    if (!notes.length) return [];
+    const at = new Map();
+    try {
+      for (let i = 0; i < entries.length; i += 1) {
+        const e = entries[i];
+        if (!e || typeof e.text !== 'string' || !e.text.trim()) continue;
+        const k = await C.noteKey(file, e.text);
+        if (!at.has(k)) at.set(k, i);
+      }
+    } catch (e) { at.clear(); }                          // no WebCrypto here: only edit keys anchor
+    return notes.map((x) => {
+      const card = cards.find((c) => c.key === x.key && c.anchor !== null);
+      const anchor = card ? card.anchor : at.has(x.key) ? at.get(x.key) : null;
+      return Object.freeze({ key: `note-${x.key}`, text: x.text, anchor });
+    });
+  }
+
+  /* Everything in the margin: the change cards and the note cards, each {key, anchor}. */
+  const railItems = () => rail.cards.concat(rail.data && Array.isArray(rail.data.notes) ? rail.data.notes : []);
+
+  /* A row (or an address) opened this proposal: scroll its first change into view, its card open (ED9, ED47). */
+  function wantFocus() {
+    if (ed.focusWant === null || !rail.data || ed.focusWant !== rail.data.n) return;
+    ed.focusWant = null;
+    if (!rail.cards.length) rail.cards = railCards();
+    focusFirst();
+  }
+  function focusFirst() {
+    const items = railItems().filter((c) => c.anchor !== null).sort((a, b) => a.anchor - b.anchor);
+    if (!items.length) return;
+    ed.focusSeq += 1;
+    ed.focusOut = { n: ed.focusSeq, index: items[0].anchor };
+    rail.active = items[0].key;
+    if (rail.cards.length || rail.nodes.size) renderRail();
   }
 
   /* Every issue comment of proposal n (the approval records may be past the first page), up to the go-live
@@ -2660,9 +2707,9 @@
     const words = {
       declined: `Declined${by}.`,
       failed: `Not live: ${c.reason || 'the site check failed'}.`,
-      conflict: 'This part changed on the site since it was proposed. Use Review to ask for changes.',
+      conflict: 'This part changed on the site since it was proposed. Comment to ask for changes.',
       ambiguous: 'Two identical changes here: review the whole proposal.',
-      whole: 'This proposal is reviewed as a whole (Review).',
+      whole: 'This proposal is approved as a whole, from its row in the bubble.',
     }[c.state];
     if (words) return h('p', { class: `hc-rcard-state is-${c.state}`, role: 'status', text: words });
     if (!c.canAct) return h('p', { class: 'hc-rcard-state', text: 'Waiting for review.' });
@@ -2676,14 +2723,21 @@
     const acts = h('div', { class: 'hc-rcard-acts' });
     for (const a of c.acts) {
       const b = h('button', { type: 'button', class: `hc-rcard-btn is-${a}`, 'data-act': a, disabled: rail.busy === true,
-        'aria-label': a === 'approve' ? 'Approve this change' : 'Reject this change',
-        title: a === 'approve' ? 'Approve (goes live)' : 'Reject' }, icon(a));
+        'aria-label': a === 'approve' ? 'Approve this change' : 'Deny this change',
+        title: a === 'approve' ? 'Approve (goes live)' : 'Deny' }, icon(a), h('span', { text: a === 'approve' ? 'Approve' : 'Deny' }));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         if (Date.now() < Number(card.dataset.armedAt || 0)) return;     // card safety: it just appeared or moved
         decide(a === 'approve' ? 'approved' : 'declined', [c.key]);
       });
       acts.appendChild(b);
+    }
+    // U3 (D3): Comment opens the conversation inline (the card's own talk part)
+    if (canTalk() && c.anchor !== null) {
+      const talk = h('button', { type: 'button', class: 'hc-rcard-btn is-comment', 'data-act': 'comment',
+        'aria-expanded': rail.active === c.key ? 'true' : 'false', title: 'Comment on this change' }, h('span', { text: 'Comment' }));
+      talk.addEventListener('click', (e) => { e.stopPropagation(); railActivate(rail.active === c.key ? null : c.key); });
+      acts.appendChild(talk);
     }
     const body = h('p', { class: 'hc-rcard-body' }, h('b', { text: `${c.verb}: ` }));
     if (c.from) body.appendChild(h('span', { class: 'hc-rcard-from', text: `“${c.from}”` }));
@@ -2709,23 +2763,36 @@
     return card;
   }
 
+  /* U3: a note the proposer left on a block — their photo, "<name>'s note", the text (always as text). */
+  function noteNode(x) {
+    const login = loginOf(rail.data.pull);
+    const card = h('article', { class: 'hc-rcard hc-rnote', 'data-key': x.key, tabindex: '0', 'aria-label': `${login}'s note` },
+      h('div', { class: 'hc-rcard-head' }, avatarFace(login, login),
+        h('div', { class: 'hc-rcard-id' }, h('span', { class: 'hc-rcard-who', text: `${login}'s note` }))),
+      h('p', { class: 'hc-rnote-text', text: x.text }));
+    card.addEventListener('mouseenter', () => { rail.hover = x.key; postEditor(); });
+    card.addEventListener('mouseleave', () => { if (rail.hover === x.key) { rail.hover = null; postEditor(); } });
+    card.addEventListener('click', () => railActivate(x.key));
+    return card;
+  }
+
   function renderRail() {
     if (!rail.el) return;
     rail.cards = railCards();
-    const drawn = rail.cards.filter((c) => c.anchor !== null);
+    const drawn = railItems().filter((c) => c.anchor !== null);
     const on = drawn.length > 0;
     rail.el.hidden = !on;
     document.body.classList.toggle('hc-has-rail', on);
     rail.nodes = new Map();
     rail.el.replaceChildren(...drawn.map((c) => {
-      const node = cardNode(c);
+      const node = c.text !== undefined && c.verb === undefined ? noteNode(c) : cardNode(c);
       rail.nodes.set(c.key, node);
       const marker = h('button', { type: 'button', class: 'hc-rmark', 'data-key': c.key,
-        'aria-label': `${c.verb} suggested by ${loginOf(rail.data.pull)}: open its card` }, avatarFace(loginOf(rail.data.pull), loginOf(rail.data.pull)));
+        'aria-label': c.verb === undefined ? `${loginOf(rail.data.pull)}'s note: open it` : `${c.verb} suggested by ${loginOf(rail.data.pull)}: open its card` },
+      avatarFace(loginOf(rail.data.pull), loginOf(rail.data.pull)));
       marker.addEventListener('click', () => railActivate(rail.active === c.key ? null : c.key));
       return h('div', { class: 'hc-rslot', 'data-key': c.key }, marker, node);
     }));
-    if (rail.sheet) openSheet();
     layoutRail();
     postEditor();
   }
@@ -2739,9 +2806,12 @@
   /* Each card on its block's line (railLayout: no overlap; the active one exactly on its line). */
   function layoutRail() {
     if (!rail.el || rail.el.hidden) return;
-    const narrow = window.innerWidth < RAIL_WIDE;
+    const mode = railMode();
+    const narrow = mode !== 'cards';
+    const below = mode === 'below';
     rail.el.classList.toggle('is-markers', narrow);
-    const drawn = rail.cards.filter((c) => c.anchor !== null && rail.rects.has(c.anchor));
+    rail.el.classList.toggle('is-below', below);
+    const drawn = railItems().filter((c) => c.anchor !== null && rail.rects.has(c.anchor));
     // the bubble sits top right, under the header: cards start below it where it covers the rail
     let minTop = -Infinity;
     if (dock && !document.body.classList.contains('hc-dock-collapsed') && typeof dock.getBoundingClientRect === 'function') {
@@ -2757,7 +2827,8 @@
       const node = rail.nodes.get(c.key);
       const slot = node ? node.parentNode : null;
       const hgt = narrow ? 40 : (node ? node.offsetHeight || 96 : 96);     // measured shown (a hidden slot is 0 high)
-      return { key: c.key, want: Math.max(rail.rects.get(c.anchor).top, minTop), height: hgt, slot };
+      const r = rail.rects.get(c.anchor);
+      return { key: c.key, want: Math.max(below ? r.top + r.height + 4 : r.top, minTop), height: hgt, slot };
     });
     const tops = C.railLayout(want, narrow ? null : rail.active, 8);
     for (const w of want) {
@@ -2787,7 +2858,7 @@
 
   function railHot() {
     const key = rail.hover || rail.active;
-    const c = key ? rail.cards.find((x) => x.key === key) : null;
+    const c = key ? railItems().find((x) => x.key === key) : null;
     return c && c.anchor !== null ? c.anchor : null;
   }
 
@@ -2805,29 +2876,10 @@
     if (!rail.cards.length) return false;
     const c = rail.cards.find((x) => x.anchor === k || (x.kind === 'change' && x.anchor === k - 1));
     if (!c) return false;
-    if (document.body.classList.contains('hc-phone')) openSheet(c.key);
-    else railActivate(c.key);
+    railActivate(c.key);                                  // U3: on phones too, its card opens under its block
     return true;
   }
 
-  function openSheet(focusKey) {
-    closeSheet();
-    const drawn = rail.cards.filter((c) => c.anchor !== null);
-    if (!drawn.length) return;
-    const close = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'rail-sheet-close' }, 'Close');
-    close.addEventListener('click', closeSheet);
-    const sheet = h('section', { class: 'hc-rsheet', role: 'dialog', 'aria-label': 'Suggested changes' },
-      h('div', { class: 'hc-rsheet-head' }, h('b', { text: `${drawn.length} suggested ${plural(drawn.length, 'change', 'changes')}` }), close),
-      ...drawn.map((c) => { const n = cardNode(c); if (c.key === focusKey) n.classList.add('is-active'); return n; }));
-    sheet.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-    document.body.appendChild(sheet);
-    rail.sheet = sheet;
-    close.focus();
-  }
-  function closeSheet() {
-    if (rail.sheet) rail.sheet.remove();
-    rail.sheet = null;
-  }
 
   /* Approve or Reject: the record goes to the proposal; approved keys are then watched on main. */
   async function decide(kind, keys) {
@@ -2888,6 +2940,288 @@
     rail.timer = setTimeout(tick, POLL_MS);
   }
 
+  // ------------------------------------------- the review list in the bubble (U3) ---
+  /* Plan D2 (ED8, ED9, ED11, ED12, ED13, ED46, ED47, ED48). The proposals this viewer may approve
+     (HCCore.visibleProposals: never their own; nobody else sees a count, a list or marks) are rows in the
+     bubble's 'review' panel (HCDock.panel): three on screen, the rest by scrolling. A row = the proposer's
+     photo and name, the page (or "N pages"), when, the site rules' dot, and its kind when it is not a page
+     edit. A click opens its first page with the bubble still out, the row marked, the first change scrolled
+     into view and its margin card open (focusProposal). Go-live applies page edits one by one ("Approve
+     all" approves every open one the viewer may); anything else is approved or declined whole (Approve =
+     GitHub's merge, Decline = close; red site rules are named in plain words before a second click); a
+     notes-only send gets Done (closed: its sender sees "seen"). While someone's proposal is drawn, the
+     panel's head says "Viewing <name>'s changes" with Back; my own edits say "Your changes". */
+  const rv = { open: false, list: null, armed: null, why: null, busy: false };
+  const CHECK_WORDS = Object.freeze({ pass: 'Site rules pass', fail: 'Site rules fail', checking: 'Site rules are checking',
+    unknown: 'Site rules not read yet' });
+  const viewerOf = () => ({ login: sessionLogin(), role: state.role && state.access === 'ok' ? state.role.key : 'read' });
+  const isMine = (pull) => Boolean(sessionLogin()) && loginOf(pull).toLowerCase() === sessionLogin().toLowerCase();
+  const isNotes = (t) => C.proposalKind(t.pull, t.files) === 'notes';
+  /* Does proposal t touch `file`: a changed file, or a notes-only send whose body names that page. */
+  /* Only a proposal wholly inside project files can be another's to approve without Admin (D2): the access list is
+     read only when one is open (a read less on every page for everyone else). */
+  const PROJECT_PATH_RE = /^(?:content\/projects\/[a-z0-9][a-z0-9-]{0,80}\.md|data\/projects\/[a-z0-9][a-z0-9-]{0,80}\.json)$/;
+  const projectOnly = (t) => { const p = C.proposalPaths(t.pull, t.files); return Boolean(p && p.length) && p.every((f) => PROJECT_PATH_RE.test(f)); };
+  const needsAccess = (list) => viewerOf().role !== 'admin' && list.some((t) => !isMine(t.pull) && projectOnly(t));
+  const touches = (t, file) => Boolean(fileRow(t.files, file)) || (isNotes(t) && C.bodyPages(t.pull.body).indexOf(file) >= 0);
+
+  /* The rows: the visible open proposals with their site rules' state. -> the list | null (a stale session). */
+  async function loadReview() {
+    const gen = sessionGen.current();
+    if (!state.session || state.access !== 'ok' || !state.role || state.role.canPush !== true) { rv.list = []; return rv.list; }
+    const all = await openProposals();
+    const access = needsAccess(all) ? await accessRegistry() : null;
+    const vis = C.visibleProposals(viewerOf(), all, access);
+    const list = await Promise.all(vis.map(async (t) => {
+      const head = headShaOf(t.pull);
+      const check = head ? await checkOf(head).catch((e) => { if (quiet(e)) throw e; return { state: 'unknown' }; }) : { state: 'unknown' };
+      return { t, check };
+    }));
+    if (!sessionGen.isCurrent(gen)) return null;
+    rv.list = list;
+    refreshDock();
+    return list;
+  }
+
+  /* The first page of proposal t that the site shows (its file order), as a route, or null. */
+  function firstRouteOf(t) {
+    for (const f of C.proposalPaths(t.pull, t.files) || []) {
+      const pg = C.pageForFile(f, state.regs);
+      if (pg && ROUTE_RE.test(pg.route)) return pg.route;
+    }
+    return null;
+  }
+
+  function rowOf(x) {
+    const p = x.t.pull;
+    const kind = C.proposalKind(p, x.t.files);
+    const pages = [];
+    for (const f of C.proposalPaths(p, x.t.files) || []) {
+      const pg = C.pageForFile(f, state.regs);
+      if (pg && !pages.some((q) => q.route === pg.route)) pages.push(pg);
+    }
+    const what = pages.length === 1 ? pages[0].label : pages.length > 1 ? `${pages.length} pages` : String(p.title || 'a change').slice(0, 120);
+    const check = CHECK_WORDS[x.check && x.check.state] ? x.check.state : 'unknown';
+    return { n: p.number, login: loginOf(p), kind, what, when: cardWhen(p.updated_at || p.created_at), check,
+      eligible: C.proposalEligible(p, x.t.files), head: headShaOf(p), files: x.t.files || [] };
+  }
+
+  function rowButton(text, action, fn, extra) {
+    const b = h('button', Object.assign({ type: 'button', class: 'cms-btn hc-review-act', 'data-action': action, disabled: rv.busy === true }, extra || {}), text);
+    b.addEventListener('click', () => { Promise.resolve(fn()).catch(shown); });
+    return b;
+  }
+
+  function reviewRowNode(r) {
+    const viewing = ed.focusPr === r.n;
+    const open = h('button', { type: 'button', class: 'hc-review-open', 'data-action': 'review-row', 'data-pr': String(r.n),
+      'aria-current': viewing ? 'true' : 'false', title: `Open ${r.login}'s changes on the page` },
+    avatarFace(r.login, r.login),
+    h('span', { class: 'hc-review-main' }, h('span', { class: 'hc-review-who', text: r.login }), h('span', { class: 'hc-review-what', text: r.what })),
+    h('span', { class: 'hc-review-meta' },
+      r.kind !== 'page' ? h('span', { class: 'hc-review-kind', text: C.REVIEW_KIND_WORDS[r.kind] }) : null,
+      h('span', { class: 'hc-review-when', text: r.when }),
+      h('span', { class: `hc-review-dot is-${r.check}`, role: 'img', 'aria-label': CHECK_WORDS[r.check], title: CHECK_WORDS[r.check] })));
+    open.addEventListener('click', () => { focusProposal(r.n).catch(shown); });
+    const acts = h('span', { class: 'hc-review-acts' });
+    if (r.kind === 'notes') acts.appendChild(rowButton('Done', 'review-done', () => rowAction(r, 'done')));
+    else if (r.eligible) acts.appendChild(rowButton('Approve all', 'review-approve-all', () => approveAll(r)));
+    else {
+      const armed = rv.armed === `merge:${r.n}`;
+      acts.appendChild(rowButton(armed ? 'Approve anyway' : 'Approve', 'review-approve', () => rowAction(r, 'merge'), { class: 'cms-btn cms-btn-primary hc-review-act' }));
+      acts.appendChild(rowButton('Decline', 'review-decline', () => rowAction(r, 'close')));
+    }
+    const why = rv.why && rv.why.n === r.n ? h('p', { class: 'hc-review-why', role: 'alert', text: rv.why.text }) : null;
+    return h('li', { class: `hc-review-row${viewing ? ' is-viewing' : ''}`, 'data-pr': String(r.n) }, open, acts, why);
+  }
+
+  /* The panel's head: whose changes the page shows. */
+  function viewingHead() {
+    const pv = ed.pv;
+    const pr = pv && pv.pr && (pv.mode === 'overlay' || pv.mode === 'show') ? pv.pr : null;
+    if (pr && !isMine(pr)) {
+      const who = loginOf(pr);
+      const back = h('button', { type: 'button', class: 'cms-btn hc-review-back', 'data-action': 'review-back',
+        title: 'Back to the page with your own changes' }, 'Back');
+      back.addEventListener('click', () => showOff());
+      return h('div', { class: 'hc-review-head is-viewing', 'data-review-head': 'viewing' }, avatarFace(who, who),
+        h('span', { class: 'hc-review-head-text', text: `Viewing ${who}'s changes` }), back);
+    }
+    const me = sessionLogin();
+    if (me && ((pr && isMine(pr)) || (ed.draft && canEditPage(ed.page) && pageChanges() > 0))) {
+      return h('div', { class: 'hc-review-head is-mine', 'data-review-head': 'mine' }, avatarFace(me, me),
+        h('span', { class: 'hc-review-head-text', text: 'Your changes' }));
+    }
+    return null;
+  }
+
+  /* HCDock.panel('review', …): a pure function of rv and the page view. */
+  function reviewPanel(view) {
+    if (!view || !view.signedIn || !ed.on) return null;
+    const out = [viewingHead()];
+    if (!rv.open) return out;
+    const list = rv.list || [];
+    const close = h('button', { type: 'button', class: 'hc-review-close', 'data-action': 'review-close', 'aria-label': 'Close the list',
+      title: 'Close the list (Escape)' }, '×');
+    close.addEventListener('click', () => closeReview());
+    const top = h('div', { class: 'hc-review-top' },
+      h('b', { text: rv.list === null ? 'Reading what waits for review…' : list.length ? `${list.length} to review` : 'Nothing to review' }), close);
+    // phones: the list is a bottom sheet over the page (.hc-rsheet), opened from the bubble's "N to review"
+    const phone = document.body.classList.contains('hc-phone');
+    out.push(h('section', { class: `hc-review${phone ? ' hc-rsheet' : ''}`, 'data-review': true, 'aria-label': 'To review',
+      role: phone ? 'dialog' : null }, top,
+      list.length ? h('ul', { class: 'hc-review-list' }, ...list.map((x) => reviewRowNode(rowOf(x)))) : null));
+    return out;
+  }
+
+  function openReview() {
+    rv.open = true;
+    D.unfold();
+    refreshDock();
+    loadReview().catch(shown);
+  }
+  function closeReview() {
+    Object.assign(rv, { open: false, armed: null, why: null });
+    refreshDock();
+  }
+
+  /* Open proposal n on its first page: the bubble stays out with its row marked; the first change is scrolled
+     into view once the margin cards are read (loadRail, ed.focusWant). A proposal the viewer may not see is
+     drawn nowhere (pageView). */
+  async function focusProposal(n) {
+    Object.assign(rv, { armed: null, why: null });
+    Object.assign(ed, { show: null, plain: null, focusPr: n, focusWant: n });     // at once: the page's next draw keeps it
+    let t = null;
+    try { t = (await openProposals()).find((x) => x.pull.number === n) || null; } catch (e) { if (quiet(e)) return; }
+    if (ed.focusPr !== n) return;                          // another row (or Back) came first
+    if (ed.trayOpen) { ed.trayOpen = false; applyTray(); }
+    if (!ed.on) { refreshDock(); return; }
+    // the page on screen when the proposal changes it (a click on its block), else its first page
+    const route = t && !(ed.page && touches(t, ed.page.file)) ? firstRouteOf(t) : null;
+    if (route && route !== currentRoute()) {
+      ed.keepFocus = route;
+      refreshDock();
+      window.location.hash = `#${route}`;               // onHashChange loads the frame there, the proposal kept
+      return;
+    }
+    const drawn = Boolean(ed.pv && ed.pv.pr && ed.pv.pr.number === n);
+    // already drawn: scroll to its first change now (or when its cards are read: loadRail, ed.focusWant)
+    if (drawn) { if (rail.data && rail.data.n === n) { ed.focusWant = null; focusFirst(); } }
+    else { clearSelection(); frameTo(currentRoute(), false); }
+    refreshDock();
+  }
+
+  /* Why the site rules are red (or not done), in plain words: the first three findings of the check. */
+  async function redReasons(r) {
+    const st = r.head ? await checkOf(r.head).catch(() => ({ state: 'unknown' })) : { state: 'unknown' };
+    let lines = [];
+    if (st.state === 'fail' && Number.isInteger(st.runId)) {
+      try {
+        lines = (await C.loadAnnotations((p) => api(p), st.runId)).map((a) => String(a.message || '').slice(0, 200)).filter(Boolean).slice(0, 3);
+      } catch (e) { lines = []; }
+    }
+    const first = st.state === 'checking' ? 'The site rules are still checking this proposal'
+      : st.state === 'fail' ? 'The site rules do not pass on this proposal' : 'The site rules have not answered for this proposal';
+    return `${first}${lines.length ? `: ${lines.join(' · ')}` : ''}. Press Approve anyway to approve it all the same.`;
+  }
+
+  const ROW_DONE = Object.freeze({ merge: 'Approved: it goes live in about a minute.', close: 'Declined.', done: 'Done: the note is closed.' });
+  /* Approve (merge) / Decline (close) a proposal reviewed whole, or Done (close) a notes-only send. */
+  async function rowAction(r, action) {
+    if (rv.busy || !state.client) return;
+    if (action === 'merge' && r.check !== 'pass' && rv.armed !== `merge:${r.n}`) {
+      rv.armed = `merge:${r.n}`;
+      rv.why = { n: r.n, text: await redReasons(r) };
+      refreshDock();
+      return;
+    }
+    rv.busy = true;
+    refreshDock();
+    let out = null;
+    try {
+      if (action === 'merge') {
+        // a code owner who is not an admin approves first (main's ruleset); an admin's merge bypasses it
+        if (!state.role || state.role.key !== 'admin') {
+          const a = await C.runReviewAction(state.client, 'approve', { number: r.n, sha: r.head });
+          if (!a.ok) out = a;
+        }
+        if (!out) out = await C.runReviewAction(state.client, 'merge', { number: r.n, sha: r.head, checkState: r.check, confirmed: true });
+      } else out = await C.runReviewAction(state.client, 'close', { number: r.n });
+    } finally { rv.busy = false; }
+    Object.assign(rv, { armed: null, why: null });
+    say(out.ok ? ROW_DONE[action] : out.message, out.ok ? null : 'error');
+    if (out.ok) {
+      forgetProposals();
+      D.loadCount();
+      if (ed.focusPr === r.n) { showOff(); return; }
+    }
+    refreshDock();
+  }
+
+  /* Approve all: one approval record for every open edit of every page the viewer may approve (go-live
+     applies them one by one, as the margin cards' Approve does). */
+  async function approveAll(r) {
+    if (rv.busy || !state.client || !r.head) return;
+    rv.busy = true;
+    refreshDock();
+    let out;
+    try {
+      const main = await mainSha();
+      const [base, access, committers] = await Promise.all([mergeBaseOf(main, r.head), accessRegistry(), committersOf(r.n).catch(() => null)]);
+      const me = sessionLogin().toLowerCase();
+      if (!committers || committers.has(me)) {
+        out = { ok: false, message: 'You cannot approve this proposal: you wrote part of it, or who wrote it could not be read.' };
+      } else {
+        const keys = [];
+        for (const f of r.files) {
+          if (!f || typeof f.filename !== 'string' || !C.mayApproveEdit({ login: me, permission: ROLE_NAME[state.role && state.role.key] || 'read',
+            path: f.filename, access, author: r.login })) continue;
+          const [b, hd, m] = await Promise.all([textAt(base, f.filename, true), textAt(r.head, f.filename, true), textAt(main, f.filename, false)]);
+          for (const e of (await C.proposalEdits(f.filename, b, hd, m)) || []) if (e.state === 'open') keys.push(e.key);
+        }
+        out = keys.length ? await C.runRecord(state.client, r.n, 'approved', keys) : { ok: false, message: 'Nothing here can be approved now.' };
+        const done = Array.isArray(out.done) ? out.done : [];
+        if (done.length && rail.data && rail.data.n === r.n) {
+          for (const k of done) rail.pending.set(k, 'approved');
+          renderRail();
+          watchMain();
+        }
+      }
+    } finally { rv.busy = false; }
+    say(out.message, out.ok ? null : 'error');
+    refreshDock();
+  }
+
+  /* ONE Escape stack (D18, ED52): Escape closes only the top-most layer — the account menu, then the block
+     open in the page, then the bubble's review list (on phones its bottom sheet), then what HCDock.escape
+     closes (the bubble's own panels and sheet), then the editor page. -> the layer it closed, or null. A field that uses Escape itself
+     (defaultPrevented) keeps it. */
+  function escapeTop() {
+    if (menu && !menu.hidden) {
+      closeMenu();
+      if (avatarBtn && typeof avatarBtn.focus === 'function') avatarBtn.focus();
+      return 'menu';
+    }
+    if (!ed.on) return null;
+    if (ed.selected !== null || ed.inPage) {
+      Object.assign(ed, { sel: null, selected: null, inPage: null, asMarkdown: null });
+      postEditor();
+      return 'block';
+    }
+    if (rv.open) { closeReview(); return 'panel'; }
+    if (typeof D.escape === 'function' && D.escape() === true) return 'panel';
+    if (ed.trayOpen) {
+      closeTray();
+      if (handle && typeof handle.focus === 'function') handle.focus();
+      return 'page';
+    }
+    return null;
+  }
+  function onEscape(e) {
+    if (!e || e.key !== 'Escape' || e.defaultPrevented) return;
+    if (escapeTop() && typeof e.preventDefault === 'function') e.preventDefault();
+  }
+
   /* U7 (plan D12): a load says hc-ready twice. The first is the handshake (its script runs: it may hear
      hc-editor now); the second is its first paint (Editor mode applied, its style sheet in, the page drawn,
      js/editor-frame.js paintSignal). Only then does the frame take #content's place (body.hc-frame-live), so
@@ -2922,7 +3256,11 @@
     const locked = pageLocked(ed.page);
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
       selected: ed.selected, overlay: ed.pv ? ed.pv.marks : [], open: openBlockMessage(), hot: railHot(), tint, people, locked,
-      cmd: ed.cmdOut || null }, '*');
+      cmd: ed.cmdOut || null,
+      // U3: the block to scroll into view once (the first change of a proposal opened from its row), and the
+      // blocks the margin's note cards sit beside (the frame reports where they are, as for marked blocks)
+      focus: ed.focusOut, anchors: rail.data && Array.isArray(rail.data.notes)
+        ? rail.data.notes.filter((x) => x.anchor !== null).map((x) => x.anchor) : [] }, '*');
     ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
 
@@ -3034,6 +3372,9 @@
     window.location.hash = `#${route}`;
   }
 
+  /* U3 (ED53): the page a route shows — its page id, else the route without its @heading and ?query. */
+  const pageKeyOf = (route) => pageIdForRoute(route) || String(route).split('@')[0].split('?')[0];
+  let hashPage = null;                      // the page of the last route onHashChange saw (start: the first one)
   function onHashChange() {
     const param = takeEditorParam();
     if (param) {
@@ -3045,8 +3386,19 @@
       if (ed.trayOpen) trayGo(trayHash);
     }
     const r = currentRoute();
+    // U3 (ED53): viewing a proposal ends when its PAGE is left (a heading or Contents link, #/<route>@<id>,
+    // stays on it) — unless its row (or address) is taking us there
+    const key = pageKeyOf(r);
+    const was = hashPage;
+    hashPage = key;
+    if (ed.keepFocus !== null && key === pageKeyOf(ed.keepFocus)) ed.keepFocus = null;
+    else if ((!param || param.pr === null) && key !== was) {
+      Object.assign(ed, { show: null, focusPr: null, focusWant: null, plain: null, keepFocus: null });
+      Object.assign(rv, { armed: null, why: null });
+    }
     const ours = ed.fromFrame !== null && r === ed.fromFrame;
     ed.fromFrame = null;
+    refreshDock();
     if (ours || !ed.on) return;
     frameTo(r, false);
   }
@@ -3319,12 +3671,11 @@
     menuWho = h('p', { class: 'hc-menu-who' });
     menu = h('div', { class: 'hc-menu', role: 'menu', 'aria-label': 'Your account' }, menuWho, menuWhole, menuData, signOut);
     menu.hidden = true;
-    const escape = (e) => { if (e && e.key === 'Escape') closeMenu(); };
-    avatarBtn.addEventListener('keydown', escape);
-    menu.addEventListener('keydown', escape);
+    // Escape: the one stack (onEscape, below) closes the menu first
     // round 2 (R2a, Kyle 2026-10-15): who comes first (photo, name with role, the Proposals link under it), then the switch
     controls = h('span', { class: 'hc-editor-controls' }, who, switchBtn);
     ({ dock, handle } = D.mount(document.body, dockApi()));
+    D.panel('review', (v) => reviewPanel(v));            // U3: the review list and whose changes are on screen
     notice = h('p', { class: 'hc-notice', role: 'status' });
     notice.hidden = true;
     // the thin editor page (U0b): its title says which view this is
@@ -3340,17 +3691,10 @@
       trayBody);
     // the editor's one status line lives in the bubble, which is on screen over the page and the editor page alike
     dock.appendChild(notice);
-    // Escape leaves the editor page, wherever the focus is (the bubble's button included); a field or menu that
-    // uses Escape itself (the account menu, a Markdown box) keeps it
-    if (typeof document.addEventListener === 'function') document.addEventListener('keydown', (e) => {
-      if (!e || e.key !== 'Escape' || e.defaultPrevented || !ed.on || !ed.trayOpen || (menu && !menu.hidden)) return;
-      closeTray();
-      if (handle && typeof handle.focus === 'function') handle.focus();
-    });
+    // U3 (D18, ED52): ONE Escape stack, wherever the focus is; a field that uses Escape itself keeps it
+    if (typeof document.addEventListener === 'function') document.addEventListener('keydown', onEscape);
     tray.hidden = true;
-    // the bubble's "Proposals" count: the proposals list is gone (U0b), so it follows that list's redirect (the
-    // page + the bubble); U3 opens the bubble's review list from it
-    handle.addEventListener('click', () => trayGo('#/'));
+    // the bubble's "N to review" row: its click is the dock's (api.openReview above opens or closes U3's list)
     document.body.appendChild(tray);
     // U4b: another tab wrote this login's drafts (one storage entry per page): read them again. When it changed
     // THIS page, say so; when it REMOVED this page's draft (proposed or discarded there; U1: sign-out keeps it), this tab
@@ -3382,7 +3726,7 @@
     if (mq) {
       const apply = () => {
         document.body.classList.toggle('hc-phone', Boolean(mq.matches));
-        if (rail.data) { closeSheet(); layoutRail(); }
+        if (rail.data) layoutRail();
       };
       apply();
       if (typeof mq.addEventListener === 'function') mq.addEventListener('change', apply);
@@ -4166,6 +4510,7 @@
     membersMount();
     loadAvatars();
     window.addEventListener('message', onMessage);
+    hashPage = pageKeyOf(currentRoute());
     window.addEventListener('hashchange', onHashChange);
     // U1: a sign-out in another tab signs this one out too. A message with an fp (another
     // tab's token was refused by GitHub) counts only when this tab holds that same token:
@@ -4233,7 +4578,10 @@
     newProjectForm,
     makeProjectDraft,
     personFields,
-    state: () => Object.freeze({ focusPr: ed.focusPr, trayOpen: ed.trayOpen, trayHash }),
+    state: () => Object.freeze({ focusPr: ed.focusPr, trayOpen: ed.trayOpen, trayHash, reviewOpen: rv.open, plain: ed.plain }),
+    railModeFor,
+    escapeTop: () => escapeTop(),
+    openReview: () => openReview(),           // U2b's phone "N to review" row
   });
   window.HCEditor = Object.freeze({ start, mountPreview, refresh, openView, helpers });
 }());

@@ -2273,7 +2273,11 @@
     });
   }
 
-  const reviewUrl = (origin, n) => `${origin}/cms/#/review/${n}`;
+  /* U3 (plan D18): the proposal on the site itself: its first page (route, when known) with the bubble's review
+     list open on its row. The old /cms/#/review/<n> keeps working through js/cms-redirect.js. */
+  const REVIEW_ROUTE_RE = /^\/[a-z0-9][a-z0-9/_-]{0,200}$/;
+  const reviewUrl = (origin, n, route) => `${origin}/#${typeof route === 'string' && REVIEW_ROUTE_RE.test(route)
+    && route.indexOf('//') < 0 ? route : '/'}?editor=review&pr=${n}`;
 
   /* The PR body: the summary, the pages, where it was made, and (once the
      number is known) the link to it in the editor's Review tab. */
@@ -2282,7 +2286,7 @@
     const lines = [trimmed(x.summary), '', 'Pages:'];
     for (const p of listOf(x.pages)) if (isObj(p)) lines.push(`- ${p.label} (\`${p.file}\`)`);
     lines.push('', 'Made in the site editor.');
-    if (typeof x.reviewUrl === 'string' && x.reviewUrl) lines.push(`Review it in the editor: ${x.reviewUrl}`);
+    if (typeof x.reviewUrl === 'string' && x.reviewUrl) lines.push(`Review it on the site: ${x.reviewUrl}`);
     const text = `${lines.join('\n')}\n`;
     return listOf(x.notes).length ? notesSection.serialise(text, x.notes) : text;
   }
@@ -3817,6 +3821,96 @@
       && r.every((f) => isObj(f) && f.status === 'modified' && GO_LIVE_PAGE_RE.test(String(f.filename)));
   }
 
+  /* ---- U3 (editor UI/UX build, plan D2, ED11): who SEES a proposal. Seeing is a UI rule only (the
+     repository is public on GitHub; approval itself is enforced by go-live, CODEOWNERS and the ruleset):
+     a viewer sees only the proposals they could approve, never their own.
+       page edits inside one project's files (content/projects/<id>.md, data/projects/<id>.json)
+                                         Admin; Maintain or Write when an editor of that project
+       anything else (setup, tools, Team, people, access, a new project, any shared file)   Admin only
+       a notes-only send (no changed file)  by the pages its body names, the same rows
+     viewer: {login, role} with role the editor's role key ('admin' | 'maintain' | 'push' | 'read') or the
+     role object ({key}); access: MAIN's data/graph/edit-access.json (ownsAll reads it). */
+  const viewerRole = (v) => {
+    const r = isObj(v) ? v.role : null;
+    const key = isObj(r) ? r.key : r;
+    return typeof key === 'string' ? key : 'read';
+  };
+  const viewerLogin = (v) => (isObj(v) && typeof v.login === 'string' ? v.login.toLowerCase() : '');
+  /* May this viewer review the page held by `page` (a file path, or {file})? */
+  function mayReviewPage(viewer, page, access) {
+    const path = typeof page === 'string' ? page : (isObj(page) && typeof page.file === 'string' ? page.file : '');
+    const login = viewerLogin(viewer);
+    const role = viewerRole(viewer);
+    if (!login || !path) return false;
+    if (role === 'admin') return true;
+    if (role !== 'maintain' && role !== 'push') return false;
+    return ownsAll({ login, files: [path], access });
+  }
+  /* The pages a proposal's body names ("- <label> (`<file>`)" lines, prBody's own), for a notes-only send. */
+  const BODY_PAGE_RE = /^- [^\n]{0,300} \(`((?:content|data)\/[a-z0-9/_.-]{1,200})`\)$/gm;
+  function bodyPages(body) {
+    const text = typeof body === 'string' ? body.slice(0, 20000) : '';
+    const out = [];
+    for (const m of text.matchAll(BODY_PAGE_RE)) if (m[1].indexOf('..') < 0 && out.indexOf(m[1]) < 0) out.push(m[1]);
+    return out;
+  }
+  /* A notes-only send: GitHub lists no changed file (or says changed_files 0). */
+  const isNotesOnly = (pull, files) => (Array.isArray(files) ? files.length === 0 : false)
+    || (isObj(pull) && pull.changed_files === 0);
+  /* The files a proposal touches -> [path] | null (its files unread): every changed file and every
+     renamed-away one; a notes-only send's are the pages its body names. */
+  function proposalPaths(pull, files) {
+    if (isNotesOnly(pull, files)) return bodyPages(isObj(pull) ? pull.body : '');
+    if (!Array.isArray(files)) return null;
+    const out = [];
+    for (const f of files) {
+      for (const p of [f && f.filename, f && f.previous_filename]) if (typeof p === 'string' && out.indexOf(p) < 0) out.push(p);
+    }
+    return out;
+  }
+  /* May this viewer review this proposal ({pull, files})? Never their own; Admin anything (even unread
+     files); Maintain / Write only when EVERY file is a file of a project they edit. */
+  function mayReviewProposal(viewer, entry, access) {
+    const t = isObj(entry) ? entry : {};
+    if (!isPull(t.pull)) return false;
+    const login = viewerLogin(viewer);
+    const role = viewerRole(viewer);
+    if (!login || loginOf(t.pull) === login || !loginOf(t.pull)) return false;
+    if (role === 'admin') return true;
+    if (role !== 'maintain' && role !== 'push') return false;
+    const paths = proposalPaths(t.pull, t.files);
+    return Boolean(paths && paths.length) && ownsAll({ login, files: paths, access });
+  }
+  /* The open proposals ([{pull, files}], openProposals' shape) this viewer may see, in the given order. */
+  function visibleProposals(viewer, proposals, access) {
+    return listOf(proposals).filter((t) => isObj(t) && isPull(t.pull) && (!t.pull.state || t.pull.state === 'open')
+      && mayReviewProposal(viewer, t, access));
+  }
+  /* What kind of send a proposal is, from its files: 'page' (pages, maybe with the image list), 'notes' (no
+     changed file), 'facts' (project facts files), 'project' (adds a facts file), 'people' (the Team list),
+     'access' (only data/projects.json: an edit-access change), else 'site'. REVIEW_KIND_WORDS names it. */
+  const REVIEW_KIND_WORDS = Object.freeze({ facts: 'project facts', project: 'new project', people: 'people',
+    access: 'access request', site: 'site data', notes: 'note' });
+  function proposalKind(pull, files) {
+    if (isNotesOnly(pull, files)) return 'notes';
+    if (!Array.isArray(files)) return 'site';
+    const names = files.filter(isObj).map((f) => String(f.filename));
+    if (files.some((f) => isObj(f) && f.status === 'added' && PROJECT_FACTS_FILE_RE.test(String(f.filename)))) return 'project';
+    if (names.length && names.every((p) => PROJECT_FACTS_FILE_RE.test(p))) return 'facts';
+    if (names.length && names.every((p) => p === 'data/people.json')) return 'people';
+    if (names.length && names.every((p) => p === 'data/projects.json')) return 'access';
+    if (names.some((p) => /^content\/.+\.md$/.test(p)) && names.every((p) => /^content\/.+\.md$/.test(p)
+      || p === 'data/cloudinary-manifest.json')) return 'page';
+    return 'site';
+  }
+  /* A note's block key (U3 + U4): sha256(path NUL block NUL block), the block's text without its trailing
+     blank space: the record key of a change that leaves the block as it is. A note on a changed block may
+     carry that change's own edit key instead; both anchor it. */
+  const noteKey = (path, blockText, subtle) => {
+    const t = String(blockText || '').replace(/\s+$/, '');
+    return editKey(String(path), t, t, undefined, undefined, subtle);
+  };
+
   /* One edit's change in words for its card: {verb, from, to}, Markdown marks dropped, one line, at
      most CARD_CLIP characters per side. Plain text: the caller sets it with textContent. */
   const CARD_CLIP = 160;
@@ -4203,6 +4297,7 @@
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
+    mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, pageForFile,
     ownProposals, collectProposal, proposeRequest, runPropose,
     NOTE_MAX, notesSection, mergeNotes, SEND_KINDS, splitSend, proposalTitle, proposalCommit, pageChangeCount,
     OWN_SENDS_DAYS, sentStatus, ownSends, UNDO_CHANGED_TEXT, UNDO_DROPPED_TEXT, UNDO_BODY_TEXT, UNDO_FAILED_TEXT, runUndo,

@@ -48,9 +48,10 @@
      panel(name, renderFn)
                     a named slot: renderFn(view) -> a node, an array of nodes, or null, drawn into
                     div.hc-dock-panel[data-dock-panel=<name>] on every refresh; renderFn null removes the slot.
-                    The slot named 'review' sits under the review row and is drawn only while that row is open
-                    (its default says "Loading…" until U3 registers its list); every other slot is drawn at the
-                    end of the bubble.
+                    The slot named 'review' sits under the review row and shows whatever its renderFn returns
+                    (hidden when that is nothing): js/editor.js draws there whose changes are on screen and, while
+                    its review list is open, the list. Its default says "Loading…" while the dock's own 'review'
+                    list is open (a page without U3's list); every other slot is drawn at the end of the bubble.
      sent(number)   a send just landed (opened, or one more commit on my open send): the sent row counts it as
                     waiting at once (the list read from GitHub replaces it later)
      offerUndo({items, run})
@@ -67,7 +68,7 @@
      scrolled(y)    the page frame scrolled to y (px): the same fold rule as the page's own scroll (D13); the frame
                     has no scroll message yet, so js/editor.js does not call it today
      escape()       closes one layer — an open list, else the phone sheet — and says true; false when nothing was
-                    open (U3's Escape stack calls it in order)
+                    open. The one Escape key handler is js/editor.js's stack (D18), which calls this in order
 
    The `api` keys (every one is required; functions unless said otherwise):
      h(tag, attrs, ...kids)   js/editor.js's DOM builder (text always as text)
@@ -82,7 +83,9 @@
      go(route)                opens the page at `route` (Editor stays on: the marks show)
      loadSends()              Promise of MY sends (HCCore.ownSends' rows, each with `route` or null), or null
      openSend(item)           opens the page a send of mine changed
-     openReview()             on a phone: opens the page's review sheet (true) or not (false: nothing drawn)
+     openReview()             the review row was clicked: js/editor.js opens or closes its review list and says true
+                              (it owns that list, on a phone too); false lets the dock open its own 'review' slot
+     reviewOpen()             optional: true while js/editor.js's review list is open (the row's aria-expanded)
      shown(error)             says a failure on the status line
      avatar(login, first)     the face node for a login (committed avatar or the first letter)
      accessAsk(a, projectId, name, result)   the Request edit access control (or null), its result line `result`
@@ -187,8 +190,9 @@
     dockLock = h('div', { class: 'hc-dock-lock', role: 'status', 'data-dock-lock': true });
     dockLock.hidden = true;
     handle = button({ class: 'hc-dock-pages hc-dock-rowbtn', 'data-action': 'tray-open', 'aria-expanded': 'false' }, 'to review');
+    // ONE owner for the click: js/editor.js's review list when it has one, else the dock's own slot
     handle.addEventListener('click', () => {
-      if (isPhone() && api.openReview()) { setSheet(false); return; }
+      if (api.openReview()) return;
       toggle('review');
     });
     reviewRow = h('div', { class: 'hc-dock-row', 'data-dock-row': 'review' }, handle);
@@ -215,17 +219,14 @@
     host.appendChild(dock);
     host.appendChild(dockTag);
     // the review list's slot (U3 fills it with panel('review', fn)); until then it says it is loading
-    panels.set('review', { render: () => h('p', { class: 'hc-dock-empty', text: 'Loading…' }), slot: null });
+    panels.set('review', { render: () => (open === 'review' ? h('p', { class: 'hc-dock-empty', text: 'Loading…' }) : null), slot: null });
 
     // D13: fold on scroll, unless the pointer is in the bubble or one of its lists is scrolling
     dock.addEventListener('pointerenter', () => { pointerIn = true; });
     dock.addEventListener('pointerleave', () => { pointerIn = false; });
     for (const list of [changesList, sentList]) list.addEventListener('scroll', () => { listScrollAt = now(); }, { passive: true });
     if (typeof window.addEventListener === 'function') window.addEventListener('scroll', onScroll, { passive: true });
-    // Escape closes one layer (an open list, then the phone sheet)
-    dock.addEventListener('keydown', (e) => {
-      if (e && e.key === 'Escape' && escape()) { if (e.preventDefault) e.preventDefault(); }
-    });
+    // Escape: js/editor.js's one stack (D18) listens on the document and calls escape() in its order
     sheetDrag();
     let collapsed = false;
     try { const s = api.store(); collapsed = Boolean(s && s.getItem(DOCK_KEY) === 'collapsed'); } catch (e) { collapsed = false; }
@@ -531,7 +532,9 @@
 
     // the review row (its count from setCount; U3's list in the 'review' slot)
     show(reviewRow, signedIn && Boolean(v.on) && reviewCount > 0);
+    handle.hidden = reviewRow.hidden;                       // the one owner of whether the count shows
     if (reviewRow.hidden && open === 'review') open = '';
+    const reviewing = open === 'review' || (typeof api.reviewOpen === 'function' && api.reviewOpen() === true);
 
     // the sent row: my sends
     const mine = signedIn ? sendList() : [];
@@ -544,9 +547,9 @@
     sentList.hidden = open !== 'sent';
     sentList.replaceChildren(...(open === 'sent' ? sentItems(mine) : []));
     dockCount.setAttribute('aria-expanded', open === 'changes' ? 'true' : 'false');
-    handle.setAttribute('aria-expanded', open === 'review' ? 'true' : 'false');
+    handle.setAttribute('aria-expanded', reviewing ? 'true' : 'false');
     sentBtn.setAttribute('aria-expanded', open === 'sent' ? 'true' : 'false');
-    dock.classList.toggle('is-open', Boolean(open));
+    dock.classList.toggle('is-open', Boolean(open) || reviewing);
 
     // the rail keeps clear of the bubble (css/editor.css reads its size)
     const bs = document.body.style;
@@ -586,9 +589,9 @@
         } else dock.appendChild(p.slot);
       }
       if (name === 'review') {
-        const on = open === 'review';
-        p.slot.hidden = !on;
-        p.slot.replaceChildren(...(on ? [].concat(p.render(v) || []).filter(Boolean) : []));
+        const kids = [].concat(p.render(v) || []).filter(Boolean);
+        p.slot.hidden = kids.length === 0;
+        p.slot.replaceChildren(...kids);
         continue;
       }
       p.slot.replaceChildren(...[].concat(p.render(v) || []).filter(Boolean));

@@ -84,7 +84,7 @@ test('load order (1/2): with the open proposals still unread, the frame is alrea
 
 test('load order (2/2): once the open proposals are in, the marks arrive by a LATER hc-editor, on the same load', async () => {
   const pulls = heldPulls();
-  const page = await on({ hash: `#${UBUNTU_ROUTE}`, intercept: pulls.intercept });
+  const page = await on({ hash: `#${UBUNTU_ROUTE}`, intercept: pulls.intercept, variant: 'admin' });   // U3 (ED11): an approver
   const nonce = page.nonce();
   await page.send({ type: 'hc-ready' });
   // the page file waits for the proposals (it is drawn ONCE, with them); the frame asks it meanwhile

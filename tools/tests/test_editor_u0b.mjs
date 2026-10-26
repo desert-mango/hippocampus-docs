@@ -109,7 +109,7 @@ test('REDIRECTS: one table, every retired address and its target (the page + bub
 });
 
 test('redirect #/review/<n>: lands on the page on screen with that proposal drawn (ed.focusPr = n), the bubble out', async () => {
-  const page = await on(UBUNTU_ROUTE, { tucked: true, site: { extra: secondProposal() } });
+  const page = await on(UBUNTU_ROUTE, { tucked: true, site: { extra: secondProposal(), variant: 'admin' } });   // U3: an approver
   assert.equal(lastEditor(page).tint, 2, 'before: the newest (#2, second-author) is drawn');
   assert.equal(page.win.HCEditor.openView('#/review/1'), true);
   await settle();
@@ -123,7 +123,7 @@ test('redirect #/review/<n>: lands on the page on screen with that proposal draw
 
 test('redirect #/review/<n> from a site address: ?editor=review&pr=<n> (and the old ?editor=proposals&pr=<n>) is stripped, focus set', async () => {
   for (const tab of ['review', 'proposals']) {
-    const page = openSite({ hash: `#${UBUNTU_ROUTE}?editor=${tab}&pr=1`, extra: secondProposal() });
+    const page = openSite({ hash: `#${UBUNTU_ROUTE}?editor=${tab}&pr=1`, extra: secondProposal(), variant: 'admin' });   // U3: an approver
     await settle();
     await page.send({ type: 'hc-ready' });
     assert.equal(page.location.hash, `#${UBUNTU_ROUTE}`, `${tab}: the parameter is stripped`);

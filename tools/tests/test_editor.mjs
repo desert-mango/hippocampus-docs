@@ -271,7 +271,7 @@ test('U4a: the Editor switch and the avatar sit in the dock (top right since V1)
 });
 
 test('R2a (round 2): the bubble is balanced: photo, name with role and the Proposals link, then the switch; count and Send below', async () => {
-  const page = await editorOn();
+  const page = await editorOn({ variant: 'admin' });          // U3 (ED11): an Admin, who may review PR #1
   await new Promise((r) => setImmediate(r));
   const dock = page.one((e) => e.classList.contains('hc-dock'));
   const order = findAll(dock, (e) => e.attrs['data-action'] === 'avatar' || e.attrs['data-editor-switch'] !== undefined
@@ -285,9 +285,9 @@ test('R2a (round 2): the bubble is balanced: photo, name with role and the Propo
   assert.ok(id, 'name and role chip sit together');
   const link = page.handle();
   assert.equal(findAll(id, (x) => x === link).length, 0, 'the review count is no longer under the name');
-  // a Writer who approves no project has nothing to review: the row is not shown (test_editor_dock.mjs: the count)
-  assert.equal(link.textContent, '0 to review');
-  assert.equal(link.parent.hidden, true);
+  // an Admin may review PR #1 (U3's rule, HCCore.visibleProposals): the row shows its count (test_editor_dock.mjs: 0 hides it)
+  assert.equal(link.textContent, '1 to review');
+  assert.equal(link.parent.hidden, false);
 });
 
 test('U4a: the dock counts this page\'s changes; Send for review is off until there is one (U0b: no Send box)', async () => {
@@ -463,7 +463,7 @@ const UBUNTU_ROUTE = '/setup/raspberry-pi/ubuntu-24-04-server';
 const UBUNTU_FILE = 'content/setup/raspberry-pi/ubuntu-24-04-server.md';
 const fixtureText = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
 test('the thin editor page (U0b): the account menu\'s Data files opens it; Back to the page and Escape close it; kept for the tab', async () => {
-  const page = await editorOn();
+  const page = await editorOn({ variant: 'admin' });          // U3 (ED11): the Proposals link shows for an approver
   await page.dataFiles();
   assert.equal(page.tray().hidden, false);
   assert.ok(page.body.classList.contains('hc-tray-open'));
@@ -978,7 +978,8 @@ const pageBar = (page) => page.one((e) => e.classList.contains('hc-pagebar'));
 const marksOf = (m) => [...m.overlay].map((x) => ({ index: x.index, mark: x.mark }));
 
 async function ubuntuOn(opts) {
-  const page = await editorOn(Object.assign({ hash: `#${UBUNTU_ROUTE}` }, opts));
+  // U3 (ED11): others' proposals on a setup page are drawn for an Admin only
+  const page = await editorOn(Object.assign({ hash: `#${UBUNTU_ROUTE}`, variant: 'admin' }, opts));
   await page.send({ type: 'hc-ready' });
   return page;
 }
@@ -1078,9 +1079,9 @@ test('overlay: a block main ALSO changed since the merge base shows main\'s vers
   assert.ok(ov.overlay[k].text.includes('# main moved this line'), 'main\'s version, never a guess');
   const marks = marksOf(page.editorMessages().at(-1));
   assert.deepEqual(marks.filter((x) => x.mark === 'conflict'), [{ index: k, mark: 'conflict' }]);
-  // a read-only role gets the same mark (U0b: the bar's words and its Update from main button went with the bar)
+  // U3 (ED11): a read-only role may approve nothing, so it gets no marks at all (it was: the same mark)
   const ro = await ubuntuOn({ files: { [UBUNTU_FILE]: main.text }, variant: 'readonly' });
-  assert.deepEqual(marksOf(ro.editorMessages().at(-1)).filter((x) => x.mark === 'conflict'), [{ index: k, mark: 'conflict' }]);
+  assert.deepEqual(marksOf(ro.editorMessages().at(-1)), []);
 });
 
 
@@ -1259,7 +1260,7 @@ test('frame: "side by side" puts the old block and its new version in one hc-sid
 });
 
 test('a link inside the frame: to a page a proposal touches reloads with the overlay; away from it clears the marks', async () => {
-  const page = await editorOn();
+  const page = await editorOn({ variant: 'admin' });          // U3 (ED11): an approver sees the overlay
   await page.send({ type: 'hc-ready' });
   let srcs = page.frame().srcs.length;
   await page.send({ type: 'hc-route', route: UBUNTU_ROUTE });
@@ -1606,9 +1607,9 @@ test('PR body: summary, the pages, "Made in the site editor.", and the review li
   const body = C.prBody({ summary: 'Fix the DVL heading', pages });
   assert.equal(body, 'Fix the DVL heading\n\nPages:\n- DVL (`content/setup/bluerov/dvl.md`)\n- About (`content/about.md`)\n\n'
     + 'Made in the site editor.\n');
-  const linked = C.prBody({ summary: 'Fix', pages, reviewUrl: 'https://docs.example.org/cms/#/review/42' });
-  assert.ok(linked.endsWith('Made in the site editor.\nReview it in the editor: https://docs.example.org/cms/#/review/42\n'));
-  assert.equal(C.reviewUrl('https://docs.example.org', 42), 'https://docs.example.org/cms/#/review/42');
+  const linked = C.prBody({ summary: 'Fix', pages, reviewUrl: 'https://docs.example.org/#/?editor=review&pr=42' });
+  assert.ok(linked.endsWith('Made in the site editor.\nReview it on the site: https://docs.example.org/#/?editor=review&pr=42\n'));
+  assert.equal(C.reviewUrl('https://docs.example.org', 42), 'https://docs.example.org/#/?editor=review&pr=42');
 });
 
 test('new project: exactly two files — the registry entry with the six keys, and content/projects/<id>.md', () => {
@@ -1785,7 +1786,7 @@ test('Propose: blobs -> one tree on main\'s tree -> one commit -> one ref -> one
   assert.equal(pull.body.base, 'main');
   assert.equal(pull.body.body, C.prBody({ summary: 'Fix the DVL heading', pages: proposeOpts().pages }));
   assert.deepEqual(patch.body, { body: C.prBody({ summary: 'Fix the DVL heading', pages: proposeOpts().pages,
-    reviewUrl: 'https://docs.example.org/cms/#/review/42' }) });
+    reviewUrl: 'https://docs.example.org/#/?editor=review&pr=42' }) });
   // a failed review-link edit leaves the proposal standing
   const gh2 = recorded(editorGithub(baseGithub({ onWrite: writeAnswers((m, r) => (m === 'PATCH' ? reply(500, {}) : undefined)) })));
   assert.equal((await C.runPropose(gh2.client, proposeOpts())).ok, true);
@@ -2035,7 +2036,7 @@ test('js/editor.js Propose from a setup page: exactly blobs -> tree -> commit ->
   assert.equal(writes[1].body.base_tree, TREE_M, 'on main\'s tree');
   assert.equal(writes[4].body.title, `Edit ${PAGE_LABEL}`, 'titled "Edit <page>" (U2 generates the title)');
   assert.match(writes[3].body.ref, /^refs\/heads\/cms\/bob\/edit-[a-z0-9-]+-[0-9]{6}$/);
-  assert.match(writes[5].body.body, /https:\/\/docs\.example\.org\/cms\/#\/review\/42/, 'the PR links its review (the redirect lands it)');
+  assert.match(writes[5].body.body, /https:\/\/docs\.example\.org\/#\/\?editor=review&pr=42/, 'the PR links its review on the site (U3)');
   assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /#42/, 'said in the bubble; no review page opens');
   assert.equal(draftsOf(page).get(PAGE_ID), null, 'the draft went into the proposal');
   assert.deepEqual(asked, [], 'no leave question after proposing');

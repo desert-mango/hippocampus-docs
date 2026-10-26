@@ -55,6 +55,12 @@
     overlay-side     the same, with the View setting "Side by side"
     two-prs          proposal #2 and a newer #3 on this page: #3 is drawn, the
                      page bar lists #2 with its own "Show on page"
+    review-list      (U3; the proposal steps default to &variant=admin, ED11) #2
+                     and #3: the bubble's review list open, two rows
+    review-page      after a click on #2's row: its marks, its row marked, the
+                     first change scrolled into view and its margin card open
+    review-viewing   #2 drawn: "Viewing walk-proposer's changes" + Back
+    review-notes     #2's body carries a note: its card beside its block
     members          (U4) Editor OFF, a member (Write): the members-only detail
                      js/editor.js draws through the org reader. On a setup
                      page: "who wrote this" with per-author counts and date
@@ -160,7 +166,9 @@
   const REGISTRY = stepRegistry();   // the steps, by unit (below)
   const STEPS = Object.keys(REGISTRY);
   const ACCESS_STEPS = STEPS.filter((s) => s.indexOf('access-') === 0);
-  const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs'];
+  // U3: the review steps draw the same synthetic proposals (review-list / review-page with #3 too)
+  const OVERLAY_STEPS = ['overlay-inline', 'overlay-side', 'two-prs', 'review-list', 'review-page', 'review-viewing', 'review-notes'];
+  const TWO_PR_STEPS = ['two-prs', 'review-list', 'review-page'];
   const params = new URLSearchParams(location.search);
   const step = params.get('step') || 'on';
   const page = params.get('page') || (/^access-/.test(step) ? '/projects/core-stack' : '/setup/hippocampus-bringup/fcu-firmware');
@@ -233,7 +241,14 @@
       reviewComments: { 2: [] },               // U6: the conversations the walk's Comment and Reply write land here
       roles: { 'walk-proposer': 'write', 'kyle-nelson-berkeley': variant === 'readonly' ? 'read' : (variant || 'write') },
     };
-    if (step === 'two-prs') {
+    // U3 (D3, ED18): review-notes — proposal #2's body carries a note on a block it does not change (its last paragraph)
+    if (step === 'review-notes') {
+      const k = paras.length > 2 ? paras[paras.length - 1] : h1;
+      const key = await window.HCCore.noteKey(file, texts[k]);
+      extra.pulls[0].body = window.HCCore.notesSection.serialise(`Walk proposal #2\n\nPages:\n- Walk page (\`${file}\`)\n`,
+        [{ key, text: 'Please check this step against the new board.' }]);
+    }
+    if (TWO_PR_STEPS.indexOf(step) >= 0) {
       extra.pulls.push(pull(3, 'newer-proposer', '2026-09-30T09:00:00Z', sha('b3')));
       extra.files[3] = [Object.assign({}, row, { additions: 2, deletions: 0, changes: 2 })];
       extra.contents[sha('b3')] = { [file]: three.join('') };
@@ -272,7 +287,9 @@
     'access-added': undefined, 'access-removed': undefined, 'access-nowrite': 'readonly', 'access-none': undefined,
     'access-admin': 'admin' };
   const variant = Object.prototype.hasOwnProperty.call(ACCESS_VARIANT, step) ? ACCESS_VARIANT[step]
-    : (['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant') : undefined);
+    : (['admin', 'maintain', 'readonly'].indexOf(params.get('variant')) >= 0 ? params.get('variant')
+      // U3 (ED11): others' proposals are drawn only for someone who may approve them: the proposal steps default to Admin
+      : (OVERLAY_STEPS.indexOf(step) >= 0 ? 'admin' : undefined));
   // U5b: an approval record written by the page is kept as proposal #2's comment (window.walkWrites lists every write)
   window.walkWrites = [];
   const onWrite = (extra) => (method, url, body) => {
@@ -702,6 +719,34 @@
       },
 
       /* ---- U3 ---- */
+      // plan D2 (ED8, ED11): the bubble's review list open, two rows (#3 and #2), photo, name, page, when, dot
+      'review-list': async () => {
+        await editorOn();
+        const open = await until(() => $('.hc-dock [data-action="tray-open"]:not([hidden])'), 'the "Proposals" count (an Admin)');
+        open.click();
+        await until(() => SD.querySelectorAll('.hc-review-row').length === 2, 'two rows in the review list');
+      },
+      // ED9, ED47, D3: a row click — #2 drawn on its page, its row marked, the first change scrolled into view
+      // and its margin card open (the active one)
+      'review-page': async () => {
+        await REGISTRY['review-list']();
+        $('[data-action="review-row"][data-pr="2"]').click();
+        await until(() => $('.hc-review-row.is-viewing[data-pr="2"]'), '#2\'s row marked');
+        await until(() => $('#hc-frame-host .hc-rcard[aria-label$="suggested by walk-proposer"]'), '#2\'s margin cards');
+        await until(() => $('#hc-frame-host .hc-rslot.is-active'), 'the first change\'s card open');
+      },
+      // ED46, ED48: the bubble names whose changes the page shows, with Back (no "read-only" anywhere)
+      'review-viewing': async () => {
+        await editorOn();
+        await until(() => { const x = $('[data-review-head="viewing"]'); return x && /Viewing walk-proposer's changes/.test(x.textContent) && x.querySelector('[data-action="review-back"]'); },
+          '"Viewing walk-proposer\'s changes" with Back');
+        if (/read-only/i.test(SD.body.textContent)) throw new Error('"read-only" is still on the page');
+      },
+      // ED18 (reviewer side): proposal #2's note beside its block, as plain text
+      'review-notes': async () => {
+        await editorOn();
+        await until(() => { const n = $('#hc-frame-host .hc-rnote'); return n && /walk-proposer's note/.test(n.textContent); }, 'the note card');
+      },
 
       /* ---- U4 ---- */
 

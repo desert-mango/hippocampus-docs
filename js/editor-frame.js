@@ -445,6 +445,7 @@
       const s = state;
       if (!s || !s.on) return;
       const marked = new Set((Array.isArray(s.overlay) ? s.overlay : []).map((o) => o && o.index));
+      for (const i of Array.isArray(s.anchors) ? s.anchors : []) marked.add(i);      // U3: a note card's block
       const rects = [];
       if (marked.size) {
         const root = doc.getElementById('content') || doc.body;
@@ -920,7 +921,22 @@
       state = s;
       apply();
       if (s.cmd && s.cmd.n !== lastCmd) { lastCmd = s.cmd.n; restoreSnap(s.cmd); }
+      if (s.focus && s.focus.n !== lastFocus) { lastFocus = s.focus.n; focusBlock(s.focus.index); }
     });
+
+    /* U3 (ED9, ED47): a proposal opened from its review row: its first change is scrolled into view, once
+       per n (the reader may then scroll away). */
+    let lastFocus = null;
+    function focusBlock(index) {
+      const root = doc.getElementById('content') || doc.body;
+      for (const body of pageBodies(root, prefix)) {
+        for (const w of blocksIn(body)) {
+          if (indexOfBlock(w) !== index || typeof w.scrollIntoView !== 'function') continue;
+          try { w.scrollIntoView({ block: 'center' }); } catch (e) { /* a courtesy */ }
+          return;
+        }
+      }
+    }
 
     let pending = false;
     const content = doc.getElementById('content');
