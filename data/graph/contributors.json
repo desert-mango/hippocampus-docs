@@ -697,15 +697,15 @@
   "scalar-field": {
    "contributors": [
     {
-     "login": "lennartalff",
-     "name": "Thies Lennart Alff",
-     "contributions": 44,
+     "login": "NBauschmann",
+     "name": "Nathalie Bauschmann",
+     "contributions": 47,
      "roster": true
     },
     {
-     "login": "NBauschmann",
-     "name": "Nathalie Bauschmann",
-     "contributions": 39,
+     "login": "lennartalff",
+     "name": "Thies Lennart Alff",
+     "contributions": 44,
      "roster": true
     },
     {
@@ -733,9 +733,9 @@
     "NBauschmann": {
      "ir_adc_read": 1,
      "ir_field_hardware": 4,
-     "scalar_field_belief": 10,
+     "scalar_field_belief": 15,
      "scalar_field_interfaces": 6,
-     "scalar_field_sim": 18
+     "scalar_field_sim": 21
     },
     "lennartalff": {
      "path_planning": 39,
