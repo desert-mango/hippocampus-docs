@@ -5,7 +5,7 @@
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 207,
+  "commits_365d": 214,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -641,7 +641,7 @@
   {
    "week": "2026-10-26",
    "days": [
-    2,
+    9,
     null,
     null,
     null,
@@ -652,6 +652,55 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_belief",
+   "sha": "378f539",
+   "date": "2026-10-26",
+   "msg": "feat(playground): add live ROS2 belief viewer (belief_live_viewer), build playground and GMRF module",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "0547140",
+   "date": "2026-10-26",
+   "msg": "feat(node): publish the numerical posterior mean in belief/mean_cloud",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "ipp_rig",
+   "sha": "10e4cff",
+   "date": "2026-10-26",
+   "msg": "feat(launch): pass scenario_path to the belief",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "4b331ca",
+   "date": "2026-10-26",
+   "msg": "refactor(playground): adapt to belief_geometry and record geometry files",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "75cbe5a",
+   "date": "2026-10-26",
+   "msg": "feat(gmrf)!: support belief_geometry and geometry_file references",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "2091a51",
+   "date": "2026-10-26",
+   "msg": "feat(node)!: select belief walls via belief_geometry, instead of geometry_file or scenario",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "153449d",
+   "date": "2026-10-26",
+   "msg": "feat(belief): follow geometry_file references in the wall loader",
+   "author": "NBauschmann"
+  },
   {
    "repo": "scalar_field_sim",
    "sha": "8d35ac8",
@@ -777,63 +826,20 @@
    "date": "2026-10-16",
    "msg": "fix(tf_publisher): preserve incoming pose timestamps",
    "author": "NBauschmann"
-  },
-  {
-   "repo": "hippo_common",
-   "sha": "d8bfc25",
-   "date": "2026-10-16",
-   "msg": "refactor(tf_publisher): generalize pose parameter helper",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "da0b968",
-   "date": "2026-10-16",
-   "msg": "Merge pull request #2 from Latfoo/main",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "fb48508",
-   "date": "2026-10-15",
-   "msg": "fix: wrong obstacle publisher executable in launch file",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "ec7688e",
-   "date": "2026-10-15",
-   "msg": "Declare workspace repo dependencies",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "2af8431",
-   "date": "2026-10-15",
-   "msg": "Slim down README",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "282ea6a",
-   "date": "2026-10-15",
-   "msg": "Restore simple_field_1.toml used by the launch file defaults",
-   "author": "Latfoo"
-  },
-  {
-   "repo": "scalar_field_sim",
-   "sha": "8e88ea7",
-   "date": "2026-10-15",
-   "msg": "Raise clip_max to 0.05 for experiment_02 fields",
-   "author": "Latfoo"
   }
  ],
  "most_active_repos": [
   {
    "name": "ipp_rig",
-   "commits": 90,
+   "commits": 91,
    "language": "Python",
-   "pushed_at": "2026-10-22"
+   "pushed_at": "2026-10-26"
+  },
+  {
+   "name": "scalar_field_belief",
+   "commits": 31,
+   "language": "Python",
+   "pushed_at": "2026-10-26"
   },
   {
    "name": "fav_docs",
@@ -846,12 +852,6 @@
    "commits": 26,
    "language": "Python",
    "pushed_at": "2026-10-26"
-  },
-  {
-   "name": "scalar_field_belief",
-   "commits": 25,
-   "language": "Python",
-   "pushed_at": "2026-10-23"
   },
   {
    "name": "docs",

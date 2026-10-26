@@ -836,11 +836,11 @@
    "stars": 2,
    "forks": 1,
    "open_issues": 0,
-   "pushed_at": "2026-10-22",
+   "pushed_at": "2026-10-26",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 90,
+   "commits_365d": 91,
    "html_url": "https://github.com/HippoCampusRobotics/ipp_rig"
   },
   "ipp_rviz_visuals": {
@@ -1144,11 +1144,11 @@
    "stars": 1,
    "forks": 0,
    "open_issues": 0,
-   "pushed_at": "2026-10-23",
+   "pushed_at": "2026-10-26",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 25,
+   "commits_365d": 31,
    "html_url": "https://github.com/HippoCampusRobotics/scalar_field_belief"
   },
   "scalar_field_interfaces": {
