@@ -1052,6 +1052,9 @@
   // Editor mode on a project page (the edit gate, 2026-10-21): editing follows the same list
   const ACCESS_LOCKED_TEXT = 'You can\'t edit this project.';
   const ACCESS_READING_TEXT = 'Checking who can edit this project…';
+  // the bubble's lock line for 'none' (fixes pass B9c, D22): who can, not your commit count (the Editor-off aside
+  // keeps ACCESS_TEXTS.none, its own explanation)
+  const ACCESS_EDITORS_ONLY_TEXT = 'Only this project\'s editors can change it.';
   const ACCESS_TEXTS = Object.freeze({
     added: 'An admin gave you access to this project.',
     removed: 'An admin removed your access to this project.',
@@ -1822,6 +1825,8 @@
      the text each file had at `base` (main's head, or my proposal's branch
      head) when it was opened. Every storage access is guarded. */
   const DRAFTS_KEY = 'hc-cms-drafts';
+  // a draft this browser would not keep (storage full, a private window): said once in the bubble (fixes pass B7)
+  const DRAFT_UNSAVED_TEXT = 'Your change could not be saved in this browser. It stays on this page until you reload.';
   const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
   function validDraft(d) {
@@ -2443,8 +2448,28 @@
      branch cms/<login>/<slug>-<yymmdd> and a PR, or (adding to my own open
      proposal) a fast-forward of its branch. Never main, never the machinery
      or the files the site regenerates. */
-  const STALE_DRAFT_TEXT = 'changed on GitHub since you opened it. Your draft is kept: copy your text somewhere, '
-    + 'press "Discard changes", open the page again and put your change back in';
+  /* A failure in plain words with a next step (fixes pass B14, Nielsen #15): GitHub's common answers by status
+     (an error's .status, or the "answered HTTP <n>" its message carries), a network failure, else the raw text
+     after "Something went wrong:". */
+  const FAILURE_TEXTS = Object.freeze({
+    401: 'Your sign-in has ended. Sign in again.',
+    403: 'GitHub refused this: you may not have the right to do it.',
+    404: 'That page or send no longer exists on GitHub.',
+    409: 'GitHub could not apply this: the send may have changed. Reload and try again.',
+    422: 'GitHub could not apply this: the send may have changed. Reload and try again.',
+    network: 'GitHub could not be reached. Check your connection and try again.',
+  });
+  function failureText(e) {
+    const msg = String((e && e.message) || e || '');
+    const fromMsg = /answered HTTP ([0-9]{3})\b/.exec(msg);
+    const status = e && Number.isInteger(e.status) ? e.status : fromMsg ? Number(fromMsg[1]) : null;
+    if (status !== null && Object.prototype.hasOwnProperty.call(FAILURE_TEXTS, status)) return FAILURE_TEXTS[status];
+    if (status === null && /could not be reached|Failed to fetch|NetworkError|Load failed|network/i.test(msg)) return FAILURE_TEXTS.network;
+    return `Something went wrong: ${msg}`;
+  }
+  // fixes pass B9a (D22, Nielsen #8): plain words; the page's title goes before it, never its file path
+  const STALE_DRAFT_TEXT = 'Someone changed this page since you started. Your words are kept on this page: open it to put '
+    + 'them back, or discard them.';
   const REF_TRIES = 5;
   const PROPOSAL_BRANCH_RE = /^cms\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)+$/;
   const isProposalBranch = (b) => isRef(b) && PROPOSAL_BRANCH_RE.test(b);
@@ -2913,7 +2938,10 @@
         if (ch.baseSha === head) continue;
         const res = await send('GET', contentsPath(ch.path, head), { accept: RAW_MEDIA, raw: true });
         const now = res.status === 404 ? null : need(res, `reading ${ch.path}`);
-        if (now !== ch.original) stop(409, `Not proposed: ${ch.path} ${STALE_DRAFT_TEXT}.`);
+        if (now !== ch.original) {
+          const d = listOf(o.drafts).find((x) => isObj(x) && isObj(x.files) && Object.prototype.hasOwnProperty.call(x.files, ch.path));
+          stop(409, `${d && typeof d.label === 'string' && d.label ? d.label : ch.path}. ${STALE_DRAFT_TEXT}`);
+        }
       }
       let treeSha = baseTree;                               // notes only: the base's own tree, no blob, no tree
       if (changes.length) {
@@ -4511,7 +4539,7 @@
     PREVIEW_CONTENT_ONLY_TEXT, PREVIEW_UNLISTED_TEXT, previewScope,
     gateRunOf, checkStatus, annotationRows, loadAnnotations, annotationText, undoOnGitHubUrl,
     vercelCommentUrl, ownsAll, reviewActionsFor,
-    ACCESS_SITE_WIDE_TEXT, ACCESS_REQUEST_LABEL, ACCESS_SECTION_LABEL, ACCESS_UNREAD_TEXT, ACCESS_LOCKED_TEXT, ACCESS_READING_TEXT, ACCESS_TEXTS, accessFor, canEditProject, accessEditors,
+    ACCESS_SITE_WIDE_TEXT, ACCESS_REQUEST_LABEL, ACCESS_SECTION_LABEL, ACCESS_UNREAD_TEXT, ACCESS_LOCKED_TEXT, ACCESS_READING_TEXT, ACCESS_EDITORS_ONLY_TEXT, ACCESS_TEXTS, accessFor, canEditProject, accessEditors,
     accessRequestDraft, classifyAccessProposal, accessProposalTitle, accessKindLabel, accessChangeLine, accessIssueUrl, reviewRequest, actionOutcome, runReviewAction,
     previewPages, loadHeadRegistries,
     ID_RULE_TEXT, STRICT_JSON_TEXT, LEAVE_TEXT, DISCARD_TEXT, RAW_REGISTRIES, DRAFTS_KEY, draftsKey, SNIPPETS, SNIPPET_CATALOG,
@@ -4520,7 +4548,7 @@
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, FACTS_RULES, validFacts, factsDraftText, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     GITHUB_LINKS_FILE, PERSON_FIELDS, PEOPLE_ADMIN_TEXT, PEOPLE_ADMIN_ONLY_TEXT, peopleFieldText, peopleRemoveText, githubLinksText, peopleDraftProblem,
-    STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
+    STALE_DRAFT_TEXT, DRAFT_UNSAVED_TEXT, FAILURE_TEXTS, failureText, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, pageForFile,
     ownProposals, collectProposal, proposeRequest, runPropose,
     NOTE_MAX, notesSection, mergeNotes, SEND_KINDS, splitSend, proposalTitle, proposalCommit, pageChangeCount,

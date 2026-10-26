@@ -309,8 +309,11 @@ details summary { cursor: pointer; color: var(--heading); font-weight: 600; }
   transition: border-color 0.2s, transform 0.2s, background 0.2s;
 }
 .card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); transform: translateY(-2px); background: var(--surface-2); }
-.card h3 { margin: 0 0 0.35rem; font-size: 1.06rem; display: flex; align-items: center; gap: 0.5rem; }
-.card p { margin: 0.2rem 0 0.7rem; font-size: 0.9rem; color: var(--body-soft); }
+.card h3, .card .card-h3 { margin: 0 0 0.35rem; font-size: 1.06rem; display: flex; align-items: center; gap: 0.5rem; }
+.card p, .card .card-p { margin: 0.2rem 0 0.7rem; font-size: 0.9rem; color: var(--body-soft); }
+/* the "+ New project" card is a button: spans styled as the other cards' h3 and p (fixes pass B11) */
+.card .card-h3 { font-weight: bold; color: var(--heading); line-height: 1.25; }
+.card .card-p { display: block; }
 .card .arrow { color: var(--muted); margin-left: auto; transition: color 0.2s; }
 .card:hover .arrow { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }

@@ -217,6 +217,7 @@
     const held = state.session || state.memoryOnly;
     const dead = held && typeof held.token === 'string' ? held.token : null;
     sessionGen.next();
+    D.stopOffer();               // fixes pass B1: an Undo offer belongs to the sign-in that sent
     if (ed.on) setEditor(false);
     C.clearSession(store());
     if (signOut) {
@@ -559,6 +560,7 @@
       chip: signedIn ? roleChip() : '',
       pages: mine.map(changedPage),
       pageCount: C.pageChangeCount(mine),
+      unsaved: signedIn && unsaved.size > 0,
       typed: Boolean(opts && opts.typed),
     };
   }
@@ -583,7 +585,13 @@
       else { blocks += 1; if (!/\.md$/.test(f)) unit = 'changes'; }
     }
     const route = state.regs || d.key === PEOPLE_PAGE ? (d.key === PEOPLE_PAGE ? '/team' : C.routeForPage(d.key, state.regs)) : null;
-    return { key: d.key, label: String(d.label || d.key), blocks, unit, route: route || null };
+    // fixes pass B9e: the page's own title from the site's data when it has one ("FCU Firmware"), else the draft's
+    let label = String(d.label || d.key);
+    for (const f of Object.keys(d.files)) {
+      const pg = state.regs ? C.pageForFile(f, state.regs) : null;
+      if (pg && typeof pg.label === 'string' && pg.label) { label = pg.label; break; }
+    }
+    return { key: d.key, label, blocks, unit, route: route || null, stale: staleKeys.has(d.key) };
   }
   /* The role chip (plan D1, ED5, ED62): what you can do, from the real rule. Admin; a Maintainer approves every
      project; a Writer approves the projects main's edit-access.json lists them on (HCCore.accessFor), else edits;
@@ -710,7 +718,12 @@
         }
         if (!sessionGen.isCurrent(gen)) return;
         if (out.status === 401) { signedOut = out.message; break; }
-        if (!out.ok) { failed.push(`${g.title}: ${out.message}`); continue; }
+        if (!out.ok) {
+          // fixes pass B9a: a page changed since it was opened: its changes row offers Discard
+          if (out.status === 409 && String(out.message).indexOf(C.STALE_DRAFT_TEXT) >= 0) for (const d of g.drafts) staleKeys.add(d.key);
+          failed.push(String(out.message).indexOf(C.STALE_DRAFT_TEXT) >= 0 ? out.message : `${g.title}: ${out.message}`);
+          continue;
+        }
         results.push({ g, out });
         if (out.signedOut) { signedOut = `${out.message} Your sign-in has ended. Please sign in again.`; break; }
       }
@@ -763,6 +776,7 @@
   }
   /* Undo the sends of one click (HCCore.runUndo each, newest first) and put their drafts back. */
   async function undoSends(results, gen) {
+    if (!sessionGen.isCurrent(gen)) return { text: '' };     // another sign-in: never undo with its token (B1)
     const back = [];
     const undone = [];
     const said = [];
@@ -780,6 +794,15 @@
     refreshDock();
     D.loadCount();
     return { text: said.length ? said.join(' ') : 'Undone: your changes are back.', kind, undone };
+  }
+  /* Discard from the bubble's changes list (fixes pass B9a): asked first, as the editor page's Discard changes. */
+  function discardDraft(key) {
+    const d = drafts.get(key);
+    if (!d) return;
+    if (C.isDirty(d) && !window.confirm(C.DISCARD_TEXT)) return;
+    drafts.remove(key);
+    if (ed.draft && ed.draft.key === key) { clearSelection(); frameTo(ed.route, false); }
+    refreshDock();
   }
   /* The undone parts go back into their drafts (a part joins a draft of the same page made since). */
   function putBack(parts) {
@@ -817,6 +840,7 @@
       shown: (e) => shown(e),
       avatar: (login, first) => avatarFace(login, first),
       accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
+      discard: (key) => discardDraft(key),
       // U3 (ED11): the count is what this viewer may review; nobody else sees one
       onCount: (n) => { ed.count = n; },                 // the dock alone shows or hides the row (and its button) by the count
       openCount: () => loadReview().then((list) => (list === null ? null : list.length)),
@@ -1118,12 +1142,33 @@
     }
     return draftBound.store;
   }
+  /* fixes pass B7 (Nielsen #6): the drafts this browser refused to keep (storage full, a private window). The
+     bubble says so once; only while one exists does leaving the page ask first (D21: saved drafts never ask). */
+  const unsaved = new Set();
+  const staleKeys = new Set();   // fixes pass B9a: drafts whose page changed since they were opened (a refused send)
+  let leaveAsk = false;
+  function draftKept(key, ok) {
+    const had = unsaved.size > 0;
+    if (ok === false) unsaved.add(key); else unsaved.delete(key);
+    if (unsaved.size && !had) {
+      if (!leaveAsk && typeof window.addEventListener === 'function') {
+        leaveAsk = true;
+        window.addEventListener('beforeunload', (e) => {
+          if (!unsaved.size) return;
+          e.preventDefault();
+          e.returnValue = '';
+        });
+      }
+      unfoldDock();
+    }
+    return ok;
+  }
   const drafts = Object.freeze({
     get: (k) => draftStore().get(k),
     // round 2 (R2b): every change to the page's draft passes the undo history (histNote); a draft removed for any
     // other reason (sent for review, discarded) ends its history
-    put: (d) => { histNote(d); return draftStore().put(d); },
-    remove: (k) => { histRemoved(k); return draftStore().remove(k); },
+    put: (d) => { histNote(d); return draftKept(d.key, draftStore().put(d)); },
+    remove: (k) => { histRemoved(k); unsaved.delete(k); staleKeys.delete(k); return draftStore().remove(k); },
     list: () => draftStore().list(), dirty: () => draftStore().dirty(), sync: (keep) => draftStore().sync(keep),
     clear: () => draftStore().clear(),
   });
@@ -2767,7 +2812,9 @@
         title: a === 'approve' ? 'Approve (goes live)' : 'Deny' }, icon(a), h('span', { text: a === 'approve' ? 'Approve' : 'Deny' }));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (Date.now() < Number(card.dataset.armedAt || 0)) return;     // card safety: it just appeared or moved
+        // card safety: a pointer's click right after the card appeared or moved is ignored; a keyboard press (a
+        // click with detail 0) never is (fixes pass B12, WCAG 2.1.1)
+        if (e.detail !== 0 && Date.now() < Number(card.dataset.armedAt || 0)) return;
         decide(a === 'approve' ? 'approved' : 'declined', [c.key]);
       });
       acts.appendChild(b);
@@ -2813,11 +2860,29 @@
     card.addEventListener('mouseenter', () => { rail.hover = x.key; postEditor(); });
     card.addEventListener('mouseleave', () => { if (rail.hover === x.key) { rail.hover = null; postEditor(); } });
     card.addEventListener('click', () => railActivate(x.key));
+    card.addEventListener('focus', () => { rail.hover = x.key; postEditor(); });
+    card.addEventListener('blur', () => { if (rail.hover === x.key) { rail.hover = null; postEditor(); } });
+    // fixes pass B12 (WCAG 2.1.1): Enter or Space on the focused card does what a click does
+    card.addEventListener('keydown', (e) => {
+      if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      railActivate(x.key);
+    });
     return card;
   }
 
   function renderRail() {
     if (!rail.el) return;
+    D.keepFocus(rail.el, drawRail, railOpener);    // fixes pass B3: the focus stays on its card's control
+  }
+  /* A card's control the redraw dropped: its card, else its marker. */
+  function railOpener(m) {
+    if (!m.key) return null;
+    const node = rail.nodes.get(m.key);
+    if (node && !node.hidden) return node;
+    return findDown(rail.el, (e) => e.tagName === 'BUTTON' && e.getAttribute('data-key') === m.key);
+  }
+  function drawRail() {
     rail.cards = railCards();
     const drawn = railItems().filter((c) => c.anchor !== null);
     const on = drawn.length > 0;
@@ -2843,6 +2908,13 @@
     layoutRail();
   }
 
+  /* Where a card wants to sit for its block's rect: on the block's line (below it in 'below' mode), never above
+     minTop (the open bubble's bottom edge: fixes pass B5, Nielsen #2: the first change's card was hidden under the
+     bubble, which stays open after a review-row click, D2). -> its top, or null when the block is out of sight. */
+  function railPlace(r, minTop, view, below) {
+    if (!r || !(r.top + r.height > 0) || !(r.top < view)) return null;
+    return Math.max(below ? r.top + r.height + 4 : r.top, minTop);
+  }
   /* Each card on its block's line (railLayout: no overlap; the active one exactly on its line). */
   function layoutRail() {
     if (!rail.el || rail.el.hidden) return;
@@ -2859,16 +2931,15 @@
       const r = rail.el.getBoundingClientRect();
       if (b.left < r.right && b.right > r.left && b.bottom > r.top) minTop = b.bottom - r.top + 8;
     }
-    // a card whose block is scrolled out of sight (or hidden under the bubble) is not drawn
+    // a card whose block is scrolled out of sight is not drawn; one under the open bubble is drawn just below it
     const view = rail.view || window.innerHeight;
-    const seen = drawn.filter((c) => { const r = rail.rects.get(c.anchor); return r.top + r.height > Math.max(0, minTop) && r.top < view; });
+    const seen = drawn.filter((c) => railPlace(rail.rects.get(c.anchor), minTop, view, below) !== null);
     for (const c of seen) { const node = rail.nodes.get(c.key); if (node && node.parentNode) node.parentNode.hidden = false; }
     const want = seen.map((c) => {
       const node = rail.nodes.get(c.key);
       const slot = node ? node.parentNode : null;
       const hgt = narrow ? 40 : (node ? node.offsetHeight || 96 : 96);     // measured shown (a hidden slot is 0 high)
-      const r = rail.rects.get(c.anchor);
-      return { key: c.key, want: Math.max(below ? r.top + r.height + 4 : r.top, minTop), height: hgt, slot };
+      return { key: c.key, want: railPlace(rail.rects.get(c.anchor), minTop, view, below), height: hgt, slot };
     });
     const tops = C.railLayout(want, narrow ? null : rail.active, 8);
     for (const w of want) {
@@ -2991,9 +3062,19 @@
      GitHub's merge, Decline = close; red site rules are named in plain words before a second click); a
      notes-only send gets Done (closed: its sender sees "seen"). While someone's proposal is drawn, the
      panel's head says "Viewing <name>'s changes" with Back; my own edits say "Your changes". */
-  const rv = { open: false, list: null, armed: null, why: null, busy: false };
+  const rv = { open: false, list: null, armed: null, why: null, busy: false, keys: null };
+  /* WCAG 4.1.3 (fixes pass B8): ONE live line for the review list's questions and reasons, its text swapped
+     (never a new node per redraw); reviewRowNode places it under the row that asked. */
+  let rvAlert = null;
+  function reviewAlert(text) {
+    if (!rvAlert) rvAlert = h('p', { class: 'hc-review-why', role: 'alert' });
+    if (rvAlert.textContent !== text) rvAlert.textContent = text;
+    return rvAlert;
+  }
   const CHECK_WORDS = Object.freeze({ pass: 'Site rules pass', fail: 'Site rules fail', checking: 'Site rules are checking',
     unknown: 'Site rules not read yet' });
+  // fixes pass B12 (WCAG 1.4.1): the dot's shape says it too, not its colour alone
+  const CHECK_GLYPH = Object.freeze({ pass: '✓', fail: '✕', checking: '…', unknown: '?' });
   const viewerOf = () => ({ login: sessionLogin(), role: state.role && state.access === 'ok' ? state.role.key : 'read' });
   const isMine = (pull) => Boolean(sessionLogin()) && loginOf(pull).toLowerCase() === sessionLogin().toLowerCase();
   const isNotes = (t) => C.proposalKind(t.pull, t.files) === 'notes';
@@ -3061,17 +3142,18 @@
     h('span', { class: 'hc-review-meta' },
       r.kind !== 'page' ? h('span', { class: 'hc-review-kind', text: C.REVIEW_KIND_WORDS[r.kind] }) : null,
       h('span', { class: 'hc-review-when', text: r.when }),
-      h('span', { class: `hc-review-dot is-${r.check}`, role: 'img', 'aria-label': CHECK_WORDS[r.check], title: CHECK_WORDS[r.check] })));
+      h('span', { class: `hc-review-dot is-${r.check}`, role: 'img', 'aria-label': CHECK_WORDS[r.check], title: CHECK_WORDS[r.check],
+        text: CHECK_GLYPH[r.check] })));
     open.addEventListener('click', () => { focusProposal(r.n).catch(shown); });
     const acts = h('span', { class: 'hc-review-acts' });
+    const armed = (what) => rv.armed === `${what}:${r.n}`;
     if (r.kind === 'notes') acts.appendChild(rowButton('Done', 'review-done', () => rowAction(r, 'done')));
-    else if (r.eligible) acts.appendChild(rowButton('Approve all', 'review-approve-all', () => approveAll(r)));
+    else if (r.eligible) acts.appendChild(rowButton(armed('all') ? 'Yes, approve all' : 'Approve all', 'review-approve-all', () => approveAll(r)));
     else {
-      const armed = rv.armed === `merge:${r.n}`;
-      acts.appendChild(rowButton(armed ? 'Approve anyway' : 'Approve', 'review-approve', () => rowAction(r, 'merge'), { class: 'cms-btn cms-btn-primary hc-review-act' }));
-      acts.appendChild(rowButton('Decline', 'review-decline', () => rowAction(r, 'close')));
+      acts.appendChild(rowButton(armed('merge') ? 'Approve anyway' : 'Approve', 'review-approve', () => rowAction(r, 'merge'), { class: 'cms-btn cms-btn-primary hc-review-act' }));
+      acts.appendChild(rowButton(armed('close') ? 'Yes, decline' : 'Decline', 'review-decline', () => rowAction(r, 'close')));
     }
-    const why = rv.why && rv.why.n === r.n ? h('p', { class: 'hc-review-why', role: 'alert', text: rv.why.text }) : null;
+    const why = rv.why && rv.why.n === r.n ? reviewAlert(rv.why.text) : null;
     return h('li', { class: `hc-review-row${viewing ? ' is-viewing' : ''}`, 'data-pr': String(r.n) }, open, acts, why);
   }
 
@@ -3087,11 +3169,7 @@
       return h('div', { class: 'hc-review-head is-viewing', 'data-review-head': 'viewing' }, avatarFace(who, who),
         h('span', { class: 'hc-review-head-text', text: `Viewing ${who}'s changes` }), back);
     }
-    const me = sessionLogin();
-    if (me && ((pr && isMine(pr)) || (ed.draft && canEditPage(ed.page) && pageChanges() > 0))) {
-      return h('div', { class: 'hc-review-head is-mine', 'data-review-head': 'mine' }, avatarFace(me, me),
-        h('span', { class: 'hc-review-head-text', text: 'Your changes' }));
-    }
+    // fixes pass B9e (Nielsen #17): no "Your changes" head row: it carried no action (the changes row says it)
     return null;
   }
 
@@ -3104,8 +3182,10 @@
     const close = h('button', { type: 'button', class: 'hc-review-close', 'data-action': 'review-close', 'aria-label': 'Close the list',
       title: 'Close the list (Escape)' }, '×');
     close.addEventListener('click', () => closeReview());
-    const top = h('div', { class: 'hc-review-top' },
-      h('b', { text: rv.list === null ? 'Reading what waits for review…' : list.length ? `${list.length} to review` : 'Nothing to review' }), close);
+    // fixes pass B6: the bubble's row button ("N to review") is the list's one header; the top says only the
+    // states the count cannot (reading, nothing left)
+    const state0 = rv.list === null ? 'Reading what waits for review…' : list.length ? '' : 'Nothing to review';
+    const top = h('div', { class: 'hc-review-top' }, state0 ? h('b', { text: state0 }) : null, close);
     // phones: the list is a bottom sheet over the page (.hc-rsheet), opened from the bubble's "N to review"
     const phone = document.body.classList.contains('hc-phone');
     out.push(h('section', { class: `hc-review${phone ? ' hc-rsheet' : ''}`, 'data-review': true, 'aria-label': 'To review',
@@ -3121,7 +3201,7 @@
     loadReview().catch(shown);
   }
   function closeReview() {
-    Object.assign(rv, { open: false, armed: null, why: null });
+    Object.assign(rv, { open: false, armed: null, why: null, keys: null });
     refreshDock();
   }
 
@@ -3175,6 +3255,12 @@
       refreshDock();
       return;
     }
+    // fixes pass B8 (Nielsen #7): Decline asks once, like Approve anyway
+    if (action === 'close' && rv.armed !== `close:${r.n}`) {
+      Object.assign(rv, { armed: `close:${r.n}`, why: { n: r.n, text: `Decline ${r.login}'s send?` } });
+      refreshDock();
+      return;
+    }
     rv.busy = true;
     refreshDock();
     let out = null;
@@ -3202,32 +3288,43 @@
      applies them one by one, as the margin cards' Approve does). */
   async function approveAll(r) {
     if (rv.busy || !state.client || !r.head) return;
+    // fixes pass B8 (Nielsen #7): the first click reads what would be approved and asks; the second writes it
+    const asked = rv.armed === `all:${r.n}` && rv.keys && rv.keys.n === r.n ? rv.keys.keys : null;
     rv.busy = true;
     refreshDock();
-    let out;
+    let out = null;
     try {
-      const main = await mainSha();
-      const [base, access, committers] = await Promise.all([mergeBaseOf(main, r.head), accessRegistry(), committersOf(r.n).catch(() => null)]);
-      const me = sessionLogin().toLowerCase();
-      if (!committers || committers.has(me)) {
-        out = { ok: false, message: 'You cannot approve this proposal: you wrote part of it, or who wrote it could not be read.' };
-      } else {
-        const keys = [];
-        for (const f of r.files) {
-          if (!f || typeof f.filename !== 'string' || !C.mayApproveEdit({ login: me, permission: ROLE_NAME[state.role && state.role.key] || 'read',
-            path: f.filename, access, author: r.login })) continue;
-          const [b, hd, m] = await Promise.all([textAt(base, f.filename, true), textAt(r.head, f.filename, true), textAt(main, f.filename, false)]);
-          for (const e of (await C.proposalEdits(f.filename, b, hd, m)) || []) if (e.state === 'open') keys.push(e.key);
-        }
-        out = keys.length ? await C.runRecord(state.client, r.n, 'approved', keys) : { ok: false, message: 'Nothing here can be approved now.' };
-        const done = Array.isArray(out.done) ? out.done : [];
-        if (done.length && rail.data && rail.data.n === r.n) {
-          for (const k of done) rail.pending.set(k, 'approved');
-          renderRail();
-          watchMain();
+      if (asked) out = await C.runRecord(state.client, r.n, 'approved', asked);
+      else {
+        const main = await mainSha();
+        const [base, access, committers] = await Promise.all([mergeBaseOf(main, r.head), accessRegistry(), committersOf(r.n).catch(() => null)]);
+        const me = sessionLogin().toLowerCase();
+        if (!committers || committers.has(me)) {
+          out = { ok: false, message: 'You cannot approve this proposal: you wrote part of it, or who wrote it could not be read.' };
+        } else {
+          const keys = [];
+          for (const f of r.files) {
+            if (!f || typeof f.filename !== 'string' || !C.mayApproveEdit({ login: me, permission: ROLE_NAME[state.role && state.role.key] || 'read',
+              path: f.filename, access, author: r.login })) continue;
+            const [b, hd, m] = await Promise.all([textAt(base, f.filename, true), textAt(r.head, f.filename, true), textAt(main, f.filename, false)]);
+            for (const e of (await C.proposalEdits(f.filename, b, hd, m)) || []) if (e.state === 'open') keys.push(e.key);
+          }
+          if (!keys.length) out = { ok: false, message: 'Nothing here can be approved now.' };
+          else {
+            Object.assign(rv, { armed: `all:${r.n}`, keys: { n: r.n, keys },
+              why: { n: r.n, text: `Approve all ${keys.length} ${keys.length === 1 ? 'change' : 'changes'}?` } });
+          }
         }
       }
     } finally { rv.busy = false; }
+    if (!out) { refreshDock(); return; }               // asked: the second click approves
+    Object.assign(rv, { armed: null, why: null, keys: null });
+    const done = Array.isArray(out.done) ? out.done : [];
+    if (done.length && rail.data && rail.data.n === r.n) {
+      for (const k of done) rail.pending.set(k, 'approved');
+      renderRail();
+      watchMain();
+    }
     say(out.message, out.ok ? null : 'error');
     refreshDock();
   }
@@ -3618,9 +3715,13 @@
       if (ed.page && hist.key === ed.page.pageId) hist.pending = { index, snap: m.snap };   // the next typed change's restore point
     } else if (m.type === 'hc-key' && (m.op === 'undo' || m.op === 'redo')) undoRedo(m.op);
     else if (m.type === 'hc-key' && m.op === 'redraw' && ed.on) frameTo(ed.route, true);   // the text is right; the page is drawn from it
+    // fixes pass B13 (contract with js/source.js frameMessage): the frame's own scroll folds the bubble (D13), and
+    // Escape typed in the page goes to the one Escape stack
+    else if (m.type === 'hc-scroll' && Number.isInteger(m.y) && m.y >= 0 && m.y <= 10000000) D.scrolled(m.y);
+    else if (m.type === 'hc-key' && m.op === 'escape') escapeTop();
     return true;
   }
-  const shown = (e) => { if (!quiet(e)) say(`Something went wrong: ${(e && e.message) || e}`, 'error'); };
+  const shown = (e) => { if (!quiet(e)) say(C.failureText(e), 'error'); };     // plain words (fixes pass B14)
 
   /* The reader followed a link inside the frame: the parent's hash follows
      (js/app.js repaints the sidebar, the nav and the title), and the frame is
@@ -4068,17 +4169,14 @@
     frameTo(ed.route, true);
   }
 
-  /* hc-access-ask: "Request edit access" on a locked project's lock line runs the bubble's own control
-     (accessAsk, drawn in the dock's lock lines): the access proposal for a Write role, else the prefilled issue
-     in a new tab. The bubble comes out, where the answer is said. */
+  /* hc-access-ask: "Request edit access" on a locked project's lock line brings the bubble out with its own
+     control (accessAsk, drawn in the dock's lock lines) focused: the access proposal for a Write role, else the
+     prefilled issue link. A frame message never sends or opens a tab by itself (fixes pass B2): the person's
+     own click in the bubble does. */
   function accessAskInPage() {
     if (!ed.on || !pageLocked(ed.page)) return;
     refreshDock();
-    unfoldDock();
-    const ask = findDown(dock, (e) => /^access-(request|issue)$/.test(e.getAttribute('data-action') || ''));
-    if (!ask) return;                                  // the list is not read yet: the bubble says so
-    if (ask.getAttribute('data-action') === 'access-request') ask.click();
-    else window.open(ask.getAttribute('href'), '_blank', 'noopener');
+    D.askAccess();
   }
   function findDown(root, pred) {
     for (const c of Array.from((root && root.childNodes) || [])) {
@@ -4094,9 +4192,16 @@
      status (HCEditor.helpers.newProjectForm) — whose button makes the 3-file draft (makeProjectDraft, on main),
      kept with my other changes and sent like them. A refused field is said in the dialog. */
   let newProjectBox = null;
+  let npInert = [];          // fixes pass B11 (WCAG 2.4.3): what the dialog made inert, given back on close
   function closeNewProject() {
-    if (newProjectBox) { newProjectBox.hidden = true; newProjectBox.remove(); }
+    if (!newProjectBox) return;
+    newProjectBox.hidden = true;
+    newProjectBox.remove();
     newProjectBox = null;
+    for (const el of npInert) el.removeAttribute('inert');
+    npInert = [];
+    // the focus goes back to where "+ New project" is: the page frame (the card is inside it)
+    if (ed.frame && typeof ed.frame.focus === 'function') ed.frame.focus();
   }
   function openNewProject() {
     if (!ed.on || !canEdit()) return;
@@ -4120,7 +4225,19 @@
         field('tagline', 'One-line description', tagline), field('status', 'Status', status),
         problem, h('div', { class: 'hc-np-actions' }, cancel, make)));
     cancel.addEventListener('click', closeNewProject);
-    box.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') closeNewProject(); });
+    // fixes pass B11 (WCAG 2.4.3): Tab and Shift+Tab stay inside the dialog; the rest of the page is inert
+    const stops = [id, name, tagline, status, cancel, make];
+    box.addEventListener('keydown', (e) => {
+      if (!e) return;
+      if (e.key === 'Escape') { closeNewProject(); return; }
+      if (e.key !== 'Tab') return;
+      const live = stops.filter((x) => !x.disabled);
+      const at = live.indexOf(document.activeElement);
+      const next = e.shiftKey ? (at <= 0 ? live[live.length - 1] : null) : (at === live.length - 1 || at < 0 ? live[0] : null);
+      if (!next) return;
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      next.focus();
+    });
     make.addEventListener('click', async () => {
       const values = Object.assign({}, form.defaults, { id: id.value, name: name.value, tagline: tagline.value,
         status: status.value || form.defaults.status });
@@ -4136,6 +4253,9 @@
       frameTo(ed.route, true);
     });
     newProjectBox = box;
+    npInert = Array.from(document.body.childNodes).filter((el) => el && typeof el.setAttribute === 'function'
+      && typeof el.getAttribute === 'function' && el.getAttribute('inert') === null);
+    for (const el of npInert) el.setAttribute('inert', '');
     document.body.appendChild(box);
     if (typeof id.focus === 'function') id.focus();
   }
@@ -5197,6 +5317,7 @@
     personFields,
     state: () => Object.freeze({ focusPr: ed.focusPr, trayOpen: ed.trayOpen, trayHash, reviewOpen: rv.open, plain: ed.plain }),
     railModeFor,
+    railPlace,               // fixes pass B5
     escapeTop: () => escapeTop(),
     openReview: () => openReview(),           // U2b's phone "N to review" row
   });

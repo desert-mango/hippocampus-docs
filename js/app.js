@@ -404,7 +404,7 @@
       'Title: <page title>', '', 'What it should cover: <say what the page is for>', '',
       '(The setup pages are listed in data/setup.json, which tools/rst_convert.py writes, so a maintainer adds the page.)'].join('\n');
     const href = `${NEW_PAGE_ISSUE}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
-    return `<a class="sb-new-page" href="${esc(href)}" target="_blank" rel="noopener noreferrer">+ New page</a>`;
+    return `<a class="sb-new-page" href="${esc(href)}" target="_blank" rel="noopener noreferrer">+ New page<span class="visually-hidden"> (opens GitHub in a new tab)</span></a>`;
   }
   function sidebarList(title, items, base, activeId) {
     sidebar.innerHTML = `<h3>${esc(title)}</h3>` + items.map((it) =>
@@ -808,7 +808,7 @@
         ${groups || '<p class="empty-note">No project has this status.</p>'}
         <div class="project-grid project-new-row" hidden><button type="button" class="card project-card project-new" data-hc-new-project>
           <span class="card-img card-tile" aria-hidden="true">+</span>
-          <span class="card-body"><h3><span class="card-name">New project</span></h3><p>Add a project: its name, one line and status.</p></span>
+          <span class="card-body"><span class="card-h3"><span class="card-name">New project</span></span><span class="card-p">Add a project: its name, one line and status.</span></span>
         </button></div>
         <p class="provenance">Coverage rule: every repository in the
         <a href="https://github.com/HippoCampusRobotics">HippoCampusRobotics org</a> belongs to exactly
@@ -1468,22 +1468,34 @@
      right after the clicked control (the header button, or the footer link),
      as text. One line per control, hidden while empty. */
   const signInLines = new Map();
+  const signInNext = new WeakMap();   // a new line's words, set on the next frame
   function signInLine(anchor) {
     const at = anchor && typeof anchor.after === 'function' ? anchor : ($('#signin-btn') || $('#edit-page'));
     return (text, kind) => {
       if (!at) return;
       let line = signInLines.get(at);
+      const put = (l, t, k) => {
+        l.textContent = t || '';
+        l.hidden = !t;
+        l.classList.toggle('is-error', k === 'error');
+      };
       if (!line) {
+        // WCAG 4.1.3 (fixes pass B11): the live line goes in EMPTY; its words come on the next frame, so a screen
+        // reader hears them as a change
         line = document.createElement('span');
         line.className = 'edit-status hc-signin-status';
         line.setAttribute('role', 'status');
         line.setAttribute('aria-live', 'polite');
         at.after(line);
         signInLines.set(at, line);
+        const fresh = line;
+        signInNext.set(fresh, { text, kind });
+        const later = typeof window.requestAnimationFrame === 'function' ? (fn) => window.requestAnimationFrame(fn) : (fn) => window.setTimeout(fn, 16);
+        later(() => { const n = signInNext.get(fresh); signInNext.delete(fresh); if (n) put(fresh, n.text, n.kind); });
+        return;
       }
-      line.textContent = text || '';
-      line.hidden = !text;
-      line.classList.toggle('is-error', kind === 'error');
+      if (signInNext.has(line)) { signInNext.set(line, { text, kind }); return; }   // its first words are on their way
+      put(line, text, kind);
     };
   }
 

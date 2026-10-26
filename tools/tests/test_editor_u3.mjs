@@ -162,7 +162,7 @@ test('U3 review list (D2, ED8, ED11): an Admin\'s bubble lists the open proposal
   await settle();
   const panel = panelOf(page);
   assert.ok(panel, 'the review panel slot (HCDock.panel)');
-  assert.match(textOf(panel), /1 to review/);
+  assert.match(textOf(page.handle()), /1 to review/, 'fix B6: the row button is the list\'s one header');
   const rowsNow = reviewRows(page);
   assert.equal(rowsNow.length, 1);
   const row = rowsNow[0];
@@ -455,6 +455,8 @@ test('U3 Decline (D3): an Admin\'s Decline closes the proposal (one write) and t
   const page = await on(OTHER_ROUTE, { variant: 'admin', extra: extraPull(5, 'wendy', ['data/projects/core-stack.json']), onWrite });
   page.handle().click();
   await settle();
+  rowAct(page, 5, 'review-decline').click();       // fix B8: the first click asks ("Yes, decline")
+  await settle();
   rowAct(page, 5, 'review-decline').click();
   await settle();
   assert.deepEqual(writeLog(writes), [['PATCH', '/pulls/5']]);
@@ -531,4 +533,188 @@ test('U3 helpers.openReview: opens the review list (U2b\'s "N to review" row cal
   assert.equal(H(page).state().reviewOpen, true);
   assert.ok(panelOf(page), 'the review panel is drawn');
   assert.equal(reviewRows(page).length, 1);
+});
+
+// ================================================================ fixes pass B (integrated review) ===
+
+/* focus() on the fake elements records document.activeElement (restored after the test). */
+function trackFocus(t, page) {
+  const proto = Object.getPrototypeOf(page.body);
+  const was = proto.focus;
+  proto.focus = function focus() { page.win.document.activeElement = this; };
+  t.after(() => { proto.focus = was; });
+}
+const focused = (page) => page.win.document.activeElement;
+
+test('fix B3 (WCAG 2.4.3): a redraw of the review list keeps the focus on the same row', async (t) => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: wendyAdds() });
+  trackFocus(t, page);
+  page.handle().click();
+  await settle();
+  const before = page.one((e) => e.attrs && e.attrs['data-action'] === 'review-row' && e.attrs['data-pr'] === '3');
+  before.focus();
+  H(page).escapeTop.call(null);           // nothing open in the page: Escape closes the list ...
+  page.handle().click();                  // ... and the row button opens it again
+  await settle();
+  assert.equal(focused(page), page.handle(), 'a closed list hands the focus to its row button');
+  const again = page.one((e) => e.attrs && e.attrs['data-action'] === 'review-row' && e.attrs['data-pr'] === '3');
+  again.focus();
+  await page.send({ type: 'hc-ready' });  // any redraw of the bubble rebuilds the list
+  const now = focused(page);
+  assert.ok(now && now.attrs['data-action'] === 'review-row' && now.attrs['data-pr'] === '3', 'the same row has the focus');
+  assert.ok(page.all((e) => e === now).length === 1, 'and it is on the page');
+});
+
+test('fix B3: "Approve anyway" keeps the focus across its arming click', async (t) => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: extraPull(5, 'wendy', ['data/projects/core-stack.json']) });
+  trackFocus(t, page);
+  page.handle().click();
+  await settle();
+  const first = rowAct(page, 5, 'review-approve');
+  first.focus();
+  first.click();
+  await settle();
+  const now = focused(page);
+  assert.match(textOf(now), /Approve anyway/, 'the focus is on the armed button');
+  assert.equal(now, rowAct(page, 5, 'review-approve'));
+});
+
+test('fix B8 (Nielsen #7): Decline asks once ("Decline wendy\'s send?" → "Yes, decline"); only the second click writes', async (t) => {
+  const writes = [];
+  const onWrite = (method, url, body) => { writes.push({ method, url, body }); return { status: 200, body: { state: 'closed' } }; };
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: extraPull(5, 'wendy', ['data/projects/core-stack.json']), onWrite });
+  trackFocus(t, page);
+  page.handle().click();
+  await settle();
+  rowAct(page, 5, 'review-decline').focus();
+  rowAct(page, 5, 'review-decline').click();
+  await settle();
+  assert.deepEqual(writeLog(writes), [], 'the first click only asks');
+  const ask = page.one((e) => e.classList.contains('hc-review-why'));
+  assert.equal(textOf(ask), 'Decline wendy\'s send?');
+  assert.equal(ask.attrs.role, 'alert');
+  assert.equal(textOf(rowAct(page, 5, 'review-decline')), 'Yes, decline');
+  assert.equal(focused(page), rowAct(page, 5, 'review-decline'), 'the focus stays on it');
+  rowAct(page, 5, 'review-decline').click();
+  await settle();
+  assert.deepEqual(writeLog(writes), [['PATCH', '/pulls/5']]);
+});
+
+test('fix B8: Approve all asks once ("Approve all N changes?" → "Yes, approve all"); only the second click writes', async () => {
+  const writes = [];
+  const onWrite = (method, url, body) => { writes.push({ method, url, body }); return { status: 201, body: { id: 1 } }; };
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: wendyAdds(), onWrite });
+  page.handle().click();
+  await settle();
+  rowAct(page, 3, 'review-approve-all').click();
+  await settle();
+  assert.deepEqual(writeLog(writes), [], 'the first click only asks');
+  assert.match(textOf(page.one((e) => e.classList.contains('hc-review-why'))), /^Approve all 1 change\?$/);
+  assert.equal(textOf(rowAct(page, 3, 'review-approve-all')), 'Yes, approve all');
+  rowAct(page, 3, 'review-approve-all').click();
+  await settle();
+  assert.ok(writeLog(writes).length >= 1, `the second click writes the approval: ${JSON.stringify(writeLog(writes))}`);
+});
+
+test('fix B8 (WCAG 4.1.3): one live line per review list, its text swapped, not a new node per redraw', async () => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: extraPull(5, 'wendy', ['data/projects/core-stack.json']) });
+  page.handle().click();
+  await settle();
+  rowAct(page, 5, 'review-approve').click();
+  await settle();
+  const a = page.one((e) => e.classList.contains('hc-review-why'));
+  await page.send({ type: 'hc-ready' });
+  const b = page.one((e) => e.classList.contains('hc-review-why'));
+  assert.equal(a, b, 'the same node');
+  rowAct(page, 5, 'review-decline').click();
+  await settle();
+  assert.equal(page.one((e) => e.classList.contains('hc-review-why')), a, 'another question, the same node');
+  assert.equal(textOf(a), 'Decline wendy\'s send?');
+});
+
+test('fix B6 (Nielsen #3): the open review panel has ONE "N to review" header — the row button', async () => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin', extra: wendyAdds() });
+  page.handle().click();
+  await settle();
+  assert.match(textOf(page.handle()), /^2 to review$/);
+  assert.ok(!/to review/.test(textOf(panelOf(page))), `no second header in the panel: ${textOf(panelOf(page))}`);
+  assert.ok(page.one((e) => e.attrs && e.attrs['data-action'] === 'review-close'), 'the list still closes');
+});
+
+test('fix B12 (WCAG 1.4.1): the status dot carries a glyph beside its colour', async () => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin' });
+  page.handle().click();
+  await settle();
+  const dot = page.one((e) => e.classList.contains('hc-review-dot'));
+  assert.ok(['✓', '✕', '…', '?'].indexOf(textOf(dot)) >= 0, textOf(dot));
+  assert.ok(dot.attrs['aria-label'], 'and its words');
+});
+
+test('fix B9b (D22): a block the page changed since the send says so in plain words, as plain text', () => {
+  const css = readRepo('css/editor.css');
+  assert.ok(!/Update from main|main changed this/.test(css));
+  assert.match(css, /\.hc-prop-conflict::before \{ content: "The page changed since this was sent\.";/);
+});
+
+test('fix B13 (D13, ED35): the frame\'s hc-scroll folds the open bubble past 24 px; hc-key escape closes the top layer', async () => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin' });
+  const tucked = () => page.body.classList.contains('hc-dock-collapsed');
+  assert.equal(tucked(), false);
+  await page.send({ type: 'hc-scroll', y: 0 });
+  await page.send({ type: 'hc-scroll', y: 10 });
+  assert.equal(tucked(), false, '10 px: stays');
+  await page.send({ type: 'hc-scroll', y: 'x' });
+  await page.send({ type: 'hc-scroll', y: 80 });
+  assert.equal(tucked(), true, 'past 24 px: folded');
+  page.one((e) => e.classList.contains('hc-dock-tag')).click();
+  await settle();
+  page.handle().click();
+  await settle();
+  assert.equal(H(page).state().reviewOpen, true);
+  await page.send({ type: 'hc-key', op: 'escape' });
+  assert.equal(H(page).state().reviewOpen, false, 'Escape in the page closed the list');
+});
+
+test('fix B5 (Nielsen #2): a card whose block sits under the open bubble is drawn just below the bubble, not hidden', async () => {
+  const page = await on(OTHER_ROUTE, { variant: 'admin' });
+  const place = H(page).railPlace;
+  assert.equal(typeof place, 'function');
+  const bubbleBottom = 300;
+  assert.equal(place({ top: 120, height: 40 }, bubbleBottom, 800, false), 300, 'under the bubble: just below it');
+  assert.equal(place({ top: 120, height: 40 }, bubbleBottom, 800, true), 300, 'in below mode too');
+  assert.equal(place({ top: 420, height: 40 }, bubbleBottom, 800, false), 420, 'below the bubble: on its line');
+  assert.equal(place({ top: 420, height: 40 }, -Infinity, 800, true), 464, 'below mode: under its block');
+  assert.equal(place({ top: -80, height: 40 }, bubbleBottom, 800, false), null, 'scrolled away above');
+  assert.equal(place({ top: 900, height: 40 }, bubbleBottom, 800, false), null, 'not reached yet');
+});
+
+test('fix B12 (WCAG 2.1.1): Enter or Space on a focused note card opens it, as a click does', async () => {
+  const mainText = readRepo(UBUNTU_FILE);
+  const blocks = C.splitBlocks(mainText).blocks;
+  const target = blocks.find((b) => b.kind === 'paragraph' || (b.kind !== 'space' && b.kind !== 'heading'));
+  const key = await C.noteKey(UBUNTU_FILE, target.text, webcrypto.subtle);
+  const body = C.notesSection.serialise(`Notes\n\nPages:\n- Ubuntu (\`${UBUNTU_FILE}\`)\n`, [{ key, text: 'Check this line.' }]);
+  const extra = extraPull(6, 'wendy', [], { changed_files: 0, body });
+  extra.files = { 6: [] };
+  const page = await on(UBUNTU_ROUTE, { variant: 'admin', extra });
+  page.handle().click();
+  await settle();
+  page.one((e) => e.attrs && e.attrs['data-action'] === 'review-row' && e.attrs['data-pr'] === '6').click();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  const note = page.one((e) => e.classList.contains('hc-rnote'));
+  const mark = page.one((e) => e.classList.contains('hc-rmark'));
+  if (lastEditor(page).hot !== null) { mark.click(); await settle(); }    // the first note opens by itself: close it
+  assert.equal(lastEditor(page).hot, null, 'nothing lit yet');
+  for (const fn of note.listeners.keydown || []) fn({ type: 'keydown', key: 'Enter', target: note, preventDefault() {} });
+  await settle();
+  assert.equal(lastEditor(page).hot, blocks.indexOf(target), 'Enter opened the note (its block is lit)');
+});
+
+test('fix B12 (WCAG 8): the 400 ms guard on a fresh card stops a stray pointer click, never a keyboard press', () => {
+  // the node harness draws no Approve card (no layout); the rule is read from the source: a keyboard press is a
+  // click with detail 0, and the guard applies only to a pointer's click
+  const src = readRepo('js/editor.js');
+  const card = src.slice(src.indexOf('function cardNode(c)'), src.indexOf('function noteNode(x)'));
+  assert.match(card, /if \(e\.detail !== 0 && Date\.now\(\) < Number\(card\.dataset\.armedAt \|\| 0\)\) return;/);
 });

@@ -16,7 +16,8 @@
                    pages: title, "N blocks", Send this page; a title goes to that page)
      review row    "3 to review" (opens the `review` panel slot, which U3 fills; until then "Loading…")
      sent row      "1 sent · waiting" (opens MY sends with their status: waiting, live, declined, seen)
-   After a send: "Sent · waiting for review" with Undo for 8 seconds (the clock stops while the tab is hidden).
+   After a send: "Sent · waiting for review" with Undo for 8 seconds, the focus on Undo (the clock stops while
+   the tab is hidden, or the focus or the pointer is in the bubble).
    The bubble folds to the photo tab when the page scrolls more than 24 px or typing starts, unless the pointer
    is in it or one of its lists is scrolling (D13); a click on the tab opens it again. Under 768 px (body.hc-phone)
    the tab is a round photo button at the bottom right and the bubble opens over the page as a bottom sheet
@@ -38,9 +39,11 @@
            page       the page on screen ({pageId, label, ...}) or null
            draftKey   the key of the draft on screen, or null
            chip       the role chip's words ("Admin", "Can approve 2 projects", "Can edit", "Read only") or ''
-           pages      the changed pages I may send: [{key, label, blocks, unit, route}] (route null: no link)
+           pages      the changed pages I may send: [{key, label, blocks, unit, route, stale}] (route null: no link;
+                      stale: the page changed since it was opened, the row offers Discard)
            pageCount  how many pages changed (HCCore.pageChangeCount)
            typed      true when this redraw follows typing in the page (the bubble folds)
+           unsaved    a change this browser would not keep (fixes pass B7): the bubble says so, once
          then every registered panel (see panel()).
      fold(on)       on !== false: fold the bubble into the photo tab (focus the tab); fold(false): bring it back
                     (focus the switch). Remembered in this browser. On a phone: close / open the sheet.
@@ -59,14 +62,20 @@
                     and Undo for 8 s (UNDO_MS; the clock stops while document.visibilityState is 'hidden').
                     Undo calls run() -> Promise of {text, kind ('error' or not), undone: [numbers]}; its text
                     replaces the box's words
+     stopOffer()    the Undo offer goes (the sign-in ended): its box empties, its clock stops
      setCount(n)    the review row's count ("N to review"; 0 hides the row; api.onCount(n) hears it first)
      loadCount()    asks api.openCount() for the count, then setCount; asks api.loadSends() for my sends
-     lockParts(a, projectId, name)
+     lockParts(a, projectId, name, opts)
                     the edit gate's lines: "You can't edit this project.", why, and Request edit access (once the
-                    list is read) with its result line; the facts-file page's note uses them too
+                    list is read; opts.ask false leaves it out) with its result line; the facts-file page's note
+                    uses them too
+     askAccess()    the page's lock line asked: the bubble comes out with Request edit access focused (no send)
      chip()         the role chip node (js/editor.js places it after the name; refresh writes its words)
-     scrolled(y)    the page frame scrolled to y (px): the same fold rule as the page's own scroll (D13); the frame
-                    has no scroll message yet, so js/editor.js does not call it today
+     scrolled(y)    the page frame scrolled to y (px): the same fold rule as the page's own scroll (D13);
+                    js/editor.js calls it on the frame's hc-scroll message
+     keepFocus(root, draw, fallback)
+                    runs draw() (a redraw of root's insides) and puts the focus back on the matching new control
+                    (fixes pass B3; refresh does it for the bubble, js/editor.js for the margin cards)
      escape()       closes one layer — an open list, else the phone sheet — and says true; false when nothing was
                     open. The one Escape key handler is js/editor.js's stack (D18), which calls this in order
 
@@ -89,6 +98,7 @@
      shown(error)             says a failure on the status line
      avatar(login, first)     the face node for a login (committed avatar or the first letter)
      accessAsk(a, projectId, name, result)   the Request edit access control (or null), its result line `result`
+     discard(key)             Discard on a changes row whose page changed since it was opened (asked first)
      onCount(n)               hears the review count
      openCount()              Promise of the count of open sends I may review, or of null when the answer is stale
 */
@@ -96,6 +106,9 @@
   'use strict';
 
   const DOCK_KEY = 'hc-editor-dock';
+  // fixes pass B10 (Nielsen #13): one quiet line for a first-time editor, until the first edit or its ×
+  const HINT_KEY = 'hc-editor-hinted:';
+  const HINT_TEXT = 'Click any paragraph to change it. Your edits stay here until you send them.';
   const UNDO_MS = 8000;          // D4: Undo stays for 8 seconds
   const UNDO_TICK_MS = 1000;     // the clock counts in steps of a second, only while the tab is seen
   const FOLD_PX = 24;            // D13: the page scrolled more than this -> the bubble folds
@@ -114,6 +127,8 @@
   let dockRedo = null;
   let changesList = null;
   let dockLock = null;     // the edit gate on a project page
+  let unsavedLine = null;  // fixes pass B7: a change this browser would not keep
+  let hint = null;         // fixes pass B10: the first-time line under the pill
   let reviewRow = null;
   let handle = null;       // the review row's button ("N to review")
   let sentRow = null;
@@ -186,6 +201,21 @@
     changesList = h('ul', { class: 'hc-dock-list', 'data-dock-list': 'changes', 'aria-label': 'Changed pages' });
     changesList.hidden = true;
 
+    // ---- fixes pass B10: the first-time hint (this login has never typed here)
+    const hintX = button({ class: 'hc-dock-hint-x', 'data-action': 'dock-hint-close', 'aria-label': 'Hide this tip', title: 'Hide this tip' }, '×');
+    hint = h('div', { class: 'hc-dock-hint', 'data-dock-hint': true }, h('p', { text: HINT_TEXT }), hintX);
+    hint.hidden = true;
+    hintX.addEventListener('click', () => {
+      if (lastView) hinted(lastView.login, true);
+      hint.hidden = true;
+      if (api.switchBtn && typeof api.switchBtn.focus === 'function') api.switchBtn.focus();
+      api.redraw();
+    });
+
+    // ---- fixes pass B7: one live line, its words set once
+    unsavedLine = h('p', { class: 'hc-dock-unsaved', role: 'alert', 'data-dock-unsaved': true });
+    unsavedLine.hidden = true;
+
     // ---- the edit gate (a project page), then the review row under it (ED39)
     dockLock = h('div', { class: 'hc-dock-lock', role: 'status', 'data-dock-lock': true });
     dockLock.hidden = true;
@@ -211,7 +241,7 @@
 
     grab = h('div', { class: 'hc-sheet-grab', 'aria-hidden': 'true' });
     reviewUp = false;
-    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, grab, pill, dockLock, changesRow, changesList,
+    dock = h('div', { class: 'hc-dock', role: 'region', 'aria-label': 'Editor' }, grab, pill, hint, unsavedLine, dockLock, changesRow, changesList,
       reviewRow, sentRow, sentList, undoBox);
     dockTag = button({ class: 'hc-dock-tag', 'data-action': 'dock-expand', 'aria-label': 'Show the editor controls',
       title: 'Show the editor controls' });
@@ -233,6 +263,17 @@
     document.body.classList.toggle('hc-dock-collapsed', collapsed);
     scrollFrom = scrollY();
     return { dock, tag: dockTag, handle };
+  }
+
+  /* Has this login been shown the tip (and passed it)? set: remember it in this browser. */
+  function hinted(login, set) {
+    const key = `${HINT_KEY}${String(login || '').toLowerCase()}`;
+    try {
+      const st = api.store();
+      if (!st) return true;                // nowhere to remember it: say nothing rather than say it every time
+      if (set) st.setItem(key, '1');
+      return set ? true : st.getItem(key) === '1';
+    } catch (e) { return true; }
   }
 
   // ---------------------------------------------------------------- fold / unfold ---
@@ -371,7 +412,7 @@
       clearTimer(mine);
       undo.disabled = true;
       Promise.resolve().then(() => (typeof mine.run === 'function' ? mine.run() : null)).catch((e) => ({
-        text: `Something went wrong: ${(e && e.message) || e}`, kind: 'error' })).then((r) => {
+        text: window.HCCore.failureText(e), kind: 'error' })).then((r) => {
         if (offer !== mine) return;
         const out = r || {};
         const undone = Array.isArray(out.undone) ? out.undone : [];
@@ -387,12 +428,18 @@
     });
     tick(mine);
     if (lastView) refreshDock(lastView);
+    // WCAG 2.2.1 / 2.4.3 (fixes pass B4): the Send button is gone; the focus goes to Undo
+    if (typeof undo.focus === 'function' && !tucked()) undo.focus();
   }
-  /* The undo clock: a step every second, counted only while the tab is seen (document.visibilityState). */
+  /* The focus is on a control inside the bubble. */
+  const focusInside = () => Boolean(dock && typeof document !== 'undefined' && document.activeElement
+    && walkDown(dock, (c) => c === document.activeElement));
+  /* The undo clock: a step every second, counted only while the tab is seen (document.visibilityState) and
+     neither the focus nor the pointer is inside the bubble (fixes pass B4: the person may be about to press it). */
   function tick(mine) {
     mine.timer = window.setTimeout(() => {
       if (offer !== mine) return;
-      if (document.visibilityState !== 'hidden') mine.left -= UNDO_TICK_MS;
+      if (document.visibilityState !== 'hidden' && !pointerIn && !focusInside()) mine.left -= UNDO_TICK_MS;
       if (mine.left > 0) { tick(mine); return; }
       offer = null;
       undoBox.replaceChildren();
@@ -404,34 +451,60 @@
     if (mine && mine.timer !== null && typeof window.clearTimeout === 'function') window.clearTimeout(mine.timer);
     if (mine) mine.timer = null;
   }
+  /* The offer ends (a new one, or the sign-in ended: fixes pass B1): no Undo button is left on screen. */
   function stopOffer() {
     if (offer) clearTimer(offer);
     offer = null;
+    if (undoBox) { undoBox.replaceChildren(); undoBox.hidden = true; }
   }
 
   // ---------------------------------------------------------------- the edit gate ---
   /* "You can't edit this project.", why, and Request edit access (only once the list is read) with its result
      line: the bubble's lines and the facts-file page's note. */
-  function lockParts(a, projectId, name) {
+  function lockParts(a, projectId, name, opts) {
     const result = h('p', { class: 'hc-access-result cms-action-result', role: 'status' });
     result.hidden = true;
-    const ask = a.status === 'read' ? api.accessAsk(a, projectId, name, result) : null;
-    return [h('p', { class: 'hc-dock-lock-head', text: window.HCCore.ACCESS_LOCKED_TEXT }), h('p', { class: 'hc-dock-lock-why', text: a.text }),
+    const withAsk = !(opts && opts.ask === false);
+    const ask = withAsk && a.status === 'read' ? api.accessAsk(a, projectId, name, result) : null;
+    const why = a.why === 'none' ? window.HCCore.ACCESS_EDITORS_ONLY_TEXT : a.text;
+    return [h('p', { class: 'hc-dock-lock-head', text: window.HCCore.ACCESS_LOCKED_TEXT }), h('p', { class: 'hc-dock-lock-why', text: why }),
       ask, result].filter(Boolean);
   }
   /* Redrawn only when the answer changed, so a request's result stays on screen. ED41: "An admin gave you access
-     to this project." is not said here (the Editor-off aside keeps its explanations). */
+     to this project." is not said here (the Editor-off aside keeps its explanations); fixes pass B9c: nor is any
+     "you can edit" line (nothing to say). B9d: the page's lock line holds the one Request edit access; the
+     bubble's own button comes out only when that line is clicked (askAccess), for the person's own click (B2). */
   let dockLockKey = '';
+  let askPage = null;      // the page whose Request edit access the lock line asked for
   function drawDockLock(a, page, projectId) {
-    const quiet = Boolean(a && a.can && a.why === 'added');
-    const key = a && !quiet ? [page.pageId, a.status, a.can, a.why, a.text].join('\n') : '';
+    const quiet = Boolean(a && a.can);
+    const reveal = Boolean(page && askPage === page.pageId);
+    const key = a && !quiet ? [page.pageId, a.status, a.can, a.why, a.text, reveal].join('\n') : '';
     if (key === dockLockKey) return;
     dockLockKey = key;
     if (!key) { dockLock.replaceChildren(); dockLock.hidden = true; dockLock.classList.remove('is-locked'); return; }
-    if (a.can) dockLock.replaceChildren(h('p', { class: 'hc-dock-lock-why', text: a.text }));
-    else dockLock.replaceChildren(...lockParts(a, projectId, page.label));
-    dockLock.classList.toggle('is-locked', !a.can);
+    dockLock.replaceChildren(...lockParts(a, projectId, page.label, { ask: reveal }));
+    dockLock.classList.add('is-locked');
     dockLock.hidden = false;
+  }
+  /* The page's lock line asked (its hc-access-ask): the bubble comes out with its Request edit access focused;
+     nothing is sent until the person clicks it (fixes pass B2). -> true when the control is there. */
+  function askAccess() {
+    if (!dock || !lastView || !lastView.page) return false;
+    askPage = lastView.page.pageId;
+    unfoldDock();
+    refreshDock(lastView);
+    const find = (n) => {
+      for (const c of Array.from((n && n.childNodes) || [])) {
+        if (c && typeof c.getAttribute === 'function' && /^access-(request|issue)$/.test(c.getAttribute('data-action') || '')) return c;
+        const hit = find(c);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const ask = find(dockLock);
+    if (ask && typeof ask.focus === 'function') ask.focus();
+    return Boolean(ask);
   }
   /* ED39: on a locked page the review row (and its slot) sits right under the lock, above the changes of other
      pages; everywhere else it comes after the changes. */
@@ -449,6 +522,51 @@
     moveAfter(up ? dockLock : changesList, [reviewRow, p ? p.slot : null]);
   }
 
+  // ---------------------------------------------------------------- one focus owner (fixes pass B3) ---
+  /* WCAG 2.4.3: the lists in the bubble and the margin cards are drawn anew on every redraw. Before a redraw the
+     focused control is noted by what it is (its tag, data-action / data-act, data-pr, data-number and the
+     data-key it sits under); after it the matching new control takes the focus, else fallback(mark) names one
+     (the row button that opened the list). Nothing moves when the focus is elsewhere, or went elsewhere meanwhile. */
+  const attrOf = (el, k) => (el && typeof el.getAttribute === 'function' ? el.getAttribute(k) : null);
+  function walkDown(root, fn, key) {
+    for (const c of Array.from((root && root.childNodes) || [])) {
+      if (!c || typeof c.getAttribute !== 'function') continue;
+      const k = attrOf(c, 'data-key') || key || '';
+      if (fn(c, k)) return c;
+      const hit = walkDown(c, fn, k);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  const sigOf = (el, key) => [el.tagName, attrOf(el, 'data-action'), attrOf(el, 'data-act'), attrOf(el, 'data-pr'),
+    attrOf(el, 'data-number'), key || ''].join('|');
+  function keepFocus(root, draw, fallback) {
+    const el = typeof document !== 'undefined' ? document.activeElement : null;
+    let mark = null;
+    if (root && el && el !== root) {
+      let key = '';
+      if (walkDown(root, (c, k) => { if (c === el) { key = k; return true; } return false; })) {
+        mark = { el, key, sig: sigOf(el, key), action: attrOf(el, 'data-action') || '', pr: attrOf(el, 'data-pr') || '' };
+      }
+    }
+    draw();
+    if (!mark) return;
+    const now = document.activeElement;
+    if (now && now !== mark.el && now !== document.body) return;          // the focus went elsewhere meanwhile
+    if (walkDown(root, (c) => c === mark.el) && now === mark.el) return;  // the same control is still there
+    let next = walkDown(root, (c, k) => c !== mark.el && !c.hidden && sigOf(c, k) === mark.sig);
+    if (!next && typeof fallback === 'function') next = fallback(mark);
+    if (next && !next.hidden && typeof next.focus === 'function') next.focus();
+  }
+  /* The bubble's own fallback: the row button that opens the list the focus was in. */
+  function dockOpener(m) {
+    if (tucked() && !isPhone()) return null;
+    if (m.pr || /^(review-|tray-open)/.test(m.action)) return handle;
+    if (/^dock-(go|send-page|discard)$/.test(m.action)) return dockCount;
+    if (m.action === 'dock-open-send') return sentBtn;
+    return null;
+  }
+
   // ---------------------------------------------------------------- drawing ---
   function changesItems(v) {
     return (v.pages || []).map((p) => {
@@ -460,9 +578,13 @@
       const one = button({ class: 'cms-btn hc-dock-item-send', 'data-action': 'dock-send-page', 'data-key': p.key }, 'Send this page');
       one.disabled = sending;
       one.addEventListener('click', () => send(p.key));
+      // fixes pass B9a: a page changed since you started: Discard is right here (asked first)
+      const drop = p.stale ? button({ class: 'cms-btn hc-dock-item-discard', 'data-action': 'dock-discard', 'data-key': p.key,
+        'aria-label': `Discard your changes to ${p.label}` }, 'Discard') : null;
+      if (drop) drop.addEventListener('click', () => { if (typeof api.discard === 'function') api.discard(p.key); });
       return h('li', { class: 'hc-dock-item' }, title,
         h('span', { class: 'hc-dock-item-meta', text: n ? plural(n, p.unit === 'changes' ? 'change' : 'block', p.unit === 'changes' ? 'changes' : 'blocks') : 'notes' }),
-        one);
+        one, drop);
     });
   }
   function sendList() {
@@ -489,6 +611,9 @@
 
   function refreshDock(v) {
     if (!dock) return;
+    keepFocus(dock, () => drawDock(v), dockOpener);
+  }
+  function drawDock(v) {
     lastView = v;
     const signedIn = v.signedIn;
     dock.hidden = !signedIn;
@@ -504,7 +629,12 @@
     }
     if (phone) document.body.classList.toggle('hc-dock-collapsed', !sheetOpen);
     document.body.classList.toggle('hc-sheet-open', phone && sheetOpen && signedIn);
-    if (v.typed) autoFold();
+    // fixes pass B7: the line that says a change was not kept; the redraw that first shows it does not fold
+    const lost = Boolean(v.unsaved);
+    const fresh = lost && unsavedLine.hidden;
+    if (lost && unsavedLine.textContent !== window.HCCore.DRAFT_UNSAVED_TEXT) unsavedLine.textContent = window.HCCore.DRAFT_UNSAVED_TEXT;
+    unsavedLine.hidden = !lost;
+    if (v.typed && !fresh) autoFold();
     const folded = tucked();
     dockTag.hidden = !signedIn || !folded;                 // only while folded away
     if (folded) { dock.setAttribute('inert', ''); api.closeMenu(); } else dock.removeAttribute('inert');   // nothing hidden is in the tab order
@@ -526,6 +656,10 @@
     dockUndo.disabled = !v.canUndo;
     dockRedo.disabled = !v.canRedo;
     if (!n && open === 'changes') open = '';
+    // B10: the tip shows while I may edit this page and have never changed anything; the first change ends it
+    let tip = signedIn && Boolean(v.on) && editing && !hinted(v.login);
+    if (tip && (n > 0 || (Number.isInteger(v.changes) && v.changes > 0) || v.canUndo)) { hinted(v.login, true); tip = false; }
+    hint.hidden = !tip;
 
     drawDockLock(v.access, v.page, v.projectId);
     placeReview(Boolean(v.access && !v.access.can && !dockLock.hidden));
@@ -560,8 +694,13 @@
     if (signedIn) {
       const login = String(v.login);
       const kids = [api.avatar(login, login)];
-      if (n) kids.push(h('span', { class: 'hc-dock-badge', text: String(n) }));
+      // the badge: pages changed, else what waits for review; the tab's name says it (fixes pass B4, WCAG 4.1.2)
+      const toReview = Boolean(v.on) && reviewCount > 0 ? reviewCount : 0;
+      const badge = n || toReview;
+      if (badge) kids.push(h('span', { class: 'hc-dock-badge', 'aria-hidden': 'true', text: String(badge) }));
       dockTag.replaceChildren(...kids);
+      const said = [n ? `${plural(n, 'page', 'pages')} changed` : '', toReview ? `${toReview} to review` : ''].filter(Boolean);
+      dockTag.setAttribute('aria-label', ['Show the editor controls'].concat(said).join(', '));
     }
     drawPanels(v);
   }
@@ -627,10 +766,13 @@
     panel,
     sent,
     offerUndo,
+    stopOffer,
     setCount,
     loadCount,
     lockParts,
+    askAccess,
     chip: () => chipEl,
+    keepFocus,
     escape,
     scrolled: (y) => scrolledTo(y, 'frame'),
     UNDO_MS,

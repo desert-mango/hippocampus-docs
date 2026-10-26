@@ -1892,3 +1892,15 @@ test('peopleMarks: added, removed, moved (only those out of order), pinned, unpi
   swap.groups[1].people.reverse();
   assert.equal(C.peopleMarks(PEOPLE, JSON.stringify(swap)).filter((m) => m.mark === 'move').length, 1);
 });
+
+test('fix B14 (Nielsen #15): failureText says GitHub\'s common answers in plain words with a next step', () => {
+  const said = (e) => C.failureText(e);
+  assert.equal(said(new Error('GitHub answered HTTP 401 for x')), 'Your sign-in has ended. Sign in again.');
+  assert.equal(said(Object.assign(new Error('nope'), { status: 403 })), 'GitHub refused this: you may not have the right to do it.');
+  assert.equal(said(new Error('GitHub answered HTTP 404')), 'That page or send no longer exists on GitHub.');
+  for (const n of [409, 422]) assert.equal(said(new Error(`GitHub answered HTTP ${n}`)), 'GitHub could not apply this: the send may have changed. Reload and try again.');
+  assert.equal(said(new TypeError('Failed to fetch')), 'GitHub could not be reached. Check your connection and try again.');
+  assert.equal(said(new Error('GitHub could not be reached')), 'GitHub could not be reached. Check your connection and try again.');
+  assert.equal(said(new Error('GitHub answered HTTP 500')), 'Something went wrong: GitHub answered HTTP 500', 'unknown: the raw text after a colon');
+  assert.equal(said('odd'), 'Something went wrong: odd');
+});

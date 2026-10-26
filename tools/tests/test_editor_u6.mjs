@@ -9,7 +9,7 @@
    the page; the frame posts hc-facts {field, value} and the parent keeps a facts draft, data/projects/<id>.json
    (strict JSON, HCCore.factsDraftText, checked by HCCore.validFacts against FACTS_RULES, the copy of the gate's
    PROJECT_FACTS_SPEC that tools/tests/test_facts_rules.py holds equal). A locked project says so in the page and
-   its "Request edit access" (hc-access-ask) runs the bubble's own request. "+ New project" (hc-new-project) opens a
+   its "Request edit access" (hc-access-ask) opens the bubble and focuses its own Request edit access (the person's click sends). "+ New project" (hc-new-project) opens a
    small dialog that makes the 3-file draft (HCEditor.helpers.makeProjectDraft). js/app.js: one ACTIVE tag on a
    project page (the facts row's), data-hc-fact marks, the "+ New page" item and the hidden "+ New project" card.
 
@@ -173,23 +173,39 @@ test('hc-facts: refused on a locked project, and off a project page', async () =
   assert.equal(draftsOf(page).get('data/projects/core-stack'), null);
 });
 
-test('hc-access-ask: the locked page\'s "Request edit access" runs the bubble\'s own request (one proposal for Write)', async () => {
+/* Fixes pass B: focus() on the fake elements records document.activeElement (restored after the test). */
+function trackFocus(t, page) {
+  const proto = Object.getPrototypeOf(page.body);
+  const was = proto.focus;
+  proto.focus = function focus() { page.win.document.activeElement = this; };
+  t.after(() => { proto.focus = was; });
+}
+
+test('hc-access-ask (fix B2): the locked page\'s "Request edit access" opens the bubble and focuses its button; nothing is sent until that click', async (t) => {
   const writes = [];
   const onWrite = (method, url) => { writes.push([method, url]); return { status: 422, body: { message: 'no' } }; };
   const page = await on('/projects/core-stack', { editors: [], site: { onWrite } });
+  trackFocus(t, page);
   await page.send({ type: 'hc-access-ask' });
   assert.equal(page.body.classList.contains('hc-dock-collapsed'), false, 'the bubble is out');
-  // the dock's own Request edit access ran: its result line (here the fake GitHub has no tree for main) is out
+  assert.deepEqual(writes, [], 'a frame message sends nothing');
+  const ask = page.one((e) => e.attrs['data-action'] === 'access-request');
+  assert.ok(ask, 'the bubble shows its Request edit access');
+  assert.equal(page.win.document.activeElement, ask, 'and focuses it');
+  ask.click();          // the person's own click in the bubble sends
+  await settle();
   assert.ok(page.one((e) => e.classList.contains('hc-access-result') && !e.hidden && /Stopped while reading main/.test(e.textContent)),
     'its result is said in the bubble');
 });
 
-test('hc-access-ask: a read-only member gets the prefilled GitHub issue, in a new tab', async () => {
+test('hc-access-ask (fix B2): a read-only member gets the prefilled GitHub issue link focused, not a tab opened for them', async (t) => {
   const page = await on('/projects/core-stack', { editors: [], site: { variant: 'readonly' } });
+  trackFocus(t, page);
   await page.send({ type: 'hc-access-ask' });
-  assert.equal(page.opens.length, 1);
-  assert.match(page.opens[0][0], /\/issues\/new\?title=/);
-  assert.equal(page.opens[0][1], '_blank');
+  assert.equal(page.opens.length, 0, 'no tab opens from a frame message');
+  const ask = page.one((e) => e.attrs['data-action'] === 'access-issue');
+  assert.match(ask.attrs.href, /\/issues\/new\?title=/);
+  assert.equal(page.win.document.activeElement, ask);
 });
 
 test('hc-access-ask: ignored on a page you can edit', async () => {
@@ -257,6 +273,7 @@ test('ED51: the Projects page ends with a hidden "+ New project" card (the frame
   const m = /<div class="project-grid project-new-row" hidden><button type="button" class="card project-card project-new" data-hc-new-project>[\s\S]*?<\/button>/.exec(html);
   assert.ok(m, 'the card, hidden');
   assert.match(m[0], /New project/);
+  assert.ok(!/<(h[1-6]|p)[\s>]/.test(m[0]), 'fix B11: no heading or paragraph inside the button (spans styled the same)');
   assert.ok(html.indexOf('data-hc-new-project') > html.lastIndexOf('href="#/projects/'), 'after the last project');
 });
 
@@ -267,7 +284,8 @@ test('ED51: every side-menu group ends with "+ New page": a prefilled issue in a
   assert.ok(groups.length >= 10);
   for (const g of groups) {
     const title = /<summary>([^<]*)<\/summary>/.exec(g)[1];
-    const a = /<a class="sb-new-page" href="([^"]+)" target="_blank" rel="noopener noreferrer">\+ New page<\/a><\/details>$/.exec(g);
+    // fix B11 (WCAG 3.2.5 advisory): the link says it opens GitHub in a new tab, for screen readers
+    const a = /<a class="sb-new-page" href="([^"]+)" target="_blank" rel="noopener noreferrer">\+ New page<span class="visually-hidden"> \(opens GitHub in a new tab\)<\/span><\/a><\/details>$/.exec(g);
     assert.ok(a, `the last item of ${title}`);
     const u = new URL(a[1].replace(/&amp;/g, '&'));
     assert.equal(u.origin + u.pathname, 'https://github.com/desert-mango/hippocampus-docs/issues/new');
@@ -277,4 +295,27 @@ test('ED51: every side-menu group ends with "+ New page": a prefilled issue in a
   const css = readRepo('css/site.css');
   assert.match(css, /\.sb-new-page \{ display: none; \}/);
   assert.match(css, /body\.hc-editor-on \.sb-new-page \{ display: block; \}/);
+});
+
+test('fix B11 (WCAG 2.4.3): the New project dialog keeps Tab inside, makes the page inert, and gives the focus back on close', async (t) => {
+  const page = await on('/projects');
+  trackFocus(t, page);
+  const before = page.body.childNodes.slice();
+  await page.send({ type: 'hc-new-project' });
+  const dlg = page.one((e) => e.getAttribute && e.getAttribute('data-new-project') !== null && !e.hidden);
+  const field = (n) => page.one((e) => e.getAttribute && e.getAttribute('name') === n && e.tagName !== 'LABEL');
+  assert.equal(page.win.document.activeElement, field('id'), 'the first field has the focus');
+  for (const el of before) assert.equal(el.getAttribute('inert'), '', 'the page behind is inert');
+  const key = (k, shift) => { const ev = { key: k, shiftKey: Boolean(shift), prevented: false, preventDefault() { ev.prevented = true; } };
+    for (const fn of dlg.listeners.keydown || []) fn(ev); return ev; };
+  page.action('new-project-make').focus();
+  assert.equal(key('Tab').prevented, true);
+  assert.equal(page.win.document.activeElement, field('id'), 'Tab from the last control wraps to the first');
+  key('Tab', true);
+  assert.equal(page.win.document.activeElement, page.action('new-project-make'), 'Shift+Tab from the first wraps to the last');
+  field('name').focus();
+  assert.equal(key('Tab').prevented, false, 'inside, Tab moves as usual');
+  page.action('new-project-cancel').click();
+  for (const el of before) assert.equal(el.getAttribute('inert'), null, 'the page is back');
+  assert.equal(page.win.document.activeElement, page.frame(), 'the focus goes back to the page, where "+ New project" is');
 });

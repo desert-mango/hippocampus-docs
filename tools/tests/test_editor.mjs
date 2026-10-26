@@ -1836,7 +1836,9 @@ test('Propose: a taken branch name retries -2 … -5; a file changed on GitHub s
   const stale = recorded(editorGithub(baseGithub({ onWrite: writeAnswers() })));
   const s = await C.runPropose(stale.client, proposeOpts({ changes: [{ path: SETUP_FILE, text: 'e\n', original: 'older\n', baseSha: OLD }] }));
   assert.equal(s.ok, false);
-  assert.match(s.message, new RegExp(`${SETUP_FILE.replace(/[.]/g, '\\.')} changed on GitHub since you opened it`));
+  // fixes pass B9a: plain words (the page's title when the drafts name it; here no draft, so the path)
+  assert.equal(s.message, `${SETUP_FILE}. ${C.STALE_DRAFT_TEXT}`);
+  assert.match(C.STALE_DRAFT_TEXT, /^Someone changed this page since you started\./);
   assert.deepEqual(stale.seq().filter((x) => !x.startsWith('GET')), [], 'nothing written');
   // same text at the new head: it goes ahead; a "new" file that now exists does not
   const fine = recorded(editorGithub(baseGithub({ onWrite: writeAnswers() })));
@@ -2481,7 +2483,7 @@ test('edit access: a granting copy of edit-access.json served by the site (the d
   assert.ok(page.calls.some((c) => /\/contents\/data\/graph\/edit-access\.json\?ref=[0-9a-f]{40}/.test(c.url)), 'main\'s file, through GitHub');
   const lock = page.one((e) => e.classList.contains('hc-dock-lock') && !e.hidden);
   assert.match(lock.textContent, /You can't edit this project\./, 'main lists no editor: the page stays locked');
-  assert.match(lock.textContent, /You have no commits in this project's repos yet\./);
+  assert.match(lock.textContent, /Only this project's editors can change it\./);
 });
 
 test('edit access: read again from the site after a minute, so a changed list shows without a reload', async () => {
@@ -2506,13 +2508,13 @@ test('edit access: read again from the site after a minute, so a changed list sh
 test('edit access: the bubble on a project page says what you can do there, in one line (U0b: the Changes tab\'s line is gone)', async () => {
   const line = (page) => { const l = page.one((e) => e.classList.contains('hc-dock-lock') && !e.hidden); return l ? l.textContent : null; };
   let page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText(['bob']) } });
-  assert.equal(line(page), 'You can edit this project: you have commits in 2 of its 15 repos.');
+  assert.equal(line(page), null, 'fix B9c: nothing to say when you can edit');
   page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([]) } });
-  assert.match(line(page), /You have no commits in this project's repos yet\./);
+  assert.match(line(page), /Only this project's editors can change it\./);
   page = await editorOn({ hash: '#/projects/core-stack', files: { [ACCESS_FILE]: accessText([], ['bob']) } });
   assert.match(line(page), /An admin removed your access to this project\./);
   page = await editorOn({ hash: '#/projects/core-stack', variant: 'maintain', files: { [ACCESS_FILE]: accessText([]) } });
-  assert.equal(line(page), 'You can edit every project (Maintainer).');
+  assert.equal(line(page), null, 'fix B9c: a Maintainer edits every project: nothing to say');
   // not a project page: no line
   page = await editorOn({ files: { [ACCESS_FILE]: accessText(['bob']) } });
   assert.equal(line(page), null);
@@ -2885,8 +2887,10 @@ test('edit gate: an Editor without access to a project cannot select, insert, ed
   const lock = dockLock(page);
   assert.ok(lock, 'the dock has the can\'t-edit line');
   assert.match(lock.textContent, /You can't edit this project\./);
-  assert.match(lock.textContent, /You have no commits in this project's repos yet\./);
-  const ask = findAll(lock, (e) => e.attrs['data-action'] === 'access-request')[0];
+  assert.match(lock.textContent, /Only this project's editors can change it\./);
+  assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'fix B9d: one Request control, the page\'s lock line');
+  await page.send({ type: 'hc-access-ask' });          // the page line's click: the bubble's button comes out
+  const ask = findAll(dockLock(page), (e) => e.attrs['data-action'] === 'access-request')[0];
   assert.ok(ask, 'with Request edit access');
   assert.equal(ask.textContent, C.ACCESS_REQUEST_LABEL);
   // removed by an admin: the same
@@ -2898,6 +2902,7 @@ test('edit gate: an Editor without access to a project cannot select, insert, ed
 test('edit gate: Request edit access in the dock sends the one access proposal (the project box\'s own path)', async () => {
   const { writes, onWrite } = recordWrites();
   const page = await gateOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } }, files: { [ACCESS_FILE]: accessText([]) } });
+  await page.send({ type: 'hc-access-ask' });          // fix B9d: the page line's Request brings the bubble's button out
   const ask = findAll(dockLock(page), (e) => e.attrs['data-action'] === 'access-request')[0];
   ask.click();
   await settle();
@@ -2911,6 +2916,7 @@ test('edit gate: a read-only member on a project page gets the GitHub issue link
   const page = await gateOn({ variant: 'readonly', files: { [ACCESS_FILE]: accessText([]) } });
   await page.send({ type: 'hc-ready' });
   assert.equal(lastLocked(page), true);
+  await page.send({ type: 'hc-access-ask' });          // fix B9d: the page line's Request brings the link out
   const ask = findAll(dockLock(page), (e) => e.attrs['data-action'] === 'access-issue')[0];
   assert.ok(ask, 'the issue link');
   assert.match(ask.attrs.href, /\/issues\/new\?title=/);
@@ -2927,10 +2933,7 @@ test('edit gate: an Editor with access edits the project page; the dock says why
   // U2 (ED7, D1): nothing changed yet -> no changes row, no "No changes yet", no Send for review
   assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, '');
   assert.equal(page.action('dock-send').hidden, true);
-  const lock = dockLock(page);
-  assert.ok(lock, 'one short line');
-  assert.equal(lock.textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
-  assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'nothing to request');
+  assert.equal(dockLock(page), undefined, 'fix B9c: nothing to say when you can edit, nothing to request');
   await page.typeIn(i, 'A changed paragraph.\n\n');
   assert.ok(draftsOf(page).get(GATE_PAGE), 'the draft is kept');
   assert.equal(page.action('dock-send').hidden, false, 'U2: Send for review shows with a change');
@@ -2945,7 +2948,7 @@ test('edit gate: Admin and Maintainer edit every project, with or without the ac
       assert.equal(lastLocked(page), false, variant);
       await page.pick(firstParagraph(GATE_TEXT));
       assert.ok(page.editorMessages().at(-1).open, `${variant}: the block opens for typing`);
-      assert.match(dockLock(page).textContent, /You can edit every project/);
+      assert.equal(dockLock(page), undefined, `${variant}: fix B9c: nothing to say when you can edit`);
     }
   }
 });

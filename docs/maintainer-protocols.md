@@ -245,9 +245,9 @@ The words, exactly as the editor shows them:
 - A new project whose id is taken: "a project with the id 'uvms' already exists — pick another
   id". An id must be "lowercase letters, digits and dashes (it is the page's address,
   /projects/<id>)".
-- Someone changed the page on GitHub while you edited: "<file> changed on GitHub since you
-  opened it. Your draft is kept: copy your text somewhere, press "Discard changes", open the
-  page again and put your change back in". **Discard changes** is on the editor page.
+- Someone changed the page while you edited: "<page title>. Someone changed this page since you
+  started. Your words are kept on this page: open it to put them back, or discard them." That
+  page's row in the bubble's changes list then has a **Discard** button (it asks first).
 - Your send went live or was declined meanwhile: "Your send #n is no longer open: discard these
   changes and start from the live site."
 

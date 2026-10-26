@@ -590,7 +590,8 @@ test('U2 ED39/ED41: on a locked project page the review row sits under the lock 
   const lock = findAll(dock, (e) => e.attrs['data-dock-lock'] !== undefined)[0];
   assert.equal(lock.hidden, false);
   assert.match(lock.textContent, /You can't edit this project\./);
-  assert.ok(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 'Request edit access');
+  assert.match(lock.textContent, /Only this project's editors can change it\./);
+  assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'fix B9d: the page\'s lock line holds the one Request');
   const kids = dock.childNodes;
   assert.ok(kids.indexOf(lock) < kids.indexOf(row(page, 'review')), 'the review row comes after the lock');
   const added = await editorOn({ hash: `#${GATE_ROUTE}`, files: { [ACCESS_FILE]: accessText(['bob'], 'added') } });
@@ -748,4 +749,228 @@ test('U2 fix 9 (U4 asked): a draft that holds only notes is a change (isDirty, d
   store.put(d);
   assert.deepEqual(store.dirty().map((x) => x.key), [PAGE_ID]);
   assert.equal(C.isDirty(Object.assign({}, d, { notes: [] })), false, 'an empty notes list is no change');
+});
+
+// ================================================================ fixes pass B (integrated review) ===
+
+test('fix B1 (security 1): a sign-out ends the Undo offer; the old Undo button writes nothing', async (t) => {
+  const { writes, onWrite, rest } = sendWrites();
+  const page = await editorOn({ onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
+  hide(t, page);
+  await typePage(page);
+  page.action('dock-send').click();
+  await settle();
+  const undo = page.action('dock-undo');
+  assert.ok(undo, 'the offer is out');
+  page.one((e) => e.attrs['data-action'] === 'sign-out').click();
+  await settle();
+  const box = page.one((e) => e.attrs['data-dock-undo'] !== undefined);
+  assert.equal(box.hidden, true, 'the offer is gone with the sign-in');
+  assert.equal(findAll(box, (e) => e.attrs['data-action'] === 'dock-undo').length, 0);
+  const before = writes.length;
+  undo.click();
+  await settle();
+  assert.deepEqual(writes.slice(before).map(rest), [], 'no write after the sign-out');
+});
+
+test('fix B1: HCDock.stopOffer() takes the Undo offer away and stops its clock', () => {
+  const dock = bareDock();
+  dock.D.offerUndo({ items: [{ number: 42, title: 'Edit X' }], run: async () => ({ text: 'Undone.', undone: [42] }) });
+  const box = dock.one((e) => e.attrs['data-dock-undo'] !== undefined);
+  assert.equal(box.hidden, false);
+  assert.equal(typeof dock.D.stopOffer, 'function');
+  dock.D.stopOffer();
+  assert.equal(box.hidden, true);
+  assert.equal(dock.step(), 0, 'no clock left running');
+});
+
+test('fix B1: undoSends returns before any write when the sign-in changed', () => {
+  const src = readRepo('js/editor.js');
+  const body = src.slice(src.indexOf('async function undoSends'), src.indexOf('function putBack'));
+  assert.ok(body.indexOf('if (!sessionGen.isCurrent(gen)) return') < body.indexOf('C.runUndo('), 'the check comes before the first write');
+});
+
+/* focus() on the fake elements records document.activeElement (restored after the test). */
+function trackFocus(t, doc) {
+  const proto = FakeElement.prototype;
+  const was = proto.focus;
+  proto.focus = function focus() { doc.activeElement = this; };
+  t.after(() => { proto.focus = was; });
+}
+const TWO_PAGES = { pages: [{ key: PAGE_ID, label: 'FCU Firmware', blocks: 1, unit: 'blocks', route: PAGE_ROUTE },
+  { key: UBUNTU_ID, label: 'Ubuntu 24.04 Server', blocks: 2, unit: 'blocks', route: '/setup/raspberry-pi/ubuntu-24-04-server' }], pageCount: 2 };
+
+test('fix B3 (WCAG 2.4.3): a redraw of the changes list keeps the focus on the same control', (t) => {
+  const dock = bareDock({ view: TWO_PAGES });
+  trackFocus(t, dock.doc);
+  dock.action('dock-changes').click();
+  const sendUb = () => findAll(dock.list('changes'), (e) => e.attrs['data-action'] === 'dock-send-page' && e.attrs['data-key'] === UBUNTU_ID)[0];
+  const old = sendUb();
+  old.focus();
+  dock.set({});                       // a redraw: the list is built anew
+  assert.notEqual(sendUb(), old, 'a new node');
+  assert.equal(dock.doc.activeElement, sendUb(), 'the focus is on the same page\'s Send this page');
+  // the page left the list: the focus goes to the row button that opened it
+  dock.set({ pages: TWO_PAGES.pages.slice(0, 1), pageCount: 1 });
+  assert.equal(dock.doc.activeElement, dock.action('dock-changes'));
+});
+
+test('fix B3: a redraw of the review slot keeps the focus on the same row, else on "N to review"', (t) => {
+  const dock = bareDock();
+  trackFocus(t, dock.doc);
+  let rowsShown = [7, 8];
+  dock.D.panel('review', () => rowsShown.map((n) => {
+    const b = new FakeElement('button');
+    b.setAttribute('data-action', 'review-row');
+    b.setAttribute('data-pr', String(n));
+    return b;
+  }));
+  dock.D.setCount(2);
+  const rowOf = (n) => findAll(dock.body, (e) => e.attrs['data-action'] === 'review-row' && e.attrs['data-pr'] === String(n))[0];
+  rowOf(8).focus();
+  const before = rowOf(8);
+  dock.set({});
+  assert.notEqual(rowOf(8), before);
+  assert.equal(dock.doc.activeElement, rowOf(8));
+  rowsShown = [7];
+  dock.set({});
+  assert.equal(dock.doc.activeElement, dock.action('tray-open'), 'its row went: the row button');
+});
+
+test('fix B4 (WCAG 2.2.1): the Undo offer takes the focus; its 8 s clock waits while the focus or the pointer is in the bubble', (t) => {
+  const dock = bareDock();
+  trackFocus(t, dock.doc);
+  dock.D.offerUndo({ items: [{ number: 42, title: 'Edit FCU Firmware' }], run: async () => ({ text: 'Undone.', undone: [42] }) });
+  const box = dock.one((e) => e.attrs['data-dock-undo'] !== undefined);
+  assert.equal(dock.doc.activeElement, dock.action('dock-undo'), 'the focus is on Undo');
+  for (let i = 0; i < 30; i += 1) dock.step();               // 30 s with the focus on it: not counted
+  assert.equal(box.hidden, false, 'still offered');
+  dock.doc.activeElement = dock.body;                        // the focus leaves the bubble
+  const bubble = dock.one((e) => e.classList.contains('hc-dock'));
+  bubble.fire('pointerenter');
+  for (let i = 0; i < 30; i += 1) dock.step();               // 30 s with the pointer in it: not counted
+  assert.equal(box.hidden, false, 'still offered');
+  bubble.fire('pointerleave');
+  for (let i = 0; i < 7; i += 1) dock.step();
+  assert.equal(box.hidden, false, '7 counted seconds');
+  dock.step();
+  assert.equal(box.hidden, true, 'gone after 8 counted seconds');
+});
+
+test('fix B4 (WCAG 4.1.2): the folded photo tab says what its badge counts', () => {
+  const dock = bareDock({ view: TWO_PAGES });
+  dock.D.fold(true);
+  const tag = dock.one((e) => e.classList.contains('hc-dock-tag'));
+  assert.equal(tag.attrs['aria-label'], 'Show the editor controls, 2 pages changed');
+  dock.D.setCount(3);
+  assert.equal(tag.attrs['aria-label'], 'Show the editor controls, 2 pages changed, 3 to review');
+  dock.set({ pages: [], pageCount: 0 });
+  assert.equal(tag.attrs['aria-label'], 'Show the editor controls, 3 to review');
+  assert.equal(dock.one((e) => e.classList.contains('hc-dock-badge')).textContent, '3', 'the badge shows why');
+});
+
+test('fix B7 (Nielsen #6): a change this browser refuses to keep is said once in the bubble, and only then does leaving ask', async () => {
+  const local = memoryStorage();
+  const setItem = local.setItem;
+  let refuse = true;
+  local.setItem = (k, v) => { if (refuse && /^hc-cms-drafts/.test(k)) throw new Error('QuotaExceededError'); return setItem(k, v); };
+  const page = await editorOn({ localStorage: local });
+  assert.deepEqual(page.listeners.beforeunload || [], [], 'no leave question while nothing is lost');
+  await typePage(page);
+  const line = page.one((e) => e.classList.contains('hc-dock-unsaved'));
+  assert.ok(line && !line.hidden, 'the bubble says it');
+  assert.equal(line.textContent, 'Your change could not be saved in this browser. It stays on this page until you reload.');
+  assert.equal(line.attrs.role, 'alert');
+  const ask = page.listeners.beforeunload || [];
+  assert.equal(ask.length, 1, 'leaving asks now');
+  const ev = { preventDefault() { ev.prevented = true; }, returnValue: undefined };
+  ask[0](ev);
+  assert.equal(ev.prevented, true, 'the browser\'s leave question');
+  await typePage(page, 'Typed again.\n\n');
+  assert.equal(page.all((e) => e.classList.contains('hc-dock-unsaved')).length, 1, 'said once: one line');
+  // the browser keeps it again: the line goes and leaving asks nothing
+  refuse = false;
+  await typePage(page, 'And kept.\n\n');
+  assert.equal(page.one((e) => e.classList.contains('hc-dock-unsaved')).hidden, true);
+  const ev2 = { preventDefault() { ev2.prevented = true; } };
+  ask[0](ev2);
+  assert.equal(ev2.prevented, undefined, 'nothing is lost: no question');
+});
+
+test('fix B7: the bubble stays out on the typing that first could not be kept (the line must be seen)', async () => {
+  const local = memoryStorage();
+  const setItem = local.setItem;
+  local.setItem = (k, v) => { if (/^hc-cms-drafts/.test(k)) throw new Error('QuotaExceededError'); return setItem(k, v); };
+  const page = await editorOn({ localStorage: local });
+  await typePage(page);
+  assert.equal(tucked(page), false, 'not folded by that typing');
+});
+
+test('fix B9a (Nielsen #8): a page changed since you started says so in plain words, with its title, and the changes row offers Discard', async () => {
+  const { writes, onWrite, rest } = sendWrites();
+  const storage = memoryStorage();
+  const ubuntu = readRepo(UBUNTU_FILE);
+  const old = draft(UBUNTU_ID, 'Ubuntu 24.04 Server', UBUNTU_FILE, `${ubuntu}\nMore.\n`, 'an older text\n');
+  old.base = { ref: 'main', sha: '9'.repeat(40), number: null };
+  C.createDraftStore(localFor(storage), C.draftsKey('bob')).put(old);
+  const page = await editorOn({ storage, onWrite, extra: { trees: { [MAIN_SHA]: TREE_M } } });
+  page.action('dock-send').click();
+  await settle();
+  assert.equal(writes.filter((w) => rest(w) === 'POST /pulls').length, 0, 'nothing sent');
+  const said = page.one((e) => e.classList.contains('hc-notice')).textContent;
+  assert.match(said, /Ubuntu 24\.04 Server\. Someone changed this page since you started\. Your words are kept on this page: open it to put them back, or discard them\./);
+  assert.ok(!/content\/setup|GitHub since you opened|proposed/.test(said), `no file path, no old words: ${said}`);
+  page.action('dock-changes').click();
+  await settle();
+  const discard = findAll(page.one((e) => e.attrs['data-dock-list'] === 'changes'), (e) => e.attrs['data-action'] === 'dock-discard')[0];
+  assert.ok(discard, 'Discard on the page\'s row');
+  assert.equal(discard.attrs['data-key'], UBUNTU_ID);
+  discard.click();
+  await settle();
+  assert.equal(page.confirms.at(-1), C.DISCARD_TEXT, 'asked first');
+  assert.equal(draftsOf(page).get(UBUNTU_ID), null, 'discarded');
+});
+
+test('fix B9e (Nielsen #17): the changes list names a page by its own title from the site\'s data', async () => {
+  const storage = memoryStorage();
+  const ubuntu = readRepo(UBUNTU_FILE);
+  C.createDraftStore(localFor(storage), C.draftsKey('bob')).put(draft(UBUNTU_ID, 'ubuntu 24.04 server', UBUNTU_FILE, `${ubuntu}\nMore.\n`, ubuntu));
+  const page = await editorOn({ storage });
+  page.action('dock-changes').click();
+  await settle();
+  const list = page.one((e) => e.attrs['data-dock-list'] === 'changes');
+  assert.ok(findAll(list, (e) => e.classList.contains('hc-dock-item-title') && e.textContent === 'Ubuntu 24.04 Server 64bit').length === 1, list.textContent);
+});
+
+test('fix B9e: no empty "Your changes" head row in the bubble while I edit', async () => {
+  const page = await editorOn();
+  await typePage(page);
+  assert.equal(page.one((e) => e.attrs && e.attrs['data-review-head'] === 'mine'), undefined);
+  assert.ok(!/Your changes/.test(dockOf(page).textContent), dockOf(page).textContent);
+});
+
+test('fix B10 (Nielsen #13): a first-time editor sees one quiet tip under the pill until the first edit; × hides it for good', async () => {
+  const tipOf = (page) => page.one((e) => e.attrs['data-dock-hint'] !== undefined);
+  const page = await editorOn();
+  assert.equal(tipOf(page).hidden, false, 'shown');
+  assert.equal(tipOf(page).textContent.replace('×', ''), 'Click any paragraph to change it. Your edits stay here until you send them.');
+  await typePage(page);
+  assert.equal(tipOf(page).hidden, true, 'the first edit ends it');
+  assert.equal(page.local.getItem('hc-editor-hinted:bob'), '1');
+  // another browser of the same person: × hides it, and it stays hidden
+  const other = await editorOn();
+  assert.equal(tipOf(other).hidden, false);
+  other.action('dock-hint-close').click();
+  await settle();
+  assert.equal(tipOf(other).hidden, true);
+  assert.equal(other.local.getItem('hc-editor-hinted:bob'), '1', 'remembered in this browser');
+  await other.go('#/setup/raspberry-pi/ubuntu-24-04-server');
+  assert.equal(tipOf(other).hidden, true, 'and not shown on the next page');
+});
+
+test('fix B10: no tip for a reader who cannot edit the page', () => {
+  const dock = bareDock({ view: { editing: false } });
+  assert.equal(dock.one((e) => e.attrs['data-dock-hint'] !== undefined).hidden, true);
+  dock.set({ editing: true });
+  assert.equal(dock.one((e) => e.attrs['data-dock-hint'] !== undefined).hidden, false);
 });

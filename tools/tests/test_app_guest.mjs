@@ -182,7 +182,8 @@ function memoryStorage(seed) {
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
-const settle = async () => { for (let i = 0; i < 60; i += 1) await tick(); };
+// microtasks AND zero-delay timers: the sign-in line writes its words a frame later (fix B11), rAF = setTimeout 0 here
+const settle = async () => { for (let i = 0; i < 60; i += 1) { await tick(); await new Promise((r) => setTimeout(r, 1)); } };
 
 function fileResponse(p) {
   const clean = String(p).split('?')[0].split('#')[0].replace(/^\//, '');
@@ -571,7 +572,9 @@ test('a failed injection closes the pre-opened window and the line beside the bu
 test('a blocked window: the line beside the button says so and nothing is injected (U1: then the same-tab sign-in)', async () => {
   const app = await boot({ hash: '#/', open: null });
   app.click();
-  assert.match(app.signInStatus().textContent, /blocked/, 'said at once, where the click was');
+  assert.ok(app.signInStatus(), 'the line is at once where the click was (fix B11: empty, its words a frame later)');
+  await new Promise((r) => setTimeout(r, 5));
+  assert.match(app.signInStatus().textContent, /blocked|server functions/, 'said where the click was (this host then says it has no sign-in)');
   await settle();
   assert.equal(app.opens.length, 1);
   assert.deepEqual(app.injected(), []);
@@ -761,6 +764,9 @@ test('ED1: a blocked pop-up signs in in this tab: the state and the route kept i
   const line = app.signInStatus();
   assert.ok(line, 'the message is beside the button');
   assert.equal(line.getAttribute('aria-live'), 'polite');
+  // fix B11 (WCAG 4.1.3): the live line goes in empty; its words come on the next frame (heard as a change)
+  assert.equal(line.textContent, '', 'empty when it goes in');
+  await new Promise((r) => setTimeout(r, 5));
   assert.match(line.textContent, /blocked/);
   assert.match(line.textContent, /this tab/);
   assert.equal(line.hidden, false);
@@ -788,6 +794,7 @@ test('ED1: a blocked pop-up where storage throws cannot keep the state, so it sa
   const app = await boot({ hash: '#/', open: null, clientId: 'Iv1.placeholder', storage: 'throws' });
   app.click();
   await settle();
+  await new Promise((r) => setTimeout(r, 5));      // fix B11: a new line's words come on the next frame
   assert.deepEqual(app.location.assigned, []);
   assert.match(app.signInStatus().textContent, /Allow pop-ups/);
 });

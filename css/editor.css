@@ -618,9 +618,10 @@ body.hc-edit-on .hc-fact[contenteditable] { cursor: text; caret-color: var(--hc-
 .hc-block.hc-prop-conflict { border-left: 3px dashed var(--warn); padding-left: .9rem; margin-left: -1.05rem; }
 body.hc-hide-suggestions .hc-block.hc-prop-add,
 body.hc-hide-suggestions .hc-block.hc-prop-del { display: none; }
-/* main changed this block since the proposal: main's version, said in words (the frame gets no text) */
-.hc-block.hc-prop-conflict::before { content: "main changed this since the proposal \2014  Update from main";
-  display: block; margin-bottom: .3rem; font-size: .72rem; font-weight: 600; color: var(--warn); }
+/* the site changed this block since it was sent: its version now, said in words (the frame gets no text) */
+/* fixes pass B9b (D22): plain words, plain text (nothing here is a link or a button) */
+.hc-block.hc-prop-conflict::before { content: "The page changed since this was sent.";
+  display: block; margin-bottom: .3rem; font-size: .72rem; font-weight: 500; color: var(--warn); text-decoration: none; }
 
 /* Side by side (View: diff style): a replaced block and its new version in two columns
    (js/editor-frame.js pairs them into .hc-side; inline keeps them stacked, old above new). */
@@ -1019,3 +1020,33 @@ body.hc-editor-on, body.hc-edit-on { --hc-edit-on: #fff; }
 body.hc-edit-on.hc-edit-locked .page-body > .hc-block,
 body.hc-edit-on.hc-edit-locked .page-body > .hc-side > .hc-block,
 body.hc-edit-on.hc-edit-locked .project-page [data-hc-fact] { cursor: not-allowed; }
+
+/* ---- fixes pass B (integrated review, 2026-10-26) ---- */
+/* B6 (Nielsen #3, D2): the review panel is not capped at 12rem (one row showed); its list shows three rows and
+   more, up to 60vh, then scrolls (the one scroll in the bubble) */
+.hc-dock-panel { max-height: none; overflow: visible; }
+.hc-review-list { max-height: 60vh; }
+.hc-review-top:not(:has(b)) { justify-content: flex-end; margin-bottom: -.4rem; }   /* only the ×: it sits at the right */
+/* B9e (Nielsen #17): Send for review stays inside the bubble */
+.hc-dock-send { margin-left: .1rem; padding: 0 .6rem; }
+/* B12 (WCAG 1.4.1): the status dot is a glyph (✓ ✕ … ?) in its colour, not colour alone */
+.hc-review-dot { display: inline-grid; place-items: center; width: auto; height: auto; min-width: .9rem; background: none;
+  color: var(--muted); font: 700 .78rem/1 var(--sans); }
+.hc-review-dot.is-pass { background: none; color: var(--ok); }
+.hc-review-dot.is-fail { background: none; color: var(--danger); }
+.hc-review-dot.is-checking { background: none; color: var(--warn); }
+/* B10 (Nielsen #13): the first-time hint under the pill */
+.hc-dock-hint { display: flex; align-items: flex-start; gap: .4rem; margin: .3rem .2rem 0; max-width: 20rem; color: var(--body-soft);
+  font-size: .76rem; line-height: 1.4; }
+.hc-dock-hint[hidden] { display: none; }
+.hc-dock-hint p { margin: 0; flex: 1; }
+.hc-dock-hint button { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--body-soft);
+  cursor: pointer; font-size: 1rem; line-height: 1; }
+.hc-dock-hint button:hover { background: var(--surface-2); color: var(--heading); }
+.hc-dock-hint button:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+/* B7 (Nielsen #6): a change this browser could not keep */
+.hc-dock:has(> .hc-dock-unsaved:not([hidden])), .hc-dock:has(> .hc-dock-hint:not([hidden])) { border-radius: 14px; }
+.hc-dock-unsaved { margin: .3rem .2rem 0; max-width: 20rem; color: var(--danger); font-size: .76rem; line-height: 1.4; }
+.hc-dock-unsaved[hidden] { display: none; }
+/* B9a: the changes list's Discard (a stale draft) */
+.hc-dock-item-discard { grid-column: 2; min-height: 28px; font-size: .74rem; }

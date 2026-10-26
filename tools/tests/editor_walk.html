@@ -582,7 +582,7 @@
     const login = JSON.parse(await readText('fixtures/github-data/user.json')).login;
     const store = C.createDraftStore(SW.localStorage, C.draftsKey(String(login)));
     const pages = [['setup/raspberry-pi/ubuntu-24-04-server', 'Ubuntu 24.04 Server', 'content/setup/raspberry-pi/ubuntu-24-04-server.md'],
-      ['setup/hippocampus-bringup/fcu-firmware', 'FCU firmware', 'content/setup/hippocampus-bringup/fcu-firmware.md']];
+      ['setup/hippocampus-bringup/fcu-firmware', 'FCU Firmware', 'content/setup/hippocampus-bringup/fcu-firmware.md']];
     for (const [key, label, file] of pages.slice(0, n)) {
       const text = await readText(`../../${file}`);
       if (!text) throw new Error(`no text for ${file}`);
@@ -700,7 +700,7 @@
         await editorOn();
         await u2Open();
         SW.HCDock.sent(42);
-        SW.HCDock.offerUndo({ items: [{ number: 42, title: 'Edit FCU firmware', note: 'goes live on approval' }],
+        SW.HCDock.offerUndo({ items: [{ number: 42, title: 'Edit FCU Firmware', note: 'goes live on approval' }],
           run: async () => ({ text: 'Undone: your changes are back.', undone: [42] }) });
         await until(() => { const b = $('[data-action="dock-sent"]'); return b && b.textContent === '1 sent · waiting'; }, '"1 sent · waiting"');
         await until(() => { const u = $('[data-dock-undo]'); return u && !u.hidden && /Sent · waiting for review/.test(u.textContent); },
@@ -713,8 +713,9 @@
         await until(() => /^#\/projects\/core-stack/.test(SW.location.hash) && $('#content h1'), 'the core-stack page');
         await editorOn();
         await u2Open();
-        await until(() => { const l = $('.hc-dock-lock.is-locked'); return l && !l.hidden && l.querySelector('[data-action="access-request"]'); },
-          'the lock text with Request edit access');
+        // fixes pass B9d: at rest the page's lock line holds the one Request edit access; the bubble says the lock
+        await until(() => { const l = $('.hc-dock-lock.is-locked'); return l && !l.hidden && /editors can change it/.test(l.textContent); },
+          'the lock text (the page line holds Request edit access)');
       },
 
       /* ---- U3 ---- */
