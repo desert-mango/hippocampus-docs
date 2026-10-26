@@ -41,8 +41,9 @@
            block right after it) into one two-column <div class="hc-side">;
            with "inline" they stay stacked, old above new.
          * on the Team page (#people-root) with hc-editor.people, loads
-           js/editor-people.js (HCEditorPeople: the card menu, moves, drag, the
-           "+" cards and the people marks) once, on demand;
+           js/editor-people.js (HCEditorPeople: typing a name or title in
+           place, the Move buttons and drag, the "+" cards and the people
+           marks; no card menu since U5) once, on demand;
          * opens ONE block for typing in the page (editor redesign U2): the
            message's `open` {index, md, kind} names the block and its Markdown.
            The frame loads js/editor-md.js and js/editor-type.js (once, on
@@ -87,6 +88,15 @@
   const MAX_BLOCK_MD = 200000;  // js/source.js MAX_BLOCK_MD: a longer hc-block-md is refused by the bridge
   const OPEN_EDITORS = Object.freeze(['visual', 'code', 'box']);
   const PHONE_BAR_QUERY = '(max-width: 767px)';   // D8: the toolbar sits above the keyboard
+  const PHONE_MAX = 767;                            // the same phone line, for the WINDOW's width the parent posts
+
+  /* Fix pass A1 (Nielsen #4): is the reader on a phone? Framed (D12), this frame is only #content's slot (~700 px in
+     a 1280-px window), so its own width says nothing about the device: the parent's hc-editor.width (the WINDOW's
+     width, U7b) decides. Only when no width came (an old parent) does the frame's own media query answer. */
+  function phoneWindow(win, width) {
+    if (typeof width === 'number' && isFinite(width) && width > 0) return width <= PHONE_MAX;
+    return Boolean(win && typeof win.matchMedia === 'function' && win.matchMedia(PHONE_BAR_QUERY).matches);
+  }
   const ELEMENT = 1;
 
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -273,8 +283,11 @@
       grid.setAttribute('data-ready', 'true');
       if (!media.length) { grid.textContent = 'The site has no images yet: use Upload.'; return; }
       for (const a of media) {
+        // fix pass A4 (WCAG 4.1.2): the list item is a wrapper; the button keeps its own role and name
+        const cell = doc.createElement('div');
+        cell.className = 'hc-pick-cell';
+        cell.setAttribute('role', 'listitem');
         const b = button('hc-pick-img', `Use ${a.label}`, '');
-        b.setAttribute('role', 'listitem');
         b.setAttribute('title', a.label);
         const img = doc.createElement('img');
         img.setAttribute('src', a.url);
@@ -286,39 +299,53 @@
           closePicker();
           HC.post('hc-image-use', { index, url: a.url });
         });
-        grid.appendChild(b);
+        cell.appendChild(b);
+        grid.appendChild(cell);
       }
     }
 
-    function closePicker() {
+    function closePicker(refocus) {
       if (!openPicker) return;
-      const { rail, picker } = openPicker;
+      const { rail, picker, plus } = openPicker;
       openPicker = null;
       if (picker.parentNode) picker.parentNode.removeChild(picker);
       rail.classList.remove('is-open');
+      if (refocus && plus && typeof plus.focus === 'function') { try { plus.focus({ preventScroll: true }); } catch (x) { /* a courtesy */ } }
     }
 
-    function rail(index) {
+    /* Fix pass A7 (WCAG 2.4.6): each "+" says where it adds: after the first words of the block above it, or before
+       the first block. */
+    function railLabel(above) {
+      if (!above) return 'Add a block before the first block';
+      const text = Array.from(above.childNodes || []).map((c) => String(c.textContent || '')).join(' ');   // a space between parts
+      const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+      if (!words.length) return 'Add a block after the block above';
+      const head = words.slice(0, 6).join(' ');
+      return `Add a block after “${head.length > 60 ? `${head.slice(0, 60)}…` : head}${words.length > 6 ? '…' : ''}”`;
+    }
+
+    function rail(index, label) {
       const r = doc.createElement('div');
       r.className = 'hc-plus';
       r.setAttribute('data-insert', String(index));
-      const plus = button('hc-plus-btn', 'Add a block here', '+');
+      const plus = button('hc-plus-btn', label || 'Add a block here', '+');
       plus.addEventListener('click', (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         const wasMine = openPicker && openPicker.rail === r;
         closePicker();
         if (wasMine) return;
+        // fix pass A7 (WCAG 4.1.2): a plain group of buttons (no menu roles it cannot keep); the focus moves into it,
+        // Escape closes it back to its "+"
         const picker = doc.createElement('div');
         picker.className = 'hc-picker';
-        picker.setAttribute('role', 'menu');
-        picker.setAttribute('aria-label', 'Add here');
+        picker.setAttribute('role', 'group');
+        picker.setAttribute('aria-label', 'Add here: pick a kind of block');
         const tiles = doc.createElement('div');
         tiles.className = 'hc-pick-row';
         picker.appendChild(tiles);
         for (const k of INSERT_KINDS) {
           const b = button('hc-pick', `Add ${k.label === 'Repo' ? 'a repository card' : k.label === 'Image' ? 'an image' : `a ${k.label.toLowerCase()}`}`, '');
           b.setAttribute('data-kind', k.kind);
-          b.setAttribute('role', 'menuitem');
           const ic = pathIcon(k.icon, 20);
           if (ic) b.appendChild(ic);
           const name = doc.createElement('span');
@@ -334,7 +361,15 @@
         }
         r.appendChild(picker);
         r.classList.add('is-open');           // D10 (ED28): the room opens on this click only, never on hover
-        openPicker = { rail: r, picker, index };
+        openPicker = { rail: r, picker, index, plus };
+        picker.addEventListener('keydown', (ev) => {
+          if (!ev || ev.key !== 'Escape') return;
+          if (typeof ev.preventDefault === 'function') ev.preventDefault();
+          if (typeof ev.stopPropagation === 'function') ev.stopPropagation();
+          closePicker(true);
+        });
+        const first = Array.from(tiles.childNodes)[0];
+        if (first && typeof first.focus === 'function') { try { first.focus({ preventScroll: true }); } catch (x) { /* a courtesy */ } }
       });
       r.appendChild(plus);
       return r;
@@ -426,7 +461,7 @@
 
     /* Click/Enter-to-select and the "+" rails, once per block. */
     function decorate(body, blocks) {
-      blocks.forEach((w) => {
+      blocks.forEach((w, k) => {
         const i = indexOfBlock(w);
         if (i === null || w.getAttribute('data-hc-wired') === '1') return;
         w.setAttribute('data-hc-wired', '1');
@@ -452,11 +487,11 @@
         });
         const prev = w.previousSibling;
         const hasRail = prev && prev.nodeType === ELEMENT && classesOf(prev).indexOf('hc-plus') >= 0;
-        if (!hasRail) body.insertBefore(rail(i), w);
+        if (!hasRail) body.insertBefore(rail(i, railLabel(k > 0 ? blocks[k - 1] : null)), w);
       });
       const last = blocks[blocks.length - 1];
       if (last && !(last.nextSibling && classesOf(last.nextSibling).indexOf('hc-plus') >= 0)) {
-        const end = rail(indexOfBlock(last) + 1);
+        const end = rail(indexOfBlock(last) + 1, railLabel(last));
         body.insertBefore(end, last.nextSibling || null);
       }
     }
@@ -620,9 +655,11 @@
           }
         }
       }
+      // fix pass A2: the marks kept before a reload go in BEFORE the open: the parent re-opens the selected block in
+      // the same message, and the open reuses an edit root whose data-hc-md-sent is its Markdown (the restored one)
+      restoreMarks(s);                  // U4 (D6): the marks kept before a reload
       syncOpen(s);
       syncNotes(s);                     // U4 (D8): my notes beside their blocks
-      restoreMarks(s);                  // U4 (D6): the marks kept before a reload
       if (openPicker && openPicker.grid && !openPicker.grid.hidden && Array.isArray(s.media)
         && openPicker.grid.getAttribute('data-ready') !== 'true') drawMedia(openPicker.grid, openPicker.index, s.media);
       queueRects();
@@ -732,6 +769,7 @@
         onRemove: () => removeBlock(now),
         onList: () => { const host = hostOf(); if (!host) return; noteBefore(now, true); T.list(host); schedule(now); },
         listState: () => T.listState(hostOf()),
+        formatState: (what) => formatAt(now, what),
       };
       if (editor === 'box') {
         const adm = root.querySelector('.adm');
@@ -764,7 +802,7 @@
       now.handles.push({ detach() { bar.close(); if (bar.el.parentNode) bar.el.parentNode.removeChild(bar.el); } });
       // phone (ED65): the toolbar is fixed just above the on-screen keyboard (visualViewport), never over the text
       const vv = win.visualViewport;
-      if (vv && typeof win.matchMedia === 'function' && win.matchMedia(PHONE_BAR_QUERY).matches && bar.el.style) {
+      if (vv && phoneWindow(win, state && state.width) && bar.el.style) {
         const place = () => { bar.el.style.bottom = `${Math.max(0, Math.round((win.innerHeight || 0) - vv.height - (vv.offsetTop || 0)))}px`; };
         bar.el.classList.add('is-phone');
         place();
@@ -905,8 +943,24 @@
       now.w.classList.add('hc-removed');
       // D9 (ED32): no one-click loss — the removal is an undo step (js/editor.js), and says so for 8 seconds
       const pill = win.HCEditorBlocks.removedPill(doc, { onUndo: () => HC.post('hc-key', { op: 'undo' }),
-        setTimeout: (fn, ms) => win.setTimeout(fn, ms) });
+        setTimeout: (fn, ms) => win.setTimeout(fn, ms), clearTimeout: (t) => win.clearTimeout && win.clearTimeout(t) });
       now.w.appendChild(pill);
+      // fix pass A5 (WCAG 2.4.3): the Remove item went with its menu; the focus goes to the pill's Undo
+      const undo = Array.from(pill.childNodes).find((c) => classesOf(c).indexOf('hc-removed-undo') >= 0);
+      if (undo && typeof undo.focus === 'function') { try { undo.focus({ preventScroll: true }); } catch (e) { /* a courtesy */ } }
+    }
+
+    /* Fix pass A7 (WCAG 4.1.2): is the selection's start inside bold ('strong') or italic ('em') text of the open
+       block? B and I show it as aria-pressed. */
+    function formatAt(now, what) {
+      const sel = doc.getSelection ? doc.getSelection() : null;
+      if (!now || openNow !== now || !sel || !sel.rangeCount) return false;
+      const tags = what === 'strong' ? ['STRONG', 'B'] : what === 'em' ? ['EM', 'I'] : [];
+      const host = (now.targets || []).find((t) => t.contains(sel.anchorNode));
+      for (let n = host ? sel.anchorNode : null; n && n !== host; n = n.parentNode) {
+        if (n.nodeType === ELEMENT && tags.indexOf(String(n.tagName).toUpperCase()) >= 0) return true;
+      }
+      return false;
     }
 
     /* B / I / Code / Link from the open block's toolbar (D8) and the keys (Cmd/Ctrl+E, +K), as suggestions. */
@@ -995,9 +1049,12 @@
     }
     const restored = new Set();
     function restoreMarks(s) {
-      const list = s && Array.isArray(s.marks) ? s.marks.filter((m) => !restored.has(`${m.index}|${m.md}`)) : [];
+      // fix pass A2: a mark is used up only once its block was there to take it (the first hc-editor of a load can
+      // come before js/app.js draws the page; the next apply, from the MutationObserver, tries again)
+      const key = (m) => `${m.index}|${m.md}`;
+      const list = s && Array.isArray(s.marks) ? s.marks.filter((m) => !restored.has(key(m)) && wrapperFor(m.index)) : [];
       if (!list.length) return;
-      for (const m of list) restored.add(`${m.index}|${m.md}`);
+      for (const m of list) restored.add(key(m));
       loadScripts().then((ok) => {
         const M = win.HCEditorMd;
         const S = win.HCSanitize;
@@ -1169,7 +1226,33 @@
       }).observe(content, { childList: true, subtree: true });
     }
 
-    win.addEventListener('scroll', queueRects);
+    win.addEventListener('scroll', () => { queueRects(); postScroll(); });   // fix pass A8: one listener, both jobs
+
+    /* ---- fix pass A8 (U2b/U3, ED35): frame -> parent ----
+       (a) hc-scroll {y}: where the frame is scrolled, at most one message per SCROLL_MS (the last position always
+       goes out), only while Editor mode is on. (b) hc-key {op: 'escape'}: an Escape the frame used for nothing (no
+       open block, no "+" picker, no menu or field that took it: those stop it or mark it handled), so the parent
+       can use it (its bubble, its review card). Decided after every listener ran (the people drag's Escape). */
+    const SCROLL_MS = 150;
+    let scrollTimer = null;
+    let scrollPending = false;
+    let scrollSent = 0;                 // the frame loads at the top; the same position is never sent twice
+    const scrollY = () => Math.max(0, Math.round(Number(win.scrollY) || 0));
+    function postScroll() {
+      if (!state || !state.on) { scrollPending = false; return; }
+      if (scrollTimer !== null) { scrollPending = true; return; }
+      scrollPending = false;
+      const y = scrollY();
+      if (y === scrollSent) return;
+      scrollSent = y;
+      HC.post('hc-scroll', { y });
+      scrollTimer = win.setTimeout(() => { scrollTimer = null; if (scrollPending) postScroll(); }, SCROLL_MS);
+    }
+    function escapeUnused(e) {
+      if (!state || !state.on || e.defaultPrevented) return;
+      const later = typeof win.setTimeout === 'function' ? (fn) => win.setTimeout(fn, 0) : (fn) => fn();
+      later(() => { if (!e.defaultPrevented && state && state.on && !openNow && !openPicker) HC.post('hc-key', { op: 'escape' }); });
+    }
     win.addEventListener('resize', queueRects);
     win.addEventListener('hashchange', () => {
       const h = String(win.location.hash || '');
@@ -1203,8 +1286,10 @@
       });
       doc.addEventListener('keydown', (e) => {
         if (!e || e.key !== 'Escape') return;
+        if (openPicker) { closePicker(true); return; }       // fix pass A7: the "+" picker closes back to its "+"
         if (openNow) closeBlock(true);
         else if (wanted !== null) { const i = wanted; wanted = null; report(i, 'closed', ''); }
+        else escapeUnused(e);
       });
     }
 
@@ -1352,7 +1437,7 @@
   }
 
   const api = { INSERT_KINDS, MARK_CLASS, sentinelIndex, isChrome, findSentinels, pageBodies, groupBlocks, sidePairs,
-    blocksIn, create };
+    blocksIn, phoneWindow, create };
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     api.runtime = create(window, document, window.HC);
     window.HCEditorFrame = Object.freeze(api);
@@ -1435,12 +1520,25 @@
     const locked = () => Boolean(st && st.on && st.facts && st.facts.lock);
     const valueOf = (n) => String(n.getAttribute('data-hc-value') || '');
     const post = (field, value) => HC.post('hc-facts', { field, value });
+    /* fix pass A6 (WCAG 4.1.2, 2.4.3): an idle fact is a button named with what it changes and what it says now;
+       a fact being typed in is a textbox; a closed menu or panel gives the focus back to its fact */
+    const factText = (field, node) => (field === 'status' ? valueOf(node)
+      : field === 'repos' ? valueOf(node).split(/\s+/).filter(Boolean).join(', ')
+        : String(node.textContent || '').replace(/\s+/g, ' ').trim()).slice(0, 120);
+    function nameIdle(field, node) {
+      node.setAttribute('role', 'button');
+      const text = factText(field, node);
+      node.setAttribute('aria-label', `Change ${FACT_LABELS[field]}${text ? `: ${text}` : ''}`);
+    }
+    const refocus = (node) => { if (node && typeof node.focus === 'function') { try { node.focus({ preventScroll: true }); } catch (x) { /* a courtesy */ } } };
 
     // ---- the title and the one-line description: one line of text in place
     function openText(field, node) {
       const was = node.textContent;
       node.setAttribute('contenteditable', 'true');
       node.setAttribute('spellcheck', 'true');
+      node.setAttribute('role', 'textbox');
+      node.setAttribute('aria-label', `Edit ${FACT_LABELS[field]}`);
       node.classList.add('hc-fact-editing');
       const close = (keep) => {
         if (!open || open.node !== node) return;
@@ -1449,8 +1547,9 @@
         node.removeAttribute('spellcheck');
         node.classList.remove('hc-fact-editing');
         const now = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!keep || now === was.trim()) { node.textContent = was; return; }
-        post(field, now);
+        if (!keep || now === was.trim()) node.textContent = was;
+        else post(field, now);
+        nameIdle(field, node);
       };
       open = { field, node, close };
       if (!textWired.has(node)) {
@@ -1466,6 +1565,7 @@
       if (sel && doc.createRange) {
         const r = doc.createRange();
         r.selectNodeContents(node);
+        r.collapse(false);              // fix pass A6 (Nielsen #18): the caret at the end, the text not all selected
         sel.removeAllRanges();
         sel.addRange(r);
       }
@@ -1477,22 +1577,46 @@
       const menu = el('div', 'hc-fact-menu');
       menu.setAttribute('role', 'menu');
       menu.setAttribute('aria-label', 'Status');
-      const close = () => { if (open && open.node === node) open = null; detach(menu); node.classList.remove('hc-fact-editing'); };
+      // back: the focus returns to the status (a pick, Escape); a click elsewhere leaves it where it went
+      const close = (keep, back) => {
+        if (open && open.node === node) open = null;
+        detach(menu);
+        node.classList.remove('hc-fact-editing');
+        if (back) refocus(node);
+      };
+      const items = [];
       for (const s of (st.facts.statuses || [])) {
         const b = btn('hc-fact-opt', s);
         b.setAttribute('role', 'menuitemradio');
         b.setAttribute('aria-checked', s === now ? 'true' : 'false');
         b.setAttribute('data-status', s);
-        b.addEventListener('click', (e) => { stop(e); close(); if (s !== now) post('status', s); });
+        b.addEventListener('click', (e) => { stop(e); close(false, true); if (s !== now) post('status', s); });
         menu.appendChild(b);
+        items.push(b);
       }
+      // fix pass A6 (WCAG 2.1.1): one Tab stop; ArrowUp / ArrowDown wrap, Home / End
+      let at = Math.max(0, items.findIndex((b) => b.getAttribute('data-status') === now));
+      const focusAt = (i) => {
+        if (!items.length) return;
+        at = (i + items.length) % items.length;
+        items.forEach((b, j) => b.setAttribute('tabindex', j === at ? '0' : '-1'));
+        refocus(items[at]);
+      };
       menu.addEventListener('click', stop);
-      menu.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') { stop(e); close(); } });
+      menu.addEventListener('keydown', (e) => {
+        const k = e && e.key;
+        if (k === 'Escape') { stop(e); close(false, true); return; }
+        const from = items.indexOf(e && e.target);
+        const i = from >= 0 ? from : at;
+        const to = k === 'ArrowDown' ? i + 1 : k === 'ArrowUp' ? i - 1 : k === 'Home' ? 0 : k === 'End' ? items.length - 1 : null;
+        if (to === null) return;
+        stop(e);
+        focusAt(to);
+      });
       node.classList.add('hc-fact-editing');
       node.appendChild(menu);
       open = { field: 'status', node, close };
-      const first = menu.childNodes[0];
-      if (first && typeof first.focus === 'function') first.focus();
+      focusAt(at);
     }
 
     // ---- the repositories: remove by name, add by name, Done
@@ -1510,6 +1634,7 @@
       input.setAttribute('autocomplete', 'off');
       const add = btn('hc-fact-btn', 'Add');
       const problem = el('p', 'hc-fact-problem');
+      problem.setAttribute('role', 'status');          // fix pass A6 (WCAG 4.1.3): the reason is heard
       problem.hidden = true;
       const done = btn('hc-fact-btn hc-fact-done', 'Done');
       const cancel = btn('hc-fact-btn', 'Cancel');
@@ -1520,7 +1645,16 @@
           li.setAttribute('data-repo', n);
           li.appendChild(el('span', 'hc-fact-repo-name', n));
           const x = btn('hc-fact-x', '×', `Remove ${n}`);
-          x.addEventListener('click', (e) => { stop(e); names = names.filter((m) => m !== n); draw(); });
+          x.addEventListener('click', (e) => {
+            stop(e);
+            const i = names.indexOf(n);
+            names = names.filter((m) => m !== n);
+            draw();
+            // fix pass A6 (WCAG 2.4.3): the focus goes to the next row's ×, else the field
+            const rows = Array.from(list.childNodes);
+            const next = rows[Math.min(i, rows.length - 1)];
+            refocus(next ? next.childNodes[1] : input);
+          });
           li.appendChild(x);
           list.appendChild(li);
         }
@@ -1536,18 +1670,19 @@
         say('');
         draw();
       };
-      const close = (keep) => {
+      const close = (keep, back) => {
         if (open && open.node === node) open = null;
         detach(panel);
         node.classList.remove('hc-fact-editing');
         if (keep && names.join(' ') !== was.join(' ')) post('repos', names.slice());
+        if (back) refocus(node);
       };
       add.addEventListener('click', (e) => { stop(e); addNow(); });
       input.addEventListener('keydown', (e) => { if (e && e.key === 'Enter') { stop(e); addNow(); } });
-      done.addEventListener('click', (e) => { stop(e); close(true); });
-      cancel.addEventListener('click', (e) => { stop(e); close(false); });
+      done.addEventListener('click', (e) => { stop(e); close(true, true); });
+      cancel.addEventListener('click', (e) => { stop(e); close(false, true); });
       panel.addEventListener('click', (e) => { if (e && e.stopPropagation) e.stopPropagation(); });
-      panel.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') { stop(e); close(false); } });
+      panel.addEventListener('keydown', (e) => { if (e && e.key === 'Escape') { stop(e); close(false, true); } });
       const row = el('div', 'hc-fact-repo-add');
       row.appendChild(input);
       row.appendChild(add);
@@ -1633,10 +1768,13 @@
           if (node.getAttribute('tabindex') !== '0') node.setAttribute('tabindex', '0');
           const tip = `Click to change ${FACT_LABELS[field]}`;
           if (node.getAttribute('title') !== tip) node.setAttribute('title', tip);
+          if (!(open && open.node === node)) nameIdle(field, node);
         } else if (node.classList.contains('hc-fact')) {
           node.classList.remove('hc-fact');
           node.removeAttribute('tabindex');
           node.removeAttribute('title');
+          node.removeAttribute('role');
+          node.removeAttribute('aria-label');
         }
       }
       if (!walkWired && (Object.keys(f).length || walk(content(), (c) => c.getAttribute('data-hc-new-project') !== null, []).length)) wireWalk();

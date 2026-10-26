@@ -136,7 +136,12 @@
         hc-history       {index, snap}       the frame took restore point `snap` of block
                                              `index` before the edit that follows (R2b)
         hc-key           {op}                'undo' | 'redo': the keys, pressed in the frame;
-                                             'redraw': a restore point was missing
+                                             'redraw': a restore point was missing;
+                                             'escape': an Escape the frame used for
+                                             nothing (fix pass A8)
+        hc-scroll        {y}                 how far the frame is scrolled (a whole
+                                             number 0..1e7), at most every 150 ms
+                                             while Editor mode is on (fix pass A8)
         hc-people        {op: 'order', team,  the Team page's lists as shown after a drag
                           alumni, act} |      or a Move button: [{name, pinned}] (names only,
                          {op: 'add', group}  at most 500; act the button), or "+" (R5); U5:
@@ -332,7 +337,7 @@
       return isIndex(d.index) && typeof d.snap === 'string' && SNAP_RE.test(d.snap) ? { type, index: d.index, snap: d.snap } : null;
     }
     // Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z; 'redraw': a restore point is gone, the parent draws the page from its text
-    if (type === 'hc-key') return d.op === 'undo' || d.op === 'redo' || d.op === 'redraw' ? { type, op: d.op } : null;
+    if (type === 'hc-key') return d.op === 'undo' || d.op === 'redo' || d.op === 'redraw' || d.op === 'escape' ? { type, op: d.op } : null;
     if (type === 'hc-people') {
       // round 2 (R5): the Team page in Editor mode — the lists as shown after a drag or a card-menu move or pin
       // (names and pins only; the parent checks the names are exactly the draft's), or "+" on a list
@@ -429,6 +434,12 @@
     }
     // "+ New project" on the Projects page, "Request edit access" under a locked project's title: no fields
     if (type === 'hc-new-project' || type === 'hc-access-ask') return { type };
+    /* ---- fix pass ---- */
+    // A8: how far the frame is scrolled (the parent's margin cards and bubble follow it): a whole number, capped
+    if (type === 'hc-scroll') {
+      const y = typeof d.y === 'number' && isFinite(d.y) && d.y >= 0 ? Math.min(Math.round(d.y), 1e7) : null;
+      return y === null ? null : { type, y };
+    }
     return null;
   }
 

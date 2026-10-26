@@ -361,3 +361,81 @@ test('U5 D16: drag from the grip — lifted after 3 px, dropped among the other 
   fire('pointercancel', { pointerId: 7 });
   assert.equal(t.cardOf('Ben').classList.contains('is-dragging'), false);
 });
+
+/* ---- fix pass ---- */
+test('fix A3 (WCAG 2.1.1): Enter or Space on a card types its name; "Edit title" and "Replace photo" beside the Move buttons, named with the person', () => {
+  const t = roster();
+  t.admin();
+  const ann = t.cardOf('Ann');
+  const name = byCls(ann, 'person-name')[0];
+  const ev = { key: 'Enter', prevented: false };
+  ann.dispatch('keydown', ann, { key: 'Enter' });
+  assert.equal(name.getAttribute('contenteditable'), 'true', 'Enter on the card: the name is typed');
+  assert.equal(t.doc.activeElement, name);
+  name.textContent = 'Ann Lee';
+  ann.dispatch('keydown', name, { key: 'Enter' });
+  assert.deepEqual(t.HC.posts.at(-1), { type: 'hc-people', op: 'field', name: 'Ann', field: 'name', value: 'Ann Lee' });
+  assert.equal(t.doc.activeElement, ann, 'focus back on the card');
+  const ben = t.cardOf('Ben');
+  ben.dispatch('keydown', ben, { key: ' ' });
+  assert.equal(byCls(ben, 'person-name')[0].getAttribute('contenteditable'), 'true', 'Space too');
+  ben.dispatch('keydown', byCls(ben, 'person-name')[0], { key: 'Escape' });
+  assert.equal(byCls(ben, 'person-name')[0].getAttribute('contenteditable'), null, 'Escape cancels');
+  const fields = byCls(ann, 'hc-pfields');
+  assert.equal(fields.length, 1, 'one group of field buttons');
+  assert.ok(cls(fields[0]).includes('hc-ptool'), 'a tool: taken off with the others');
+  const btns = byCls(ann, 'hc-pfield');
+  assert.deepEqual(btns.map((b) => [b.tagName, b.getAttribute('aria-label'), b.textContent]),
+    [['BUTTON', 'Edit the title of Ann', 'Edit title'], ['BUTTON', 'Replace the photo of Ann', 'Replace photo']]);
+  btns[0].click();
+  const title = byCls(ann, 'person-title')[0];
+  assert.equal(title.getAttribute('contenteditable'), 'true', 'Edit title: the title is typed');
+  title.textContent = 'Lead';
+  ann.dispatch('keydown', title, { key: 'Enter' });
+  assert.deepEqual(t.HC.posts.at(-1), { type: 'hc-people', op: 'field', name: 'Ann', field: 'title', value: 'Lead' });
+  btns[1].click();
+  assert.deepEqual(t.HC.posts.at(-1), { type: 'hc-people', op: 'field', name: 'Ann', field: 'photo' });
+  void ev;
+  // my own card (not an admin): Enter types the name; only "Replace photo" (never the title)
+  const o = roster();
+  o.sync({ peopleOwn: 'Ben' });
+  const obe = o.cardOf('Ben');
+  assert.deepEqual(byCls(obe, 'hc-pfield').map((b) => b.getAttribute('aria-label')), ['Replace the photo of Ben']);
+  obe.dispatch('keydown', obe, { key: 'Enter' });
+  assert.equal(byCls(obe, 'person-name')[0].getAttribute('contenteditable'), 'true');
+  const oann = o.cardOf('Ann');
+  oann.dispatch('keydown', oann, { key: 'Enter' });
+  assert.equal(byCls(oann, 'person-name')[0].getAttribute('contenteditable'), null, 'another card: nothing');
+  assert.equal(byCls(oann, 'hc-pfield').length, 0);
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
+  assert.match(css, /:is\(:focus-visible, :has\(:focus-visible\)\) :is\(\.hc-pmoves, \.hc-pfields\), :is\(\.hc-pmoves, \.hc-pfields\):focus-within \{\s*position: static;/,
+    'shown with the Move buttons, on keyboard focus or focus inside the group');
+  const hidden = /\.hc-pmoves, \.hc-pfields \{([^}]*)\}/.exec(css);
+  assert.ok(hidden && !/display:\s*none/.test(hidden[1]) && /clip-path: inset\(50%\)/.test(hidden[1]),
+    'hidden by a clip, never display: none (a display: none button cannot take the focus handed back after a move)');
+});
+
+test('fix A3 (WCAG 3.3.1): the "+" card\'s error line is tied to its field; aria-invalid goes once the field is valid', () => {
+  const t = roster();
+  t.admin();
+  byCls(t.root, 'hc-padd').find((x) => x.getAttribute('data-hc-padd') === 'team').click();
+  const fresh = byCls(t.root, 'hc-pnew')[0];
+  const input = (k) => one(fresh, (x) => x.getAttribute('data-hc-pfield') === k);
+  const problem = byCls(fresh, 'hc-pnew-problem')[0];
+  byCls(fresh, 'hc-pnew-add')[0].click();
+  assert.equal(input('name').getAttribute('aria-invalid'), 'true');
+  assert.equal(input('name').getAttribute('aria-describedby'), problem.getAttribute('id'));
+  assert.ok(problem.getAttribute('id'), 'the error line has an id');
+  input('name').value = 'Dana';
+  fresh.dispatch('input', input('name'));
+  assert.equal(input('name').getAttribute('aria-invalid'), null, 'valid again: no longer invalid');
+  assert.equal(input('name').getAttribute('aria-describedby'), null);
+  assert.equal(problem.textContent, '');
+  input('login').value = 'bad login!';
+  byCls(fresh, 'hc-pnew-add')[0].click();
+  assert.equal(input('login').getAttribute('aria-describedby'), problem.getAttribute('id'));
+  assert.equal(input('name').getAttribute('aria-invalid'), null, 'one field named at a time');
+  input('login').value = 'dana';
+  fresh.dispatch('input', input('login'));
+  assert.equal(input('login').getAttribute('aria-invalid'), null);
+});

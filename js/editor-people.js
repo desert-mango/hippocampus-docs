@@ -231,6 +231,30 @@
         list === 'team' ? 'Move to Alumni' : 'Move to Current team');
       return box;
     }
+    /* fix pass A3 (WCAG 2.1.1): the title and the photo without a mouse — two small buttons shown with the Move
+       buttons (on keyboard focus); the name is Enter or Space on the card itself */
+    function fieldButtons(card) {
+      const name = card.getAttribute('data-hc-name');
+      const box = make('div', 'hc-ptool hc-pfields', { role: 'group', 'aria-label': `Change ${name}` });
+      const btn = (field, label, text) => {
+        const b = make('button', 'hc-pfield', { type: 'button', 'data-pfield': field, 'aria-label': label }, text);
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (field === 'photo') { endEdit(true); HC.post('hc-people', { op: 'field', name, field: 'photo' }); return; }
+          const span = spanOf(card, field);
+          if (span) startEdit(span, card, field);
+        });
+        box.appendChild(b);
+      };
+      if (may(card, 'title') && spanOf(card, 'title')) btn('title', `Edit the title of ${name}`, 'Edit title');
+      if (may(card, 'photo')) btn('photo', `Replace the photo of ${name}`, 'Replace photo');
+      return elKids(box).length ? box : null;
+    }
+    function spanOf(card, field) {
+      return find(card, (c) => (field === 'name' ? has(c, 'person-name')
+        : field === 'title' ? has(c, 'person-title') && !has(c, 'person-subtitle') : false));
+    }
     function setEnds(card) {
       const grid = card.parentNode;
       const cards = cardsIn(grid);
@@ -266,6 +290,8 @@
         card.appendChild(moveButtons(card, list));
         setEnds(card);
       }
+      const fields = mode === 'admin' || card.getAttribute('data-hc-name') === ownName ? fieldButtons(card) : null;
+      if (fields) card.appendChild(fields);
       if (card.getAttribute('data-hc-pwired') === '1') return;
       card.setAttribute('data-hc-pwired', '1');           // the listeners stay; each one asks the mode it runs in
       card.addEventListener('click', (e) => {
@@ -287,7 +313,15 @@
           if (e.key === 'Enter') { e.preventDefault(); endEdit(true); focusEl(card); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); endEdit(false); focusEl(card); }
           return;
         }
-        if (mode !== 'admin' || e.target !== card) return;
+        if (e.target !== card) return;
+        // fix pass A3: Enter or Space on a card I may change starts typing its name (the link is never followed here)
+        if ((e.key === 'Enter' || e.key === ' ') && !e.altKey && may(card, 'name')) {
+          e.preventDefault();
+          const span = spanOf(card, 'name');
+          if (span) startEdit(span, card, 'name');
+          return;
+        }
+        if (mode !== 'admin') return;
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); movePerson({ op: e.key === 'ArrowUp' ? 'up' : 'down', name: card.getAttribute('data-hc-name') }); }
         else if (e.key === 'Enter' || e.key === ' ') e.preventDefault();      // never follow the link from the editor
       });
@@ -432,8 +466,24 @@
       photoWrap.appendChild(photo);
       photoWrap.appendChild(make('span', '', {}, 'Choose a profile image after adding'));
       card.appendChild(photoWrap);
-      const problem = make('p', 'hc-pnew-problem', { 'aria-live': 'polite' });
+      const problem = make('p', 'hc-pnew-problem', { id: `hc-pnew-${list}-problem`, 'aria-live': 'polite' });
       card.appendChild(problem);
+      // fix pass A3 (WCAG 3.3.1): the error line belongs to the field it names; a field made valid says so
+      const flag = (input, why) => {
+        for (const i of [login, name]) { i.removeAttribute('aria-invalid'); i.removeAttribute('aria-describedby'); }
+        problem.textContent = why;
+        input.setAttribute('aria-invalid', 'true');
+        input.setAttribute('aria-describedby', problem.getAttribute('id'));
+        focusEl(input);
+      };
+      const recheck = () => {
+        if (name.getAttribute('aria-invalid') === 'true' && val(name)) { name.removeAttribute('aria-invalid'); name.removeAttribute('aria-describedby'); problem.textContent = ''; }
+        if (login.getAttribute('aria-invalid') === 'true' && (!val(login) || /^@?[A-Za-z0-9-]{1,39}$/.test(val(login)))) {
+          login.removeAttribute('aria-invalid'); login.removeAttribute('aria-describedby'); problem.textContent = '';
+        }
+      };
+      name.addEventListener('input', recheck);
+      login.addEventListener('input', recheck);
       const row = make('div', 'hc-pnew-actions', {});
       const add = make('button', 'cms-btn hc-pnew-add', { type: 'button' }, 'Add');
       const cancel = make('button', 'cms-btn hc-pnew-cancel', { type: 'button' }, 'Cancel');
@@ -443,10 +493,8 @@
       const val = (i) => String(i.value || '').trim();
       const close = () => { swap(card, plus); focusEl(plus); };
       const submit = () => {
-        if (!val(name)) { problem.textContent = 'A name is needed.'; name.setAttribute('aria-invalid', 'true'); focusEl(name); return; }
-        if (val(login) && !/^@?[A-Za-z0-9-]{1,39}$/.test(val(login))) {
-          problem.textContent = 'A GitHub account is letters, digits and dashes.'; login.setAttribute('aria-invalid', 'true'); focusEl(login); return;
-        }
+        if (!val(name)) { flag(name, 'A name is needed.'); return; }
+        if (val(login) && !/^@?[A-Za-z0-9-]{1,39}$/.test(val(login))) { flag(login, 'A GitHub account is letters, digits and dashes.'); return; }
         HC.post('hc-people', { op: 'add-in-place', group: list, login: val(login), name: val(name), title: val(title), link: val(link), photo: photo.checked === true });
       };
       add.addEventListener('click', (e) => { e.preventDefault(); submit(); });

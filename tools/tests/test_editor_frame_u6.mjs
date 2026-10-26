@@ -261,3 +261,89 @@ test('walk hook: click "new-project" clicks the Projects page card (it posts hc-
   const m = p.answers.map(([x]) => x).filter((x) => x.type === 'hc-walk-facts-state').at(-1);
   assert.equal(m.card, true);
 });
+
+/* ---- fix pass ---- */
+/* A6 (WCAG 4.1.2, 2.4.3, 2.1.1, 4.1.3; Nielsen #18). The harness has no focus: these tests give El one. */
+function withFocus(fn) {
+  const proto = Object.getPrototypeOf(el(makeDoc(), 'div'));
+  const had = Object.getOwnPropertyDescriptor(proto, 'focus');
+  proto.focus = function focus() { this.ownerDocument.activeElement = this; };
+  try { return fn(); } finally { if (had) Object.defineProperty(proto, 'focus', had); else delete proto.focus; }
+}
+
+test('fix A6: an idle fact is a button named with what it changes and says; a fact typed in is a textbox', () => {
+  const p = boot();
+  assert.deepEqual([p.h1, p.lead, p.status, p.repos].map((n) => [n.getAttribute('role'), n.getAttribute('aria-label')]), [
+    ['button', 'Change the title: Core stack'], ['button', 'Change the one-line description: The shared packages.'],
+    ['button', 'Change the status: active'], ['button', 'Change the repositories: hippo_core, hippo_msgs']]);
+  p.h1.click();
+  assert.equal(p.h1.getAttribute('role'), 'textbox');
+  assert.equal(p.h1.getAttribute('aria-label'), 'Edit the title');
+  p.h1.textContent = 'Core stack 2';
+  key(p.h1, 'Enter');
+  assert.equal(p.h1.getAttribute('role'), 'button');
+  assert.equal(p.h1.getAttribute('aria-label'), 'Change the title: Core stack 2');
+  p.HC.send(FACTS({ edit: false }));
+  assert.equal(p.h1.getAttribute('role'), null, 'no rights: the page as it is');
+  assert.equal(p.h1.getAttribute('aria-label'), null);
+});
+
+test('fix A6 (Nielsen #18): a click on the title puts the caret at the end, the text not all selected', () => {
+  const p = projectPage();
+  const ranges = [];
+  p.doc.createRange = () => { const r = { collapsed: null, selectNodeContents(n) { this.node = n; }, collapse(toStart) { this.collapsed = toStart ? 'start' : 'end'; } }; ranges.push(r); return r; };
+  p.doc.getSelection = () => ({ removeAllRanges() {}, addRange() {} });
+  const b = boot(null, p);
+  b.h1.click();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].collapsed, 'end');
+});
+
+test('fix A6: the status menu: one Tab stop, arrows / Home / End; a pick or Escape gives the focus back to the status', () => withFocus(() => {
+  const p = boot();
+  p.status.click();
+  const menu = byClass(p.status, 'hc-fact-menu')[0];
+  const opts = kids(menu);
+  const stops = () => opts.filter((b) => b.getAttribute('tabindex') === '0').map((b) => b.getAttribute('data-status'));
+  assert.deepEqual(stops(), ['active'], 'one Tab stop: the current status');
+  assert.equal(p.doc.activeElement, opts[0]);
+  menu.dispatch('keydown', opts[0], { key: 'ArrowDown' });
+  assert.deepEqual(stops(), ['maintained']);
+  assert.equal(p.doc.activeElement, opts[1]);
+  menu.dispatch('keydown', opts[1], { key: 'End' });
+  assert.deepEqual(stops(), ['archive']);
+  menu.dispatch('keydown', opts[3], { key: 'ArrowDown' });
+  assert.deepEqual(stops(), ['active'], 'wraps');
+  menu.dispatch('keydown', opts[0], { key: 'ArrowUp' });
+  menu.dispatch('keydown', opts[3], { key: 'Home' });
+  assert.deepEqual(stops(), ['active']);
+  menu.dispatch('keydown', opts[0], { key: 'Escape' });
+  assert.equal(byClass(p.status, 'hc-fact-menu').length, 0);
+  assert.equal(p.doc.activeElement, p.status, 'Escape: back to the status');
+  p.status.click();
+  kids(byClass(p.status, 'hc-fact-menu')[0])[2].click();
+  assert.equal(p.doc.activeElement, p.status, 'a pick: back to the status');
+}));
+
+test('fix A6: the repositories: a removed row hands the focus on; Done / Cancel / Escape give it back; the reason is a status', () => withFocus(() => {
+  const p = boot();
+  p.repos.click();
+  const panel = byClass(p.repos, 'hc-fact-repos')[0];
+  assert.equal(byClass(panel, 'hc-fact-problem')[0].getAttribute('role'), 'status');
+  const xOf = (name) => byClass(panel, 'hc-fact-repo').find((li) => li.getAttribute('data-repo') === name).childNodes[1];
+  xOf('hippo_core').click();
+  assert.equal(p.doc.activeElement, xOf('hippo_msgs'), 'the next row\'s ×');
+  xOf('hippo_msgs').click();
+  assert.equal(p.doc.activeElement, byClass(panel, 'hc-fact-repo-input')[0], 'no rows left: the field');
+  byClass(panel, 'hc-fact-done')[0].click();
+  assert.equal(p.doc.activeElement, p.repos, 'Done: back to the repositories');
+  p.repos.click();
+  const cancel = byClass(byClass(p.repos, 'hc-fact-repos')[0], 'hc-fact-btn').find((b) => b.textContent === 'Cancel');
+  cancel.click();
+  assert.equal(p.doc.activeElement, p.repos, 'Cancel: back');
+  p.repos.click();
+  const panel3 = byClass(p.repos, 'hc-fact-repos')[0];
+  p.doc.activeElement = null;
+  panel3.dispatch('keydown', panel3, { key: 'Escape' });
+  assert.equal(p.doc.activeElement, p.repos, 'Escape: back');
+}));

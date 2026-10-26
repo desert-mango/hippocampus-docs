@@ -301,6 +301,8 @@ body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-fb-hint[hidden] { display: none; }
 .hc-fb-word { margin-left: 5px; font: 500 12.5px var(--sans); }
 .hc-fb.hc-fb-comment { width: auto; padding: 0 9px; }
+/* fix pass: Type ▾ / Language ▾ are words, not 32-px squares (the later .hc-fb rule squeezed the dot over the word) */
+.hc-fb.hc-box-type, .hc-fb.hc-code-lang { display: inline-flex; width: auto; padding: 0 8px; }
 .hc-fb[aria-pressed="true"] { background: var(--hc-edit-soft); color: var(--hc-edit-ink); }
 .hc-code-lang { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 8px; }
 .hc-pm-sep { height: 1px; margin: 4px 2px; background: var(--edge-soft); }
@@ -308,6 +310,9 @@ body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-blockbar.is-phone { position: fixed; left: 8px; right: 8px; top: auto; z-index: 70; align-items: stretch; }
 .hc-blockbar.is-phone .hc-fb-row { justify-content: space-between; }
 .hc-blockbar.is-phone .hc-fb { min-width: 44px; min-height: 44px; }
+/* fix pass A1: the phone toolbar sits above the keyboard, not in the band above the text: no empty band (.is-phone is
+   set from the WINDOW's width, js/editor-frame.js phoneWindow, never from this frame's own width) */
+.hc-block.hc-open:has(> .hc-blockbar.is-phone) { padding-top: 0; }
 .hc-box-type { display: inline-flex; align-items: center; gap: 6px; height: 32px; width: auto; padding: 0 8px; border: 0; border-radius: 7px; background: none;
   color: var(--heading); font: 600 12.5px var(--sans); cursor: pointer; }
 .hc-box-type:hover { background: var(--surface-2); }
@@ -395,7 +400,8 @@ a.hc-sug-fmt { color: var(--hc-mark); }
 .hc-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .4rem; width: 100%; max-height: 16rem;
   overflow: auto; color: var(--body-soft); font: 12.5px var(--sans); }
 .hc-pick-grid[hidden] { display: none; }
-.hc-pick-img { padding: 0; aspect-ratio: 4 / 3; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface); cursor: pointer; overflow: hidden; }
+.hc-pick-cell { display: flex; min-width: 0; }
+.hc-pick-img { flex: 1 1 auto; width: 100%; padding: 0; aspect-ratio: 4 / 3; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface); cursor: pointer; overflow: hidden; }
 .hc-pick-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hc-pick-img:hover, .hc-pick-img:focus-visible { border-color: var(--hc-edit); }
 
@@ -457,11 +463,16 @@ body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline: 2px so
 .hc-premove:hover, .hc-premove:focus-visible { background: var(--surface-2); color: var(--danger, var(--heading)); }
 .hc-ppin { position: absolute; top: .45rem; right: 2rem; color: var(--muted); line-height: 0; }
 /* the Move buttons: only while the card holds keyboard focus (Kyle: drag is enough; WCAG 2.5.7 needs this path) */
-.hc-pmoves { display: none; flex-wrap: wrap; gap: .25rem; justify-content: center; margin-top: .45rem; }
-.person-card[data-hc-ptools]:is(:focus-visible, :has(:focus-visible)) .hc-pmoves { display: flex; }
-.hc-pmove { min-height: 28px; padding: 0 .5rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface);
+/* fix pass A3: hidden by a clip, not display: none — a hidden button cannot take focus, so the focus handed back to a
+   Move button after a move (js/editor-people.js syncPeople) was lost; focus inside the group shows it too */
+.hc-pmoves, .hc-pfields { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: center; position: absolute; width: 1px; height: 1px;
+  margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.person-card[data-hc-ptools]:is(:focus-visible, :has(:focus-visible)) :is(.hc-pmoves, .hc-pfields), :is(.hc-pmoves, .hc-pfields):focus-within {
+  position: static; width: auto; height: auto; margin-top: .45rem; overflow: visible; clip-path: none; white-space: normal; }
+.person-card[data-hc-ptools]:is(:focus-visible, :has(:focus-visible)) .hc-pfields, .hc-pfields:focus-within { margin-top: .25rem; }
+.hc-pmove, .hc-pfield { min-height: 28px; padding: 0 .5rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface);
   color: var(--body); font: .74rem var(--sans); cursor: pointer; }
-.hc-pmove:hover:not(:disabled), .hc-pmove:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
+.hc-pmove:hover:not(:disabled), .hc-pmove:focus-visible, .hc-pfield:hover, .hc-pfield:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
 .hc-pmove:disabled { opacity: .45; cursor: default; }
 /* the drag: the card stays in place, dimmed; a preview follows the pointer; a line marks where it lands */
 body.hc-pdragging, body.hc-pdragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
@@ -493,7 +504,7 @@ body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb
 .hc-pnew-actions { display: flex; gap: .4rem; }
 @media (pointer: coarse) {
   .hc-pgrip, .hc-premove { width: 44px; height: 44px; }
-  .hc-pmove, .hc-pnew-input, .hc-pnew-actions .cms-btn { min-height: 44px; }
+  .hc-pmove, .hc-pfield, .hc-pnew-input, .hc-pnew-actions .cms-btn { min-height: 44px; }
   .person-card[data-hc-ptools] .hc-ptool { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {

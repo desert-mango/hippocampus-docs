@@ -411,19 +411,23 @@ test('D9 (ED32) Remove: the "Removed · Undo" pill, Undo asks the parent to undo
   assert.equal(pill.getAttribute('role'), 'status', 'a screen reader hears it');
   assert.equal(pill.getAttribute('contenteditable'), 'false');
   const [what, undo] = pill.childNodes.filter((c) => c.nodeType === 1);
+  // fix pass A5: the words come on the next tick (a 0-ms timer), so the status region is heard
+  assert.equal(what.textContent, '', 'inserted empty');
+  timers.find((t) => t.ms === 0).fn();
   assert.equal(what.textContent, 'Removed');
   assert.equal(undo.tagName, 'BUTTON');
   assert.equal(undo.textContent, 'Undo');
   assert.equal(undo.getAttribute('aria-label'), 'Undo the removal');
-  assert.deepEqual(timers.map((t) => t.ms), [8000], 'one timer, 8 seconds');
+  assert.deepEqual(timers.map((t) => t.ms).sort((a, b) => a - b), [0, 8000], 'one 8-second timer (and the words\' tick)');
   fire(undo, 'click');
   assert.equal(undone, 1, 'Undo asks for the undo');
   assert.equal(pill.parentNode, null, 'and the pill goes');
-  timers[0].fn();                                          // the timer after an Undo: nothing to clear, no error
+  timers.find((t) => t.ms === 8000).fn();                  // the timer after an Undo: nothing to clear, no error
   // a second removal nobody undoes: the timer clears its pill
+  timers.length = 0;
   const pill2 = B.removedPill(barDoc(), { onUndo() {}, setTimeout: (fn, ms) => timers.push({ fn, ms }) });
   host.appendChild(pill2);
-  timers[1].fn();
+  timers.find((t) => t.ms === 8000).fn();
   assert.equal(pill2.parentNode, null, 'gone after 8 s');
   assert.equal(undone, 1);
 });
@@ -573,8 +577,14 @@ test('D11 the Image tile: Upload asks the parent as before; "Pick one the site h
   HC.send({ on: true, media: [{ url: IMG, label: 'hippocampus-docs/a' }] });
   const cells = kids(grid);
   assert.equal(cells.length, 1);
-  assert.equal(kids(cells[0])[0].getAttribute('src'), IMG);
-  cells[0].click();
+  // fix pass A4 (WCAG 4.1.2): the list item wraps the button (it used to BE the button, role=listitem)
+  assert.equal(cells[0].getAttribute('role'), 'listitem');
+  const cellBtn = kids(cells[0])[0];
+  assert.equal(cellBtn.tagName, 'BUTTON');
+  assert.equal(cellBtn.getAttribute('role'), null, 'the button keeps the button role');
+  assert.equal(cellBtn.getAttribute('aria-label'), 'Use hippocampus-docs/a');
+  assert.equal(kids(cellBtn)[0].getAttribute('src'), IMG);
+  cellBtn.click();
   assert.deepEqual(HC.posts.at(-1), { type: 'hc-image-use', index: at, url: IMG });
   // Upload: the parent's file chooser, as the old Image tile did
   kids(rail)[0].click();
@@ -603,4 +613,72 @@ test('D8 (ED18) note cards: "Your note" beside its block from hc-editor.notes; t
   assert.equal(kids(w3).some((c) => hasCls(c, 'hc-note-card')), false, 'gone');
   HC.send({ on: true, notes: [] });
   assert.equal(blocksOf(body).some((w) => kids(w).some((c) => hasCls(c, 'hc-note-card'))), false);
+});
+
+/* ---- fix pass ---- */
+test('fix A5 (WCAG 2.4.3): a pick in the Type ▾ / Language ▾ menu gives the focus back to its button', () => {
+  const focused = [];
+  const had = Object.getOwnPropertyDescriptor(LEl.prototype, 'focus');
+  LEl.prototype.focus = function focus() { focused.push(this); };
+  try {
+    const picked = [];
+    const bar = B.blockBar(barDoc(), { kind: 'box', box: { current: () => 'note', onType: (k) => picked.push(k) }, onRemove() {},
+      onFormat() {}, onList() {}, listState: () => 'none', onComment() {} });
+    const typeBtn = rowOf(bar).childNodes[0];
+    fire(typeBtn, 'click');
+    const menu = bar.el.childNodes.find((c) => (c.getAttribute('class') || c.className) === 'hc-boxmenu');
+    fire(menu.childNodes.filter((c) => c.tagName === 'BUTTON')[1], 'click');
+    assert.deepEqual(picked, ['tip']);
+    assert.equal(focused.at(-1), typeBtn, 'focus is back on Type ▾');
+    const langs = [];
+    const code = B.blockBar(barDoc(), { kind: 'code', code: { current: 'console', onChange: (l) => langs.push(l) }, onRemove() {}, onComment() {} });
+    const langBtn = rowOf(code).childNodes[0];
+    fire(langBtn, 'click');
+    const m2 = code.el.childNodes.find((c) => (c.getAttribute('class') || c.className) === 'hc-boxmenu');
+    fire(m2.childNodes.filter((c) => c.tagName === 'BUTTON')[0], 'click');
+    assert.equal(langs.length, 1);
+    assert.equal(focused.at(-1), langBtn, 'focus is back on Language ▾');
+  } finally {
+    if (had) Object.defineProperty(LEl.prototype, 'focus', had); else delete LEl.prototype.focus;
+  }
+});
+
+test('fix A5 (WCAG 2.2.1): the Removed pill\'s clock stops while the focus or the pointer is in it; the frame focuses Undo', () => {
+  const timers = new Map();
+  let n = 0;
+  const o = { onUndo() {}, setTimeout: (fn, ms) => { n += 1; timers.set(n, { fn, ms }); return n; }, clearTimeout: (id) => timers.delete(id) };
+  const host = liteDoc().createElement('div');
+  const pill = B.removedPill(barDoc(), o);
+  host.appendChild(pill);
+  const clocks = () => [...timers.values()].filter((t) => t.ms === 8000);
+  assert.equal(clocks().length, 1);
+  fire(pill, 'focusin');
+  assert.equal(clocks().length, 0, 'focus inside: the clock stops');
+  fire(pill, 'pointerenter');
+  fire(pill, 'focusout');
+  assert.equal(clocks().length, 0, 'the pointer is still inside');
+  fire(pill, 'pointerleave');
+  assert.equal(clocks().length, 1, 'both gone: a full 8 s again');
+  clocks()[0].fn();
+  assert.equal(pill.parentNode, null, 'then it goes');
+  const src = readRepo('js/editor-frame.js');
+  const body = src.slice(src.indexOf('function removeBlock(now)'), src.indexOf('function formatAt('));
+  assert.match(body, /now\.w\.appendChild\(pill\);[\s\S]*hc-removed-undo[\s\S]*undo\.focus\(/, 'after Remove the focus goes to Undo');
+  assert.match(body, /clearTimeout: \(t\) => win\.clearTimeout/, 'the frame hands the pill its clearTimeout');
+});
+
+test('fix A7 (WCAG 4.1.2): B and I carry aria-pressed from the selection; List keeps its own', () => {
+  let bold = false;
+  const bar = B.blockBar(barDoc(), { kind: 'visual', onFormat() {}, onList() {}, listState: () => 'none', onComment() {},
+    formatState: (w) => (w === 'strong' ? bold : false) });
+  const [b, i] = rowOf(bar).childNodes;
+  assert.equal(b.getAttribute('aria-pressed'), 'false');
+  assert.equal(i.getAttribute('aria-pressed'), 'false');
+  bold = true;
+  bar.refresh();
+  assert.equal(b.getAttribute('aria-pressed'), 'true', 'inside bold text: B is pressed');
+  assert.equal(i.getAttribute('aria-pressed'), 'false');
+  const src = readRepo('js/editor-frame.js');
+  assert.match(src, /formatState: \(what\) => formatAt\(now, what\)/, 'the frame says what the selection is in');
+  assert.match(src, /selectionchange', \(\) => \{ if \(openNow && openNow\.bar\) openNow\.bar\.refresh\(\)/, 'and refreshes on every selection change');
 });

@@ -836,3 +836,21 @@ test('U6 hc-editor.facts (parent -> frame): booleans only when true, the statuse
   assert.deepEqual(f(undefined), { edit: false, lock: false, create: false, statuses: [] });
   assert.equal(f({ statuses: Array(20).fill('active') }).statuses.length, 12);
 });
+
+/* ---- fix pass ---- */
+test('fix A8 hc-scroll (frame -> parent): a whole number 0..1e7 passes, anything else is dropped', () => {
+  assert.deepEqual(SRC.frameMessage('hc-scroll', { y: 120 }), { type: 'hc-scroll', y: 120 });
+  assert.deepEqual(SRC.frameMessage('hc-scroll', { y: 0, extra: 'x' }), { type: 'hc-scroll', y: 0 }, 'other fields dropped');
+  assert.deepEqual(SRC.frameMessage('hc-scroll', { y: 12.6 }), { type: 'hc-scroll', y: 13 }, 'rounded');
+  assert.deepEqual(SRC.frameMessage('hc-scroll', { y: 5e9 }), { type: 'hc-scroll', y: 1e7 }, 'capped');
+  for (const y of [-1, '120', NaN, Infinity, null, undefined, { y: 1 }]) {
+    assert.equal(SRC.frameMessage('hc-scroll', { y }), null, `dropped: ${String(y)}`);
+  }
+  assert.equal(SRC.frameMessage('hc-scroll', {}), null);
+});
+
+test('fix A8 hc-key escape (frame -> parent): admitted beside undo / redo / redraw; other ops still dropped', () => {
+  assert.deepEqual(SRC.frameMessage('hc-key', { op: 'escape' }), { type: 'hc-key', op: 'escape' });
+  assert.deepEqual(SRC.frameMessage('hc-key', { op: 'undo' }), { type: 'hc-key', op: 'undo' });
+  for (const op of ['Escape', 'esc', 'close', '', 1, null]) assert.equal(SRC.frameMessage('hc-key', { op }), null, `dropped: ${String(op)}`);
+});

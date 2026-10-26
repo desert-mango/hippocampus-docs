@@ -496,3 +496,177 @@ test('editor-frame (the edit gate): a locked project page picks nothing; body.hc
   kids(w2)[1].click();
   assert.deepEqual(HC.posts.filter((p) => p.type === 'hc-block-select'), [{ type: 'hc-block-select', index: 2 }], 'unlocked: picks again');
 });
+
+/* ---- fix pass ---- */
+/* A2 (Nielsen #5, ED30): the marks kept before a reload come back in the walk's real order of events. Fakes stand
+   in for the typing scripts (already on the window, so loadScripts resolves at once). The causes found in headless
+   Chrome: (1) the parent re-opens the selected block in the same hc-editor that carries the marks, and the open ran
+   first (a clean render; the restore then skipped the open block); (2) the first hc-editor can come before the page
+   body is drawn: the restore found no wrapper and still counted the marks as used, so it never tried again. */
+function typingFakes(win, doc) {
+  if (!Object.getOwnPropertyDescriptor(El.prototype, 'children')) {
+    Object.defineProperty(El.prototype, 'children', { get() { return this.childNodes.filter((c) => c.nodeType === 1); } });
+    Object.defineProperty(El.prototype, 'firstChild', { get() { return this.childNodes[0] || null; } });
+  }
+  win.HCEditorMd = {
+    editorFor: () => 'visual',
+    renderBlock: (md) => el(doc, 'div', null, el(doc, 'p', null, md.trim())),
+    restoreBlock: (o) => ({ how: 'marks', root: el(doc, 'div', null, el(doc, 'p', null, 'Intro link', el(doc, 'ins', { 'data-hc-sug': 'ins' }, ' typed'))) }),
+  };
+  win.HCEditorType = { attach: () => ({ detach() {} }), list() {}, listState: () => 'none' };
+  win.HCEditorBlocks = { blockBar: () => ({ el: el(doc, 'div', { class: 'hc-blockbar' }), close() {} }) };
+  win.HCSanitize = { clean: (h) => h };
+}
+const MARKS = [{ index: 2, md: 'Intro typed\n\n', orig: 'Intro link\n\n', html: '<p>Intro link<ins data-hc-sug="ins"> typed</ins></p>', kind: 'paragraph' }];
+const tick = () => new Promise((r) => setImmediate(r));
+const editRoot = (w) => kids(w).find((c) => c.classList.contains('hc-edit-root')) || null;
+
+test('fix A2: marks sent with the re-opened block are restored INTO the open block (the restore runs first)', async () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  const win = fakeWin();
+  typingFakes(win, doc);
+  EF.create(win, doc, HC);
+  HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro typed\n\n', kind: 'paragraph' }, marks: MARKS });
+  for (let i = 0; i < 4; i += 1) await tick();
+  const w2 = blocksOf(body)[1];
+  const root = editRoot(w2);
+  assert.ok(root, 'the block has an edit root');
+  assert.equal(root.getAttribute('data-hc-restored'), 'marks', 'the restored marks, not a clean render');
+  assert.ok(w2.classList.contains('hc-open'), 'and the block is open on them: ' + JSON.stringify(HC.posts.filter((p) => p.type === 'hc-block-state')));
+});
+
+test('fix A2: marks that come before the page body is drawn are restored once the body appears', async () => {
+  const { doc, content, body } = setupPage();
+  content.removeChild(body);                       // js/app.js has not drawn the page yet
+  const HC = fakeHC();
+  const win = fakeWin();
+  typingFakes(win, doc);
+  EF.create(win, doc, HC);
+  const msg = { on: true, selected: null, marks: MARKS };
+  HC.send(msg);
+  for (let i = 0; i < 3; i += 1) await tick();
+  content.appendChild(body);                      // the page body appears (the MutationObserver re-applies)
+  HC.send(msg);
+  for (let i = 0; i < 3; i += 1) await tick();
+  const root = editRoot(blocksOf(body)[1]);
+  assert.ok(root && root.getAttribute('data-hc-restored') === 'marks', 'restored on the apply that found the block');
+});
+
+/* A1 (Nielsen #4): framed, the frame is only #content's slot (~700 px in a 1280-px window): the phone toolbar is
+   decided by the WINDOW's width the parent posts (hc-editor.width), never by the frame's own media query. */
+test('fix A1: phone mode comes from the window width the parent posts, not from the frame\'s own width', () => {
+  const frameIsNarrow = { matchMedia: () => ({ matches: true }) };      // a 700-px frame: (max-width: 767px) matches
+  assert.equal(EF.phoneWindow(frameIsNarrow, 1280), false, 'a 1280-px window is no phone, however narrow the frame');
+  assert.equal(EF.phoneWindow(frameIsNarrow, 900), false);
+  assert.equal(EF.phoneWindow({ matchMedia: () => ({ matches: false }) }, 390), true, 'a 390-px window is a phone');
+  assert.equal(EF.phoneWindow({ matchMedia: () => ({ matches: false }) }, 767), true, 'the site\'s phone line (767)');
+  assert.equal(EF.phoneWindow(frameIsNarrow, null), true, 'no width from the parent: the frame\'s own query answers');
+  assert.equal(EF.phoneWindow({}, undefined), false);
+  const src = fs.readFileSync(path.join(ROOT, 'js', 'editor-frame.js'), 'utf8');
+  assert.match(src, /phoneWindow\(win, state && state\.width\)/, 'the toolbar placement asks phoneWindow with the posted width');
+  assert.equal((src.match(/matchMedia\(/g) || []).length, 1, 'phoneWindow is the frame\'s one matchMedia');
+  for (const f of ['editor-blocks.js', 'editor-people.js', 'editor-type.js']) {
+    const t = fs.readFileSync(path.join(ROOT, 'js', f), 'utf8');
+    assert.equal(/matchMedia|innerWidth|\b76[78]\b/.test(t), false, `${f} makes no width decision of its own`);
+  }
+});
+
+test('fix A1: css: the frame\'s typing, boxes, people and project sections carry no phone media query', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8');
+  const section = (name) => { const a = css.indexOf(`/* ==== ${name} ==== */`); const b = css.indexOf('/* ==== ', a + 10); return css.slice(a, b); };
+  for (const name of ['typing (U4)', 'boxes/picker (U4)', 'people (U5)', 'project (U6)']) {
+    const body = section(name);
+    assert.ok(body.length > 100, `section ${name} found`);
+    // the phone line (640/767/768 px) is the WINDOW's; a room check on the frame's own width (the note card's 1180) may stay
+    assert.equal(/@media[^{]*(max|min)-width:\s*(6[0-9]{2}|7[0-9]{2})px/.test(body), false, `${name}: no phone media query (the frame is not the window)`);
+  }
+  const box = section('boxes/picker (U4)');
+  assert.match(box, /\.hc-blockbar\.is-phone\s*\{[^}]*position:\s*fixed/, 'the phone toolbar is fixed, keyed on .is-phone');
+  assert.match(box, /\.hc-blockbar\.is-phone \.hc-fb\s*\{[^}]*min-height:\s*44px/, 'its 44-px buttons, keyed on .is-phone');
+  assert.match(box, /\.hc-block\.hc-open:has\(> \.hc-blockbar\.is-phone\)\s*\{\s*padding-top:\s*0/, 'no empty band above the text on a phone');
+  assert.match(box, /\.hc-fb\.hc-box-type, \.hc-fb\.hc-code-lang \{[^}]*width: auto/, 'Type ▾ / Language ▾ are not squeezed into a 32-px square');
+});
+
+/* A7 (WCAG 4.1.2, 2.4.6) and A8 (U2b/U3, ED35) */
+test('fix A7: each "+" says where it adds; the picker is a plain group, takes the focus, Escape closes it to its "+"', () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  HC.send({ on: true });
+  const rails = kids(body).filter((c) => c.classList.contains('hc-plus'));
+  const names = rails.map((r) => kids(r)[0].getAttribute('aria-label'));
+  assert.equal(names[0], 'Add a block before the first block');
+  assert.equal(names[1], 'Add a block after “Title”');
+  assert.equal(names[2], 'Add a block after “Intro link dangling”');
+  assert.ok(names.every((n) => n !== 'Add a block here'), 'no "+" is named the same as every other');
+  const focused = [];
+  const had = Object.getOwnPropertyDescriptor(El.prototype, 'focus');
+  El.prototype.focus = function focus() { focused.push(this); };
+  try {
+    const plus = kids(rails[1])[0];
+    plus.click();
+    const picker = kids(rails[1]).find((c) => c.classList.contains('hc-picker'));
+    assert.equal(picker.getAttribute('role'), 'group');
+    const tiles = kids(kids(picker).find((c) => c.classList.contains('hc-pick-row')));
+    assert.ok(tiles.every((t) => t.tagName === 'BUTTON' && t.getAttribute('role') === null), 'plain buttons, no menuitem');
+    assert.equal(focused.at(-1), tiles[0], 'the focus moves into it');
+    let stopped = false;
+    for (const fn of picker.listeners.keydown || []) fn({ key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } });
+    assert.equal(kids(rails[1]).some((c) => c.classList.contains('hc-picker')), false, 'Escape closes it');
+    assert.equal(focused.at(-1), plus, 'back to its "+"');
+    assert.equal(stopped, true);
+    assert.equal(HC.posts.some((p) => p.type === 'hc-key'), false, 'an Escape the picker used is not passed on');
+  } finally {
+    if (had) Object.defineProperty(El.prototype, 'focus', had); else delete El.prototype.focus;
+  }
+});
+
+test('fix A8: an Escape the frame used for nothing goes to the parent as hc-key escape; one it used does not', () => {
+  const { doc, body } = setupPage();
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  const esc = (extra) => { for (const fn of doc.listeners.keydown || []) fn(Object.assign({ key: 'Escape', defaultPrevented: false }, extra)); };
+  HC.send({ on: false });
+  esc();
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-key').length, 0, 'Editor off: nothing');
+  HC.send({ on: true });
+  esc();
+  assert.deepEqual(HC.posts.filter((p) => p.type === 'hc-key'), [{ type: 'hc-key', op: 'escape' }]);
+  esc({ defaultPrevented: true });
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-key').length, 1, 'handled elsewhere (a drag, a field): not passed on');
+  kids(kids(body).find((c) => c.classList.contains('hc-plus')))[0].click();     // a "+" picker open
+  esc();
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-key').length, 1, 'it closes the picker instead');
+  esc();
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-key').length, 2, 'then the next one goes up');
+  HC.send({ on: true, selected: 2, open: { index: 2, md: 'Intro link\n\n', kind: 'paragraph' } });   // scripts loading
+  esc();
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-key').length, 2, 'it cancels the open instead');
+});
+
+test('fix A8: hc-scroll {y} at most once per 150 ms (the last position always goes), only while Editor mode is on', () => {
+  const { doc } = setupPage();
+  const HC = fakeHC();
+  const timers = [];
+  const win = Object.assign(fakeWin(), { scrollY: 0, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; } });
+  EF.create(win, doc, HC);
+  const scroll = (y) => { win.scrollY = y; for (const fn of win.listeners.scroll || []) fn({}); };
+  scroll(40);
+  assert.equal(HC.posts.filter((p) => p.type === 'hc-scroll').length, 0, 'Editor off: nothing');
+  HC.send({ on: true });
+  scroll(100.4);
+  scroll(180);
+  scroll(260);
+  const ys = () => HC.posts.filter((p) => p.type === 'hc-scroll').map((p) => p.y);
+  assert.deepEqual(ys(), [100], 'the first at once, the rest held');
+  const t = timers.filter((x) => x.ms === 150);
+  assert.equal(t.length, 1, 'one 150-ms window');
+  t[0].fn();
+  assert.deepEqual(ys(), [100, 260], 'the last position when the window ends');
+  win.scrollY = -5;
+  timers.filter((x) => x.ms === 150).at(-1).fn();
+  assert.deepEqual(ys(), [100, 260], 'no scroll in the window: nothing more');
+  scroll(-5);
+  assert.deepEqual(ys(), [100, 260, 0], 'never below 0');
+});

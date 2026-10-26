@@ -177,7 +177,13 @@
         item.setAttribute('data-value', k);
         if (dot) item.appendChild(make(doc, 'span', `hc-box-dot hc-dot-${k}`));
         item.appendChild(make(doc, 'span', '', l));
-        item.addEventListener('click', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); closeMenu(); onPick(k, l); });
+        // fix pass A5 (WCAG 2.4.3): the picked item goes with the menu; focus goes back to the Type ▾ / Language ▾ button
+        item.addEventListener('click', (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          closeMenu();
+          onPick(k, l);
+          if (menuBtn && typeof menuBtn.focus === 'function') menuBtn.focus();
+        });
         menu.appendChild(item);
       }
       menu.appendChild(make(doc, 'div', 'hc-pm-sep'));
@@ -261,14 +267,17 @@
 
     // ---- B I Link Code List (not in a code block: it is plain text) ----
     let listBtn = null;
+    const pressable = [];          // fix pass A7: B and I say whether the selection is already bold / italic
     if (o.kind !== 'code') {
       for (const [what, text, lab] of [['strong', 'B', 'Bold'], ['em', 'I', 'Italic'], ['link', '', 'Link'], ['code', '<>', 'Code']]) {
         const b = add(button(doc, `hc-fb hc-fb-${what}`, text, lab));
         if (what === 'link') { const svg = icon(doc, 'link'); if (svg) b.appendChild(svg); }
+        if (what === 'strong' || what === 'em') pressable.push([what, b]);
         press(b, () => {
           if (!hasSelection()) { say('Select some words first.'); return; }
           say('');
           if (what === 'link') openLink(); else o.onFormat(what);
+          refresh();
         });
       }
       listBtn = add(button(doc, 'hc-fb hc-fb-list', '', 'List'));
@@ -282,6 +291,9 @@
     press(comment, () => { say(''); if (typeof o.onComment === 'function') o.onComment(); });
 
     function refresh() {
+      for (const [what, b] of pressable) {
+        b.setAttribute('aria-pressed', String(Boolean(typeof o.formatState === 'function' && o.formatState(what))));
+      }
       if (!listBtn) return;
       const st = typeof o.listState === 'function' ? o.listState() : 'none';
       listBtn.setAttribute('aria-pressed', String(st === 'ul' || st === 'ol'));
@@ -378,20 +390,40 @@
   /* D9 (ED32): no one-click loss. After Remove, the frame puts this pill beside the removed block for
      REMOVED_PILL_MS: "Removed" and an Undo button (o.onUndo: the parent's undo, where the removal is its own step).
      o.setTimeout is the frame window's timer. */
+  /* Fix pass A5 (WCAG 4.1.3, 2.2.1): the pill comes into the page with its words EMPTY and gets "Removed" on the next
+     tick, so its role=status is heard; the frame then focuses its Undo. The 8-s clock stops while the focus or the
+     pointer is inside the pill and starts again (a full 8 s) when both have left. o.clearTimeout stops a clock. */
   const REMOVED_PILL_MS = 8000;
   function removedPill(doc, o) {
     const pill = make(doc, 'div', 'hc-removed-pill');
     pill.setAttribute('role', 'status');
     pill.setAttribute('contenteditable', 'false');
-    pill.appendChild(make(doc, 'span', '', 'Removed'));
+    const what = make(doc, 'span', 'hc-removed-what');
+    pill.appendChild(what);
     const undo = button(doc, 'hc-removed-undo', 'Undo', 'Undo the removal');
+    let timer = null;
+    let gone = false;
+    let focusIn = false;
+    let pointerIn = false;
+    const hold = () => { if (timer !== null && typeof o.clearTimeout === 'function') o.clearTimeout(timer); timer = null; };
+    const start = () => {
+      if (gone || focusIn || pointerIn || timer !== null) return;
+      timer = o.setTimeout(() => { timer = null; if (focusIn || pointerIn) return; gone = true; drop(pill); }, REMOVED_PILL_MS);
+    };
     undo.addEventListener('click', (e) => {
       if (e && e.stopPropagation) e.stopPropagation();
+      gone = true;
+      hold();
       drop(pill);
       o.onUndo();
     });
     pill.appendChild(undo);
-    o.setTimeout(() => drop(pill), REMOVED_PILL_MS);
+    pill.addEventListener('focusin', () => { focusIn = true; hold(); });
+    pill.addEventListener('focusout', () => { focusIn = false; start(); });
+    pill.addEventListener('pointerenter', () => { pointerIn = true; hold(); });
+    pill.addEventListener('pointerleave', () => { pointerIn = false; start(); });
+    o.setTimeout(() => { what.textContent = 'Removed'; }, 0);
+    start();
     return pill;
   }
 

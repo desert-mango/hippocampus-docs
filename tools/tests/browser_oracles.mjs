@@ -647,7 +647,7 @@ test('U3 walk: the block editors in the page, in a real Chrome: note box type, M
     // 1. a note box: the type bar on its edge; Warning
     assert.ok(await clickBlock('motor position is stored inside the motion controller'));
     await openIs('box');
-    assert.ok(await ev("!!document.querySelector('.hc-block.hc-open .hc-boxbar .hc-box-type')", F), 'the note box bar');
+    assert.ok(await ev("!!document.querySelector('.hc-block.hc-open .hc-blockbar .hc-box-type')", F), 'the note box bar');
     await ev("document.querySelector('.hc-block.hc-open .hc-box-type').click()", F);
     await ev("[...document.querySelectorAll('.hc-boxmenu .hc-pm-item')].find((b) => b.textContent === 'Warning').click()", F);
     await sleep(200);
@@ -668,16 +668,18 @@ test('U3 walk: the block editors in the page, in a real Chrome: note box type, M
     // 3. a code block: the language picker rewrites the fence's info string
     assert.ok(await clickBlock('^\\$ ros2 launch gantry xyz_motors\\.launch\\.py\\s*$', 'pre'));
     await openIs('code');
-    await ev("(() => { const s = document.querySelector('.hc-block.hc-open .hc-codebar select'); s.value = 'bash'; s.dispatchEvent(new Event('change')); })()", F);
+    // fix pass A9: Language ▾ and its menu (the old <select> bar is gone)
+    await ev("document.querySelector('.hc-block.hc-open .hc-code-lang').click()", F);
+    await ev("[...document.querySelectorAll('.hc-boxmenu .hc-pm-item')].find((b) => b.getAttribute('data-value') === 'bash').click()", F);
     await sleep(200);
     assert.match(await draft(KEY, FILE), /```bash\n\$ ros2 launch gantry xyz_motors\.launch\.py\n```/, 'the fence says bash now');
     // 4. a paragraph: select a word, the format bar, Bold -> a format suggestion
     assert.ok(await clickBlock('As a physical check'));
     await openIs('visual');
     await ev("(() => { const p = document.querySelector('.hc-block.hc-open p'); const t = p.firstChild; const i = t.data.indexOf('physical'); const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 8); getSelection().removeAllRanges(); getSelection().addRange(r); })()", F);
-    await until(() => ev("!!document.querySelector('.hc-formatbar') && !document.querySelector('.hc-formatbar').hidden", F), 'the format bar over the selection');
+    await until(() => ev("!!document.querySelector('.hc-block.hc-open .hc-blockbar')", F), 'the open block\'s toolbar');
     await shot('u3-format-bar');
-    await ev("document.querySelector('.hc-formatbar .hc-fb-strong').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await ev("document.querySelector('.hc-blockbar .hc-fb-strong').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
     await sleep(200);
     assert.equal(await ev("(document.querySelector('.hc-open b[data-hc-sug=fmt]') || {}).textContent", F), 'physical');
     assert.match(await draft(KEY, FILE), /As a \*\*physical\*\* check/, 'Bold in the draft');
@@ -798,23 +800,23 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
     // 5. the format bar: Bold, Italic, inline code, Link
     const selectWord = (word) => ev(`(() => { const p = document.querySelector('.hc-block.hc-open p'); const w = document.createTreeWalker(p, 4); let t; while ((t = w.nextNode())) { const i = t.data.indexOf(${JSON.stringify(word)}); if (i >= 0) { const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + ${word.length}); getSelection().removeAllRanges(); getSelection().addRange(r); return true; } } return false; })()`, F);
     assert.ok(await selectWord('physical'));
-    await until(() => ev("!!document.querySelector('.hc-formatbar') && !document.querySelector('.hc-formatbar').hidden", F), 'the format bar');
-    const kinds = await ev("[...document.querySelectorAll('.hc-formatbar .hc-fb')].map((b) => b.getAttribute('aria-label'))", F);
-    assert.deepEqual(kinds, ['Bold', 'Italic', 'Inline code', 'Link']);
+    await until(() => ev("!!document.querySelector('.hc-block.hc-open .hc-blockbar')", F), 'the open block\'s toolbar');
+    const kinds = await ev("[...document.querySelectorAll('.hc-blockbar .hc-fb-row .hc-fb')].map((b) => b.getAttribute('aria-label').split(':')[0])", F);
+    assert.deepEqual(kinds, ['Bold', 'Italic', 'Link', 'Code', 'List', 'Comment']);
     await shot('v1-format-bar');
-    await ev("document.querySelector('.hc-formatbar .hc-fb-code').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await ev("document.querySelector('.hc-blockbar .hc-fb-code').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
     await sleep(250);
     assert.match(await draft(KEY, FILE), /As a `physical` check/, 'inline code in the draft');
     assert.ok(await selectWord('check'));
-    await until(() => ev("!document.querySelector('.hc-formatbar').hidden", F), 'the bar again');
-    await ev("document.querySelector('.hc-formatbar .hc-fb-link').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
-    await until(() => ev("!!document.querySelector('.hc-formatbar .hc-fb-url') && document.activeElement === document.querySelector('.hc-formatbar .hc-fb-url')", F), 'the address field, focused');
+    await until(() => ev("!!document.querySelector('.hc-blockbar')", F), 'the bar again');
+    await ev("document.querySelector('.hc-blockbar .hc-fb-link').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))", F);
+    await until(() => ev("!!document.querySelector('.hc-blockbar .hc-fb-url') && document.activeElement === document.querySelector('.hc-blockbar .hc-fb-url')", F), 'the address field, focused');
     await send('Input.insertText', { text: 'javascript:alert(1)' });
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await sleep(150);
-    assert.match(await ev("(document.querySelector('.hc-formatbar .hc-fb-err') || {}).textContent || ''", F), /https:\/\//, 'a script address is refused, in words');
+    assert.match(await ev("(document.querySelector('.hc-blockbar .hc-fb-err') || {}).textContent || ''", F), /https:\/\//, 'a script address is refused, in words');
     await shot('v1-link-refused');
-    await ev("(() => { const i = document.querySelector('.hc-formatbar .hc-fb-url'); i.value = ''; })()", F);
+    await ev("(() => { const i = document.querySelector('.hc-blockbar .hc-fb-url'); i.value = ''; })()", F);
     await send('Input.insertText', { text: '#/setup/lab-gantry/wiring' });
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await sleep(300);
@@ -822,11 +824,11 @@ test('V1 walk: theme in the frame, the left line, the title, the bubble top righ
     // keyboard: Cmd/Ctrl+K opens the address field for the selection; Escape gives the selection back
     assert.ok(await selectWord('movable'));
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 4 });
-    await until(() => ev("document.activeElement === document.querySelector('.hc-formatbar .hc-fb-url')", F), 'Cmd+K opens the address field');
+    await until(() => ev("document.activeElement === document.querySelector('.hc-blockbar .hc-fb-url')", F), 'Cmd+K opens the address field');
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-    await until(() => ev("document.querySelector('.hc-formatbar').hidden && getSelection().toString() === 'movable'", F), 'Escape closes it and keeps the selection');
+    await until(() => ev("document.querySelector('.hc-blockbar .hc-fb-linkrow').hidden && getSelection().toString() === 'movable'", F), 'Escape closes it and keeps the selection');
     await sleep(300);                                            // the selectionchange the restore fires
-    assert.equal(await ev("document.querySelector('.hc-formatbar').hidden", F), true, 'and the bar stays closed');
+    assert.equal(await ev("document.querySelector('.hc-blockbar .hc-fb-linkrow').hidden", F), true, 'and the address field stays closed');
     assert.ok(await ev("!!HCEditorFrame.runtime.open()", F), 'and the block stays open');
     // 6. the theme toggle: the frame follows at once
     await S("document.getElementById('theme-toggle').click()");
@@ -1125,22 +1127,19 @@ test('R5 walk: the Team page in Editor mode — card tools (no block line), the 
     await sleep(300);
     await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').focus()", F);
     await shot('r5-team-editor-light-1280');
-    // the menu on a card: a click opens it, not the person's page
+    // fix pass A9: the card menu is gone (U5): the focused card's Move buttons and its pin glyph instead
     const first = await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').getAttribute('data-hc-name')", F);
-    await ev("document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').click()", F);
-    await until(() => ev("!!document.querySelector('.hc-pmenu')", F), 'the card menu');
-    const items = await ev("[...document.querySelectorAll('.hc-pmenu [data-pact]')].map((b) => b.getAttribute('data-pact'))", F);
+    const items = await ev("[...document.querySelector('[data-hc-list=\"team\"] .person-card[data-hc-ptools]').querySelectorAll('.hc-pmove')].map((b) => b.getAttribute('data-pact'))", F);
     assert.deepEqual(items.slice(0, 3), ['up', 'down', 'other']);
-    await shot('r5-team-menu-light-1280');
-    // a person pinned to the alumni (Kyle Nelson, data/people.json, 2026-10-16): in the alumni list, marked pinned,
-    // and their menu offers "Unpin from the alumni"; Escape closes it, nothing is posted
+    await shot('r5-team-moves-light-1280');
+    // a person pinned to the alumni (Kyle Nelson, data/people.json, 2026-10-16): in the alumni list, marked pinned
+    // (the glyph), and their Move button offers the current team
     const away = await ev("(document.querySelector('[data-hc-list=\"alumni\"] .person-card[data-linked=\"1\"][data-pinned=\"1\"]') || {}).getAttribute?.('data-hc-name') || null", F);
     assert.equal(away, 'Kyle Nelson', 'the first linked, pinned card in the alumni list');
-    await ev(`(() => { const c = [...document.querySelectorAll('[data-hc-list="alumni"] .person-card[data-hc-name]')].find((x) => x.getAttribute('data-hc-name') === ${JSON.stringify(away)}); c.click(); })()`, F);
-    await until(() => ev("(document.querySelector('.hc-pmenu [data-pact=\"pin\"]') || {}).textContent === 'Unpin from the alumni'", F), 'Unpin from the alumni');
-    assert.equal(await ev("document.querySelector('.hc-pmenu [data-pact=\"other\"]').textContent", F), 'Move to the current team');
-    await ev("document.querySelector('.hc-pmenu').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))", F);
-    await until(() => ev("!document.querySelector('.hc-pmenu')", F), 'the menu closed');
+    const awayCard = `[...document.querySelectorAll('[data-hc-list="alumni"] .person-card[data-hc-name]')].find((x) => x.getAttribute('data-hc-name') === ${JSON.stringify(away)})`;
+    assert.equal(await ev(`(${awayCard}.querySelector('.hc-ppin') || {}).title`, F), 'Pinned: stays with the alumni');
+    assert.equal(await ev(`${awayCard}.querySelector('.hc-pmove[data-pact="other"]').getAttribute('aria-label')`, F), `Move ${away} to the current team`);
+    void first;
     // "+" on the alumni list: the New person form is gone (U0b), so it follows that address's redirect — the page
     // stays (U5 adds the person in place)
     await ev("document.querySelector('.hc-padd[data-hc-padd=\"alumni\"]').click()", F);
