@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Send the retired /cms/ editor's routes to the site page they now live on, in Editor mode.
 /* HCRedirect — the /cms/ redirect map (plan D-I). The editor moved from

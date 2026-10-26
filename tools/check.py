@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Author: Kyle Nelson
 # Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-# Last substantive modification: 19 October 2026
+# Last substantive modification: 26 October 2026
 # Affiliation: TUHH HippoCampus Robotics
 # Purpose: Validate site content and dispatch the deterministic attribution-header check.
 """The check gate. Run before every commit:  python3 tools/check.py

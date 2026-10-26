@@ -25,13 +25,13 @@
     "api/auth.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "baa82b58a7bca585f53cf0534a9e068611d59bdacd25e25faac73bef3d36d04f",
+        "baseline_sha256": "7bfabddba680140e46b555c4886b686d021b6472aad1789535a80d6980afd29d",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Exchange a GitHub App sign-in code for a user access token without exposing the secret."
       },
@@ -70,13 +70,13 @@
     "js/app.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3fbb27f6148b8923f1bede7483c7d06e8b715e7a738c143bbce7f0fb9ec181e7",
+        "baseline_sha256": "f2c46ece2931ab6d7d9479fc7c0a067c382ec9c40e10764412d43f86df8eefdc",
         "commit": "30ba7913e57afa32b1d9e713b0716d9c6ddbe911"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Route and render the documentation site's pages from JSON registries and Markdown."
       },
@@ -85,13 +85,13 @@
     "js/cms-callback.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "e42cb27681a4d5ba2d4fbf63bb7355466910f771078d1005171dc09c70652e55",
+        "baseline_sha256": "6e232cd3264986cd92cc69bc8c3ad2910c42c1bd9e80638f52c4d38e88ba8a20",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Hand the GitHub sign-in code from the popup to the CMS window that opened it."
       },
@@ -100,13 +100,13 @@
     "js/cms-core.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "a40ab26298cff4801b52a31583fea6d21b6a9f425c2373130fa012f18f69b987",
+        "baseline_sha256": "caf8753b66083c12c5bc5ba5e675328aec4d4fa3bb336d98313ec6dc69b850f3",
         "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor."
       },
@@ -115,13 +115,13 @@
     "js/cms-redirect.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "6d9efdb501744c7861dff7588fbf5ff05094ee2cec0e23ea64236946053ee08e",
+        "baseline_sha256": "8f37837b9661ff3159551737ae593f19544394533ea22837e3e7e0f174ac5a51",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Send the retired /cms/ editor's routes to the site page they now live on, in Editor mode."
       },
@@ -152,13 +152,13 @@
     "js/sanitize.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d95654d8976cf3347bb723cee74c7c3461ce3f417fdf2ec1442be038e8e48656",
+        "baseline_sha256": "ada311dbfd567e1f8a97bc39341b6f8c76a66def1821117d25504f9802249dd6",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Allowlist-sanitize the HTML that Markdown renders to, on the live site and in CMS previews."
       },
@@ -182,13 +182,13 @@
     "js/source.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "1aaa7947945a70c46ddc0c08c4457f04d64c87559be4de07534359f871d7fa47",
+        "baseline_sha256": "c635b447d5a900a386b33dcd46d4e612fc943930c1f0e844e0f56a4049f7de0d",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Fetch site content same-origin, or through the CMS preview bridge inside a preview frame."
       },
@@ -302,13 +302,13 @@
     "tools/check.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "2e9be42931cfdb2fa29002c0a3c96271a6d73cd75ecf100ee5a103e712af61d9",
+        "baseline_sha256": "ee2bfc0341c132d09dc21e9eab640641272534fd1fc3fa4c3db8347341fa5b5e",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Validate site content and dispatch the deterministic attribution-header check."
       },
@@ -361,13 +361,13 @@
     "tools/dev_site.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "e332cf2528057262ec1a65f6642dcc91cba91b7ae2edc63fa8051df5f9ab0bb5",
+        "baseline_sha256": "fd97667eef50116d4091ae682e96327eb46547aa611ab14ce30555d90b604e2c",
         "commit": "f955b129412fe22a3cf2468ccc1f9af8ef57108e"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Serve static pages and every api/ function locally, with deterministic librarian mocks."
       },
@@ -451,13 +451,13 @@
     "tools/tests/browser_oracles.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "6692b15af32e7dbd69e6c6256fe913629e241530f0121c4ad780a5f39acd6512",
+        "baseline_sha256": "e8d55fc5e9fb622a79ab951291e18a30986c2bf4ccbd5618a10cd3d4364bf617",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Run the R3 block-sentinel oracles (b) and (c) in a real headless Chrome over every content page."
       },
@@ -495,13 +495,13 @@
     "tools/tests/test_auth_handler.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "eb796f6f8186dae20d1ab2a0f8ba9d0befac5afbf6a7e5701be27b6c9a056c00",
+        "baseline_sha256": "7df5a036a06a66c95def86df32ed4229c44cc84176be254335f90069a4ee21ec",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "21 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the GitHub sign-in code exchange, its callback page, and dev_site's api routing."
       },
@@ -510,13 +510,13 @@
     "tools/tests/test_block_model.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "8bbba06746df859c55f1d209f3c72e12642980910090ebb278c48f768032d6fb",
+        "baseline_sha256": "a5b43db62d94502c29538e100ba00774691074514ff0865edfaf72611eb7fc4c",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the editor's block model, span editor, block diff, overlay, cached fetcher and view settings."
       },
@@ -645,13 +645,13 @@
     "tools/tests/test_cms_core.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "220a53cae4970af589115d3d00321caff3faefa890cd13c25ec8db8c8aecdc3d",
+        "baseline_sha256": "35e90fb0fb7422fc4d6a2d5b3aada48940a9da13ff51336035f430de31b8ed02",
         "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host."
       },
@@ -675,13 +675,13 @@
     "tools/tests/test_cms_redirect.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "80395ef8debdc80249dc0729c651bc5e63e0575ab2a53e58e735515329a65282",
+        "baseline_sha256": "6bee19eeb25f1d1de4597133eba5d56a2d2e7530cdc36c3f0f05323c275fb2f1",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "29 September 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the /cms/ redirect map: every old editor route lands on the site in Editor mode."
       },
@@ -779,13 +779,13 @@
     "tools/tests/test_preview_bridge.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "10d00eac88653c83610b7419e262b7cf0dc41b31c73e937134fd369f2be52f23",
+        "baseline_sha256": "41edb0432aed0d232df4d9f3605f91e0e4c7886943d70079ddb1e1979e736509",
         "commit": "e2d2ab1afb2cfb0b2db95ba188dbd892e4f73b16"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the content-source seam and the CMS preview bridge client in js/source.js."
       },
@@ -824,13 +824,13 @@
     "js/lab.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d7192b78562ec05c7af60a22a683735298a3e1753ad36fecbce35806e2051c96",
+        "baseline_sha256": "b26936a2ba4710dc5ddd76b32be6426e09a964e27136e2d6a2eabb0805cd0c3b",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this."
       },
@@ -839,13 +839,13 @@
     "tools/tests/test_lab_ui.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "d10a8b5e746898d8dc8b592f4c751a0b77be2d378af7a26cb9c69347e995ac4b",
+        "baseline_sha256": "b40bf9aa2fbec41cb0bac03d5b9d11af354d1cde38f01f13e546b165a531970e",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "1 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy."
       },
@@ -854,13 +854,13 @@
     "js/editor-frame.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "cb18cf2e1a155d42ff9f57b18ca6790d7ddfcef0a3873e725f06a1cde02c115e",
+        "baseline_sha256": "53eba4a8068fa75468753d33824ee6e0186c006dbf6a1cc1d59fc1b3bec9e4e4",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent."
       },
@@ -869,13 +869,13 @@
     "tools/tests/test_editor_frame.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "44f1e521bb6afb2dd30ff0bd8496aa06b8d92970c9240998e19bf678414866bb",
+        "baseline_sha256": "08ec340eff3660dd809bd7bb523e157624fb1dd21a9c995a840a7c6cd05a8da4",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site."
       },
@@ -884,13 +884,13 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "f89a072e5d54c31ce464c089f62ef28261e8ff9dee0c248cca223bff6e6673bb",
+        "baseline_sha256": "6bc22111baa264a10317862039494d566fe40cf8bfb04ad761d56e71d6dadb7f",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor."
       },
@@ -914,13 +914,13 @@
     "tools/tests/test_editor.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "0ed4378f77fe10022a5a59682a7d224e82f65d98c8fe8492f346e4eea10eee5a",
+        "baseline_sha256": "ada3e7615365327608ee31dab573cd693c5c64b02f3c5a618241dad4e48fad83",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test the Editor mode's parent side (js/editor.js) in a vm over a fake DOM and the fake GitHub."
       },
@@ -929,13 +929,13 @@
     "tools/tests/test_app_guest.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c057db47a4dbe0e0727ebd4422a13f7f7300e2df52c9e61a3c590b3796a1956e",
+        "baseline_sha256": "ebfba75d4a04e654a25c8fcd4810a236be9a5d21bdb463372978627b3f06510d",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click."
       },
@@ -944,13 +944,13 @@
     "tools/tests/test_members_gating.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "0af426f6e14e3cf70af8e775b0880880ad704d6900fd57fc13e995291d861563",
+        "baseline_sha256": "c752435bc3d4e22bea65cef060bea820ae3b271c4b5508f5a04ece12d73f9674",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "19 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Test that members-only GitHub detail reaches signed-in members only, through the org reader alone."
       },
@@ -959,13 +959,13 @@
     "tools/tests/test_parity_table.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c62afa87b11782196938d28bc0b7e5b505ca8180367f00075ab5cb7620234384",
+        "baseline_sha256": "a68f657e2788b85e6fa9de68e1a983559bf43664cbf5cc4b214aa8eaf06b9484",
         "commit": "new-in-this-change"
       },
       "header": {
         "affiliation": "TUHH HippoCampus Robotics",
         "author": "Kyle Nelson",
-        "last_substantive_modification": "2 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
         "purpose": "Prove the /cms/ parity table: every retired /cms/ route and action names a green Editor-mode test."
       },
@@ -974,13 +974,13 @@
     "js/editor-md.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "de8880c6809bed8375b7be72164d06d505a4fc06b97eb31f6429c6d6963ba7aa",
+        "baseline_sha256": "35df5e8c96d1ccab6c6f44f2113ff65be06aee5fdc8ad0a389780fbd4bca7b93",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Turn one Markdown block into the DOM a person types into, and that DOM back into Markdown, byte-exact."
       },
@@ -1019,13 +1019,13 @@
     "js/editor-type.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c0604fb4117e740677a422b7633692203cf3b9cac7b5f2cf0d03a5f599643c81",
+        "baseline_sha256": "e517dd231cd122d1bb34961be126232745c415e833bb7de5ca90c9ec00545869",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "15 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Make typing in an open block a Google Docs-style suggestion: inserted text marked, deleted text struck, kept."
       },
@@ -1034,13 +1034,13 @@
     "js/editor-blocks.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "902bf3260377cc62664017d45db764e83ea4c86fd346cad1a617bc344c06d97c",
+        "baseline_sha256": "68c877863e1c90caf0c277b5d73a4fd75f1ed72268f9218e3268b51e03f5a665",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "14 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Draw the in-page block editors: the Markdown box with live preview, the note-box bar, code language, format bar."
       },
@@ -1199,13 +1199,13 @@
     "tools/tests/editor_harness.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "35774b24f80f7406f5011aaa2725e57dd31be67a680604f662f4b9f43260f93b",
+        "baseline_sha256": "c0749c6031acdd841c0c5ce47891b44f456835a6a892c8c9b71580cedac6e70b",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Run the Editor mode's parent side in a vm over a fake DOM and the fake GitHub, for the editor tests."
       },
@@ -1214,13 +1214,13 @@
     "tools/tests/frame_harness.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "5cd83c90029cdd24ffac4ee8ac0e5934c9a9ed33d3f9ac6ef28abe0c06077584",
+        "baseline_sha256": "bea73e4b7b0e13a2069dbd010cdf6eb5bb71698a5c48ec2639f4a4def0c7ea97",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "A fake DOM for the Editor mode's frame side (js/editor-frame.js) and a loader for its lazy scripts, for tests."
       },
@@ -1229,28 +1229,28 @@
     "js/editor-dock.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3ca5aa46bf65d24fe46e72fa48790668c1cdc30042c65cc7d40eea8cebefed40",
+        "baseline_sha256": "a51d47b34accfeb32a6cc37126ed9b39cb7e22992b3547082fed12ad4cfc1fb5",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
-        "purpose": "Draw the Editor mode's dock (the bubble at the bottom right): change count, undo, send, edit gate, fold."
+        "purpose": "Draw the Editor mode's bubble (top right; a round photo button bottom right on a phone): role chip, changes, review, sends, undo, fold."
       },
       "reason": "First-party site, tool, or test implementation written for the editor UI/UX build (unit U0 scaffold); the baseline is the file as introduced."
     },
     "tools/tests/test_editor_dock.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "a101cf6611d15217afaae4e917115e43c524d489621d9d367f99a27c8b502956",
+        "baseline_sha256": "30958ab0b3f8b3b99dc6623c5d1eaa0962b5f992d253c4587cc8ce84e01a77e5",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the Editor mode's dock (js/editor-dock.js, window.HCDock): its interface and how it is loaded."
       },
@@ -1259,13 +1259,13 @@
     "js/editor-people.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "c0c18c76cc367b9062c04b5d24aa7f35c1f9bebe4d53165d11f6e9c60ee3276f",
+        "baseline_sha256": "3658587b12162f99b73a92086bf9f7fb76ec0b65f6ffb5cd37cc2e1650f44b09",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "The Team page's people tools inside the Editor's preview frame: card menu, moves, drag, \"+\" cards, marks."
       },
@@ -1274,13 +1274,13 @@
     "tools/tests/test_editor_people.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "ca2ebbd27e218cd5e2050375685f5a90ef07fc4075ac7de08c9786bd6ca711ba",
+        "baseline_sha256": "d9b24e1ce147ae35735f47d95cf045f58562050649175c334fcc66e0c1e3db7d",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the Team page's people tools in the preview frame (js/editor-people.js) and how the frame loads them."
       },
@@ -1289,13 +1289,13 @@
     "tools/tests/test_editor_u0b.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "840ec5ed0c937b6179652f10511d40f31ddd635b86f02f8b1dbfb4743f18349c",
+        "baseline_sha256": "f0150612db1ec36ec6b38d67998ba42205decc086fe59337d2984639ffd8e069",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U0b removals: each retired editor address redirects to the page it now opens."
       },
@@ -1304,13 +1304,13 @@
     "tools/tests/test_editor_u1.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "386520c5e3d29def9686941540754dbd8614f08110bdb042acd161030d576172",
+        "baseline_sha256": "87fbe1698063f44d49e8d3d7048e0256a789e9eba6ab666394b46863f0cba249",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U1 sign-in work in the editor: staying signed in, the same-tab fallback, sign-out keeping edits."
       },
@@ -1319,13 +1319,13 @@
     "tools/tests/test_dev_site.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "929384c2ff842d79ae79e3a0bcbc53aa33d3cbbc5a4333c844cf6b1af35b74ea",
+        "baseline_sha256": "6571a8f9573da69d23d6fbf1a636ca92d1e9dfca2db303d12e26efe76acb7023",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test tools/dev_site.mjs, the function-aware local server: its flags and the handlers it runs."
       },
@@ -1334,13 +1334,13 @@
     "tools/tests/test_cms_core_send.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "7b8abac5fa293f354337f679a4f499d374df6dbdda5b8bac9fdb2a56ef9c67d4",
+        "baseline_sha256": "b2aa448bb232361370bd0fca125d62cb23f993677b6ddce5c18c84b9237b841c",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the cms-core side of the dock's send flow (U2): what Send for review writes, and nothing more."
       },
@@ -1349,13 +1349,13 @@
     "tools/tests/test_editor_u3.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "aee710e9daf14185e14983050e405683e8906bd0cff01be574e233ce5b59e98d",
+        "baseline_sha256": "2ff27f59136cf2d7c004c53d668b274efaed277b88def5a83a2f2ce1ea7024a1",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U3 review work in the editor: the review panel, margin cards, redirects and the Escape order."
       },
@@ -1364,13 +1364,13 @@
     "tools/tests/test_editor_u4.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "836da7f38de8b57f5dad9b5118bb0100a5a9a70bdfed4524b0726022c28bad54",
+        "baseline_sha256": "268c35ebe261fe9fd1e30ed8e3df031b9c71e1fb874df21202cefae9f65fede8",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U4 typing work on the editor's parent side: toolbar, comments, marks restored after a reload."
       },
@@ -1379,13 +1379,13 @@
     "tools/tests/test_editor_frame_u4.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "7912f95253bfbdbc961a72cc47f77ead22e73d4e38c9dfe6f7207d5f21bf0595",
+        "baseline_sha256": "41196afcac069f61754c35c69ddc2a6b483788d3681f2f06afd175232aae72d1",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U4 typing work inside the preview frame: un-strike, the \"+\" rail, boxes and the image tile."
       },
@@ -1394,13 +1394,13 @@
     "tools/tests/test_editor_u5.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "82034c727f36530c60b4794cccd939f8358164f6710e07490c9754bf3a747520",
+        "baseline_sha256": "0caccf70f6de115b304f342dce683088329156235f53114088ca97f47fda80ec",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U5 Team page work on the editor's parent side: in-place edits, the own-card rule, add in place."
       },
@@ -1409,13 +1409,13 @@
     "tools/tests/test_editor_u6.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3154a37bed995bc2e07d2e90275c5bee1c1ff2e2a6b19bd53e141a633db3aaf4",
+        "baseline_sha256": "154f30e86842ad0d071b09fa22170eacaef773ad1b9364dfcb2d3b3653df12db",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U6 project page work on the editor's parent side: facts in place, the lock line, New project."
       },
@@ -1424,13 +1424,13 @@
     "tools/tests/test_editor_frame_u6.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "b4f97d3c48c7209ca4d9cfc7800c572184cce8f5dcd98395e1e5cfe1cee80213",
+        "baseline_sha256": "2b0b252c7a643126b471859049a48f3542e26d83534fec9b04e644c9d77f843b",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U6 project page work inside the preview frame: the facts fields drawn in the page."
       },
@@ -1439,13 +1439,13 @@
     "tools/tests/test_facts_rules.py": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "ad8e8a99ac006bf8a5947328d2f39f33ae46af6a998e596f5b8014c162fd9e5a",
+        "baseline_sha256": "813434acfbbe33d8250d2562ab96a4556388840d9736879f09531dc1420c2cd5",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test that the editor's facts rules (js/cms-core.js FACTS_RULES) match the gate's project facts spec."
       },
@@ -1454,13 +1454,13 @@
     "tools/tests/test_editor_layout.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "6e7bb66ac214de5ab94979dfc064b4427ab3a3513017737ee0df57e68afaf6e3",
+        "baseline_sha256": "5af2acccd00489dd132b744c1e7dbe782de0a285585435c52414e88896d42f61",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "Test the U7 layout work: a still page when Editor turns on, the instant switch, header word, Contents."
       },
@@ -1469,13 +1469,13 @@
     "tools/tests/dev_auth_fake.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3648bcede0a4609c2a03b8cdfb5e0addc73ff46a3db5759bd517fd20444f863d",
+        "baseline_sha256": "134813d0de227c17366af349d4b0a0ab6ceea57923de00fbd944c6a361292e2f",
         "commit": "new-in-this-change"
       },
       "header": {
         "author": "Kyle Nelson",
         "project": "https://hippocampus-docs.vercel.app/#/projects/docs-and-site",
-        "last_substantive_modification": "23 October 2026",
+        "last_substantive_modification": "26 October 2026",
         "affiliation": "TUHH HippoCampus Robotics",
         "purpose": "A fake GitHub sign-in exchange for api/auth.js under tools/dev_site.mjs, for local browser runs only."
       },

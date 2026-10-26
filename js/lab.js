@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Render the guest GitHub surfaces: Lab page, repo cards, person popover, who wrote this.
 /* HippoCampus Robotics docs — the public GitHub layer.

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 19 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Pure logic of the CMS signed-in area: roles, routes, sign-in, session, GitHub client, preview host, editor.
 /* HCCore — everything in cms/ that is logic rather than DOM, so node can test

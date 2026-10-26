@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's dock (js/editor-dock.js, window.HCDock): its interface and how it is loaded.
 /* The dock's own tests (editor UI/UX build: U0 moved the dock out of js/editor.js; U2 adds its tests here).

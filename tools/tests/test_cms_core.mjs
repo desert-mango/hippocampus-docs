@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 19 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the CMS shell's pure logic: roles, routes, PR lists, sign-in, session, API guard, preview host.
 /* Unit tests for js/cms-core.js — everything in the signed-in area that is

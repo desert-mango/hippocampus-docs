@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: The Team page's people tools inside the Editor's preview frame: card menu, moves, drag, "+" cards, marks.
 /* HCEditorPeople — the Team page's people tools inside the preview frame. U0 moved them out of

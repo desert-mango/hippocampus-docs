@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: A fake GitHub sign-in exchange for api/auth.js under tools/dev_site.mjs, for local browser runs only.
 /* DEV ONLY, localhost only (U1, D20). Never deployed as a function: Vercel runs api/*.js and nothing

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 19 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw Editor mode on the site's own page: the switch, the sandboxed page frame, the tray and the block editor.
 /* Editor mode (plan D-C, D-D, D-G, D-H, D-N). This file started as a byte

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Run the Editor mode's parent side in a vm over a fake DOM and the fake GitHub, for the editor tests.
 /* The editor harness (editor UI/UX build, unit U0). Extracted from tools/tests/test_editor.mjs so every

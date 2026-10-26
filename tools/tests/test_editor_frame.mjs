@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Editor mode's frame side (js/editor-frame.js): grouping, marks, picks and the no-op on the live site.
 /* Unit tests for js/editor-frame.js over a small fake DOM (node has none).

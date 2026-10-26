@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 19 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Fetch site content same-origin, or through the CMS preview bridge inside a preview frame.
 /* HC — the content-source seam. js/app.js, js/search.js and js/graph.js read

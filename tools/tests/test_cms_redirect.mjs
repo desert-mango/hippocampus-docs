@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 29 September 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the /cms/ redirect map: every old editor route lands on the site in Editor mode.
 /* Unit tests for js/cms-redirect.js (plan D-I): legacyRoute(cmsHash) maps

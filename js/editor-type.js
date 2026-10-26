@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Make typing in an open block a Google Docs-style suggestion: inserted text marked, deleted text struck, kept.
 /* HCEditorType: the Editor mode's typing engine (editor redesign U2, Kyle's D1 change 5).

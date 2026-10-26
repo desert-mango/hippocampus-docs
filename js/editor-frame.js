@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 15 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the Editor mode's block marks inside the sandboxed preview frame and report picks to the parent.
 /* HCEditorFrame — the FRAME side of the Editor mode (plan D-D, D-E, D-N).

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Turn one Markdown block into the DOM a person types into, and that DOM back into Markdown, byte-exact.
 /* HCEditorMd: the Editor mode converter (editor redesign, plan section 6, unit U1).

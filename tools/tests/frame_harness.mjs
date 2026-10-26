@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: A fake DOM for the Editor mode's frame side (js/editor-frame.js) and a loader for its lazy scripts, for tests.
 /* The frame harness (editor UI/UX build, unit U0). Extracted from tools/tests/test_editor_frame.mjs so every

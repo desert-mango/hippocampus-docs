@@ -1,8 +1,8 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
-// Purpose: Draw the Editor mode's dock (the bubble at the bottom right): change count, undo, send, edit gate, fold.
+// Purpose: Draw the Editor mode's bubble (top right; a round photo button bottom right on a phone): role chip, changes, review, sends, undo, fold.
 /* HCDock — the Editor mode's bubble (editor UI/UX build: U0 moved it out of js/editor.js; U2 rebuilt it, plan D1,
    D4, D5, D13, D14).
 

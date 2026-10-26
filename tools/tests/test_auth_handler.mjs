@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 21 September 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the GitHub sign-in code exchange, its callback page, and dev_site's api routing.
 /* Unit tests for api/auth.js — the CMS's GitHub App code-for-token exchange —

@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Prove the site's guest boot loads no editor code and how js/app.js loads it for a session or the sign-in click.
 /* Plan D-C: guests load zero editor code and make zero GitHub requests.

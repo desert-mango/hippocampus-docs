@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Draw the in-page block editors: the Markdown box with live preview, the note-box bar, code language, format bar.
 /* HCEditorBlocks: the editor redesign's block editors (U3, Kyle's D1 change 6), drawn INSIDE the

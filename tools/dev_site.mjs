@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Serve static pages and every api/ function locally, with deterministic librarian mocks.
 /* dev_site — the ONE local server that serves this site exactly the way Vercel

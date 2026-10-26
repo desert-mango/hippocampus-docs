@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 23 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the Team page's people tools in the preview frame (js/editor-people.js) and how the frame loads them.
 /* The people tools' own tests (editor UI/UX build: U0 moved them out of js/editor-frame.js; U5 adds its tests here).

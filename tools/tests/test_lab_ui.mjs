@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 1 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the guest GitHub surfaces in js/lab.js: helpers, fetch set, escaping and privacy.
 /* Unit tests for js/lab.js (the Lab page, repo cards, the person popover and "who wrote

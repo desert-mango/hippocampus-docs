@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 14 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Run the R3 block-sentinel oracles (b) and (c) in a real headless Chrome over every content page.
 /* R3 oracles (b) and (c) (plan D-E), the repo's first scripted Chrome test.

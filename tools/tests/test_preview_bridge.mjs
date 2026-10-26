@@ -1,6 +1,6 @@
 // Author: Kyle Nelson
 // Project: https://hippocampus-docs.vercel.app/#/projects/docs-and-site
-// Last substantive modification: 19 October 2026
+// Last substantive modification: 26 October 2026
 // Affiliation: TUHH HippoCampus Robotics
 // Purpose: Test the content-source seam and the CMS preview bridge client in js/source.js.
 /* Unit tests for js/source.js — HC.fetchText / HC.fetchJSON / HC.callFunction.
