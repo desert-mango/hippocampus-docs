@@ -718,3 +718,52 @@ test('fix B12 (WCAG 8): the 400 ms guard on a fresh card stops a stray pointer c
   const card = src.slice(src.indexOf('function cardNode(c)'), src.indexOf('function noteNode(x)'));
   assert.match(card, /if \(e\.detail !== 0 && Date\.now\(\) < Number\(card\.dataset\.armedAt \|\| 0\)\) return;/);
 });
+
+test('integration F1: one note-key rule on both sides — a Comment on a heading, the last block and an added block draws a reviewer card', async () => {
+  const FCU_FILE = 'content/setup/hippocampus-bringup/fcu-firmware.md';
+  // the author side: Comment (hc-note) on three blocks of a draft that adds a paragraph
+  const mainText = readRepo(FCU_FILE);
+  const author = await on(OTHER_ROUTE);
+  const mainBlocks = C.splitBlocks(mainText).blocks;
+  const para = mainBlocks.find((b) => b.kind === 'paragraph');
+  const added = 'A paragraph the author adds.';
+  await author.send({ type: 'hc-block-select', index: mainBlocks.indexOf(para) });
+  await author.send({ type: 'hc-block-state', index: mainBlocks.indexOf(para), editor: 'visual' });
+  await author.send({ type: 'hc-block-md', index: mainBlocks.indexOf(para), md: `${para.text.replace(/\s+$/, '')}\n\n${added}\n\n` });
+  const draft = () => C.createDraftStore(author.local, C.draftsKey(author.login)).list()[0];   // read afresh each time
+  const draftText = draft().files[FCU_FILE];
+  assert.ok(draftText.indexOf(added) >= 0, 'the draft adds the paragraph');
+  const blocks = C.splitBlocks(draftText).blocks;
+  const heading = blocks.find((b) => b.kind === 'heading');
+  const last = blocks.filter((b) => b.kind !== 'space').at(-1);
+  const add = blocks.find((b) => b.text.replace(/\s+$/, '') === added);
+  for (const [b, text] of [[heading, 'On the heading.'], [last, 'On the last block.'], [add, 'On the added block.']]) {
+    await author.send({ type: 'hc-note', index: blocks.indexOf(b), text });
+    await settle();
+  }
+  const notes = JSON.parse(JSON.stringify(draft().notes));
+  assert.equal(notes.length, 3, 'three notes in the draft');
+  const keyOf = (text) => notes.find((n) => n.text === text).key;
+  // (a) the reviewer's rule over the page's own blocks gives the same keys
+  assert.equal(keyOf('On the heading.'), await C.noteKey(FCU_FILE, heading.text, webcrypto.subtle), 'a heading');
+  assert.equal(keyOf('On the last block.'), await C.noteKey(FCU_FILE, last.text, webcrypto.subtle), 'the last block');
+  assert.equal(keyOf('On the added block.'), await C.noteKeyAdded(FCU_FILE, add.text, webcrypto.subtle), 'an added block: the shared rule');
+  // (b) the reviewer: the same draft sent as a proposal; every note anchors beside its block
+  const body = C.notesSection.serialise(`Notes\n\nPages:\n- FCU firmware (\`${FCU_FILE}\`)\n`, notes);
+  const extra = extraPull(8, 'wendy', [FCU_FILE], { body });
+  extra.contents[extra.pulls[0].head.sha][FCU_FILE] = draftText;
+  const page = await on(UBUNTU_ROUTE, { variant: 'admin', extra });
+  page.handle().click();
+  await settle();
+  page.one((e) => e.attrs && e.attrs['data-action'] === 'review-row' && e.attrs['data-pr'] === '8').click();
+  await settle();
+  for (const fn of page.listeners.hashchange || []) fn();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  await settle();
+  const ov = C.overlayOnMain(mainText, mainText, draftText).overlay;
+  const at = (src, text) => ov.findIndex((e) => e.source === src && e.text === text.replace(/\s+$/, ''));
+  const want = [at('main', heading.text), at('main', last.text), at('pr-add', add.text)];
+  assert.ok(want.every((i) => i >= 0), 'the three blocks are in the overlay');
+  assert.deepEqual([...lastEditor(page).anchors].sort((x, y) => x - y), want.sort((x, y) => x - y), 'three note cards, each beside its block');
+});

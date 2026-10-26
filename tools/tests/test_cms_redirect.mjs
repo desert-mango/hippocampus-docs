@@ -51,7 +51,7 @@ test('the D-I map, route by route (U0b targets)', () => {
     ['#/edit/about', '/#/about?editor=on'],
     ['#/edit/data/people', '/#/about?editor=on&data=people'],
     ['#/edit/data/cloudinary-manifest', '/#/about?editor=on&data=cloudinary-manifest'],
-    ['#/new/project', '/#/projects?editor=on'],
+    ['#/new/project', '/#/projects?editor=new-project'],
     ['#/new/person', '/#/about?editor=on'],
     ['#/media', '/#/?editor=on'],
     ['#/help', '/#/?editor=on'],

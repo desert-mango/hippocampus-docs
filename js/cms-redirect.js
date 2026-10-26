@@ -16,7 +16,8 @@
      #/edit/<pageId>       -> that page's site route + ?editor=on
                               (setup/<id>, project/<id>, tool/<id>, about;
                               #/edit/data/<x> -> /#/about?editor=on&data=<x>)
-     #/new/project         -> /#/projects?editor=on
+     #/new/project         -> /#/projects?editor=new-project (the New project
+                              dialog opens, for a role that may make one)
      #/new/person          -> /#/about?editor=on
      #/media               -> /#/?editor=on
      #/help  #/private     -> /#/?editor=on
@@ -40,7 +41,7 @@
   const FIXED = Object.freeze({
     '/': HOME,
     '/review': HOME,
-    '/new/project': '/#/projects?editor=on',
+    '/new/project': '/#/projects?editor=new-project',
     '/new/person': '/#/about?editor=on',
     '/media': '/#/?editor=on',
     '/help': '/#/?editor=on',

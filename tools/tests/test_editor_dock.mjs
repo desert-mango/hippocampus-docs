@@ -175,7 +175,7 @@ function bareDock(opts) {
     go: (r) => seen.go.push(r), loadSends: async () => (o.sends === undefined ? null : o.sends),
     openSend: (s) => seen.openSend.push(s.number), openReview: () => { seen.review += 1; return Boolean(o.openReview); },
     shown() {}, avatar: (l) => h('span', { class: 'hc-avatar', text: l.slice(0, 1) }),
-    accessAsk: () => h('button', { 'data-action': 'access-request' }, C.ACCESS_REQUEST_LABEL), onCount() {},
+    accessAsk: () => h('button', { 'data-action': 'access-request' }, C.ACCESS_REQUEST_LABEL),
     openCount: async () => (o.count === undefined ? 0 : o.count),
   };
   if (o.phone) body.classList.add('hc-phone');
@@ -271,15 +271,17 @@ test('U2 D1: rows show only with something to say — review count, my sends —
   assert.equal(dock.action('dock-sent').textContent, '1 sent · waiting');
   dock.D.setCount(0);
   assert.equal(dock.row('review').hidden, true, 'nothing to review: no row');
-  // the review row opens the 'review' slot (U3 fills it): "Loading…" until then
+  // the review row hands its click to js/editor.js (api.openReview), whose list is drawn in the 'review' slot;
+  // the dock opens no list of its own (integration review: its "Loading…" placeholder was never reached)
   dock.D.setCount(2);
   dock.action('tray-open').click();
-  const slot = dock.one((e) => e.attrs['data-dock-panel'] === 'review');
-  assert.ok(slot && !slot.hidden);
-  assert.equal(slot.textContent, 'Loading…');
+  assert.equal(dock.seen.review, 1, 'the click is js/editor.js\'s');
+  assert.equal(dock.one((e) => e.attrs['data-dock-panel'] === 'review'), undefined, 'no slot of the dock\'s own');
   dock.D.panel('review', () => dock.D.chip());
   dock.set({});
-  assert.equal(slot.childNodes.length, 1, 'U3 registers its list in the same slot');
+  const slot = dock.one((e) => e.attrs['data-dock-panel'] === 'review');
+  assert.ok(slot && !slot.hidden);
+  assert.equal(slot.childNodes.length, 1, 'U3 registers its list in the slot');
   dock.action('dock-collapse').click();
   assert.equal(dock.body.classList.contains('hc-dock-collapsed'), true);
   const tag = dock.one((e) => e.classList.contains('hc-dock-tag'));
@@ -521,6 +523,38 @@ test('U2 D13: the open bubble folds on a scroll of more than 24 px, not while th
   assert.match(css, /prefers-reduced-motion: reduce\) \{[^}]*\.hc-dock[^{]*\{ transition: none/);
 });
 
+test('integration F3: the frame\'s scroll baseline starts again on an unfold and on a new frame load', async () => {
+  const dock = bareDock();
+  dock.D.scrolled(0);
+  dock.D.scrolled(500);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), true, 'a long frame scroll folds');
+  dock.D.unfold();                                      // a message brings the bubble back
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false);
+  dock.D.scrolled(10);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false, 'after the unfold the first report is the new baseline');
+  dock.D.scrolled(20);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false, 'a 10 px scroll does not fold');
+  // a new page in the frame: js/editor.js resets the baseline on hc-ready, so its first report never folds
+  dock.D.scrolled(600);
+  dock.one((e) => e.classList.contains('hc-dock-tag')).click();
+  dock.D.scrolled(600);                                 // the old page, scrolled far down
+  assert.equal(typeof dock.D.scrollReset, 'function');
+  dock.D.scrollReset();
+  dock.D.scrolled(0);                                   // the new page reports its top
+  dock.D.scrolled(10);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false, 'the new page\'s first scroll does not fold');
+  // the wiring: the editor resets the dock's frame baseline on each hc-ready
+  const page = await editorOn();
+  await page.send({ type: 'hc-scroll', y: 800 });
+  page.one((e) => e.classList.contains('hc-dock-tag')).click();
+  await settle();
+  await page.send({ type: 'hc-scroll', y: 800 });
+  assert.equal(tucked(page), false);
+  await page.send({ type: 'hc-ready' });                // the frame loaded another page
+  await page.send({ type: 'hc-scroll', y: 0 });
+  assert.equal(tucked(page), false, 'a new load at the top does not fold the bubble');
+});
+
 test('U2 D13: typing in the page folds the open bubble', async () => {
   const page = await editorOn();
   assert.equal(tucked(page), false);
@@ -707,6 +741,27 @@ test('U2 fix 7a (D13): while a list in the bubble is scrolling, a page scroll do
   const dock = bareDock({ clock, view: { pages: [{ key: PAGE_ID, label: 'FCU firmware', blocks: 1, unit: 'blocks', route: PAGE_ROUTE }], pageCount: 1 } });
   dock.action('dock-changes').click();
   dock.list('changes').fire('scroll');
+  clock.t += 100;
+  dock.scroll(300);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false, 'the list is scrolling');
+  clock.t += 400;
+  dock.scroll(600);
+  assert.equal(dock.body.classList.contains('hc-dock-collapsed'), true, 'later, the page scroll folds it');
+});
+
+test('integration F7 (D13): a scroll of the review list (inside the review slot) keeps a page scroll from folding the bubble', () => {
+  const clock = { t: 1000000 };
+  const dock = bareDock({ clock });
+  const list = new FakeElement('ul');
+  list.className = 'hc-review-list';
+  dock.D.panel('review', () => list);
+  dock.set({});
+  const slot = dock.one((e) => e.attrs['data-dock-panel'] === 'review');
+  // the slot does not scroll since fixes B6 (overflow: visible); its list does, and scroll does not bubble:
+  // the slot hears it only in the capture phase
+  assert.match(readRepo('js/editor-dock.js'), /p\.slot\.addEventListener\('scroll', .*\{ capture: true, passive: true \}\)/);
+  assert.match(readRepo('css/editor.css'), /\.hc-dock-panel \{ max-height: none; overflow: visible; \}/);
+  slot.fire('scroll');                                  // the list's scroll, as the capture phase hands it to the slot
   clock.t += 100;
   dock.scroll(300);
   assert.equal(dock.body.classList.contains('hc-dock-collapsed'), false, 'the list is scrolling');

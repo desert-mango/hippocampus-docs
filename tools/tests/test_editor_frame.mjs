@@ -588,6 +588,24 @@ test('fix A1: css: the frame\'s typing, boxes, people and project sections carry
   assert.match(box, /\.hc-fb\.hc-box-type, \.hc-fb\.hc-code-lang \{[^}]*width: auto/, 'Type ▾ / Language ▾ are not squeezed into a 32-px square');
 });
 
+test('integration F5: css: no phone media query (6xx/7xx px) styles the frame\'s page; its phone padding keys on html[data-hc-win="narrow"]', () => {
+  // the rail/margin (U3) section mixes parent rules (the rail, a real window query) with frame rules, so it is not
+  // in the section list above; this checks every phone-width @media block in the file for the frame's selectors
+  const css = fs.readFileSync(path.join(ROOT, 'css', 'editor.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const re = /@media[^{]*(?:max|min)-width:\s*(?:6[0-9]{2}|7[0-9]{2})px[^{]*\{/g;
+  let m;
+  while ((m = re.exec(css))) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    for (; i < css.length && depth; i += 1) { if (css[i] === '{') depth += 1; else if (css[i] === '}') depth -= 1; }
+    const body = css.slice(m.index, i);
+    assert.equal(/body\.hc-framed|\.hc-block\.hc-prop-/.test(body), false, `a frame rule under ${m[0].trim()}: ${body.slice(0, 120)}`);
+  }
+  const N = 'html[data-hc-win="narrow"]';
+  assert.ok(css.includes(`${N} body.hc-framed .content { padding: 1rem .9rem 2.5rem; }`), 'the frame\'s phone padding');
+  assert.ok(css.includes(`${N} .hc-block.hc-prop-add, ${N} .hc-block.hc-prop-change, ${N} .hc-block.hc-prop-del {`), 'the marked blocks\' phone inset');
+});
+
 /* A7 (WCAG 4.1.2, 2.4.6) and A8 (U2b/U3, ED35) */
 test('fix A7: each "+" says where it adds; the picker is a plain group, takes the focus, Escape closes it to its "+"', () => {
   const { doc, body } = setupPage();

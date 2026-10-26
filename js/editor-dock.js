@@ -14,7 +14,7 @@
    below it ONLY rows that say something:
      changes row   "2 pages changed" · Undo ↶ Redo ↷ · Send for review (the count opens the list of changed
                    pages: title, "N blocks", Send this page; a title goes to that page)
-     review row    "3 to review" (opens the `review` panel slot, which U3 fills; until then "Loading…")
+     review row    "3 to review" (its click opens or closes js/editor.js's review list, drawn in the `review` slot)
      sent row      "1 sent · waiting" (opens MY sends with their status: waiting, live, declined, seen)
    After a send: "Sent · waiting for review" with Undo for 8 seconds, the focus on Undo (the clock stops while
    the tab is hidden, or the focus or the pointer is in the bubble).
@@ -53,8 +53,7 @@
                     div.hc-dock-panel[data-dock-panel=<name>] on every refresh; renderFn null removes the slot.
                     The slot named 'review' sits under the review row and shows whatever its renderFn returns
                     (hidden when that is nothing): js/editor.js draws there whose changes are on screen and, while
-                    its review list is open, the list. Its default says "Loading…" while the dock's own 'review'
-                    list is open (a page without U3's list); every other slot is drawn at the end of the bubble.
+                    its review list is open, the list; every other slot is drawn at the end of the bubble.
      sent(number)   a send just landed (opened, or one more commit on my open send): the sent row counts it as
                     waiting at once (the list read from GitHub replaces it later)
      offerUndo({items, run})
@@ -63,7 +62,7 @@
                     Undo calls run() -> Promise of {text, kind ('error' or not), undone: [numbers]}; its text
                     replaces the box's words
      stopOffer()    the Undo offer goes (the sign-in ended): its box empties, its clock stops
-     setCount(n)    the review row's count ("N to review"; 0 hides the row; api.onCount(n) hears it first)
+     setCount(n)    the review row's count ("N to review"; 0 hides the row): the dock alone owns it
      loadCount()    asks api.openCount() for the count, then setCount; asks api.loadSends() for my sends
      lockParts(a, projectId, name, opts)
                     the edit gate's lines: "You can't edit this project.", why, and Request edit access (once the
@@ -73,6 +72,8 @@
      chip()         the role chip node (js/editor.js places it after the name; refresh writes its words)
      scrolled(y)    the page frame scrolled to y (px): the same fold rule as the page's own scroll (D13);
                     js/editor.js calls it on the frame's hc-scroll message
+     scrollReset()  the frame loaded a page: its next scroll report is the new starting point (js/editor.js
+                    calls it on hc-ready); an unfold does the same
      keepFocus(root, draw, fallback)
                     runs draw() (a redraw of root's insides) and puts the focus back on the matching new control
                     (fixes pass B3; refresh does it for the bubble, js/editor.js for the margin cards)
@@ -92,14 +93,13 @@
      go(route)                opens the page at `route` (Editor stays on: the marks show)
      loadSends()              Promise of MY sends (HCCore.ownSends' rows, each with `route` or null), or null
      openSend(item)           opens the page a send of mine changed
-     openReview()             the review row was clicked: js/editor.js opens or closes its review list and says true
-                              (it owns that list, on a phone too); false lets the dock open its own 'review' slot
+     openReview()             the review row was clicked: js/editor.js opens or closes its review list (it owns
+                              that list, on a phone too; the dock has none of its own)
      reviewOpen()             optional: true while js/editor.js's review list is open (the row's aria-expanded)
      shown(error)             says a failure on the status line
      avatar(login, first)     the face node for a login (committed avatar or the first letter)
      accessAsk(a, projectId, name, result)   the Request edit access control (or null), its result line `result`
      discard(key)             Discard on a changes row whose page changed since it was opened (asked first)
-     onCount(n)               hears the review count
      openCount()              Promise of the count of open sends I may review, or of null when the answer is stale
 */
 (function () {
@@ -139,7 +139,7 @@
   const panels = new Map();   // name -> {render, slot}
   let lastView = null;
   let reviewCount = 0;
-  let open = '';           // the one list open under its row: '' | 'changes' | 'review' | 'sent'
+  let open = '';           // the one list open under its row: '' | 'changes' | 'sent' (the review list is js/editor.js's)
   let sends = [];          // my sends, from api.loadSends()
   let justSent = [];       // numbers sent in this page since the last read (shown as waiting)
   let sheetOpen = false;   // phones: the sheet is up
@@ -220,11 +220,8 @@
     dockLock = h('div', { class: 'hc-dock-lock', role: 'status', 'data-dock-lock': true });
     dockLock.hidden = true;
     handle = button({ class: 'hc-dock-pages hc-dock-rowbtn', 'data-action': 'tray-open', 'aria-expanded': 'false' }, 'to review');
-    // ONE owner for the click: js/editor.js's review list when it has one, else the dock's own slot
-    handle.addEventListener('click', () => {
-      if (api.openReview()) return;
-      toggle('review');
-    });
+    // ONE owner for the click: js/editor.js's review list
+    handle.addEventListener('click', () => api.openReview());
     reviewRow = h('div', { class: 'hc-dock-row', 'data-dock-row': 'review' }, handle);
     reviewRow.hidden = true;
 
@@ -248,8 +245,6 @@
     dockTag.addEventListener('click', () => fold(false));
     host.appendChild(dock);
     host.appendChild(dockTag);
-    // the review list's slot (U3 fills it with panel('review', fn)); until then it says it is loading
-    panels.set('review', { render: () => (open === 'review' ? h('p', { class: 'hc-dock-empty', text: 'Loading…' }) : null), slot: null });
 
     // D13: fold on scroll, unless the pointer is in the bubble or one of its lists is scrolling
     dock.addEventListener('pointerenter', () => { pointerIn = true; });
@@ -296,6 +291,7 @@
     document.body.classList.remove('hc-dock-collapsed');
     try { const st = api.store(); if (st) st.setItem(DOCK_KEY, 'open'); } catch (e) { /* this page only */ }
     scrollFrom = scrollY();
+    frameFrom = null;       // as fold(false): the frame's next report is the new starting point
     api.redraw();
   }
   /* D13: scrolling or typing folds the open bubble (not remembered: a reload brings it back as it was). */
@@ -362,7 +358,7 @@
       const was = open;
       open = '';
       api.redraw();
-      const back = was === 'changes' ? dockCount : was === 'review' ? handle : sentBtn;
+      const back = was === 'changes' ? dockCount : sentBtn;
       if (back && typeof back.focus === 'function') back.focus();
       return true;
     }
@@ -667,8 +663,7 @@
     // the review row (its count from setCount; U3's list in the 'review' slot)
     show(reviewRow, signedIn && Boolean(v.on) && reviewCount > 0);
     handle.hidden = reviewRow.hidden;                       // the one owner of whether the count shows
-    if (reviewRow.hidden && open === 'review') open = '';
-    const reviewing = open === 'review' || (typeof api.reviewOpen === 'function' && api.reviewOpen() === true);
+    const reviewing = typeof api.reviewOpen === 'function' && api.reviewOpen() === true;
 
     // the sent row: my sends
     const mine = signedIn ? sendList() : [];
@@ -724,7 +719,9 @@
           // right under the review row: the rows after it are moved below the slot
           dock.appendChild(p.slot);
           moveAfter(reviewRow, [p.slot]);
-          p.slot.addEventListener('scroll', () => { listScrollAt = now(); }, { passive: true });
+          // D13's "a list is scrolling" exception: the slot itself never scrolls (fixes B6), its review list
+          // does; scroll does not bubble, so the slot hears its lists' scrolls in the capture phase
+          p.slot.addEventListener('scroll', () => { listScrollAt = now(); }, { capture: true, passive: true });
         } else dock.appendChild(p.slot);
       }
       if (name === 'review') {
@@ -739,7 +736,6 @@
 
   /* The review row's count: "N to review" (0 hides the row). */
   function setCount(n) {
-    api.onCount(n);
     reviewCount = Number.isInteger(n) && n > 0 ? n : 0;
     handle.replaceChildren(h('span', { class: 'n', text: String(reviewCount) }), document.createTextNode(' to review'));
     if (lastView) refreshDock(lastView);
@@ -775,6 +771,7 @@
     keepFocus,
     escape,
     scrolled: (y) => scrolledTo(y, 'frame'),
+    scrollReset: () => { frameFrom = null; },
     UNDO_MS,
   });
   if (typeof window !== 'undefined') window.HCDock = HCDock;

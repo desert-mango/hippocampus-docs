@@ -100,7 +100,7 @@
     "js/cms-core.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "caf8753b66083c12c5bc5ba5e675328aec4d4fa3bb336d98313ec6dc69b850f3",
+        "baseline_sha256": "1a2840bda7aa2bfc3132f2f058764a7a0ce794902581ee5d30329d6f6edffe46",
         "commit": "ffd25b958de586bab4cca83fa21215bf1428254d"
       },
       "header": {
@@ -115,7 +115,7 @@
     "js/cms-redirect.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "8f37837b9661ff3159551737ae593f19544394533ea22837e3e7e0f174ac5a51",
+        "baseline_sha256": "da303ae6591a9aa9a20be11468852240e652bd061b3037775bdac66e423ff1c3",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -675,7 +675,7 @@
     "tools/tests/test_cms_redirect.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "6bee19eeb25f1d1de4597133eba5d56a2d2e7530cdc36c3f0f05323c275fb2f1",
+        "baseline_sha256": "4c1eea9ff98f0de6a539b0afe7d5bd128e4925ee87d3b832db87cb2f23e84e04",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -869,7 +869,7 @@
     "tools/tests/test_editor_frame.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "08ec340eff3660dd809bd7bb523e157624fb1dd21a9c995a840a7c6cd05a8da4",
+        "baseline_sha256": "03ae382e5d1a7b73fde1b2bfc6659ac1bd796ce53a28d59d78d3cc1ea34244ae",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -884,7 +884,7 @@
     "js/editor.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "6bc22111baa264a10317862039494d566fe40cf8bfb04ad761d56e71d6dadb7f",
+        "baseline_sha256": "3826c09221f3324ba231f3b4f53d7511525b828f487350b455a856e8c75b79f3",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -1229,7 +1229,7 @@
     "js/editor-dock.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "a51d47b34accfeb32a6cc37126ed9b39cb7e22992b3547082fed12ad4cfc1fb5",
+        "baseline_sha256": "3c9663a0904636059b90c5345c93bb660544f99880ec5243b967c23d7f060525",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -1244,7 +1244,7 @@
     "tools/tests/test_editor_dock.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "30958ab0b3f8b3b99dc6623c5d1eaa0962b5f992d253c4587cc8ce84e01a77e5",
+        "baseline_sha256": "3c5e81d0f46cc2b935fe1d821268fb0a62bb1109aa5092446e6d78e6b8091cbb",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -1259,7 +1259,7 @@
     "js/editor-people.js": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "3658587b12162f99b73a92086bf9f7fb76ec0b65f6ffb5cd37cc2e1650f44b09",
+        "baseline_sha256": "4024339e7213d76c230d98a26fe88eef496d532adcf4f8492840868a27fa1f90",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -1349,7 +1349,7 @@
     "tools/tests/test_editor_u3.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "2ff27f59136cf2d7c004c53d668b274efaed277b88def5a83a2f2ce1ea7024a1",
+        "baseline_sha256": "5717582590763e1e2687378354ef2044fcdbbef31df5d847eaa398358f2cbb59",
         "commit": "new-in-this-change"
       },
       "header": {
@@ -1409,7 +1409,7 @@
     "tools/tests/test_editor_u6.mjs": {
       "classification": "included",
       "evidence": {
-        "baseline_sha256": "154f30e86842ad0d071b09fa22170eacaef773ad1b9364dfcb2d3b3653df12db",
+        "baseline_sha256": "bed1158c09f2006d896f0f29dfbb57edc51966264072d56fe675246fa8489b9f",
         "commit": "new-in-this-change"
       },
       "header": {

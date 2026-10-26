@@ -834,15 +834,14 @@
       go: (route) => { window.location.hash = `#${route}`; },
       loadSends: () => loadSends(),
       openSend: (item) => openSend(item).catch(shown),
-      // U3: the review row's one click owner — the list in the bubble (on a phone, its .hc-rsheet); the dock never toggles it
-      openReview: () => { if (rv.open) closeReview(); else openReview(); return true; },
+      // U3: the review row's one click owner — the list in the bubble (on a phone, its .hc-rsheet); the dock has no list of its own
+      openReview: () => { if (rv.open) closeReview(); else openReview(); },
       reviewOpen: () => rv.open,
       shown: (e) => shown(e),
       avatar: (login, first) => avatarFace(login, first),
       accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
       discard: (key) => discardDraft(key),
       // U3 (ED11): the count is what this viewer may review; nobody else sees one
-      onCount: (n) => { ed.count = n; },                 // the dock alone shows or hides the row (and its button) by the count
       openCount: () => loadReview().then((list) => (list === null ? null : list.length)),
     };
   }
@@ -1213,7 +1212,6 @@
       base: { ref: target.ref, sha, number: target.number } };
   }
 
-  const sameBase = (a, b) => a.base.ref === b.base.ref;
 
   const DATA_HASH = '#/edit';
   const backToData = () => h('p', { class: 'hc-back' }, link(DATA_HASH, '← Data files'));
@@ -1739,7 +1737,6 @@
   const ed = {
     on: false,
     trayOpen: false,      // the thin editor page is open over the frame
-    count: null,          // open proposals, once read
     show: null,           // {number, sha, changed: Map file -> 'changed'|'removed'}: "Show on page"
     frame: null,          // the iframe in #hc-frame-host
     host: null,           // HCCore.createPreviewHost for it
@@ -1760,6 +1757,7 @@
     cache: null,          // HCCore.cachedFetcher over this session's token
     pv: null,             // what this load shows (pageView): mode, the proposal, its overlay and marks
     baseNote: null,       // {key, number}: that page's stored draft names a proposal not my own open one
+    wantNewProject: false, // ?editor=new-project: open the New project dialog on the frame's next hc-ready
     props: null,          // Promise of the open proposals with their files, once per refresh
     bases: new Map(),     // 'main...head' -> Promise of the merge base sha
     checks: new Map(),    // head sha -> Promise of HCCore.checkStatus
@@ -1769,7 +1767,6 @@
     focusWant: null,      // U3: the proposal whose first change the next margin-card read scrolls into view
     focusOut: null,       // U3: {n, index} the frame scrolls into view once per n (hc-editor focus)
     focusSeq: 0,
-    count: 0,             // U3: how many proposals wait for this viewer's review
   };
   let frameTimer = null;
   let liveTimer = null;     // U7: the frame takes the page's place after LIVE_FALLBACK_MS even without its paint signal
@@ -1860,6 +1857,9 @@
       return;
     }
     ed.trayOpen = false;
+    // ?editor=new-project (/cms/#/new/project): the New project dialog opens once the frame is ready (frameReady;
+    // openNewProject checks the role)
+    if (param.tab === 'new-project') ed.wantNewProject = true;
     // U3: ?editor=review (and the old ?editor=proposals) opens the review list; pr=<n> opens that proposal there
     if (param.pr !== null || param.tab === 'review' || param.tab === 'proposals') rv.open = true;
     if (param.pr !== null) {
@@ -2044,7 +2044,8 @@
 
   /* storedDraft, its base checked against my own open proposals (number and
      branch) before the frame reads anything at its head. Not one of them:
-     the page shows the live site and the Changes tab says why. */
+     the page shows the live site, and ed.baseNote records which proposal the
+     draft named. */
   async function checkedDraft(page) {
     const d = storedDraft(page);
     if (!d || d.base.number === null) return d;
@@ -2423,10 +2424,6 @@
     trayGo(`#/review/${n}`);
   }
 
-
-
-
-
   const plural = (n, one, many) => (n === 1 ? one : many);
 
 
@@ -2550,16 +2547,18 @@
   }
 
   /* Each note -> {key, text, anchor}: the frame index of its block — the card of the edit it names, else the
-     block whose note key (HCCore.noteKey) it carries; null when no block on this page matches (not drawn). */
+     block whose note key it carries (HCCore.noteKey; HCCore.noteKeyAdded for a block the proposal adds, the
+     author's own rule); null when no block on this page matches (not drawn). */
   async function noteAnchors(file, notes, cards, entries) {
     if (!notes.length) return [];
     const at = new Map();
+    const put = (k, i) => { if (!at.has(k)) at.set(k, i); };
     try {
       for (let i = 0; i < entries.length; i += 1) {
         const e = entries[i];
         if (!e || typeof e.text !== 'string' || !e.text.trim()) continue;
-        const k = await C.noteKey(file, e.text);
-        if (!at.has(k)) at.set(k, i);
+        put(await C.noteKey(file, e.text), i);
+        if (e.source === 'pr-add') put(await C.noteKeyAdded(file, e.text), i);
       }
     } catch (e) { at.clear(); }                          // no WebCrypto here: only edit keys anchor
     return notes.map((x) => {
@@ -3366,8 +3365,14 @@
      loads; Editor off undoes it (setEditor). A frame that never paints gives way after LIVE_FALLBACK_MS. */
   const LIVE_FALLBACK_MS = 8000;
   function frameReady() {
+    if (typeof D.scrollReset === 'function') D.scrollReset();   // a new page: its scroll starts a new fold baseline
     ed.readies = (ed.readies || 0) + 1;
-    if (ed.readies === 1) { ed.ready = true; postEditor(); return; }
+    if (ed.readies === 1) {
+      ed.ready = true;
+      postEditor();
+      if (ed.wantNewProject) { ed.wantNewProject = false; openNewProject(); }
+      return;
+    }
     frameLive();
   }
   function frameLive() {
@@ -3452,12 +3457,13 @@
   // ------------------------------------------------ U4: notes, marks, history beside the draft ---
   /* D8 (ED18) notes: Comment in the open block's toolbar leaves a note for the reviewer and changes no text.
      The draft holds them as notes: [{key, text}] (HCCore.validDraft; U2a's send carries them in the PR body).
-     The key is a 64-hex block key in the records' own form (HCCore.editKey, sha256 over path NUL base NUL head):
-       a block of the draft's base     editKey(path, baseBlock, baseBlock)   (a "change into itself": no real edit
+     The key is a 64-hex block key in the records' own form (HCCore.editKey, sha256 over path NUL base NUL head),
+     over the block's text without its trailing blank space — the one rule both sides share (js/cms-core.js):
+       a block of the draft's base     HCCore.noteKey(path, baseBlock)        (a "change into itself": no real edit
                                                                             has base === head, so it never collides)
-       a block the draft added         editKey(path, '', draftBlock)        (base '' with a head: no real edit has it)
-     noteKey(path, base, draft) is that rule (HCEditor.helpers.noteKey); a reviewer finds the block by computing it
-     over the proposal's merge-base blocks (and the head's added blocks).
+       a block the draft added         HCCore.noteKeyAdded(path, draftBlock)  (base '' with a head and no anchor)
+     noteKey(path, base, draft) picks between them (HCEditor.helpers.noteKey); the reviewer's noteAnchors computes
+     the same keys over the overlay's blocks (noteKeyAdded over its 'pr-add' ones).
      D6 (ED30, ED31) marks and history: under their OWN localStorage key per page, hc-cms-marks:<login>/<page>,
      never inside the draft record (the draft write never depends on them), at most MARKS_CAP characters; history
      MARKS_HIST steps each way, dropped first when the cap or the quota says no. marks: {<block key>: marked HTML}, a
@@ -3470,7 +3476,7 @@
   const NOTE_MAX = 2000;
   const MAX_MARKS_HTML = 200000;          // js/source.js MAX_MARKS_HTML
   const noteKey = (path, base, draft) => (typeof base === 'string' && base
-    ? C.editKey(path, base, base) : C.editKey(path, '', String(draft || '')));
+    ? C.noteKey(path, base) : C.noteKeyAdded(path, String(draft || '')));
   function fnv(s) {
     let h = 0x811c9dc5;
     for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
@@ -3680,8 +3686,7 @@
       if (editor === 'markdown') ed.inPageReason = reason || '';
       if (editor === 'closed') { ed.selected = null; ed.sel = null; postEditor(); }
     }
-    // the frame cannot open this block in the page: the whole page as Markdown on the thin editor page (U0b: the
-    // block textarea of the old Changes tab is gone)
+    // the frame cannot open this block in the page: the whole page opens as Markdown on the thin editor page
     if (editor === 'markdown') editWholePage().catch(shown);
   }
 
@@ -4229,7 +4234,13 @@
     const stops = [id, name, tagline, status, cancel, make];
     box.addEventListener('keydown', (e) => {
       if (!e) return;
-      if (e.key === 'Escape') { closeNewProject(); return; }
+      if (e.key === 'Escape') {
+        // the dialog is the top layer: the document's Escape stack (onEscape) must not close the next one too
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        closeNewProject();
+        return;
+      }
       if (e.key !== 'Tab') return;
       const live = stops.filter((x) => !x.disabled);
       const at = live.indexOf(document.activeElement);

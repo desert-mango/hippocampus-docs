@@ -93,6 +93,18 @@
                        access-nowrite   read-only, commits (the issue link)
                        access-none      Write, not listed (Request shown)
                        access-admin     Admin: Remove per person, Add person
+    project-edit     (U6) on /projects/core-stack, an editor of it (commits):
+                     the title open in place, facts name tagline status repos
+    project-locked   (U6) on /projects/core-stack, no commits: the lock line
+                     under the title, the not-allowed cursor, nothing to change
+    project-new      (U6) on /projects (Write): "+ New project" clicked, the
+                     New project dialog open
+    team-admin       (U5) &page=/team&variant=admin: every card's grips, the
+                     first name typed in place, its Move buttons on focus
+    team-member      (U5) &page=/team (Write): the page as outside Editor mode,
+                     except the one own card
+    team-add         (U5) &page=/team&variant=admin: the alumni "+" turned into
+                     the empty card in place
 
   The synthetic proposals (U7) are built here from the page's own Markdown
   with HCCore.splitBlocks and handed to the fake GitHub as `extra`; PR #1

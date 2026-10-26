@@ -319,3 +319,46 @@ test('fix B11 (WCAG 2.4.3): the New project dialog keeps Tab inside, makes the p
   for (const el of before) assert.equal(el.getAttribute('inert'), null, 'the page is back');
   assert.equal(page.win.document.activeElement, page.frame(), 'the focus goes back to the page, where "+ New project" is');
 });
+
+test('integration F2: Escape in the New project dialog closes only the dialog — an open review list stays open', async () => {
+  const page = await on('/projects', { site: { variant: 'admin' } });
+  page.handle().click();                                  // the review list
+  await settle();
+  const H = page.win.HCEditor.helpers;
+  assert.equal(H.state().reviewOpen, true, 'the list is open');
+  await page.send({ type: 'hc-new-project' });
+  const dlg = page.one((e) => e.getAttribute && e.getAttribute('data-new-project') !== null && !e.hidden);
+  assert.ok(dlg, 'the dialog');
+  // the browser's order: the dialog's own keydown first, then (unless stopped) the document's
+  const e = { key: 'Escape', defaultPrevented: false, stopped: false,
+    preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } };
+  for (const fn of dlg.listeners.keydown || []) fn(e);
+  if (!e.stopped) for (const fn of page.docListeners('keydown')) fn(e);
+  await settle();
+  assert.ok(!page.one((x) => x.getAttribute && x.getAttribute('data-new-project') !== null && !x.hidden), 'the dialog closed');
+  assert.equal(H.state().reviewOpen, true, 'the list under it is still open');
+});
+
+test('integration: /cms/#/new/project lands on /#/projects?editor=new-project, which opens the New project dialog for a Write role only', async () => {
+  const R = require(path.join(ROOT, 'js', 'cms-redirect.js'));
+  assert.equal(R.legacyRoute('#/new/project'), '/#/projects?editor=new-project');
+  const dialog = (page) => page.one((e) => e.getAttribute && e.getAttribute('data-new-project') !== null && !e.hidden);
+  for (const [variant, want] of [[undefined, true], ['readonly', false]]) {
+    const page = openSite({ hash: '#/projects?editor=new-project', storage: memoryStorage(), localStorage: memoryStorage(),
+      files: { [ACCESS_FILE]: accessText(['bob']) }, variant });
+    await settle();
+    for (const fn of page.listeners.hashchange || []) fn();
+    await settle();
+    await page.send({ type: 'hc-ready' });
+    await settle();
+    assert.equal(page.location.hash, '#/projects', `${variant || 'write'}: the parameter is stripped`);
+    assert.equal(Boolean(dialog(page)), want, `${variant || 'write'}: the dialog ${want ? 'opens' : 'stays shut'}`);
+    if (want) {
+      await page.send({ type: 'hc-ready' });                // a later load of the frame does not open it again
+      page.action('new-project-cancel').click();
+      await settle();
+      await page.send({ type: 'hc-ready' });
+      assert.equal(Boolean(dialog(page)), false, 'once only');
+    }
+  }
+});

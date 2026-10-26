@@ -44,9 +44,10 @@
        js/editor.js's VIEWS map (the thin editor page's routes; U0b of the
        editor UI/UX build left only #/edit…, and js/editor.js's REDIRECTS
        sends the retired addresses to the page).
-     - The Review tab's logic (badges, check status, annotations, the action
+     - The review logic (badges, check status, annotations, the action
        requests and what their answers mean, the Undo-on-GitHub URL, the
-       changed page -> preview route map) is the "review" section below.
+       changed page -> preview route map), read by js/editor.js's review
+       list in the bubble and its margin cards, is the "review" section below.
 
    THE PREVIEW HOST is the parent side of js/source.js's bridge protocol (read
    the comment block there; it is the contract). In short: the frame is
@@ -856,7 +857,7 @@
 
   // ------------------------------------------------------ review (U8) ---
 
-  /* The words the Review tab shows. docs/maintainer-protocols.md quotes the
+  /* The review words the editor shows (the review list's reasons). docs/maintainer-protocols.md quotes the
      same strings; keep them verbatim (a reconcile greps for drift). */
   const MACHINERY_TEXT = 'needs a code review by Desert Mango';
   const DERIVED_TEXT = 'carries search/ or data/graph/ files, which the site regenerates after a merge';
@@ -2528,7 +2529,7 @@
     && route.indexOf('//') < 0 ? route : '/'}?editor=review&pr=${n}`;
 
   /* The PR body: the summary, the pages, where it was made, and (once the
-     number is known) the link to it in the editor's Review tab. */
+     number is known) the link that opens it in the bubble's review list (reviewUrl). */
   function prBody(o) {
     const x = o || {};
     const lines = [trimmed(x.summary), '', 'Pages:'];
@@ -4154,13 +4155,19 @@
       || p === 'data/cloudinary-manifest.json')) return 'page';
     return 'site';
   }
-  /* A note's block key (U3 + U4): sha256(path NUL block NUL block), the block's text without its trailing
-     blank space: the record key of a change that leaves the block as it is. A note on a changed block may
-     carry that change's own edit key instead; both anchor it. */
+  /* A note's block key (U3 + U4), the ONE rule the author (js/editor.js) and the reviewer both use, over the
+     block's text without its trailing blank space:
+       noteKey(path, block)        a block of the base: sha256(path NUL block NUL block), the record key of a
+                                   change that leaves the block as it is (no real edit has base === head)
+       noteKeyAdded(path, block)   a block the draft added: sha256(path NUL NUL block), base '' with a head and
+                                   no anchor (a real add's record key carries its anchor and ordinal)
+     A note on a changed block may carry that change's own edit key instead; both anchor it. */
+  const noteText = (blockText) => String(blockText || '').replace(/\s+$/, '');
   const noteKey = (path, blockText, subtle) => {
-    const t = String(blockText || '').replace(/\s+$/, '');
+    const t = noteText(blockText);
     return editKey(String(path), t, t, undefined, undefined, subtle);
   };
+  const noteKeyAdded = (path, blockText, subtle) => editKey(String(path), '', noteText(blockText), undefined, undefined, subtle);
 
   /* One edit's change in words for its card: {verb, from, to}, Markdown marks dropped, one line, at
      most CARD_CLIP characters per side. Plain text: the caller sets it with textContent. */
@@ -4549,7 +4556,7 @@
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, FACTS_RULES, validFacts, factsDraftText, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
     GITHUB_LINKS_FILE, PERSON_FIELDS, PEOPLE_ADMIN_TEXT, PEOPLE_ADMIN_ONLY_TEXT, peopleFieldText, peopleRemoveText, githubLinksText, peopleDraftProblem,
     STALE_DRAFT_TEXT, DRAFT_UNSAVED_TEXT, FAILURE_TEXTS, failureText, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
-    mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, pageForFile,
+    mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, noteKeyAdded, pageForFile,
     ownProposals, collectProposal, proposeRequest, runPropose,
     NOTE_MAX, notesSection, mergeNotes, SEND_KINDS, splitSend, proposalTitle, proposalCommit, pageChangeCount,
     OWN_SENDS_DAYS, sentStatus, ownSends, UNDO_CHANGED_TEXT, UNDO_DROPPED_TEXT, UNDO_BODY_TEXT, UNDO_FAILED_TEXT, runUndo,

@@ -151,7 +151,6 @@
       const g = root ? find(root, (c) => has(c, 'people-group') && c.getAttribute('data-hc-list') === list) : null;
       return g ? find(g, (c) => has(c, 'people-grid')) : null;
     }
-    const listOf = (card) => { const g = up(card, (x) => x.getAttribute && x.getAttribute('data-hc-list')); return g ? g.getAttribute('data-hc-list') : null; };
     function shownLists() {
       const read = (list) => { const g = gridOf(list); return g ? cardsIn(g).map((c) => ({ name: c.getAttribute('data-hc-name'),
         linked: c.getAttribute('data-linked') === '1', active: c.getAttribute('data-active') === '1', pinned: c.getAttribute('data-pinned') === '1' })) : []; };

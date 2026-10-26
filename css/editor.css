@@ -642,10 +642,10 @@ body.hc-compact .page-body pre { font-size: .8em; }
   body.hc-edit-on .page-body > .hc-side { grid-template-columns: minmax(0, 1fr); gap: .4rem; }
 }
 
-@media (max-width: 767px) {
-  body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
-  .hc-block.hc-prop-add, .hc-block.hc-prop-change, .hc-block.hc-prop-del { margin-left: -.6rem; padding-left: .55rem; }
-}
+/* a phone WINDOW (the frame's own width is not the window's: data-hc-win, set by js/editor-frame.js) */
+html[data-hc-win="narrow"] body.hc-framed .content { padding: 1rem .9rem 2.5rem; }
+html[data-hc-win="narrow"] .hc-block.hc-prop-add, html[data-hc-win="narrow"] .hc-block.hc-prop-change, html[data-hc-win="narrow"] .hc-block.hc-prop-del {
+  margin-left: -.6rem; padding-left: .55rem; }
 
 /* ---------------------------------------------------------------- the review rail (U5b) ---
    Beside the frame, in the parent: one card per suggested change, on its block's line. Cards are the
@@ -727,7 +727,8 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
 .hc-rail.is-markers .hc-rcard { display: none; }
 .hc-rail.is-markers .hc-rslot.is-active .hc-rcard { display: block; position: absolute; top: 0; right: calc(100% + .5rem);
   width: 17.5rem; transform: none; }
-/* phone: the cards as a bottom sheet (U0b: its way in, the page bar's "Review N changes", went with the bar) */
+/* phone: the bubble's review list as a bottom sheet (.hc-review.hc-rsheet, js/editor.js); the margin cards open
+   under their block there */
 .hc-rsheet { position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 90;
   max-height: 62vh; overflow: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: .5rem; padding: .7rem; border-radius: 14px; background: var(--bg-soft);
