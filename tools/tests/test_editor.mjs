@@ -147,9 +147,12 @@ test('reload cost (D-D): a counting fetch across two edits reads each path once'
   await page.asks(PAGE_FILE);
   await page.asks('data/projects.json');
   const reads = page.github().filter((c) => /\/contents\//.test(c.url)).map((c) => c.url);
-  assert.equal(reads.length, 2, reads.join('\n'));
-  assert.equal(new Set(reads).size, 2);
-  assert.equal(page.github().filter((c) => /git\/ref\/heads\/main/.test(c.url)).length, 1, 'main resolved once');
+  // U2 fix round 1: a Writer's chip reads main's edit-access.json in Editor mode on every page, once
+  assert.equal(reads.filter((u) => u.includes('/contents/data/graph/edit-access.json?')).length, 1, reads.join('\n'));
+  assert.equal(reads.length, 3, reads.join('\n'));
+  assert.equal(new Set(reads).size, 3);
+  // main resolved once for the page's reads, and once by the edit-access read (accessRegistry pins main's head itself)
+  assert.equal(page.github().filter((c) => /git\/ref\/heads\/main/.test(c.url)).length, 2, 'main resolved once per reader');
   assert.ok(reads.every((u) => u.includes(`ref=${MAIN_SHA}`)), 'read at the sha, never the branch name');
 });
 
@@ -276,13 +279,15 @@ test('R2a (round 2): the bubble is balanced: photo, name with role and the Propo
     || e.attrs['data-action'] === 'dock-collapse' || e.attrs['data-dock-count'] !== undefined || e.attrs['data-action'] === 'dock-send')
     .map((e) => e.attrs['data-action'] || (e.attrs['data-editor-switch'] !== undefined ? 'switch' : null)
       || (e.attrs['data-dock-count'] !== undefined ? 'count' : null) || e.className.split(' ')[0]);
-  assert.deepEqual(order, ['avatar', 'hc-login', 'hc-role', 'tray-open', 'switch', 'dock-collapse', 'count', 'dock-send']);
+  // U2 (plan D1): the pill is photo, role chip, switch, ×; the rows come below it, the review row ("N to review") last
+  assert.deepEqual(order, ['avatar', 'hc-login', 'hc-role', 'switch', 'dock-collapse', 'dock-changes', 'dock-send', 'tray-open']);
   const id = page.one((e) => e.classList.contains('hc-id'));
-  assert.ok(id, 'name and role sit above the Proposals link in one column');
+  assert.ok(id, 'name and role chip sit together');
   const link = page.handle();
-  assert.ok(findAll(id, (x) => x === link).length, 'the Proposals link is under the name');
-  assert.ok(link.classList.contains('hc-dock-link'), 'a small text link, not a button chip');
-  assert.equal(link.textContent, 'Proposals1');
+  assert.equal(findAll(id, (x) => x === link).length, 0, 'the review count is no longer under the name');
+  // a Writer who approves no project has nothing to review: the row is not shown (test_editor_dock.mjs: the count)
+  assert.equal(link.textContent, '0 to review');
+  assert.equal(link.parent.hidden, true);
 });
 
 test('U4a: the dock counts this page\'s changes; Send for review is off until there is one (U0b: no Send box)', async () => {
@@ -292,11 +297,13 @@ test('U4a: the dock counts this page\'s changes; Send for review is off until th
   const send = () => page.action('dock-send');
   const i = firstParagraph(PAGE_TEXT);
   await page.pick(i);
-  assert.equal(count(), 'No changes yet');
+  // U2 (ED7, ED45): nothing changed -> no count words and no Send for review; then the count is per page
+  assert.equal(count(), '');
   assert.equal(send().disabled, true, 'nothing to send yet');
+  assert.equal(send().hidden, true, 'and not shown');
   await page.send({ type: 'hc-block-state', index: i, editor: 'visual', reason: '' });
   await page.send({ type: 'hc-block-md', index: i, md: 'A changed paragraph.\n\n' });
-  assert.equal(count(), '1 change');
+  assert.equal(count(), '1 page changed');
   assert.equal(send().disabled, false);
   // the click sends at once (tools/tests/test_editor_u0b.mjs follows it to GitHub): no box opens
   assert.equal(page.created.filter((e) => e.classList.contains('hc-sendbox')).length, 0, 'no Send box');
@@ -2109,8 +2116,9 @@ test('js/editor.js reaches GitHub only through cms-core; every write is an allow
   assert.ok(media);
   assert.deepEqual(media.match(/method:\s*'(POST|PUT|PATCH)'/g), ["method: 'POST'", "method: 'POST'"]);
   assert.deepEqual(media.match(/\bfetch\((\w|\.)+,/g), ['fetch(MEDIA_FUNCTION,', 'fetch(plan.url,']);
-  const rest = core.replace(allow, '').replace(review, '').replace(propose, '').replace(media, '');
-  assert.ok(!/\bDELETE\b/.test(rest), 'outside the allowlist and the Propose requests, nothing deletes');
+  // (integration: the sign-out's own /api/auth DELETE, asserted above, is left out of the rest too)
+  const rest = core.replace(forget, '').replace(allow, '').replace(review, '').replace(propose, '').replace(media, '');
+  assert.ok(!/\bDELETE\b/.test(rest), 'outside the allowlist, the Propose requests and the sign-out, nothing deletes');
   assert.deepEqual((rest.match(/method:\s*'(POST|PUT|PATCH)'/g) || []), ["method: 'POST'"],
     'outside them, one POST: the sign-in exchange to /api/auth');
   for (const src of [ui, core]) {
@@ -2181,7 +2189,7 @@ async function signOutThenInAsBob(page) {
   page.win.HCEditor.refresh();
   await settle();
   assert.match(whoOf(page), /bob/);
-  assert.match(whoOf(page), /Editor/);
+  assert.match(whoOf(page), /Can edit/);   // U2 (ED5): the role chip names what you can do (was the role label "Editor")
 }
 
 test('js/editor.js: a refresh that lands after sign-out and a new sign-in changes nothing', async () => {
@@ -2195,7 +2203,7 @@ test('js/editor.js: a refresh that lands after sign-out and a new sign-in change
   held.resolve();
   await settle();
   assert.match(whoOf(page), /bob/);
-  assert.match(whoOf(page), /Editor/);
+  assert.match(whoOf(page), /Can edit/);   // U2 (ED5): the role chip names what you can do (was the role label "Editor")
   assert.doesNotMatch(whoOf(page), /Admin|alice/, 'the old answer wrote nothing');
   assert.equal(page.win.HCCore.readSession(page.storage, Date.now()).login, 'bob');
 });
@@ -2551,11 +2559,11 @@ test('U4b: a draft survives a closed tab, and only for its own login', async () 
   assert.equal(a.storage.getItem(C.DRAFTS_KEY), null, 'not in the tab\'s sessionStorage');
   // the tab is closed; a new one opens (a fresh sessionStorage, the same browser's localStorage)
   const b = await editorOn({ localStorage: a.local });
-  assert.match(b.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /1 change/, 'the draft is back');
+  assert.match(b.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /1 page changed/, 'the draft is back');   // U2 (ED45): per page
   // another person on the same browser sees none of it
   const c = await editorOn({ localStorage: a.local, session: C.makeSession(TOKEN, null, 'alice', Date.now()) });
   assert.equal(draftsOf(c).list().length, 0);
-  assert.equal(c.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
+  assert.equal(c.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, '');   // U2 (ED7): no "No changes yet"
 });
 
 test('U4b, U1 (ED63): Sign out keeps the login\'s drafts and asks nothing; they are back at the next sign-in', async () => {
@@ -2609,7 +2617,7 @@ test('U4b: a sign-out in another tab deletes this tab\'s copy too: the draft is 
   await settle();
   assert.match(page.one((e) => e.classList.contains('hc-notice')).textContent, /removed in another tab/);
   assert.equal(draftsOf(page).list().length, 0, 'nothing written back');
-  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
+  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, '');   // U2 (ED7): no "No changes yet"
 });
 
 test('U4b: older tab drafts are never handed to another person, and are kept when localStorage refuses them', async () => {
@@ -2668,6 +2676,9 @@ test('edit palette: blue chrome, the change colour only on change marks, Kyle\'s
   assert.match(site, /:root\s*\{[^}]*--note-warn:\s*var\(--warn\);/, 'dark: the note boxes keep the warning amber');
   assert.match(site, /\.adm-warning \.adm-title, \.adm-attention \.adm-title, \.adm-caution \.adm-title \{ color: var\(--note-warn\); \}/, 'the note titles use it');
   assert.match(css, /--hc-hl-on:\s*var\(--hc-edit-on\)/, 'text on my highlight is the button text');
+  // ED61 (Kyle's exact choice, pinned like #2391FF): in Editor mode the text on every blue-filled button is white,
+  // about 2.2:1 in dark and 3.3:1 in light; no contrast ratio is claimed for it
+  assert.match(css, /body\.hc-editor-on, body\.hc-edit-on \{ --hc-edit-on: #fff; \}/, 'Editor mode: white button text');
   for (let n = 1; n <= 5; n++) assert.match(css, new RegExp(`body\\[data-hc-tint="${n}"\\]\\s*\\{[^}]*--hc-hl-on:\\s*var\\(--bg\\)`), `slot ${n}: text on its highlight`);
   assert.match(css, /\.person-card\[data-hc-badge\]::after\s*\{[^}]*color:\s*var\(--hc-hl-on\)/, 'the card badge text');
   for (const [sel, theme] of [[':root', 'dark'], ['[data-theme="light"]', 'light']]) {
@@ -2680,7 +2691,8 @@ test('edit palette: blue chrome, the change colour only on change marks, Kyle\'s
     const ink = accent;
     // dark: the blue passes as text; light: Kyle's exact #2391FF (pinned above) is near 3:1, his call
     if (theme === 'dark') for (const b of backs) assert.ok(ratio(ink, b) >= 4.5, `${theme}: blue text ${ink} on ${b} is ${ratio(ink, b).toFixed(2)}`);
-    assert.ok(ratio(ed['hc-edit-on'], ink) >= 4.5, `${theme}: button text on the blue fill`);
+    // #0a0a0a stays the :root value, and text on my highlight (--hc-hl-on, resolved at :root) keeps it: 4.5:1 there
+    assert.ok(ratio(ed['hc-edit-on'], ink) >= 4.5, `${theme}: text on my blue highlight`);
     // a highlight badge's text: --hc-edit-on on the viewer's blue, --bg on each proposer colour
     for (const k of ['hc-p1', 'hc-p2', 'hc-p3', 'hc-p4', 'hc-p5']) assert.ok(ratio(bg.bg, ed[k]) >= 4.5, `${theme}: badge text on --${k}`);
     // the change colour passes as text in dark; light's orange is Kyle's exact #FF7F50 (pinned above)
@@ -2732,7 +2744,7 @@ test('R5: on the Team page the card tools are on, no blocks; an order from the f
   assert.equal(now.groups[1].people.at(-1).name, alumni.at(-1).name);
   await page.send({ type: 'hc-ready' });
   assert.ok(page.editorMessages().at(-1).people.marks.some((x) => x.mark === 'move'), 'my changes are marked');
-  assert.match(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /^\d+ changes?$/);
+  assert.match(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, /^\d+ pages? changed$/);   // U2 (ED45): per page
   // an order that drops someone is refused, said, and changes nothing
   await page.send({ type: 'hc-people', op: 'order', team: team.slice(1), alumni });
   await settle();
@@ -2910,14 +2922,16 @@ test('edit gate: an Editor with access edits the project page; the dock says why
   await page.pick(i);
   assert.equal(page.editorMessages().at(-1).open.index, i, 'it opens for typing in the page');
   assert.equal(page.editorMessages().at(-1).selected, i);
-  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, 'No changes yet');
-  assert.equal(page.action('dock-send').hidden, false);
+  // U2 (ED7, D1): nothing changed yet -> no changes row, no "No changes yet", no Send for review
+  assert.equal(page.one((e) => e.attrs['data-dock-count'] !== undefined).textContent, '');
+  assert.equal(page.action('dock-send').hidden, true);
   const lock = dockLock(page);
   assert.ok(lock, 'one short line');
   assert.equal(lock.textContent, 'You can edit this project: you have commits in 2 of its 15 repos.');
   assert.equal(findAll(lock, (e) => e.attrs['data-action'] === 'access-request').length, 0, 'nothing to request');
   await page.typeIn(i, 'A changed paragraph.\n\n');
   assert.ok(draftsOf(page).get(GATE_PAGE), 'the draft is kept');
+  assert.equal(page.action('dock-send').hidden, false, 'U2: Send for review shows with a change');
   assert.equal(page.action('dock-send').disabled, false, 'and can be sent');
 });
 
@@ -2945,6 +2959,8 @@ test('edit gate: until the access file is read an Editor cannot edit a project; 
   assert.equal(lastLocked(page), false, 'the frame is told again');
   await page.pick(firstParagraph(GATE_TEXT));
   assert.ok(page.editorMessages().at(-1).open, 'now the block opens for typing');
+  // U2 (D1): Send for review shows once there is a change to send (it was shown, disabled, before)
+  await page.typeIn(firstParagraph(GATE_TEXT), 'A changed paragraph.\n\n');
   assert.equal(page.action('dock-send').hidden, false);
 });
 

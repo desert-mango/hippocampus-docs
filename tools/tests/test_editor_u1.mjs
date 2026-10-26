@@ -406,7 +406,7 @@ test('D21 (ED63): sign-out keeps the unsent edits and asks nothing; the next sig
   await settle();
   again.switchBtn().click();
   await settle();
-  assert.match(countText(again), /1 change/, 'the unsent edit is back');
+  assert.match(countText(again), /1 page changed/, 'the unsent edit is back (U2b words: per page)');
   // someone else on this browser sees none of it
   const other = site({ site: { hash: `#${PAGE_ROUTE}`, localStorage: page.local,
     session: C.makeSession(TOKEN, null, 'alice', Date.now()) } }).page;

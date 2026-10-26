@@ -23,7 +23,9 @@
    card beside the page (--hc-tint). Nothing else.
    --hc-edit (the site's --accent): every Editor line, outline, fill and switch; --hc-edit-ink is its text colour
    (the same blue: Kyle asked for the exact colours, so light-theme blue and orange text sit near 3:1 and 2.4:1 on
-   white, his call); --hc-edit-on is text on an --hc-edit-ink fill (dark text in both themes: it reaches 4.5:1).
+   white, his call); --hc-edit-on is text on an --hc-edit-ink fill: white in Editor mode (ED61, the override: U2
+   block; Kyle's exact choice, about 2.2:1 in dark and 3.3:1 in light), #0a0a0a below, which --hc-hl-on (text on
+   my highlight) keeps because :root resolves it (it reaches 4.5:1).
    --hc-p1..--hc-p5 are the other proposers, one colour each (HCCore.proposerSlots), same lightness per theme, hues
    apart. --hc-hl is the drawn proposal's highlight (its blocks' line and wash, the page bar; --hc-hl-on is text on it): blue
    for the viewer's own, the proposer's colour for anyone else's. Every proposer colour, and the dark theme's --hc-mark, reach 4.5:1 as
@@ -564,30 +566,29 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
 
 /* ==== dock (U2) ==== */
 
-/* The header: the Editor switch, then who is signed in. */
+/* The Editor switch and who is signed in (the bubble's pill holds them). */
 .hc-editor-controls { display: inline-flex; align-items: center; gap: .5rem; }
 .hc-editor-controls[hidden] { display: none; }
 .hc-switch { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; font: inherit; font-size: .84rem;
   color: var(--body-soft); background: none; border: 0; padding: .2rem .3rem; border-radius: 8px; }
 .hc-switch-track { width: 30px; height: 17px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--edge);
-  position: relative; transition: background .2s; flex: none; }
+  position: relative; transition: background-color .18s ease-out, border-color .18s ease-out; flex: none; }
 .hc-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%;
-  background: var(--muted); transition: left .2s, background .2s; }
+  background: var(--muted); transition: transform .18s ease-out, background-color .18s ease-out; }
 .hc-switch.is-on { color: var(--heading); }
 .hc-switch.is-on .hc-switch-track { background: var(--hc-edit-soft); border-color: var(--hc-edit); }
-.hc-switch.is-on .hc-switch-track::after { left: 15px; background: var(--hc-edit); }
+.hc-switch.is-on .hc-switch-track::after { transform: translateX(13px); background: var(--hc-edit); }
+.hc-switch:active:not(:disabled) .hc-switch-track { transform: scale(.96); }
 .hc-switch:disabled { opacity: .5; cursor: default; }
 .hc-switch:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-who { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--body-soft); }
-.hc-who { position: relative; }
-.hc-who .cms-role { font-size: .68rem; padding: .05rem .4rem; }
+.hc-who { position: relative; display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--body-soft); }
 /* The avatar: the committed 64-px copy, or the first name's initial; its menu holds Sign out. */
 .hc-avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%;
   border: 1px solid var(--edge); background: var(--surface-2); color: var(--heading); cursor: pointer; overflow: hidden;
   font: inherit; font-size: .74rem; font-weight: 600; flex: none; }
 .hc-avatar:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
 .hc-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.hc-menu { position: absolute; top: calc(100% + .45rem); right: 0; z-index: 60; min-width: 12rem; padding: .35rem;
+.hc-menu { position: absolute; top: calc(100% + .45rem); left: 0; z-index: 60; min-width: 12rem; padding: .35rem;
   background: var(--surface); border: 1px solid var(--edge); border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
 .hc-menu[hidden] { display: none; }
@@ -596,61 +597,112 @@ body.hc-has-rail .layout { width: 100%; max-width: none; }
   background: none; border: 0; border-radius: 6px; padding: .35rem .45rem; cursor: pointer; }
 .hc-menu-item:hover, .hc-menu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
 
-/* the dock (Kyle's live feedback, 2026-10-14, items 6-7): a bubble at the TOP RIGHT, just under the header and
-   lined up with the TUHH mark above it (the header's right padding), never inside the header. Two rows:
-   the Editor switch, avatar and role (with the x), then the change count and Send for review. The x tucks it
-   into a tag on the right edge at the same height. Site tokens, light and dark. */
-.hc-dock { position: fixed; top: calc(var(--header-h) + 10px); right: 1.25rem; z-index: 80; display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: .45rem; min-width: 17.5rem; max-width: calc(100vw - 16px);
-  padding: .45rem .45rem .5rem .65rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .42), 0 2px 6px rgba(0, 0, 0, .22); color: var(--heading); font-size: .84rem;
-  transition: transform .22s cubic-bezier(.2, .8, .2, 1), opacity .18s ease-out; }
+/* The bubble (U2, plan D1): one slim pill at the top right under the header — [photo] [role chip] [Editor switch]
+   [×] on one row — and below it only rows that say something (changes, to review, sent), each a quiet line.
+   Site tokens, light and dark. The x folds it into the photo tab at the same height (D13: so does scrolling). */
+.hc-dock { position: fixed; top: calc(var(--header-h) + 10px); right: 1.25rem; z-index: 80; display: flex; flex-direction: column;
+  width: max-content; min-width: 0; max-width: min(22rem, calc(100vw - 16px)); padding: .3rem .3rem .3rem .35rem; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--edge); color: var(--heading); font-size: .84rem;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .42), 0 2px 6px rgba(0, 0, 0, .22);
+  transform-origin: top right; transition: transform .18s ease-out, opacity .18s ease-out; }
+/* with a row under the pill the bubble is a card */
+.hc-dock:has(> .hc-dock-row:not([hidden])), .hc-dock:has(> .hc-dock-lock:not([hidden])), .hc-dock:has(> .hc-notice:not([hidden])),
+.hc-dock:has(> .hc-dock-undo:not([hidden])), .hc-dock:has(> .hc-dock-panel:not([hidden]):not(:empty)) { border-radius: 14px; padding: .3rem .3rem .4rem .35rem; }
 [data-theme="light"] .hc-dock, [data-theme="light"] .hc-dock-tag { box-shadow: 0 12px 30px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
 .hc-dock[hidden], .hc-dock-tag[hidden] { display: none; }
-/* round 2 (R2a, Kyle 2026-10-15): the top row is who (photo; name with role; the Proposals link under them) with
-   the Editor switch at its right end and the x; the bottom row is the count, Undo/Redo and Send for review */
-.hc-dock > .hc-editor-controls { grid-column: 1 / 3; grid-row: 1; min-width: 0; display: flex; align-items: center; gap: .75rem; }
-.hc-dock > .hc-dock-x { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; }
-.hc-dock .hc-who { flex: 1; min-width: 0; gap: .55rem; color: var(--body-soft); }
-.hc-dock .hc-avatar { width: 32px; height: 32px; }
-.hc-id { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; gap: .12rem; line-height: 1.2; }
-.hc-id-line { display: flex; align-items: center; gap: .4rem; min-width: 0; }
-.hc-dock .hc-login { color: var(--heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hc-dock .hc-switch { color: var(--heading); font-weight: 600; }
-.hc-dock-send-wrap { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  margin-top: .45rem; padding-top: .5rem; border-top: 1px solid var(--edge-soft); }
-.hc-dock-send-wrap:has(.hc-dock-send[hidden]) { display: none; }
-.hc-dock-count { color: var(--body-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* round 2 (R2b): Undo / Redo, two quiet icon buttons between the count and Send */
-.hc-dock-histwrap { display: inline-flex; gap: .15rem; margin-left: auto; }
+.hc-dock-pill { display: flex; align-items: center; gap: .25rem; min-width: 0; }
+.hc-dock-pill > .hc-editor-controls { display: flex; align-items: center; gap: .3rem; min-width: 0; }
+.hc-dock .hc-who { gap: .4rem; min-width: 0; }
+.hc-dock .hc-avatar { width: 30px; height: 30px; }
+.hc-id, .hc-id-line { display: flex; align-items: center; min-width: 0; }
+/* the name stays for screen readers (the photo's menu says who is signed in) */
+.hc-dock .hc-login { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* the role chip (ED62): neutral — the muted ink on a tone step, never orange; >= 4.5:1 in both themes */
+.hc-chip { display: inline-block; padding: .14rem .5rem; border-radius: 999px; background: var(--surface-2); color: var(--body-soft);
+  font: 600 .72rem/1.3 var(--sans); white-space: nowrap; letter-spacing: 0; text-transform: none; border: 0; }
+.hc-chip[hidden] { display: none; }
+.hc-dock .hc-switch { color: var(--heading); font-weight: 600; padding: .2rem .35rem; }
+.hc-dock-x { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; border: 0; border-radius: 999px; background: none;
+  color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1; transition: background-color .12s ease-out, color .12s ease-out, transform .12s ease-out; }
+.hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
+.hc-dock-x:active { transform: scale(.94); }
+.hc-dock-x:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-sheet-grab { display: none; }
+
+/* the rows under the pill: changes, to review, sent */
+.hc-dock-row { display: flex; align-items: center; gap: .4rem; margin-top: .3rem; padding: .3rem .1rem 0 .25rem;
+  border-top: 1px solid var(--edge-soft); }
+.hc-dock-row[hidden], .hc-dock-list[hidden], .hc-dock-panel[hidden], .hc-dock-undo[hidden] { display: none; }
+.hc-dock-rowbtn { display: inline-flex; align-items: center; gap: .3rem; min-height: 32px; padding: 0 .4rem; border: 0; border-radius: 8px;
+  background: none; color: var(--heading); font: 600 .8rem var(--sans); cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums;
+  transition: background-color .12s ease-out, transform .12s ease-out; }
+.hc-dock-rowbtn:hover, .hc-dock-rowbtn[aria-expanded="true"] { background: var(--surface-2); }
+.hc-dock-rowbtn:active { transform: scale(.97); }
+.hc-dock-rowbtn:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-dock-rowbtn[hidden] { display: none; }
+.hc-dock-rowbtn::after { content: ""; width: .4rem; height: .4rem; border-right: 1.5px solid var(--body-soft); border-bottom: 1.5px solid var(--body-soft);
+  transform: translateY(-2px) rotate(45deg); margin-left: .15rem; transition: transform .18s ease-out; }
+.hc-dock-rowbtn[aria-expanded="true"]::after { transform: translateY(1px) rotate(225deg); }
+.hc-dock-pages .n { font-family: var(--mono); }
+/* round 2 (R2b, ED6): Undo / Redo, 24 px arrows in full ink; dimmed (still readable) when there is nothing to undo */
+.hc-dock-histwrap { display: inline-flex; gap: .1rem; margin-left: auto; }
 .hc-dock-histwrap:not(:has(.hc-dock-hist:not([hidden]))) { display: none; }
-.hc-dock-hist { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
-  background: none; color: var(--body); cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
-.hc-dock-hist svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.hc-dock-hist:hover:not(:disabled) { background: var(--surface-2); color: var(--hc-edit-ink); }
+.hc-dock-hist { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 8px;
+  background: none; color: var(--heading); cursor: pointer; transition: background-color .12s ease-out, transform .12s ease-out; }
+.hc-dock-hist svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hc-dock-hist:hover:not(:disabled) { background: var(--surface-2); }
 .hc-dock-hist:active:not(:disabled) { transform: scale(.94); }
 .hc-dock-hist:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-dock-hist:disabled { color: var(--muted); opacity: .55; cursor: default; }
+.hc-dock-hist:disabled { opacity: .45; cursor: default; }
 .hc-dock-hist[hidden] { display: none; }
-@media (pointer: coarse) { .hc-dock-hist { width: 44px; height: 44px; } }
+.hc-dock-send { margin-left: .2rem; min-height: 32px; padding: 0 .75rem; border-radius: 8px; transition: transform .12s ease-out, filter .12s ease-out; }
+.hc-dock-send:active:not(:disabled) { transform: scale(.97); }
 .hc-dock-send[hidden] { display: none; }
-.hc-dock-x { width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--body-soft); cursor: pointer; font-size: 1.1rem; line-height: 1;
-  transition: background-color .12s ease-out, color .12s ease-out; }
-.hc-dock-x:hover { background: var(--surface-2); color: var(--heading); }
-.hc-dock-x:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
-.hc-dock-tag { position: fixed; right: 0; top: calc(var(--header-h) + 14px); z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
-  border: 1px solid var(--edge); border-right: 0; border-radius: 10px 0 0 10px; background: var(--surface); cursor: pointer;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .42); transform: translateX(110%); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
-.hc-dock-tag:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: -2px; }
-.hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 24px; height: 24px; border-radius: 50%; }
-.hc-dock-badge { position: absolute; top: -6px; left: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+/* the lists that open under a row: three rows to see, scroll for more; the scroll stays in the list */
+.hc-dock-list { list-style: none; margin: .25rem 0 0; padding: 0; max-height: 9.6rem; overflow-y: auto; overscroll-behavior: contain;
+  min-width: 17rem; }
+.hc-dock-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: .5rem; padding: .25rem .25rem .25rem .35rem;
+  border-radius: 8px; min-height: 3.2rem; }
+.hc-dock-item:hover { background: var(--surface-2); }
+.hc-dock-item-title { grid-column: 1; justify-self: start; max-width: 100%; padding: 0; border: 0; background: none; font: 600 .82rem var(--sans);
+  color: var(--heading); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+span.hc-dock-item-title { cursor: default; }
+button.hc-dock-item-title:hover { color: var(--hc-edit-ink); text-decoration: underline; text-underline-offset: 3px; }
+button.hc-dock-item-title:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; border-radius: 4px; }
+.hc-dock-item-meta { grid-column: 1; color: var(--body-soft); font-size: .74rem; }
+.hc-dock-item-send { grid-column: 2; grid-row: 1 / span 2; min-height: 32px; font-size: .76rem; }
+.hc-dock-status { grid-column: 2; grid-row: 1; padding: .1rem .45rem; border-radius: 999px; background: var(--surface-2); color: var(--body-soft);
+  font: 600 .72rem/1.3 var(--sans); }
+.hc-dock-item.is-live .hc-dock-status { color: var(--heading); }
+.hc-dock-empty { margin: .35rem .4rem; color: var(--body-soft); font-size: .78rem; }
+.hc-dock-panel { margin-top: .25rem; max-height: 12rem; overflow-y: auto; overscroll-behavior: contain; }
+/* after a send: "Sent · waiting for review" with Undo (8 s) */
+.hc-dock-undo { margin-top: .3rem; padding: .35rem .25rem 0; border-top: 1px solid var(--edge-soft); font-size: .8rem; max-width: 21rem; }
+.hc-dock-undo-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.hc-dock-undo-head b { color: var(--heading); }
+.hc-dock-undo-btn { min-height: 30px; padding: 0 .7rem; }
+.hc-dock-undo-list { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .1rem; color: var(--body-soft); font-size: .76rem; }
+.hc-dock-undo-title { color: var(--body); }
+.hc-dock-undo-note::before { content: " · "; }
+.hc-dock-undo-said { margin: 0; color: var(--body-soft); overflow-wrap: anywhere; }
+.hc-dock-undo-said.is-error { color: var(--hc-del); }
+
+/* the photo tab that brings a folded bubble back, where the pill was */
+.hc-dock-tag { position: fixed; right: 1.25rem; top: calc(var(--header-h) + 10px); z-index: 80; display: grid; place-items: center; width: 40px; height: 40px;
+  padding: 0; border: 1px solid var(--edge); border-radius: 999px; background: var(--surface); cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .42); opacity: 0; transform: scale(.85); transition: transform .18s ease-out, opacity .18s ease-out; }
+.hc-dock-tag:active { transform: scale(.94); }
+.hc-dock-tag:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
+.hc-dock-tag .hc-avatar-img, .hc-dock-tag .hc-initials { width: 28px; height: 28px; border-radius: 50%; }
+.hc-dock-tag .hc-initials { display: grid; place-items: center; background: var(--surface-2); color: var(--heading); font: 600 .78rem var(--sans); }
+.hc-dock-badge { position: absolute; top: -5px; left: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   background: var(--hc-edit-ink); color: var(--hc-edit-on); font: 700 11px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--surface); }
-body.hc-dock-collapsed .hc-dock { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
-body.hc-dock-collapsed .hc-dock-tag { transform: none; }
+body.hc-dock-collapsed .hc-dock { transform: scale(.92); opacity: 0; pointer-events: none; }
+body.hc-dock-collapsed .hc-dock-tag { transform: none; opacity: 1; }
 /* the edit gate in the bubble, on a project page: why you can edit it (one quiet line), or "You can't edit this
-   project." with why and Request edit access */
-.hc-dock-lock { grid-column: 1 / -1; display: grid; gap: .3rem; margin-top: .45rem; padding-top: .5rem;
-  border-top: 1px solid var(--edge-soft); max-width: 19rem; font-size: .78rem; line-height: 1.45; }
+   project." with why and Request edit access — the review row sits under it (ED39) */
+.hc-dock-lock { display: grid; gap: .3rem; margin-top: .3rem; padding: .35rem .25rem 0; border-top: 1px solid var(--edge-soft);
+  max-width: 19rem; font-size: .78rem; line-height: 1.45; }
 .hc-dock-lock[hidden] { display: none; }
 .hc-dock-lock p { margin: 0; overflow-wrap: anywhere; }
 .hc-dock-lock-head { color: var(--heading); font-weight: 600; }
@@ -660,44 +712,45 @@ body.hc-dock-collapsed .hc-dock-tag { transform: none; }
 .hc-access-locked { margin: .2rem 0 .6rem; }
 .hc-access-locked .hc-dock-lock-head { color: var(--heading); font-weight: 600; }
 .hc-access-locked .hc-dock-lock-why { color: var(--body-soft); }
-
-@media (prefers-reduced-motion: reduce) { .hc-dock, .hc-dock-tag, .hc-dock-x { transition: none; } }
-.hc-notice { grid-column: 1 / -1; margin: .45rem 0 0; padding-top: .45rem; border-top: 1px solid var(--edge-soft); font-size: .8rem;
-  color: var(--body-soft); max-width: 22rem; overflow-wrap: anywhere; }
+.hc-notice { margin: .3rem 0 0; padding: .35rem .25rem 0; border-top: 1px solid var(--edge-soft); font-size: .8rem;
+  color: var(--body-soft); max-width: 21rem; overflow-wrap: anywhere; }
 .hc-notice[hidden] { display: none; }
 .hc-notice.is-error { color: var(--hc-del); }
-/* the bubble's way into the editor page: "Proposals" with the open count */
-.hc-dock-pages { display: inline-flex; align-items: center; gap: .4rem;
-  min-height: 30px; padding: 0 .6rem; border: 1px solid var(--edge); border-radius: 8px; background: none; color: var(--heading);
-  font: 600 .8rem var(--sans); cursor: pointer; transition: background-color .12s ease-out, border-color .12s ease-out; }
-.hc-dock-pages:hover, .hc-dock-pages[aria-expanded="true"] { background: var(--surface-2); border-color: color-mix(in srgb, var(--hc-edit) 45%, var(--edge)); }
-.hc-dock-pages[hidden] { display: none; }
-.hc-dock-pages .n { min-width: 1.2rem; padding: 0 .3rem; border-radius: 6px; background: var(--hc-edit-soft); color: var(--hc-edit-ink);
-  font: 600 .72rem/1.25rem var(--mono); text-align: center; font-variant-numeric: tabular-nums; }
-.hc-dock-pages .n:empty { display: none; }
-/* round 2 (R2a): in the bubble it is a small text link under the name, not a chip */
-.hc-dock-pages.hc-dock-link { min-height: 0; padding: .1rem 0; border: 0; border-radius: 4px; background: none; gap: .3rem;
-  color: var(--body-soft); font: 500 .76rem var(--sans); transition: color .12s ease-out; }
-.hc-dock-pages.hc-dock-link:hover, .hc-dock-pages.hc-dock-link[aria-expanded="true"] { background: none; color: var(--hc-edit-ink);
-  text-decoration: underline; text-underline-offset: 3px; }
-.hc-dock-pages.hc-dock-link:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
-.hc-dock-pages.hc-dock-link .n { min-width: 0; padding: 0; background: none; font: 600 .74rem/1 var(--mono); }
-@media (pointer: coarse) { .hc-dock-pages.hc-dock-link { min-height: 32px; } }
+@media (pointer: coarse) { .hc-dock-hist, .hc-dock-x { width: 44px; height: 44px; } .hc-dock-rowbtn, .hc-dock-send, .hc-dock-item-send { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  .hc-dock, .hc-dock-tag, .hc-dock-x, .hc-dock-hist, .hc-dock-rowbtn, .hc-dock-rowbtn::after, .hc-dock-send, .hc-switch-track,
+  .hc-switch-track::after { transition: none; }
+}
 /* ==== phone (U2) ==== */
 
-@media (max-width: 359px) { .hc-dock .hc-role { display: none; } }
-/* Phones: the tray is a bottom sheet; the handle sits at the bottom edge. */
+/* Phones (plan D14, ED64, ED65): the folded bubble is a 48 px round photo button at the bottom right (inside the
+   safe area); a tap opens the same content as a bottom sheet (drag down, × or Escape close it). Nothing covers
+   the page while it is closed; every target is 44 px. */
 @media (max-width: 767px) {
   .hc-tray-head { flex-wrap: wrap; gap: .4rem; padding-top: .45rem; }
-  /* a phone: the bubble spans the top, so the editor page starts below it (it folds away with its x) */
-  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 104px; }
-  /* round 2 (R2a): the bubble spans the width, so the name and role stay; only the narrowest screens drop the role */
-  .hc-dock { right: 8px; top: calc(var(--header-h) + 8px); min-width: 0; width: min(20rem, calc(100vw - 16px)); }
-  .hc-dock-tag { top: calc(var(--header-h) + 12px); }
-  body.hc-tray-open:not(.hc-dock-collapsed) .hc-tray { padding-top: 112px; }
+  body.hc-phone .hc-dock-tag { top: auto; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: 48px; height: 48px; }
+  body.hc-phone .hc-dock-tag .hc-avatar-img, body.hc-phone .hc-dock-tag .hc-initials { width: 40px; height: 40px; }
+  body.hc-phone .hc-dock { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; max-height: min(80vh, 36rem);
+    padding: .4rem calc(12px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px));
+    border-radius: 16px 16px 0 0; border-bottom: 0; overflow-y: auto; overscroll-behavior: contain; transform-origin: bottom center; }
+  body.hc-phone .hc-dock:has(> .hc-dock-row:not([hidden])) { border-radius: 16px 16px 0 0; }
+  body.hc-phone.hc-dock-collapsed .hc-dock { transform: translateY(100%); opacity: 1; visibility: hidden; }
+  body.hc-phone .hc-dock.is-dragging { transition: none; }
+  body.hc-phone .hc-sheet-grab { display: block; width: 100%; height: 22px; margin: -.2rem 0 .2rem; cursor: grab; touch-action: none; position: relative; }
+  body.hc-phone .hc-sheet-grab::before { content: ""; position: absolute; left: 50%; top: 8px; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: 2px; background: var(--edge); }
+  body.hc-phone .hc-dock-x, body.hc-phone .hc-dock-hist { width: 44px; height: 44px; }
+  body.hc-phone .hc-dock-rowbtn, body.hc-phone .hc-dock-send, body.hc-phone .hc-dock-item-send, body.hc-phone .hc-switch,
+  body.hc-phone .hc-dock-undo-btn { min-height: 44px; }
+  body.hc-phone .hc-dock-item-title { min-height: 44px; }
+  body.hc-phone .hc-dock .hc-avatar { width: 44px; height: 44px; }
+  body.hc-phone .hc-dock-list { min-width: 0; max-height: 40vh; }
+  body.hc-phone .hc-dock-pill > .hc-editor-controls { flex: 1; }
   /* the page above the sheet, as mockup a-9: the section list is one tap away with Editor off */
   body.hc-editor-on .sidebar { display: none; }
 }
+@media (max-width: 359px) { body.hc-phone .hc-dock .hc-chip { display: none; } }
 
 /* ==== END-OF-FILE OVERRIDE BLOCKS ==== */
 /* One block per unit, in this order. A rule goes here only when it must win over a rule in an earlier section
@@ -723,6 +776,9 @@ body.hc-framed .content { padding: 2.2rem 1.2rem 5rem; }
 .hc-rslot { pointer-events: auto; }
 
 /* ==== override: U2 ==== */
+/* ED61: white text on every blue-filled button in Editor mode (reverses the #0a0a0a choice; Kyle's call: white on
+   the site's exact blue is about 2.2:1 in dark and 3.3:1 in light) */
+body.hc-editor-on, body.hc-edit-on { --hc-edit-on: #fff; }
 
 /* ==== override: U3 ==== */
 

@@ -38,8 +38,16 @@
                      js/editor-frame.js's test-only walk hook (below)
     inserted         on + the frame says hc-block-insert {index, 'note'}: the
                      note inserted, selected, its Markdown in the tray
-    phone            on + the tray open, under 768 px (the bottom sheet); the
-                     site's frame is 390 px wide (smoke.mjs shoots it at 390)
+    phone            on, under 768 px: the round photo button tapped, the
+                     bubble open as a bottom sheet (U2, D14); the site's
+                     frame is 390 px wide (smoke.mjs shoots it at 390)
+    bubble           (U2) on: the bubble at rest, the pill alone, no rows
+    bubble-changes   (U2) two stored page drafts: "2 pages changed", the
+                     list of changed pages open
+    bubble-sent      (U2) a send faked through HCDock (sent + offerUndo):
+                     "1 sent · waiting" and "Sent · waiting for review" + Undo
+    bubble-locked    (U2) on /projects/core-stack, a page the walk login may
+                     not edit: the lock text and Request edit access (ED39)
     overlay-inline   (U7) on, with a synthetic open proposal #2 on this page
                      drawn over main: an added note, a changed paragraph (old
                      above new), a paragraph main also changed (the "main
@@ -532,6 +540,27 @@
   };
   const accessText = (box) => (box.querySelector('.hc-access-text') || {}).textContent || '';
 
+  /* U2: the bubble open (a folded one, from an earlier step in this tab, comes back), and stored drafts of n pages
+     (the Ubuntu page, then this walk's default page), written under the walk login's draft key before Editor on */
+  async function u2Open() {
+    const tag = $('.hc-dock-tag');
+    if (tag && !tag.hidden && !SD.body.classList.contains('hc-phone')) tag.click();
+    await until(() => !SD.body.classList.contains('hc-dock-collapsed'), 'the bubble open');
+  }
+  async function u2Drafts(n) {
+    const C = window.HCCore;
+    const login = JSON.parse(await readText('fixtures/github-data/user.json')).login;
+    const store = C.createDraftStore(SW.localStorage, C.draftsKey(String(login)));
+    const pages = [['setup/raspberry-pi/ubuntu-24-04-server', 'Ubuntu 24.04 Server', 'content/setup/raspberry-pi/ubuntu-24-04-server.md'],
+      ['setup/hippocampus-bringup/fcu-firmware', 'FCU firmware', 'content/setup/hippocampus-bringup/fcu-firmware.md']];
+    for (const [key, label, file] of pages.slice(0, n)) {
+      const text = await readText(`../../${file}`);
+      if (!text) throw new Error(`no text for ${file}`);
+      store.put({ key, label, files: { [file]: `${text}\nThe walk added this paragraph.\n` }, originals: { [file]: text },
+        base: { ref: 'main', sha: window.HCFakeGitHub.MAIN_SHA, number: null } });
+    }
+  }
+
   /* The walk's steps, one labelled block per unit (editor UI/UX build, U0): a unit adds its steps in its own block.
      Each step is an async function that resolves once its state is on screen. STEPS is the registry's keys; the
      registry is built at the top (stepRegistry is hoisted) so an unknown step is refused before anything loads. */
@@ -575,11 +604,13 @@
         await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
         await frameReady(before);
       },
-      // U0b: the proposals list is gone; the phone shows the dock (U2 re-points this step to the sheet)
+      // U2 (plan D14): the round photo button bottom right, tapped: the bubble as a bottom sheet
       phone: async () => {
         await editorOn();
         await until(() => SD.body.classList.contains('hc-phone'), 'body.hc-phone (a viewport under 768 px)');
-        await until(() => { const d = $('.hc-dock'); return d && !d.hidden ? d : null; }, 'the dock');
+        const tag = await until(() => { const t = $('.hc-dock-tag'); return t && !t.hidden ? t : null; }, 'the photo button');
+        tag.click();
+        await until(() => SD.body.classList.contains('hc-sheet-open'), 'the bottom sheet open (body.hc-sheet-open)');
       },
       // U0b: no page bar; proposal #2 is on the page when its review cards are (the conflict one among them)
       'overlay-inline': async () => {
@@ -631,6 +662,44 @@
       // (U0b removed 'access-proposals': its proposals list with the access labels is gone)
 
       /* ---- U2 ---- */
+      // the bubble at rest: the pill alone (photo, role chip, switch, x), no rows
+      bubble: async () => {
+        await editorOn();
+        await u2Open();
+        await until(() => ['changes', 'review', 'sent'].every((r) => { const e = $(`[data-dock-row="${r}"]`); return e && e.hidden; }),
+          'the pill alone (no changes, review or sent row)');
+      },
+      // two pages changed (stored drafts of two pages), the changes list open
+      'bubble-changes': async () => {
+        await u2Drafts(2);
+        await editorOn();
+        await u2Open();
+        const count = await until(() => { const b = $('[data-action="dock-changes"]'); return b && /^2 pages changed$/.test(b.textContent) ? b : null; },
+          '"2 pages changed"');
+        count.click();
+        await until(() => SD.querySelectorAll('[data-dock-list="changes"]:not([hidden]) .hc-dock-item').length === 2, 'the list of the two pages');
+      },
+      // after a send (faked through HCDock: the walk's GitHub takes no writes): "1 sent · waiting" and the Undo box
+      'bubble-sent': async () => {
+        await editorOn();
+        await u2Open();
+        SW.HCDock.sent(42);
+        SW.HCDock.offerUndo({ items: [{ number: 42, title: 'Edit FCU firmware', note: 'goes live on approval' }],
+          run: async () => ({ text: 'Undone: your changes are back.', undone: [42] }) });
+        await until(() => { const b = $('[data-action="dock-sent"]'); return b && b.textContent === '1 sent · waiting'; }, '"1 sent · waiting"');
+        await until(() => { const u = $('[data-dock-undo]'); return u && !u.hidden && /Sent · waiting for review/.test(u.textContent); },
+          '"Sent · waiting for review" with Undo');
+      },
+      // a project page the walk's login may not edit (it is on no list of core-stack's): the lock text, Request
+      // edit access, and the review row under them (ED39)
+      'bubble-locked': async () => {
+        if (!/^#\/projects\/core-stack/.test(SW.location.hash)) SW.location.hash = '#/projects/core-stack';
+        await until(() => /^#\/projects\/core-stack/.test(SW.location.hash) && $('#content h1'), 'the core-stack page');
+        await editorOn();
+        await u2Open();
+        await until(() => { const l = $('.hc-dock-lock.is-locked'); return l && !l.hidden && l.querySelector('[data-action="access-request"]'); },
+          'the lock text with Request edit access');
+      },
 
       /* ---- U3 ---- */
 

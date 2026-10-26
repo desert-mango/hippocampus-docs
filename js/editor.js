@@ -532,15 +532,18 @@
   }
   const accessLockNote = (a, projectId, name) => h('section', { class: 'hc-access hc-access-locked', 'data-access-locked': true,
     'aria-label': 'Edit access' }, ...D.lockParts(a, projectId, name));
-  /* The dock is js/editor-dock.js (HCDock); this is what it shows, built from the editor's state on every redraw. */
-  function dockView() {
+  /* The dock is js/editor-dock.js (HCDock); this is what it shows, built from the editor's state on every redraw.
+     U2 (plan D1, D4): the role chip, and the changed pages I may send (one row each in the changes list). */
+  function dockView(opts) {
     const signedIn = Boolean(state.session);
     const editing = ed.on && Boolean(ed.page) && canEditPage(ed.page);
     const ours = editing && hist.key === ed.page.pageId;
     const projectId = signedIn && ed.on && state.access === 'ok' ? projectIdOf(ed.page) : null;
+    const mine = signedIn && ed.on ? sendable() : [];
     return {
       signedIn,
       login: signedIn ? String(state.session.login) : null,
+      on: Boolean(ed.on),
       editing,
       changes: editing ? pageChanges() : 0,
       canUndo: Boolean(ours && hist.undo.length),
@@ -549,11 +552,264 @@
       projectId,
       page: ed.page,
       draftKey: ed.draft ? ed.draft.key : null,
+      chip: signedIn ? roleChip() : '',
+      pages: mine.map(changedPage),
+      pageCount: C.pageChangeCount(mine),
+      typed: Boolean(opts && opts.typed),
     };
   }
-  function refreshDock() {
+  function refreshDock(opts) {
     if (!dock) return;
-    D.refresh(dockView());
+    D.refresh(dockView(opts));
+  }
+  /* The drafts Send for review takes: changed (HCCore.isDirty: a file or notes) and mine to change (the edit gate). */
+  function sendable() {
+    return drafts.list().filter((d) => C.isDirty(d) && canEditKey(d.key));
+  }
+  /* One row of the changes list: the page, how many blocks changed (data files: how many changes), where it is. */
+  function changedPage(d) {
+    let blocks = 0;
+    let unit = 'blocks';
+    for (const f of Object.keys(d.files)) {
+      if (d.files[f] === d.originals[f]) continue;
+      if (f === PEOPLE_FILE) { blocks += C.peopleChangeCount(d.originals[f], d.files[f]); unit = 'changes'; continue; }
+      const diff = /\.md$/.test(f) && typeof d.originals[f] === 'string' && typeof d.files[f] === 'string'
+        ? C.blockDiff(d.originals[f], d.files[f]) : null;
+      if (diff) blocks += diff.filter((e) => e.status !== 'same').length;
+      else { blocks += 1; if (!/\.md$/.test(f)) unit = 'changes'; }
+    }
+    const route = state.regs || d.key === PEOPLE_PAGE ? (d.key === PEOPLE_PAGE ? '/team' : C.routeForPage(d.key, state.regs)) : null;
+    return { key: d.key, label: String(d.label || d.key), blocks, unit, route: route || null };
+  }
+  /* The role chip (plan D1, ED5, ED62): what you can do, from the real rule. Admin; a Maintainer approves every
+     project; a Writer approves the projects main's edit-access.json lists them on (HCCore.accessFor), else edits;
+     a reader reads. */
+  function roleChip() {
+    const r = state.role;
+    if (!r || state.access !== 'ok') return '';
+    if (r.key === 'admin') return 'Admin';
+    if (r.key === 'maintain') return 'Can approve';
+    if (r.key !== 'push') return 'Read only';
+    const n = approvable().length;
+    return n ? `Can approve ${n} ${n === 1 ? 'project' : 'projects'}` : 'Can edit';
+  }
+  /* The projects whose sends I may approve, as a Writer: the edit gate's read of main's edit-access.json. A
+     Writer's chip and review count need it on every page, so in Editor mode asking starts the background read
+     (accessGateNow); when it lands, accessChanged draws the chip again and reloads the count. */
+  const accessDocNow = () => {
+    const g = ed.on && state.session && state.role && state.role.key === 'push' ? accessGateNow() : accessGate;
+    return g.gen === sessionGen.current() && g.status === 'read' ? g.doc : null;
+  };
+  function approvable() {
+    const doc = accessDocNow();
+    const ids = doc && isPlain(doc.projects) ? Object.keys(doc.projects) : [];
+    const login = sessionLogin();
+    return ids.filter((id) => C.accessFor(doc, id, login, state.role).can);
+  }
+  /* The project names, for the titles of access sends. */
+  function projectNames() {
+    const out = {};
+    const p = state.regs ? state.regs.projects : null;
+    const list = Array.isArray(p) ? p : (p && Array.isArray(p.projects) ? p.projects : []);
+    for (const x of list) if (x && typeof x.id === 'string' && typeof x.name === 'string') out[x.id] = x.name;
+    return out;
+  }
+  /* D5: my sends, open or closed in the last 14 days, with their status. A closed one that was not merged is read
+     once more: no changed file (a notes-only send) -> "seen"; an approval record on it (go-live put its edits
+     live, then closed it) -> "live". -> [{number, title, branch, status, at, url, route}] or null */
+  const SENDS_PATH = () => `${C.REPO_API_PATH}/pulls?state=all&sort=updated&direction=desc&per_page=100`;
+  const sendMarks = new Map();          // number -> {applied, notesOnly}: a closed send does not change
+  const sendPulls = new Map();          // number -> the pull (for openSend)
+  async function loadSends() {
+    if (!state.session || !state.client) return null;
+    const gen = sessionGen.current();
+    const res = await apiResponse(SENDS_PATH());
+    if (!res.ok || !Array.isArray(res.data) || !sessionGen.isCurrent(gen)) return null;
+    const login = sessionLogin();
+    const pulls = res.data.filter((p) => p && typeof p === 'object');
+    const closedMine = C.ownSends(login, pulls, Date.now()).filter((x) => x.status === 'declined').slice(0, 10);
+    for (const x of closedMine) {
+      if (sendMarks.has(x.number)) continue;
+      const one = await apiResponse(`${C.REPO_API_PATH}/pulls/${x.number}`);
+      const notes = await apiResponse(`${C.REPO_API_PATH}/issues/${x.number}/comments?per_page=100`);
+      const applied = notes.ok && Array.isArray(notes.data)
+        && notes.data.some((c) => c && typeof c.body === 'string' && /^hc-approved /.test(c.body));
+      sendMarks.set(x.number, { applied, notesOnly: one.ok && one.data && one.data.changed_files === 0 });
+    }
+    if (!sessionGen.isCurrent(gen)) return null;
+    const marked = pulls.map((p) => (sendMarks.has(p.number) ? Object.assign({}, p, sendMarks.get(p.number)) : p));
+    for (const p of marked) sendPulls.set(p.number, p);
+    return C.ownSends(login, marked, Date.now());
+  }
+  /* Open the page a send changed: its first changed file, or (a notes-only send) the page its text names. */
+  async function openSend(item) {
+    const n = item && Number.isInteger(item.number) ? item.number : null;
+    if (n === null) return;
+    const files = await filesOrNull(n).catch(() => null);
+    let file = Array.isArray(files) && files.length && files[0] && typeof files[0].filename === 'string' ? files[0].filename : null;
+    if (!file) {
+      const pull = sendPulls.get(n);
+      const m = pull && typeof pull.body === 'string' ? /\(`([A-Za-z0-9._/-]+)`\)/.exec(pull.body) : null;
+      file = m ? m[1] : null;
+    }
+    const regs = state.regs || null;
+    const pageId = file === PEOPLE_FILE ? PEOPLE_PAGE : (file && regs ? C.pageIdForFile(file, regs) : null);
+    const to = pageId === PEOPLE_PAGE ? '/team' : (pageId ? C.routeForPage(pageId, regs) : null);
+    if (typeof to === 'string' && to) window.location.hash = `#${to}`;
+    else say('That send changed no page on this site.');
+  }
+  /* The review count until U3's list: the open sends of others I may approve (Admin and Maintainer: every one;
+     a Writer: those wholly inside projects that list them, HCCore.ownsAll). */
+  async function reviewable(pulls) {
+    const r = state.role;
+    if (!r || r.canPush !== true) return 0;
+    const login = sessionLogin().toLowerCase();
+    const others = C.orderOpenPulls(pulls, null).filter((p) => !(p.user && String(p.user.login).toLowerCase() === login));
+    if (r.key === 'admin' || r.key === 'maintain') return others.length;
+    const doc = accessDocNow();
+    if (!doc || !approvable().length) return 0;
+    let n = 0;
+    for (const p of others) {
+      const files = await filesOrNull(p.number);
+      if (Array.isArray(files) && C.ownsAll({ login, files: files.map((f) => f && f.filename), access: doc })) n += 1;
+    }
+    return n;
+  }
+
+  /* U2 (plan D4, ED43, ED44): Send for review — one click, no box. The drafts I may send (only the draft `key`
+     for Send this page) are split by kind (HCCore.splitSend: page edits together, go-live eligible; each facts
+     file, the team, a new project, an access change on its own); each group is one send with its generated
+     title, "Added to your send" when it builds on my open send. Then the bubble says "Sent · waiting for
+     review" with Undo for 8 seconds (HCDock.offerUndo). ui: {go, result} (the thin editor page's button and
+     its result line) or null (the bubble: the outcome is said on its status line). */
+  const stillOpen = (target, own) => !target || own.some((p) => p.number === target.number && p.branch === target.branch);
+  const closedText = (target) => `Your send #${target.number} is no longer open: discard these changes and start `
+    + 'from the live site.';
+  /* Send this page takes the image list too when it is on the same base: splitSend puts it in that page's send,
+     so a new image goes with the page that shows it (the gate's 6a rule turns a page with an unlisted image red). */
+  const sameSend = (a, b) => a.base.ref === b.base.ref && a.base.number === b.base.number;
+  const withPage = (d, page) => Boolean(page) && d.key === C.MANIFEST_KEY && page.key !== C.MANIFEST_KEY && sameSend(d, page)
+    && Object.keys(page.files).some((f) => /^content\/.+\.md$/.test(f) && page.files[f] !== page.originals[f]);
+  async function sendAll(key, ui) {
+    if (proposing || !state.client || !state.session) return;
+    const list = sendable().filter((d, i, all) => !key || d.key === key || withPage(d, all.find((x) => x.key === key)));
+    const show = (text, kind) => {
+      if (!ui || !ui.result) { say(text, kind); return; }
+      ui.result.textContent = text;
+      ui.result.hidden = false;
+      ui.result.classList.toggle('is-error', kind === 'error');
+    };
+    if (!list.length) { show('Nothing was sent: no page has changes.', 'error'); return; }
+    const gen = sessionGen.current();
+    proposing = true;
+    if (ui && ui.go) ui.go.disabled = true;
+    const login = String(state.session.login);
+    const results = [];
+    const failed = [];
+    let signedOut = null;
+    try {
+      const own = await myProposals();
+      const groups = C.splitSend(list, { login, names: projectNames() });
+      for (const g of groups) {
+        const problems = g.problems.concat(stillOpen(g.target, own) ? [] : [closedText(g.target)]);
+        if (problems.length) { failed.push(`${g.title}: ${problems.join(' ')}`); continue; }
+        let out;
+        try {
+          out = await C.runPropose(state.client, {
+            login, now: Date.now(), origin: window.location.origin, summary: g.title, kind: g.kind, drafts: g.drafts,
+            target: g.target, changes: g.changes, pages: g.pages, notes: g.notes,
+          });
+        } catch (e) {
+          out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}` };
+        }
+        if (!sessionGen.isCurrent(gen)) return;
+        if (out.status === 401) { signedOut = out.message; break; }
+        if (!out.ok) { failed.push(`${g.title}: ${out.message}`); continue; }
+        results.push({ g, out });
+        if (out.signedOut) { signedOut = `${out.message} Your sign-in has ended. Please sign in again.`; break; }
+      }
+    } finally {
+      proposing = false;
+      if (ui && ui.go) ui.go.disabled = false;
+    }
+    if (!sessionGen.isCurrent(gen)) return;
+    // what was sent leaves the drafts (a part that was not sent stays)
+    takeSent(list, results.map((r) => r.g));
+    if (ed.draft && !drafts.get(ed.draft.key)) { clearSelection(); frameTo(ed.route, false); }
+    for (const r of results) D.sent(r.out.number);
+    if (signedOut) {
+      // the sign-in ended partway: Undo needs it, so none is offered; the line says what went
+      const went = results.map((r) => `${r.g.title} (#${r.out.number})`).join(', ');
+      endSession(went ? `${signedOut} Already sent for review: ${went}.` : signedOut);
+      return;
+    }
+    if (results.length) {
+      D.offerUndo({
+        items: results.map((r) => ({ number: r.out.number, title: r.g.title,
+          note: [r.g.eligible ? 'goes live on approval' : 'reviewed as a whole', r.out.added ? 'Added to your send' : '']
+            .filter(Boolean).join(' · ') })),
+        run: () => undoSends(results, gen),
+      });
+    }
+    if (failed.length) show(`${results.length ? 'Not everything was sent' : 'Nothing was sent'}: ${failed.join(' ')}`, 'error');
+    else say(results.map((r) => r.out.message).join(' '));     // the outcome line (the thin page's slot says errors)
+    refreshDock();
+    D.loadCount();
+    if (ed.trayOpen) route();           // the thin editor page shows the file as it is now
+  }
+  /* The sent parts leave their drafts: a draft whose every change went is removed; one with a part left keeps
+     only that part (the sent files go back to where they started). */
+  function takeSent(list, groups) {
+    for (const d of list) {
+      const parts = [].concat(...groups.map((g) => g.drafts.filter((x) => x.key === d.key)));
+      if (!parts.length) continue;
+      const files = new Set([].concat(...parts.map((x) => Object.keys(x.files))));
+      const notesGone = parts.some((x) => Array.isArray(x.notes));
+      const rest = Object.keys(d.files).filter((f) => !files.has(f) && d.files[f] !== d.originals[f]);
+      const notesLeft = !notesGone && Array.isArray(d.notes) && d.notes.length > 0;
+      if (!rest.length && !notesLeft) { drafts.remove(d.key); chosenBase.delete(d.key); continue; }
+      const next = Object.assign({}, d, { files: Object.assign({}, d.files) });
+      for (const f of files) next.files[f] = d.originals[f];
+      if (notesGone) delete next.notes;
+      drafts.put(next);
+    }
+    editing = null;
+  }
+  /* Undo the sends of one click (HCCore.runUndo each, newest first) and put their drafts back. */
+  async function undoSends(results, gen) {
+    const back = [];
+    const undone = [];
+    const said = [];
+    let kind = '';
+    for (const r of results.slice().reverse()) {
+      const u = await C.runUndo(state.client, r.out);
+      if (!sessionGen.isCurrent(gen)) return { text: '' };
+      if (!u.ok) { said.push(u.reason === 'changed' ? C.UNDO_CHANGED_TEXT : u.message); kind = 'error'; continue; }
+      undone.push(r.out.number);
+      back.push(...(Array.isArray(u.drafts) ? u.drafts : []));
+      if (u.warning === 'dropped') { said.push(C.UNDO_DROPPED_TEXT); kind = 'error'; } else if (u.message) said.push(u.message);
+    }
+    putBack(back);
+    if (ed.draft || back.some((d) => ed.page && d.key === ed.page.pageId)) frameTo(ed.route, false);
+    refreshDock();
+    D.loadCount();
+    return { text: said.length ? said.join(' ') : 'Undone: your changes are back.', kind, undone };
+  }
+  /* The undone parts go back into their drafts (a part joins a draft of the same page made since). */
+  function putBack(parts) {
+    for (const p of parts) {
+      if (!p || typeof p.key !== 'string' || !p.files) continue;
+      const have = drafts.get(p.key);
+      if (!have) { drafts.put(Object.assign({}, p)); continue; }
+      const next = Object.assign({}, have, { files: Object.assign({}, have.files), originals: Object.assign({}, have.originals) });
+      for (const f of Object.keys(p.files)) {
+        if (next.files[f] !== undefined && next.files[f] !== next.originals[f]) continue;   // changed again since: keep that
+        next.files[f] = p.files[f];
+        next.originals[f] = p.originals[f];
+      }
+      if (Array.isArray(p.notes) && p.notes.length) next.notes = C.mergeNotes(p.notes, Array.isArray(have.notes) ? have.notes : []);
+      drafts.put(next);
+    }
   }
   /* What js/editor-dock.js may reach of the editor (its header documents every key). */
   function dockApi() {
@@ -565,17 +821,22 @@
       closeMenu: () => closeMenu(),
       redraw: () => refreshDock(),
       undoRedo: (op) => undoRedo(op),
-      draft: () => ed.draft,
-      canSend: (d) => Boolean(canEditPage(ed.page) && canEditKey(d.key) && pageChanges()),
-      myProposals: () => myProposals(),
-      propose: (d) => sendDraft(d, null),
+      sendAll: (key) => sendAll(key, null),
+      go: (route) => { window.location.hash = `#${route}`; },
+      loadSends: () => loadSends(),
+      openSend: (item) => openSend(item).catch(shown),
+      openReview: () => {
+        if (!rail.cards.some((c) => c.anchor !== null)) return false;
+        openSheet(null);
+        return true;
+      },
       shown: (e) => shown(e),
       avatar: (login, first) => avatarFace(login, first),
       accessAsk: (a, projectId, name, result) => accessAsk(a, { projectId, name, login: sessionLogin() }, accessUi(result)),
       onCount: (n) => { ed.count = n; },
       openCount: () => {
         const gen = sessionGen.current();
-        return openPulls().then((pulls) => (sessionGen.isCurrent(gen) ? C.orderOpenPulls(pulls, null).length : null));
+        return openPulls().then((pulls) => reviewable(pulls)).then((n) => (sessionGen.isCurrent(gen) ? n : null));
       },
     };
   }
@@ -602,13 +863,11 @@
     menuWhole.hidden = !ed.on;
     menuData.hidden = !ed.on;
     who.appendChild(avatarBtn);
-    // name with role on the first line, the Proposals link under them (round 2, R2a)
+    // U2 (plan D1): the photo, then the role chip (js/editor-dock.js writes its words); the name stays for screen
+    // readers; the review count moved to its own row under the pill
     const line = h('span', { class: 'hc-id-line' }, h('span', { class: 'hc-login', title: login, text: first }));
-    if (state.role && state.access === 'ok') {
-      line.appendChild(h('span', { class: `hc-role cms-role cms-role-${state.role.key}`,
-        title: 'Your role on this site\'s repository', text: state.role.label }));
-    }
-    who.appendChild(h('span', { class: 'hc-id' }, line, handle));
+    if (state.role && state.access === 'ok') line.appendChild(D.chip());
+    who.appendChild(h('span', { class: 'hc-id' }, line));
     who.appendChild(menu);
   }
 
@@ -801,6 +1060,7 @@
   function accessChanged() {
     if (ed.on && pageLocked(ed.page) && (ed.sel || ed.selected !== null)) clearSelection();
     refreshDock();
+    if (dock && state.session) D.loadCount();        // a Writer's review count follows the list
     if (ed.on) postEditor();
   }
 
@@ -1028,7 +1288,7 @@
       });
     }
     const slot = h('p', { class: 'cms-action-result', role: 'status', hidden: true });
-    if (proposeBtn) proposeBtn.addEventListener('click', () => { sendDraft(d, { go: proposeBtn, result: slot }).catch(shown); });
+    if (proposeBtn) proposeBtn.addEventListener('click', () => { sendAll(null, { go: proposeBtn, result: slot }).catch(shown); });
     check();
     const isNew = d.originals[file] === null;
 
@@ -1112,68 +1372,7 @@
     return h('p', { class: 'cms-base' }, h('label', null, 'Start from: ', sel));
   }
 
-  /* Send for review (U0b, plan D18: the propose form and the Send box are gone; U2 builds the one-click send with
-     its generated title). Every changed draft on d's base that I may edit goes in one proposal — the edit gate: a
-     draft of a project I may not edit never rides along — titled "Edit <label>" (a new project: its label), or
-     one more commit on my proposal #n when d builds on it. ui: {go, result} (the thin editor page's button and
-     its result line) or null (the bubble: the outcome is said on its status line). */
-  async function sendDraft(d, ui) {
-    const own = await myProposals();
-    const group = () => drafts.dirty().filter((o) => sameBase(o, d) && canEditKey(o.key));
-    return sendProposal(d, { summary: d.key.indexOf('new/') === 0 ? d.label : `Edit ${d.label}`,
-      go: ui && ui.go ? ui.go : null, result: ui && ui.result ? ui.result : null, group, own });
-  }
-
-  const stillOpen = (d, own) => !d.base.number || own.some((p) => p.number === d.base.number && p.branch === d.base.ref);
-  const closedText = (d) => `Your proposal #${d.base.number} is no longer open: discard these changes and start `
-    + 'from the live site.';
-
-  async function sendProposal(d, ui) {
-    if (proposing || !state.client) return;
-    const plan = C.collectProposal(ui.group());       // the text as it is now
-    const problems = plan.problems.concat(stillOpen(d, ui.own) ? [] : [closedText(d)]);
-    const show = (text) => {
-      if (!ui.result) { say(text, 'error'); return; }
-      ui.result.textContent = text;
-      ui.result.hidden = false;
-      ui.result.classList.toggle('is-error', true);
-    };
-    if (problems.length) { show(`Nothing was sent: ${problems.join(' ')}`); return; }
-    proposing = true;
-    if (ui.go) ui.go.disabled = true;
-    const gen = sessionGen.current();
-    let out;
-    try {
-      out = await C.runPropose(state.client, {
-        login: state.session.login, summary: ui.summary, now: Date.now(), origin: window.location.origin,
-        target: d.base.number ? { branch: d.base.ref, number: d.base.number } : null,
-        changes: plan.changes, pages: plan.pages,
-      });
-    } catch (e) {
-      out = { ok: false, status: 0, message: `Something went wrong: ${(e && e.message) || e}` };
-    } finally {
-      proposing = false;
-    }
-    if (!sessionGen.isCurrent(gen)) return;
-    if (out.status === 401) { endSession(out.message); return; }
-    if (!out.ok) { if (ui.go) ui.go.disabled = false; show(out.message); return; }
-    const sent = ui.group().map((o) => o.key);
-    for (const o of ui.group()) { drafts.remove(o.key); chosenBase.delete(o.key); }
-    editing = null;
-    if (ed.draft && sent.indexOf(ed.draft.key) >= 0) {
-      clearSelection();
-      frameTo(ed.route, false);
-    }
-    // the review page that opened here is gone (U0b): the bubble hears the number (HCDock.sent; U2 fills it)
-    D.sent(out.number);
-    if (out.signedOut) {
-      // the proposal is open; only the sign-in ended (after the PR opened)
-      endSession(`${out.message} Your sign-in has ended. Please sign in again.`);
-      return;
-    }
-    say(out.message);
-    if (ed.trayOpen) route();           // the thin editor page shows the file as it is now
-  }
+  /* (U2: the one-click send is sendAll, beside the dock's view above; sendDraft and sendProposal are gone.) */
 
 
 
@@ -2760,7 +2959,7 @@
     // typing: one undo step per burst (histNote); a note box's Remove (md '') is a step of its own
     hist.typing = md !== '';
     try { if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key); } finally { hist.typing = false; }
-    refreshDock();
+    refreshDock({ typed: true });          // U2 (plan D13): typing folds the bubble
   }
 
 

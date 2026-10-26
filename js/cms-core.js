@@ -1834,7 +1834,9 @@
     return isObj(b) && isRef(b.ref) && isSha(b.sha) && (b.number === null || Number.isInteger(b.number));
   }
 
-  const isDirty = (d) => Object.keys(d.files).some((p) => d.files[p] !== d.originals[p]);
+  // a change to send: a file that differs, or page notes (a notes-only draft is sent too: U2 fix round 1, for U4)
+  const isDirty = (d) => Object.keys(d.files).some((p) => d.files[p] !== d.originals[p])
+    || (Array.isArray(d.notes) && d.notes.length > 0);
 
   /* The draft store. Without a name: the one list under DRAFTS_KEY (a tab's sessionStorage before U4b). With a
      name (draftsKey(login): one store per login in localStorage, U4b): ONE storage entry per page,
