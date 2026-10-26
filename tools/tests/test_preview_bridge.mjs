@@ -705,6 +705,23 @@ test('hc-history and hc-key (frame -> parent); hc-editor.cmd (parent -> frame): 
 
 /* Per-unit blocks (editor UI/UX build, U0): each unit's paired bridge tests (a well-formed message passes, a
    malformed one is dropped) go in its own block. */
+/* ---- U7 ---- */
+// U7b: the window's width (the frame is narrower than the window above 900 px; rules keyed on the window read it)
+test('U7b: hc-editor carries the window\'s width: a number, rounded and clamped 200-4000', () => {
+  const w = (width) => SRC.editorMessage({ type: 'hc-editor', on: true, width }).width;
+  assert.equal(w(1100), 1100);
+  assert.equal(w(1100.6), 1101);
+  assert.equal(w(120), 200, 'clamped up');
+  assert.equal(w(9000), 4000, 'clamped down');
+});
+
+test('U7b: a malformed width is dropped (no width field at all)', () => {
+  for (const width of [undefined, null, '1100', NaN, Infinity, -Infinity, true, {}, [1100]]) {
+    const m = SRC.editorMessage({ type: 'hc-editor', on: true, width });
+    assert.equal(Object.prototype.hasOwnProperty.call(m, 'width'), false, `width ${String(width)}`);
+  }
+});
+
 /* ---- U4 ---- */
 
 const IMG = 'https://res.cloudinary.com/demo/image/upload/v1/hippocampus-docs/setup/a.png';

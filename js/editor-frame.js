@@ -555,6 +555,20 @@
       // round 2 (R1): the drawn proposal's proposer colour (css/editor.css body[data-hc-tint])
       if (s.on) b.setAttribute('data-hc-tint', String(Number.isInteger(s.tint) ? s.tint : 0));
       else b.removeAttribute('data-hc-tint');
+      // U7b: the WINDOW's width class on <html> (css/site.css's framed twins, js/lab.js dialogMode): above 900 px
+      // this frame is narrower than the window, and the page's rules keyed on the window must not answer to it
+      const root = doc.documentElement;
+      if (root) {
+        const w = s.on && typeof s.width === 'number' && isFinite(s.width) ? s.width : null;
+        const st = root.style;
+        if (w === null) {
+          root.removeAttribute('data-hc-win');
+          if (st && typeof st.removeProperty === 'function') st.removeProperty('--hc-win');
+        } else {
+          root.setAttribute('data-hc-win', w > 900 ? 'wide' : (w > 640 ? 'medium' : 'narrow'));
+          if (st && typeof st.setProperty === 'function') st.setProperty('--hc-win', w + 'px');
+        }
+      }
     }
 
     function addCss() {
@@ -1214,7 +1228,9 @@
            WALK_CAP entries; `now` is scrollY at the moment of the answer;
            `rects` {content, heading} is where #content (with its computed
            padding, `pad`) and its first h1 are drawn in this document (the
-           walk's on-geometry step).
+           walk's on-geometry step); `grids` {win, cols} is <html>'s data-hc-win
+           and the column count of the first .hc-cols (U7b, the walk's
+           wide-grids step).
            It measures the page jumping while a block is edited.
        The parent is told nothing; anywhere else no listener, timer or
        observer exists. */
@@ -1264,8 +1280,14 @@
             rects.content.pad = { left: parseFloat(cs.paddingLeft) || 0, right: parseFloat(cs.paddingRight) || 0,
               top: parseFloat(cs.paddingTop) || 0 };
           }
+          // U7b's wide-grids step: the window's width class this frame was told, and the Lab activity's columns
+          const html = doc.documentElement;
+          const cols = doc.querySelector ? doc.querySelector('.hc-cols') : null;
+          const track = cols && typeof win.getComputedStyle === 'function' ? String(win.getComputedStyle(cols).gridTemplateColumns || '').trim() : '';
+          const grids = { win: html && html.getAttribute ? html.getAttribute('data-hc-win') : null,
+            cols: track && track !== 'none' ? track.split(/\s+/).length : null };
           e.source.postMessage({ type: 'hc-walk-scroll-samples', samples: samples.map((x) => x.slice()),
-            log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow(), rects }, e.origin);
+            log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow(), rects, grids }, e.origin);
           return;
         }
         if (d.type === 'hc-walk-u4') { walkU4(d, e); return; }        // U4's steps (below)

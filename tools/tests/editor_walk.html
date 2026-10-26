@@ -29,6 +29,10 @@
                      within 1 px, #content is display:none, and the swap came
                      from this load's second hc-ready, before the 8 s
                      fallback. Writes data-walk-geometry
+    wide-grids       (U7b) &page=/team&width=1100: the Lab activity's
+                     columns (.hc-cols) with Editor off, then on; ready only
+                     when the frame's <html> says data-hc-win="wide" and the
+                     counts are equal. Writes data-walk-grids
     scroll           (U7) on + select the page's LAST paragraph (low on the
                      page); ask the frame (hc-walk-scroll, the TEST-ONLY hook
                      below) until its scrollY is >= 100 px and steady over 3
@@ -984,6 +988,28 @@
           else await sleep(100);
         }
         body.setAttribute('data-walk-scroll-before', JSON.stringify(scrollSummary(steady)));
+      },
+      // U7b (ED3): at a wide window (&page=/team&width=1100) Editor on keeps the Lab activity's columns: the frame
+      // is narrower than the window, but it was told the window's width (<html data-hc-win="wide">) and the
+      // page's framed twins keep the window's grid. Ready only when the frame says "wide" and its .hc-cols has
+      // as many columns as the page with Editor off. Writes data-walk-grids {window, off, on, win}.
+      'wide-grids': async () => {
+        if (!(SW.innerWidth > 900)) throw new Error(`wide-grids needs a window wider than 900 px (it is ${SW.innerWidth}; &width=1100)`);
+        const count = (v) => { const t = String(v || '').trim(); return t && t !== 'none' ? t.split(/\s+/).length : null; };
+        const off = await until(() => { const g = $('.hc-cols'); return g ? count(SW.getComputedStyle(g).gridTemplateColumns) : null; },
+          `the Lab activity columns with Editor off (.hc-cols on ${page}; &page=/team)`);
+        await editorOn();
+        const end = Date.now() + LIMIT_MS;
+        let g = {};
+        for (;;) {
+          const r = await askScroll('the frame\'s grids');
+          g = (r && r.grids) || {};
+          if ((g.win === 'wide' && g.cols === off) || Date.now() > end) break;
+          await sleep(100);
+        }
+        body.setAttribute('data-walk-grids', JSON.stringify({ window: SW.innerWidth, off, on: g.cols, win: g.win }));
+        if (g.win !== 'wide') throw new Error(`the frame's <html> says data-hc-win=${g.win} at a ${SW.innerWidth} px window (want wide)`);
+        if (g.cols !== off) throw new Error(`the Lab activity has ${g.cols} columns with Editor on, ${off} with it off`);
       },
     };
   }

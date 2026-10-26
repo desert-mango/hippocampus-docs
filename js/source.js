@@ -485,6 +485,11 @@
         return { n: c.n, op: 'restore', index: c.index, snap: c.snap, save: c.save };
       })(),
       /* Per-unit blocks (editor UI/UX build, U0): a new hc-editor field goes in its unit's block. */
+      /* ---- U7 ---- */
+      // U7b: the window's width (above 900 px the frame is narrower than the window): a number, rounded and
+      // clamped 200-4000; anything else leaves the field out
+      ...(typeof m.width === 'number' && isFinite(m.width) ? { width: Math.min(4000, Math.max(200, Math.round(m.width))) } : {}),
+
       /* ---- U3 ---- */
       // the block to scroll into view, once per n (the first change of a proposal opened from its review row)
       focus: (() => {

@@ -430,6 +430,9 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
   .page-nav { grid-template-columns: minmax(0, 1fr); }
   .page-nav .page-nav-next { grid-column: 1; }
 }
+/* U7b: inside the Editor's page frame (narrower than the window above 900 px) the WINDOW's width decides */
+html[data-hc-win="wide"] .page-nav { grid-template-columns: 1fr 1fr; }
+html[data-hc-win="wide"] .page-nav .page-nav-next { grid-column: 2; }
 /* ---- owner boundary (uiux plan 1a): SETUP above, nobody below ---- */
 .site-footer {
   display: flex; gap: 1.5rem; align-items: center; justify-content: center;
@@ -732,6 +735,8 @@ a.chip:hover { color: var(--accent); border-color: var(--accent); }
 /* H1: four across, then 2x2, then one column; never three plus a lone card */
 .quietgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
 @media (max-width: 899px) { .quietgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* U7b: inside the Editor's page frame (narrower than the window above 900 px) the WINDOW's width decides */
+html[data-hc-win="wide"] .quietgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 479px) { .quietgrid { grid-template-columns: minmax(0, 1fr); } }
 .quiet {
   display: block; text-decoration: none; background: var(--bg-soft);
@@ -962,6 +967,8 @@ a.hc-repo:hover { border-color: var(--accent); transform: translateY(-1px); }
 @media (max-width: 900px) {
   .hc-cols { grid-template-columns: minmax(0, 1fr); }
 }
+/* U7b: inside the Editor's page frame (narrower than the window above 900 px) the WINDOW's width decides */
+html[data-hc-win="wide"] .hc-cols { grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 1fr) minmax(16rem, 1fr); }
 /* ---- owner boundary (uiux plan 1a): M above, SHELL below ---- */
 
 /* ==== the uiux build's unit blocks (plan 1a; the scaffold, unit 0) ==== */

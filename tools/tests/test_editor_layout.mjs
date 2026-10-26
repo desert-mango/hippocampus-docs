@@ -407,3 +407,127 @@ test('css: no Contents button in Editor mode (parent and frame); "HippoCampus Ed
   // the 900 px block hides the soft word for the public header only
   assert.match(squash(SITE_CSS), /\.brand-soft \{ display: none; \} body\.hc-editor-on \.brand-soft \{ display: inline-grid; \}/);
 });
+
+/* ---- U7b: the frame knows the window's width ----
+   Above 900 px the frame is narrower than the window, so the page's own rules keyed on the WINDOW width
+   (.page-nav at 640 px, .quietgrid at 899 px, .hc-cols at 900 px, lab.js's dialogMode at 768 px) would answer
+   to the frame's width. The parent sends the window's width in hc-editor; the frame marks <html> with
+   data-hc-win (wide > 900, medium 641-900, narrow <= 640) and --hc-win; framed twins keyed on it keep the
+   window's layout. The public page never carries data-hc-win, so it is unchanged. */
+
+const widths = (page) => page.editorMessages().map((m) => m.width);
+
+test('U7b: hc-editor carries the window\'s width on load, and again after a resize (debounced)', async () => {
+  const page = openSite({ hash: `#${PAGE_ROUTE}` });
+  await settle();
+  page.win.innerWidth = 1100;
+  page.switchBtn().click();
+  await settle();
+  await page.send({ type: 'hc-ready' });
+  assert.equal(page.editorMessages().at(-1).width, 1100, 'the load\'s first hc-editor says the window\'s width');
+  const before = page.editorMessages().length;
+  page.win.innerWidth = 950;
+  for (let i = 0; i < 3; i += 1) for (const fn of page.listeners.resize || []) fn({ type: 'resize' });
+  await settle();
+  const after = page.editorMessages();
+  assert.equal(after.length, before + 1, 'three resizes in a burst: one hc-editor');
+  assert.equal(after.at(-1).width, 950);
+});
+
+test('U7b: with no number for the window\'s width, hc-editor has no width field', async () => {
+  const page = await on();
+  await page.send({ type: 'hc-ready' });
+  assert.ok(page.editorMessages().length > 0);
+  assert.ok(widths(page).every((w) => w === undefined), 'the fake window has no innerWidth');
+});
+
+test('U7b: Editor off, a resize sends nothing', async () => {
+  const page = await on();
+  await page.send({ type: 'hc-ready' });
+  const frame = page.frame();
+  const count = () => frame.posted.filter((x) => x.m.type === 'hc-editor').length;
+  page.switchBtn().click();
+  await settle();
+  const n = count();
+  page.win.innerWidth = 1200;
+  for (const fn of page.listeners.resize || []) fn({ type: 'resize' });
+  await settle();
+  assert.equal(count(), n);
+});
+
+function htmlEl(doc) {
+  const root = el(doc, 'html');
+  const props = {};
+  root.style = { props, setProperty: (k, v) => { props[k] = String(v); }, removeProperty: (k) => { delete props[k]; },
+    getPropertyValue: (k) => props[k] || '' };
+  doc.documentElement = root;
+  return root;
+}
+
+test('U7b frame: <html> gets data-hc-win and --hc-win from the window\'s width while framed', () => {
+  const { doc } = setupPage();
+  const root = htmlEl(doc);
+  const HC = fakeHC();
+  EF.create(fakeWin(), doc, HC);
+  const cases = [[1100, 'wide'], [901, 'wide'], [900, 'medium'], [641, 'medium'], [640, 'narrow'], [320, 'narrow']];
+  for (const [width, want] of cases) {
+    HC.send({ on: true, width });
+    assert.equal(root.getAttribute('data-hc-win'), want, `${width} px`);
+    assert.equal(root.style.props['--hc-win'], `${width}px`);
+  }
+  HC.send({ on: true });                                      // no width: nothing to go by
+  assert.equal(root.getAttribute('data-hc-win'), null);
+  assert.equal(root.style.props['--hc-win'], undefined);
+  HC.send({ on: true, width: 1100 });
+  HC.send({ on: false, width: 1100 });                        // Editor off: the page answers to its own width
+  assert.equal(root.getAttribute('data-hc-win'), null);
+  assert.equal(root.style.props['--hc-win'], undefined);
+});
+
+test('U7b css: the framed twins restore the window\'s layout, each keyed under html[data-hc-win="wide"]', () => {
+  const css = squash(SITE_CSS.replace(/\/\*[\s\S]*?\*\//g, ''));   // the rules, without their comments
+  const W = 'html[data-hc-win="wide"]';
+  const twin = (sel, decl) => assert.ok(css.includes(`${W} ${sel} { ${decl} }`), `${W} ${sel} { ${decl} }`);
+  // each restores the rule its media query changes, to the value it has outside the query
+  twin('.page-nav', 'grid-template-columns: 1fr 1fr;');
+  twin('.page-nav .page-nav-next', 'grid-column: 2;');
+  assert.match(css, /\.page-nav \{ display: grid; grid-template-columns: 1fr 1fr;/);
+  assert.match(css, /\.page-nav \.page-nav-next \{ grid-column: 2;/);
+  twin('.quietgrid', 'grid-template-columns: repeat(4, minmax(0, 1fr));');
+  assert.match(css, /\.quietgrid \{ display: grid; grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  const cols = 'grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 1fr) minmax(16rem, 1fr);';
+  twin('.hc-cols', cols);
+  assert.ok(css.includes(`.hc-cols { display: grid; ${cols}`));
+  // every rule that names data-hc-win is a twin of one of these (nothing else keys on it)
+  const named = css.match(/[^{}]*data-hc-win[^{}]*\{/g) || [];
+  assert.equal(named.length, 4, named.join(' | '));
+  for (const s of named) assert.ok(s.trim().startsWith(W), s);
+  // the twins sit outside every @media block: they apply whatever the frame's own width is
+  for (const q of ['max-width: 640px', 'max-width: 899px', 'max-width: 900px']) {
+    let at = -1;
+    while ((at = css.indexOf(`@media (${q}) {`, at + 1)) >= 0) assert.doesNotMatch(mediaBlock(css.slice(at), q), /data-hc-win/);
+  }
+});
+
+test('U7b lab: dialogMode reads the window\'s width from the frame\'s --hc-win when framed', () => {
+  const { dialogMode } = require(path.join(ROOT, 'js', 'lab.js'));
+  const root = (win, px) => ({ getAttribute: (k) => (k === 'data-hc-win' ? win : null),
+    style: { getPropertyValue: (k) => (k === '--hc-win' ? px : '') } });
+  assert.equal(dialogMode(600, root('wide', '1100px')), 'pop', 'a 600 px frame in an 1100 px window: a popover');
+  assert.equal(dialogMode(1100, root('narrow', '400px')), 'sheet');
+  assert.equal(dialogMode(600, root(null, '')), 'sheet', 'not framed: its own width');
+  assert.equal(dialogMode(600, root('wide', 'x')), 'sheet', 'no number: its own width');
+  assert.equal(dialogMode(600, null), 'sheet');
+  assert.equal(dialogMode(1280), 'pop', 'no document (node): as before');
+});
+
+test('U7b walk: wide-grids compares the Lab activity columns, Editor off and on, at a wide window', () => {
+  const walk = readRepo('tools/tests/editor_walk.html');
+  const u7 = walk.slice(walk.indexOf('/* ---- U7 ---- */'));
+  const step = u7.slice(u7.indexOf("'wide-grids': async () => {"));
+  assert.ok(step.length > 100 && u7.indexOf("'wide-grids'") > 0, 'the wide-grids step in the U7 block');
+  assert.match(step, /data-walk-grids/);
+  assert.match(step, /'wide'/);
+  assert.match(step, /\.hc-cols/);
+  assert.match(walk, /grids/, 'the frame reports its grids through the test-only hook');
+});

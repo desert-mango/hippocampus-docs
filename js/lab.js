@@ -386,9 +386,17 @@
     return false;
   }
 
-  // M17: an anchored popover on a wide screen, a bottom sheet on a phone
-  function dialogMode(innerWidth) {
-    const w = Number(innerWidth);
+  // M17: an anchored popover on a wide screen, a bottom sheet on a phone. U7b: inside the Editor's page frame
+  // (narrower than the window above 900 px) the WINDOW's width decides: the frame's <html> carries it as
+  // data-hc-win and --hc-win (js/editor-frame.js setBodyClasses); `root` defaults to this document's <html>
+  function dialogMode(innerWidth, root) {
+    let w = Number(innerWidth);
+    const r = root !== undefined ? root : (typeof document !== 'undefined' ? document.documentElement : null);
+    if (r && typeof r.getAttribute === 'function' && r.getAttribute('data-hc-win')
+      && r.style && typeof r.style.getPropertyValue === 'function') {
+      const framed = parseFloat(r.style.getPropertyValue('--hc-win'));
+      if (isFinite(framed) && framed > 0) w = framed;
+    }
     return (isFinite(w) && w > 0 && w < SHEET_BELOW) ? 'sheet' : 'pop';
   }
 

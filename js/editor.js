@@ -3308,7 +3308,10 @@
         ? rail.data.notes.filter((x) => x.anchor !== null).map((x) => x.anchor) : [],
       // U4 (D6, D8, D11): the marks to restore after a load, the notes beside their blocks, the site's images
       marks: marksMessage(), notes: notesMessage(), media: ed.mediaOut || null,
-      facts: factsState() }, '*');   // U6 (plan D17)
+      facts: factsState(),   // U6 (plan D17)
+      // U7b: the window's width, for the page's rules keyed on it (the frame is narrower above 900 px)
+      ...(typeof window.innerWidth === 'number' ? { width: window.innerWidth } : {}) }, '*');
+
     ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
 
@@ -4326,6 +4329,14 @@
     }
     // phones: the tray is a bottom sheet (css/editor.css); the class says so to scripts and tests
     if (typeof window.addEventListener === 'function') window.addEventListener('resize', () => layoutRail());
+    // U7b: the frame hears the window's new width, once a resize has settled (100 ms)
+    let widthTimer = null;
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', () => {
+        clearTimeout(widthTimer);
+        widthTimer = setTimeout(() => { widthTimer = null; if (ed.on) postEditor(); }, 100);
+      });
+    }
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia(PHONE_QUERY) : null;
     if (mq) {
       const apply = () => {
