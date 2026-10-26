@@ -763,7 +763,7 @@ test('M5: a person card: plain click opens; a modifier click navigates; Editor m
   assert.equal(doc.activeElement, ada, 'focus returns to the card');
   ev = doc.dispatch(ada, 'keydown', { key: 'x' });
   assert.equal(ev.defaultPrevented, false);
-  // something else handled the click first (js/editor-frame.js wireCard): nothing here
+  // something else handled the click first (js/editor-people.js wireCard): nothing here
   ev = doc.dispatch(lina, 'click', { button: 0, defaultPrevented: true });
   await lab.whenReady();
   assert.equal(doc.body.querySelector('[role="dialog"]'), null);

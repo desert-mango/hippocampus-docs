@@ -138,9 +138,10 @@
         hc-key           {op}                'undo' | 'redo': the keys, pressed in the frame;
                                              'redraw': a restore point was missing
         hc-people        {op: 'order', team,  the Team page's lists as shown after a drag
-                          alumni} |           or a card-menu move or pin: [{name, pinned}]
-                         {op: 'add', group}  (names only, at most 500), or "+" on the
-                                             'team' / 'alumni' list (round 2, R5)
+                          alumni, act} |      or a Move button: [{name, pinned}] (names only,
+                         {op: 'add', group}  at most 500; act the button), or "+" (R5); U5:
+                                             {op: 'field' | 'remove' | 'add-in-place', ...}
+                                             (its block below)
         hc-block-rects   {rects, view}       where the MARKED blocks are on screen
                                              (U5b, the review rail): rects =
                                              [{index, top, height}] in the
@@ -207,6 +208,9 @@
   const MAX_PEOPLE = 500;
   const PEOPLE_MARKS = Object.freeze(['add', 'del', 'move', 'pin', 'unpin', 'edit']);
   const PEOPLE_LISTS = Object.freeze(['team', 'alumni']);
+  const PEOPLE_FIELDS = Object.freeze(['name', 'title', 'photo']);     // U5: a card's fields typed in place
+  const PEOPLE_ACTS = Object.freeze(['up', 'down', 'other', 'drop']);  // U5: the move an order came from
+  const MAX_PERSON_TEXT = 500;
   // round 2 (R2b): undo restore points — the frame's DOM snapshot ids ('f<load>-<n>') and the parent's ('u<n>')
   const SNAP_RE = /^[a-z][a-z0-9-]{0,39}$/;
   const personName = (v) => (typeof v === 'string' && v.trim() && v.length <= 200 ? v : null);              // css/editor.css --hc-p1..--hc-p5 (HCCore.PROPOSER_SLOTS)
@@ -333,6 +337,7 @@
       // round 2 (R5): the Team page in Editor mode — the lists as shown after a drag or a card-menu move or pin
       // (names and pins only; the parent checks the names are exactly the draft's), or "+" on a list
       if (d.op === 'add') return PEOPLE_LISTS.indexOf(d.group) >= 0 ? { type, op: 'add', group: d.group } : null;
+      if (d.op !== 'order') return peopleOpU5(type, d);          // U5's ops (its block below)
       if (d.op !== 'order' || !Array.isArray(d.team) || !Array.isArray(d.alumni)
         || d.team.length + d.alumni.length > MAX_PEOPLE) return null;
       const clean = (list) => {
@@ -347,7 +352,8 @@
       const team = clean(d.team);
       const alumni = clean(d.alumni);
       // focus: the person just moved (the page comes back to them after it reloads), or null
-      return team && alumni ? { type, op: 'order', team, alumni, focus: personName(d.focus) } : null;
+      return team && alumni ? { type, op: 'order', team, alumni, focus: personName(d.focus),
+        act: PEOPLE_ACTS.indexOf(d.act) >= 0 ? d.act : null } : null;     // U5: the Move button pressed, or null
     }
     if (type === 'hc-block-rects') {
       // U5b: where the MARKED blocks are on screen (the parent's review rail lines its cards up with
@@ -377,6 +383,32 @@
     if (type === 'hc-image-use') return isIndex(d.index) && isImageUrl(d.url) ? { type, index: d.index, url: d.url } : null;
 
     /* ---- U5 ---- */
+    /* The Team page edited in place (plan D16): hc-people {op: 'field', name, field: 'name'|'title'|'photo',
+       value?} (a photo without a value asks the parent for the file), {op: 'remove', name}, and {op:
+       'add-in-place', group, login, name, title, link, photo} (the "+" card's fields; login '' or a GitHub
+       account name, photo true: ask for the file once added). Strings only, bounded; the parent checks the
+       rights and the registry's own rules. */
+    function peopleOpU5(t, x) {
+      const str = (v, max) => (typeof v === 'string' && v.length <= max ? v : null);
+      if (x.op === 'field') {
+        const name = personName(x.name);
+        if (!name || PEOPLE_FIELDS.indexOf(x.field) < 0) return null;
+        if (x.value === undefined || x.value === null) return x.field === 'photo' ? { type: t, op: 'field', name, field: 'photo' } : null;
+        const value = str(x.value, MAX_PERSON_TEXT);
+        return value === null ? null : { type: t, op: 'field', name, field: x.field, value };
+      }
+      if (x.op === 'remove') { const name = personName(x.name); return name ? { type: t, op: 'remove', name } : null; }
+      if (x.op === 'add-in-place') {
+        const login = str(x.login, 40);
+        const name = str(x.name, 200);
+        const title = str(x.title === undefined ? '' : x.title, MAX_PERSON_TEXT);
+        const link = str(x.link === undefined ? '' : x.link, MAX_PERSON_TEXT);
+        if (PEOPLE_LISTS.indexOf(x.group) < 0 || login === null || (login && !/^@?[A-Za-z0-9-]{1,39}$/.test(login.trim()))
+          || name === null || title === null || link === null) return null;
+        return { type: t, op: 'add-in-place', group: x.group, login: login.trim().replace(/^@/, ''), name, title, link, photo: x.photo === true };
+      }
+      return null;
+    }
 
     /* ---- U6 ---- */
     return null;
@@ -458,6 +490,11 @@
         .map((x) => ({ url: x.url, label: typeof x.label === 'string' ? x.label.slice(0, 300) : '' })) } : {}),
 
       /* ---- U5 ---- */
+      // the Team page (plan D15, D16): my own card's name when only it may be edited (a member), the Move button
+      // the last order came from (focus goes back to it), and a refused people edit to raise as an alert
+      peopleOwn: personName(m.people && typeof m.people === 'object' ? m.people.own : null),
+      peopleAct: m.people && typeof m.people === 'object' && PEOPLE_ACTS.indexOf(m.people.act) >= 0 ? m.people.act : null,
+      peopleAlert: m.people && typeof m.people === 'object' && typeof m.people.alert === 'string' ? m.people.alert.slice(0, 300) : null,
 
       /* ---- U6 ---- */
     };

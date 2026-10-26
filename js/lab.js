@@ -908,7 +908,7 @@
     // or on Enter/Space when it is a link-less card (cardClickOpensDialog); a modifier click on a linked card
     // is left to the browser (a new tab). Any GitHub-derived name (data-hc-login) opens that person; a
     // commit row or a repository bar (data-hc-open) its own dialog. Nothing happens in Editor mode or when
-    // something else already handled the event (js/editor-frame.js wireCard preventDefaults).
+    // something else already handled the event (js/editor-people.js wireCard preventDefaults).
     function onTrigger(e) {
       if (!e || e.defaultPrevented) return;
       const cl = doc.body && doc.body.classList;

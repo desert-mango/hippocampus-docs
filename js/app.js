@@ -948,10 +948,9 @@
      title (people.json `highlight: true`) is in the site's accent; an optional `subtitle` is a second, plain
      title line under it (Kyle 2026-10-21).
      M5 (uiux 2026-10, R1-4): a plain click opens the person's profile dialog (js/lab.js), which holds the link;
-     a linked card stays an <a href> (cmd/ctrl/middle click still open the page in a new tab, and Editor mode's
-     wireCard reads the href); a link-less card is a focusable role="button" div. Both carry data-hc-person.
+     a linked card stays an <a href> (cmd/ctrl/middle click still open the page in a new tab); a link-less card is a focusable role="button" div. Both carry data-hc-person.
      entry = HCLab.splitTeam's {person, linked, active, pinned} (or a bare person); the data-* attributes are
-     what Editor mode's card tools read (js/editor-frame.js). */
+     what Editor mode's card tools read (js/editor-people.js). */
   function personCardHTML(entry) {
     const person = entry && entry.person ? entry.person : entry;
     const name = (person && typeof person.name === 'string') ? person.name.trim() : '';
@@ -969,7 +968,9 @@
     const link = safeHttpUrl(person.link);
     const flags = entry && entry.person
       ? ` data-linked="${entry.linked ? 1 : 0}" data-active="${entry.active ? 1 : 0}" data-pinned="${entry.pinned ? 1 : 0}"` : '';
-    const data = ` data-hc-name="${esc(name)}" data-link="${link ? 1 : 0}"${flags} data-hc-person="${esc(name)}" aria-haspopup="dialog"`;
+    // U5 (editor UI/UX build): the person's one public GitHub login, when the GitHub layer knows it (read-only)
+    const login = entry && typeof entry.login === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(entry.login) ? ` data-hc-login="${esc(entry.login)}"` : '';
+    const data = ` data-hc-name="${esc(name)}" data-link="${link ? 1 : 0}"${flags}${login} data-hc-person="${esc(name)}" aria-haspopup="dialog"`;
     return link
       ? `<a class="person-card" href="${esc(link)}" target="_blank" rel="noopener"${data}>${inner}</a>`
       : `<div class="person-card is-static" role="button" tabindex="0"${data}>${inner}</div>`;
@@ -980,12 +981,20 @@
   const today = () => new Date().toISOString().slice(0, 10);
   function teamLists(data, pub) {
     if (!data || !Array.isArray(data.groups)) throw new Error('data/people.json is malformed');
+    // U5: roster name -> the one public login people-public.json maps to it (two logins: none)
+    const logins = new Map();
+    const pp = pub && typeof pub === 'object' && pub.people && typeof pub.people === 'object' ? pub.people : {};
+    for (const k of Object.keys(pp)) {
+      const r = pp[k] && typeof pp[k].roster === 'string' ? pp[k].roster : null;
+      if (r) logins.set(r, logins.has(r) ? null : k);
+    }
+    const withLogin = (l) => l.map((x) => (logins.get(x.person && x.person.name) ? Object.assign({}, x, { login: logins.get(x.person.name) }) : x));
     if (window.HCLab && typeof HCLab.splitTeam === 'function') {
       const s = HCLab.splitTeam(data, pub, today());
-      return [['team', 'Current team', s.team], ['alumni', 'Alumni', s.alumni]];
+      return [['team', 'Current team', withLogin(s.team)], ['alumni', 'Alumni', withLogin(s.alumni)]];
     }
     return data.groups.map((g) => [g.id === 'active' ? 'team' : 'alumni', g.id === 'active' ? 'Current team' : (g.title || 'Alumni'),
-      (Array.isArray(g.people) ? g.people : []).map((person) => ({ person }))]);
+      withLogin((Array.isArray(g.people) ? g.people : []).map((person) => ({ person })))]);
   }
   /* M1/M6/M7/M14/M15/M16 (uiux 2026-10): the Team page, as ONE string — the h1, the people first (the current
      team, then the alumni, each an h2 over cards of one size), then "Lab activity" with "· GitHub data as of
@@ -1054,7 +1063,7 @@
 
   // the Team page's string builders, read by tools/tests/test_views.mjs; cloudinaryTx also sizes js/lab.js's
   // profile photo
-  window.HCTeam = Object.freeze({ teamSkeleton, personCardHTML, cloudinaryTx });
+  window.HCTeam = Object.freeze({ teamSkeleton, personCardHTML, teamLists, cloudinaryTx });
 
   function viewSetupIndex() {
     // #/setup routes to the "start" landing page

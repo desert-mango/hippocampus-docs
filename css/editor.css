@@ -422,17 +422,58 @@ a.hc-sug-fmt { color: var(--hc-mark); }
 
 /* ==== people (U5) ==== */
 
-/* The Team page in Editor mode (round 2, R5; Kyle items 5 and 10): no block line over the roster — a light
-   card-level affordance instead (a 1 px outline in the edit colour, a grab cursor), a dashed "+" card at the end
-   of each list, the card menu, and the drop target while dragging. */
-body.hc-people-edit .person-card[data-hc-ptools] { cursor: grab; outline: 1px solid transparent; outline-offset: 2px;
+/* The Team page in Editor mode (round 2, R5; U5: plan D15, D16, reorderable-list-ux). An admin: no block line over
+   the roster — a light card-level affordance (a 1 px outline in the edit colour), the name and the title typed in
+   place, a six-dot grip (the only drag handle: touch-action none there alone), a small remove control and the
+   Move buttons (shown while the card holds keyboard focus: WCAG 2.5.7's path without a drag), a pin glyph, the
+   drop line, and a dashed "+" card that becomes an empty card in place. Anyone else: the page as it reads, their
+   own card (data-hc-own) with its name and photo editable. Targets are 44 px on a touch screen. */
+body.hc-people-edit .person-card[data-hc-ptools] { position: relative; outline: 1px solid transparent; outline-offset: 2px;
   transition: outline-color .15s ease-out, background-color .15s ease-out; }
 body.hc-people-edit .person-card[data-hc-ptools]:hover,
-body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline-color: color-mix(in srgb, var(--hc-edit) 60%, transparent);
+body.hc-people-edit .person-card[data-hc-ptools]:focus-within { outline-color: color-mix(in srgb, var(--hc-edit) 60%, transparent);
   transform: none; border-color: var(--edge-soft); }
 body.hc-people-edit .person-card[data-hc-ptools]:focus-visible { outline: 2px solid var(--hc-edit); }
-body.hc-people-edit .person-card.is-dragging { opacity: .4; cursor: grabbing; }
+.person-card[data-hc-ptools] .person-name, .person-card[data-hc-ptools] .person-title:not(.person-subtitle),
+.person-card[data-hc-ptools] .person-photo, .person-card[data-hc-ptools] .person-initials { cursor: text; border-radius: 4px; }
+.person-card[data-hc-ptools] .person-photo, .person-card[data-hc-ptools] .person-initials { cursor: pointer; }
+.person-card[data-hc-own] .person-title { cursor: default; }
+.person-card[data-hc-ptools] .person-name:hover, .person-card[data-hc-ptools] .person-title:not(.person-subtitle):hover {
+  background: var(--hc-edit-soft); }
+.person-card[data-hc-own] .person-title:hover { background: none; }
+.person-card[data-hc-ptools] .person-photo:hover, .person-card[data-hc-ptools] .person-initials:hover {
+  outline: 2px solid color-mix(in srgb, var(--hc-edit) 60%, transparent); outline-offset: 2px; }
+.person-card .is-typing { outline: 2px solid var(--hc-edit); outline-offset: 2px; background: var(--surface); color: var(--heading);
+  white-space: nowrap; overflow: hidden; cursor: text; }
+.person-card[data-hc-own] { outline: 1px dashed color-mix(in srgb, var(--hc-edit) 45%, transparent); outline-offset: 2px; }
+/* the tools: out of the way until the card is hovered or focused */
+.person-card .hc-ptool { opacity: 0; transition: opacity .12s ease-out; }
+.person-card[data-hc-ptools]:hover .hc-ptool, .person-card[data-hc-ptools]:focus-within .hc-ptool, .person-card .hc-ppin { opacity: 1; }
+.hc-pgrip { position: absolute; top: .3rem; left: .3rem; display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 6px; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hc-pgrip:hover { background: var(--surface-2); color: var(--heading); }
+.hc-premove { position: absolute; top: .3rem; right: .3rem; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); font: 1rem/1 var(--sans); cursor: pointer; }
+.hc-premove:hover, .hc-premove:focus-visible { background: var(--surface-2); color: var(--danger, var(--heading)); }
+.hc-ppin { position: absolute; top: .45rem; right: 2rem; color: var(--muted); line-height: 0; }
+/* the Move buttons: only while the card holds keyboard focus (Kyle: drag is enough; WCAG 2.5.7 needs this path) */
+.hc-pmoves { display: none; flex-wrap: wrap; gap: .25rem; justify-content: center; margin-top: .45rem; }
+.person-card[data-hc-ptools]:is(:focus-visible, :has(:focus-visible)) .hc-pmoves { display: flex; }
+.hc-pmove { min-height: 28px; padding: 0 .5rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface);
+  color: var(--body); font: .74rem var(--sans); cursor: pointer; }
+.hc-pmove:hover:not(:disabled), .hc-pmove:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
+.hc-pmove:disabled { opacity: .45; cursor: default; }
+/* the drag: the card stays in place, dimmed; a preview follows the pointer; a line marks where it lands */
+body.hc-pdragging, body.hc-pdragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+body.hc-people-edit .person-card.is-dragging { opacity: .4; }
+.hc-ppreview { position: fixed; z-index: 70; margin: 0; pointer-events: none; opacity: .95;
+  box-shadow: 0 0 2px rgb(0 0 0 / .12), 0 8px 16px rgb(0 0 0 / .14); }
+[data-theme="dark"] .hc-ppreview { box-shadow: 0 0 0 1px rgb(255 255 255 / .08), 0 0 2px rgb(0 0 0 / .24), 0 8px 16px rgb(0 0 0 / .28); }
+.person-card.hc-pdrop-before { box-shadow: -4px 0 0 0 var(--hc-edit); }
 body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb, var(--hc-edit) 70%, transparent); outline-offset: 6px; border-radius: var(--radius); }
+/* the one status line (screen readers; seen as a quiet line) and a refused change */
+.hc-plive { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hc-palert { margin: 0 0 .8rem; padding: .5rem .7rem; border: 1px solid var(--danger); border-radius: 8px; font-size: .84rem; color: var(--heading); }
 .hc-padd { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; min-height: 7rem;
   width: 100%; font: inherit; color: var(--body-soft); background: none; border: 1px dashed color-mix(in srgb, var(--hc-edit) 45%, var(--edge));
   border-radius: var(--radius); cursor: pointer; transition: color .15s ease-out, border-color .15s ease-out, background-color .15s ease-out; }
@@ -440,12 +481,24 @@ body.hc-people-edit .people-grid.is-drop { outline: 1px dashed color-mix(in srgb
 .hc-padd:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 2px; }
 .hc-padd .hc-padd-plus { font-size: 1.6rem; line-height: 1; font-weight: 300; }
 .hc-padd .person-name { color: inherit; font-weight: 500; }
-.hc-pmenu { position: absolute; z-index: 60; min-width: 13rem; padding: .3rem; border-radius: 10px; background: var(--surface);
-  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-[data-theme="light"] .hc-pmenu { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
-.hc-pmenu-item { display: block; width: 100%; min-height: 34px; padding: .35rem .6rem; border: 0; border-radius: 6px; background: none;
-  color: var(--body); font: .86rem var(--sans); text-align: left; cursor: pointer; }
-.hc-pmenu-item:hover, .hc-pmenu-item:focus-visible { background: var(--surface-2); color: var(--heading); outline: none; }
+/* "+": the empty card in place */
+.person-card.hc-pnew { display: grid; gap: .4rem; align-content: start; text-align: left; border: 1px dashed var(--hc-edit); }
+.hc-pnew-field { display: grid; gap: .15rem; font-size: .74rem; color: var(--muted); }
+.hc-pnew-input { width: 100%; min-height: 32px; padding: .25rem .45rem; border: 1px solid var(--edge); border-radius: 6px;
+  background: var(--surface); color: var(--heading); font: .84rem var(--sans); }
+.hc-pnew-input:focus-visible { outline: 2px solid var(--hc-edit); outline-offset: 1px; }
+.hc-pnew-input[aria-invalid="true"] { border-color: var(--warn); }
+.hc-pnew-check { display: flex; gap: .4rem; align-items: center; font-size: .76rem; color: var(--body-soft); }
+.hc-pnew-problem { margin: 0; min-height: 1em; font-size: .76rem; color: var(--warn); }
+.hc-pnew-actions { display: flex; gap: .4rem; }
+@media (pointer: coarse) {
+  .hc-pgrip, .hc-premove { width: 44px; height: 44px; }
+  .hc-pmove, .hc-pnew-input, .hc-pnew-actions .cms-btn { min-height: 44px; }
+  .person-card[data-hc-ptools] .hc-ptool { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .person-card .hc-ptool, body.hc-people-edit .person-card[data-hc-ptools] { transition: none; }
+}
 /* what my draft or an opened proposal changes, card by card: the highlight (--hc-hl; blue for mine) */
 .person-card[data-hc-badge] { position: relative; outline: 2px solid var(--hc-hl); outline-offset: 2px; }
 .person-card[data-hc-badge]::after { content: attr(data-hc-badge); position: absolute; top: -.55rem; left: 50%; transform: translateX(-50%);

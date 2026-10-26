@@ -2170,6 +2170,140 @@
     return { problem: null, text: formatLike(peopleText, reg.doc) };
   }
 
+  /* ---- the Team page edited in place (editor UI/UX build, unit U5: plan D15, D16) ---- */
+  const GITHUB_LINKS_FILE = 'data/github-links.json';
+  const PERSON_NAME_MAX = 120;
+  const PERSON_TITLE_MAX = 200;
+  const PERSON_FIELDS = Object.freeze(['name', 'title', 'photo']);
+  const peopleIn = (doc) => [].concat(...listOf(doc.groups).map((g) => (isObj(g) ? listOf(g.people) : [])));
+  const oneLine = (v) => trimmed(v).replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ');
+  /* One field of one person, typed in place: field 'name' | 'title' | 'photo' (value: the text, or for the photo
+     an https:// address or '' for none). A name stays unique and is never empty; every other field is kept.
+     -> {problem: null, text} | {problem} */
+  function peopleFieldText(peopleText, name, field, value) {
+    const fail = (problem) => ({ problem });
+    if (PERSON_FIELDS.indexOf(field) < 0) return fail(`'${String(field).slice(0, 20)}' cannot be changed here`);
+    const reg = parsedRegistry(PEOPLE_FILE, peopleText, 'groups');
+    if (reg.problem) return fail(reg.problem);
+    const all = peopleIn(reg.doc);
+    const p = all.find((x) => isObj(x) && x.name === name);
+    if (!p) return fail(`'${String(name).slice(0, 60)}' is not on the Team page any more: nothing was changed`);
+    if (field === 'name') {
+      const v = oneLine(value);
+      if (!v) return fail('A name cannot be empty: nothing was changed');
+      if (v.length > PERSON_NAME_MAX) return fail(`A name has at most ${PERSON_NAME_MAX} characters`);
+      if (v !== p.name && all.some((x) => isObj(x) && x.name === v)) return fail(`'${v}' is already on the Team page`);
+      p.name = v;
+    } else if (field === 'title') {
+      const v = oneLine(value);
+      if (v.length > PERSON_TITLE_MAX) return fail(`A title has at most ${PERSON_TITLE_MAX} characters`);
+      p.title = v;
+    } else {
+      const v = trimmed(value);
+      if (v && !/^https:\/\/\S+$/.test(v)) return fail('The photo must be an https:// address from the site\'s image list');
+      p.photo = v || null;
+    }
+    return { problem: null, text: formatLike(peopleText, reg.doc) };
+  }
+  /* One person off the Team page (Remove, undoable in the editor). -> {problem: null, text, group, index} | {problem} */
+  function peopleRemoveText(peopleText, name) {
+    const reg = parsedRegistry(PEOPLE_FILE, peopleText, 'groups');
+    if (reg.problem) return { problem: reg.problem };
+    for (const g of listOf(reg.doc.groups)) {
+      const list = isObj(g) ? listOf(g.people) : [];
+      const i = list.findIndex((x) => isObj(x) && x.name === name);
+      if (i >= 0) {
+        list.splice(i, 1);
+        return { problem: null, text: formatLike(peopleText, reg.doc), group: String(g.id || ''), index: i };
+      }
+    }
+    return { problem: `'${String(name).slice(0, 60)}' is not on the Team page any more: nothing was changed` };
+  }
+  /* data/github-links.json with `login` linked to roster name `name` (a string), to nobody (null), or with its
+     line taken out (undefined): a rename keeps the person's GitHub link (tools/github_names.py: the map wins over
+     the automatic match), and "Add a person" links the GitHub account typed. A login differing only in case uses
+     the line already there; a new line keeps the map sorted. Refused: a login that is not one, an excluded
+     (service) account, and a name another login is already mapped to (that would link neither).
+     -> {problem: null, text} | {problem} */
+  function githubLinksText(linksText, login, name) {
+    const fail = (problem) => ({ problem });
+    const who = trimmed(login).replace(/^@/, '');
+    if (!ACCESS_LOGIN_RE.test(who)) return fail(`'${who.slice(0, 60)}' is not a GitHub account name (letters, digits and dashes)`);
+    const p = jsonProblem(linksText);
+    if (p) return fail(jsonProblemText(GITHUB_LINKS_FILE, p));
+    const doc = JSON.parse(linksText);
+    if (!isObj(doc) || !isObj(doc.links)) return fail(`${GITHUB_LINKS_FILE}: 'links' must be an object — fix the file first`);
+    const low = who.toLowerCase();
+    if (listOf(doc.exclude).some((x) => typeof x === 'string' && x.toLowerCase() === low)) {
+      return fail(`'${who}' is a service account: it is never linked to a person`);
+    }
+    const key = Object.keys(doc.links).find((k) => k.toLowerCase() === low) || who;
+    if (typeof name === 'string') {
+      const other = Object.keys(doc.links).find((k) => k !== key && doc.links[k] === name);
+      if (other) return fail(`'${name}' is already linked to the GitHub account ${other}`);
+    } else if (name !== null && name !== undefined) return fail('a link names a person, or nobody');
+    const had = Object.prototype.hasOwnProperty.call(doc.links, key);
+    if (name === undefined) delete doc.links[key];
+    else if (had) doc.links[key] = name;
+    else {
+      const next = Object.assign({}, doc.links, { [key]: name });
+      doc.links = {};
+      Object.keys(next).sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0))
+        .forEach((k) => { doc.links[k] = next[k]; });
+    }
+    return { problem: null, text: formatLike(linksText, doc) };
+  }
+  /* D15 (ED56): may this viewer send this Team page draft? viewer = {admin, login, own}: own is the roster name
+     data/graph/people-public.json gives the viewer's login (their own card), or null. An admin may send any
+     change. Anyone else only their own card's name and photo, plus the github-links.json line for their own
+     login naming that card; anything else (another person, their own title, an order, a pin, any other file)
+     is refused. draft = {files, originals}. -> null | the reason, in plain words */
+  const PEOPLE_ADMIN_ONLY_TEXT = 'Only an admin can change the Team page.';   // for someone without an own card
+  const PEOPLE_ADMIN_TEXT = `${PEOPLE_ADMIN_ONLY_TEXT} You can change your own name and photo.`;
+  function peopleDraftProblem(viewer, draft) {
+    const v = isObj(viewer) ? viewer : {};
+    if (v.admin === true) return null;
+    if (!isObj(draft) || !isObj(draft.files) || !isObj(draft.originals)) return PEOPLE_ADMIN_TEXT;
+    const changed = Object.keys(draft.files).filter((f) => draft.files[f] !== draft.originals[f]);
+    if (!changed.length) return null;
+    if (typeof v.own !== 'string' || !v.own) return PEOPLE_ADMIN_ONLY_TEXT;
+    if (typeof v.login !== 'string' || !ACCESS_LOGIN_RE.test(v.login)) return PEOPLE_ADMIN_TEXT;
+    if (changed.some((f) => f !== PEOPLE_FILE && f !== GITHUB_LINKS_FILE)) return PEOPLE_ADMIN_TEXT;
+    const parse = (t) => { try { return typeof t === 'string' ? JSON.parse(t) : null; } catch (e) { return null; } };
+    const was = parse(draft.originals[PEOPLE_FILE]);
+    const now = Object.prototype.hasOwnProperty.call(draft.files, PEOPLE_FILE) ? parse(draft.files[PEOPLE_FILE]) : was;
+    if (!isObj(was) || !isObj(now)) return PEOPLE_ADMIN_TEXT;
+    // the own card's place in the original; in the draft the card at that place may differ in name and photo only
+    let at = null;
+    listOf(was.groups).forEach((g, gi) => listOf(isObj(g) ? g.people : null).forEach((p, pi) => {
+      if (!at && isObj(p) && p.name === v.own) at = [gi, pi];
+    }));
+    if (!at) return PEOPLE_ADMIN_TEXT;
+    const mine = (doc) => { const g = listOf(doc.groups)[at[0]]; return isObj(g) ? listOf(g.people)[at[1]] : null; };
+    const card = mine(now);
+    if (!isObj(card) || typeof card.name !== 'string') return PEOPLE_ADMIN_TEXT;
+    const newName = card.name;
+    const back = JSON.parse(JSON.stringify(now));
+    const old = mine(was);
+    const put = mine(back);
+    put.name = old.name;
+    if (Object.prototype.hasOwnProperty.call(old, 'photo')) put.photo = old.photo; else delete put.photo;
+    if (JSON.stringify(back) !== JSON.stringify(was)) return PEOPLE_ADMIN_TEXT;
+    if (changed.indexOf(GITHUB_LINKS_FILE) >= 0) {
+      const la = parse(draft.originals[GITHUB_LINKS_FILE]);
+      const lb = parse(draft.files[GITHUB_LINKS_FILE]);
+      if (!isObj(la) || !isObj(lb) || !isObj(la.links) || !isObj(lb.links)) return PEOPLE_ADMIN_TEXT;
+      const low = v.login.toLowerCase();
+      const strip = (doc) => Object.assign({}, doc, { links: Object.keys(doc.links).filter((k) => k.toLowerCase() !== low).sort()
+        .reduce((o, k) => Object.assign(o, { [k]: doc.links[k] }), {}) });
+      if (JSON.stringify(strip(la)) !== JSON.stringify(strip(lb))) return PEOPLE_ADMIN_TEXT;
+      const value = (doc) => { const k = Object.keys(doc.links).find((x) => x.toLowerCase() === low); return k === undefined ? undefined : doc.links[k]; };
+      const b = value(lb);
+      if (b !== value(la) && b !== newName) return PEOPLE_ADMIN_TEXT;
+    }
+    return null;
+  }
+
   /* What a people.json change does, person by person (the marks on the Team page for my draft and for an
      opened people proposal): add, del (with the old group and title, so the page can show a ghost), move (the
      group changed, or the person left the order the others keep: the longest kept order stays unmarked), pin,
@@ -4304,6 +4438,7 @@
     jsonProblem, jsonProblemText, lockedIds, registryDraftProblem, formatLike,
     insertSnippet, linkMarkdown, createDraftStore, isDirty,
     PROJECT_STATUSES, PROJECT_ID_RE, newProjectDraft, personGroups, addPersonText, peopleOrderText, peopleMarks, peopleChangeCount,
+    GITHUB_LINKS_FILE, PERSON_FIELDS, PEOPLE_ADMIN_TEXT, PEOPLE_ADMIN_ONLY_TEXT, peopleFieldText, peopleRemoveText, githubLinksText, peopleDraftProblem,
     STALE_DRAFT_TEXT, slugify, proposalBranch, isProposalBranch, proposalPathProblem, treeEntries, reviewUrl, prBody,
     mayReviewPage, mayReviewProposal, visibleProposals, proposalKind, proposalPaths, bodyPages, REVIEW_KIND_WORDS, noteKey, pageForFile,
     ownProposals, collectProposal, proposeRequest, runPropose,

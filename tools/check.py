@@ -406,6 +406,10 @@ READER_REQUIRED_KEYS = {
     # ---- U4 ----
 
     # ---- U5 ----
+    # (none new) js/editor-people.js reads no data/*.json file: it reads the cards js/app.js drew. The Team
+    # page's other U5 readers dereference keys already listed: js/editor.js and js/app.js read
+    # data/graph/people-public.json's `people` and each one's `roster` (the entry above); js/cms-core.js
+    # githubLinksText reads data/github-links.json, which has its own gate block.
 
     # ---- U6 ----
 }

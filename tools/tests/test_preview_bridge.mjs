@@ -504,7 +504,8 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   assert.deepEqual(got[0], { on: true, selected: 2,
     settings: { suggestions: true, diff: 'side', compact: true, outlines: true },
     overlay: [{ index: 1, mark: 'add' }], theme: null, open: null, hot: null, locked: false, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null,
-    focus: null, anchors: [] });   // U3: the two new fields, empty
+    focus: null, anchors: [],      // U3: the two new fields, empty
+    peopleOwn: null, peopleAct: null, peopleAlert: null });   // U5
   // a late listener gets the last message at once
   const late = [];
   HC.onEditor((m) => late.push(m));
@@ -512,7 +513,8 @@ test('editor mode: hc-editor reaches HC.onEditor cleaned; a forged one (source, 
   // wrong types fall back, never throw
   assert.deepEqual(SRC.editorMessage({ type: 'hc-editor', on: 'yes', selected: '1', settings: 'x', overlay: {} }),
     { on: false, selected: null, settings: { suggestions: true, diff: 'inline', compact: false, outlines: true }, overlay: [], theme: null, open: null, hot: null, locked: false, tint: 0, people: { edit: false, marks: [], focus: null }, cmd: null,
-    focus: null, anchors: [] });   // U3: the two new fields, empty
+    focus: null, anchors: [],      // U3: the two new fields, empty
+    peopleOwn: null, peopleAct: null, peopleAlert: null });   // U5
   assert.equal(SRC.editorMessage({ type: 'hc-file' }), null);
   // round 2, R1: the proposer's colour slot, a whole number 0..5, else 0
   for (const [v, want] of [[3, 3], [5, 5], [0, 0], [6, 0], [-1, 0], [2.5, 0], ['2', 0], [null, 0]]) {
@@ -662,7 +664,7 @@ test('HC.fetchProjects: the index merged with each project\'s facts file, in the
 // ---- round 2, R5: the Team page's people tools ----
 test('hc-people (frame -> parent): an order of names with pins, or "+" for a list; anything else posts nothing', () => {
   const ok = SRC.frameMessage('hc-people', { op: 'order', team: [{ name: 'Ann', pinned: true, x: 1 }], alumni: [{ name: 'Ben' }] });
-  assert.deepEqual(ok, { type: 'hc-people', op: 'order', team: [{ name: 'Ann', pinned: true }], alumni: [{ name: 'Ben', pinned: false }], focus: null });
+  assert.deepEqual(ok, { type: 'hc-people', op: 'order', team: [{ name: 'Ann', pinned: true }], alumni: [{ name: 'Ben', pinned: false }], focus: null, act: null });
   assert.equal(SRC.frameMessage('hc-people', { op: 'order', team: [{ name: 'Ann' }], alumni: [], focus: 'Ann' }).focus, 'Ann');
   assert.deepEqual(SRC.frameMessage('hc-people', { op: 'add', group: 'alumni' }), { type: 'hc-people', op: 'add', group: 'alumni' });
   assert.equal(SRC.frameMessage('hc-people', { op: 'add', group: 'staff' }), null);
@@ -742,5 +744,44 @@ test('U4 bridge: hc-editor marks / notes / media are cleaned entry by entry and 
 });
 
 /* ---- U5 ---- */
+test('U5 hc-people (frame -> parent): field, remove and add-in-place pass cleaned; an order carries its Move button', () => {
+  const f = (d) => SRC.frameMessage('hc-people', d);
+  assert.deepEqual(f({ op: 'field', name: 'Ann', field: 'name', value: 'Anna', x: 1 }), { type: 'hc-people', op: 'field', name: 'Ann', field: 'name', value: 'Anna' });
+  assert.deepEqual(f({ op: 'field', name: 'Ann', field: 'title', value: '' }), { type: 'hc-people', op: 'field', name: 'Ann', field: 'title', value: '' });
+  assert.deepEqual(f({ op: 'field', name: 'Ann', field: 'photo' }), { type: 'hc-people', op: 'field', name: 'Ann', field: 'photo' }, 'ask for the file');
+  assert.deepEqual(f({ op: 'remove', name: 'Ben' }), { type: 'hc-people', op: 'remove', name: 'Ben' });
+  assert.deepEqual(f({ op: 'add-in-place', group: 'team', login: ' @ann-b ', name: 'Ann B', title: 'Student', link: 'https://x.org', photo: true, extra: 1 }),
+    { type: 'hc-people', op: 'add-in-place', group: 'team', login: 'ann-b', name: 'Ann B', title: 'Student', link: 'https://x.org', photo: true });
+  assert.deepEqual(f({ op: 'add-in-place', group: 'alumni', login: '', name: '' }),
+    { type: 'hc-people', op: 'add-in-place', group: 'alumni', login: '', name: '', title: '', link: '', photo: false }, 'the parent says what is missing');
+  assert.equal(f({ op: 'order', team: [{ name: 'Ann' }], alumni: [], act: 'down' }).act, 'down');
+  assert.equal(f({ op: 'order', team: [{ name: 'Ann' }], alumni: [], act: 'jump' }).act, null);
+});
+
+test('U5 hc-people (frame -> parent): malformed field, remove and add-in-place messages post nothing', () => {
+  const f = (d) => SRC.frameMessage('hc-people', d);
+  assert.equal(f({ op: 'field', name: 'Ann', field: 'link', value: 'x' }), null, 'only name, title, photo');
+  assert.equal(f({ op: 'field', name: 'Ann', field: 'name' }), null, 'a name needs a value');
+  assert.equal(f({ op: 'field', name: '', field: 'name', value: 'x' }), null);
+  assert.equal(f({ op: 'field', name: 'Ann', field: 'title', value: 7 }), null);
+  assert.equal(f({ op: 'field', name: 'Ann', field: 'title', value: 'x'.repeat(501) }), null);
+  assert.equal(f({ op: 'remove', name: { toString: () => 'Ann' } }), null);
+  assert.equal(f({ op: 'add-in-place', group: 'staff', login: '', name: 'A' }), null);
+  assert.equal(f({ op: 'add-in-place', group: 'team', login: 'not a login', name: 'A' }), null);
+  assert.equal(f({ op: 'add-in-place', group: 'team', login: 'a', name: 'x'.repeat(201) }), null);
+  assert.equal(f({ op: 'add-in-place', group: 'team', name: 'A' }), null, 'login is always sent ("" for none)');
+  assert.equal(f({ op: 'erase', name: 'Ann' }), null);
+});
+
+test('U5 hc-editor (parent -> frame): people.own, people.act and people.alert, cleaned', () => {
+  const e = (people) => SRC.editorMessage({ type: 'hc-editor', on: true, people });
+  const ok = e({ edit: false, marks: [], focus: 'Ann', own: 'Kyle Nelson', act: 'up', alert: 'No.' });
+  assert.deepEqual([ok.peopleOwn, ok.peopleAct, ok.peopleAlert], ['Kyle Nelson', 'up', 'No.']);
+  const bad = e({ own: 7, act: 'fly', alert: { x: 1 } });
+  assert.deepEqual([bad.peopleOwn, bad.peopleAct, bad.peopleAlert], [null, null, null]);
+  const none = SRC.editorMessage({ type: 'hc-editor', on: true });
+  assert.deepEqual([none.peopleOwn, none.peopleAct, none.peopleAlert], [null, null, null]);
+  assert.equal(e({ alert: 'x'.repeat(400) }).peopleAlert.length, 300);
+});
 
 /* ---- U6 ---- */

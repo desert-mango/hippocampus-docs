@@ -2727,7 +2727,8 @@ test('R3: "Edit this page" (?editor=changes) turns Editor mode on in place; no e
 
 // ---- round 2, R5: the Team page in Editor mode (Kyle 2026-10-15, items 5 and 10) ----
 test('R5: on the Team page the card tools are on, no blocks; an order from the frame becomes my people draft; "+" follows the New person redirect (U0b)', async () => {
-  const page = await editorOn({ hash: '#/team' });
+  // U5 (plan D15): the Team page's tools are an admin's; a Write member gets only their own card (test_editor_u5.mjs)
+  const page = await editorOn({ hash: '#/team', variant: 'admin' });
   await page.send({ type: 'hc-ready' });
   const m = page.editorMessages().at(-1);
   assert.equal(m.people.edit, true, 'the card tools');

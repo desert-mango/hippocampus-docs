@@ -805,6 +805,53 @@
       })(),
 
       /* ---- U5 ---- */
+      /* The Team page in Editor mode (plan D15, D16). Run with &page=/team. The frame is sandboxed, so each step
+         asks js/editor-people.js's localhost walk hook (hc-walk-people) to take the real click path and say
+         what it shows (hc-walk-people-state).
+           team-admin   &variant=admin: every card's tools (grips), the first card's name being typed in place,
+                        then its Move buttons shown on keyboard focus (the shot shows the focused card)
+           team-member  (Write, kyle-nelson-berkeley): the page reads as it does outside Editor mode — no grip, no
+                        "+" — except the one own card (data-hc-own, "Kyle Nelson")
+           team-add     &variant=admin: the alumni "+" turned into the empty card in place */
+      ...(() => {
+        // the step needs the Team page and the variant it names (the URL's &page and &variant)
+        const teamPageOnly = (want) => {
+          if (page !== '/team') throw new Error(`run ${step} with &page=/team (not ${page})`);
+          if (variant !== want) throw new Error(`run ${step} with ${want ? `&variant=${want}` : 'no &variant (Write)'}`);
+        };
+        // ask the frame's walk hook to act, until its answer passes `ok`
+        const peopleAsk = (act, ok, what) => {
+          const replies = [];
+          const on = (e) => { const m = e.data; if (m && typeof m === 'object' && m.type === 'hc-walk-people-state' && m.act === act) replies.push(m); };
+          window.addEventListener('message', on);
+          let asked = false;
+          return until(() => {
+            const f = pageFrame();
+            if (f && f.contentWindow && (!asked || act === 'state' || !replies.length)) { f.contentWindow.postMessage({ type: 'hc-walk-people', act }, '*'); asked = true; }
+            const r = replies.length ? replies[replies.length - 1] : null;
+            return r && ok(r) ? r : null;
+          }, `${what} (last answer ${JSON.stringify(replies[replies.length - 1] || null)})`).finally(() => window.removeEventListener('message', on));
+        };
+        return {
+          'team-admin': async () => {
+            teamPageOnly('admin');
+            await editorOn();
+            await peopleAsk('state', (r) => r.mode === 'admin' && r.grips > 0, 'every card\'s tools (an admin)');
+            await peopleAsk('name', (r) => r.typing, 'the first card\'s name typed in place');
+            await peopleAsk('moves', (r) => r.moves, 'the focused card\'s Move buttons');
+          },
+          'team-member': async () => {
+            teamPageOnly(undefined);
+            await editorOn();
+            await peopleAsk('state', (r) => r.mode === 'own' && r.owns === 1 && r.grips === 0 && !r.fresh, 'reading mode, one own card');
+          },
+          'team-add': async () => {
+            teamPageOnly('admin');
+            await editorOn();
+            await peopleAsk('add', (r) => r.fresh, 'the empty card in place');
+          },
+        };
+      })(),
 
       /* ---- U6 ---- */
 

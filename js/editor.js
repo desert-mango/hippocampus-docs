@@ -1032,10 +1032,45 @@
   /* May I change what `key` names (a page id or a draft key)? The role rule, and on a project its access list. */
   function canEditKey(key) {
     if (!canEdit()) return false;
+    // U5 (plan D15, ED56): the Team page is an admin's; anyone else only their own card's name and photo
+    if (key === PEOPLE_PAGE) {
+      if (isAdmin()) return true;
+      const d = ed.draft && ed.draft.key === PEOPLE_PAGE ? ed.draft : drafts.get(PEOPLE_PAGE);
+      return Boolean(ownCard()) && (!d || !C.peopleDraftProblem(peopleViewer(), d));
+    }
     const id = projectOfKey(key);
     return !id || projectAccess(id).can;
   }
   const canEditPage = (page) => canEditKey(page && page.pageId);
+  /* U5 (plan D15): the own-card rule. "Own" is the roster name data/graph/people-public.json gives the signed-in
+     login (read once, on the Team page); the frame enables tools on that card only (hc-editor.people.own), the
+     parent refuses any other people edit from a non-admin, and HCCore.peopleDraftProblem refuses to send one. */
+  const isAdmin = () => Boolean(state.role && state.role.key === 'admin' && state.role.canPush === true);
+  /* lower-cased login -> {login, roster}: login in GitHub's own case (people-public.json's key), which is what a
+     data/github-links.json line must be keyed by (tools/github_names.py looks the map up case-sensitively);
+     roster null when no card is matched. null until read */
+  let peopleLogins = null;
+  let peopleLoginsAsked = false;
+  function loadPeopleLogins() {
+    if (peopleLoginsAsked) return;
+    peopleLoginsAsked = true;
+    Promise.resolve().then(() => HC.fetchJSON('data/graph/people-public.json')).catch(() => null).then((doc) => {
+      const out = Object.create(null);
+      const people = doc && typeof doc === 'object' && doc.people && typeof doc.people === 'object' && !Array.isArray(doc.people) ? doc.people : {};
+      for (const k of Object.keys(people)) {
+        const p = people[k];
+        if (p && typeof p === 'object') out[k.toLowerCase()] = { login: k, roster: typeof p.roster === 'string' && p.roster ? p.roster : null };
+      }
+      peopleLogins = out;
+      if (ed.on && ed.page && ed.page.data) { refreshDock(); postEditor(); }
+    });
+  }
+  const viewerLogin = () => (state.session && typeof state.session.login === 'string' ? state.session.login : '');
+  const loginEntry = (login) => (peopleLogins && typeof login === 'string' && login ? peopleLogins[login.toLowerCase()] || null : null);
+  const ownCard = () => { const e = loginEntry(viewerLogin()); return e ? e.roster : null; };
+  // F7: the second sentence ("your own name and photo") only for someone who has an own card
+  const peopleRefusal = () => (ownCard() ? C.PEOPLE_ADMIN_TEXT : C.PEOPLE_ADMIN_ONLY_TEXT);
+  const peopleViewer = () => ({ admin: isAdmin(), login: viewerLogin(), own: ownCard() });
   // a project page you may not edit (any role): nothing on it is selected, inserted, opened or sent
   const pageLocked = (page) => Boolean(projectIdOf(page)) && !canEditPage(page);
   /* The access answer changed: draw again what depends on it. */
@@ -2270,6 +2305,7 @@
     const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
     if (!focus && d) {
       pv.mode = 'draft';
+      peopleLinksSync(d);                  // U5: after an undo or redo of a rename, the GitHub link follows the name
       pv.people = C.peopleMarks(d.originals[page.file], d.files[page.file]);
       return pv;
     }
@@ -3254,8 +3290,13 @@
     if (document.body) document.body.setAttribute('data-hc-tint', String(tint));   // the bar and the review cards
     // round 2 (R5): the Team page's card tools (my own edits only, never over a drawn proposal) and its marks
     const onTeam = Boolean(ed.page && ed.page.data);
-    const people = { edit: onTeam && canEditPage(ed.page) && !ed.show && !(ed.pv && ed.pv.pr), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
-      focus: onTeam ? ed.peopleFocus || null : null };
+    // U5 (plan D15): every card's tools for an admin; for anyone else only their own card (own), else none
+    const peopleTools = onTeam && canEditPage(ed.page) && !ed.show && !(ed.pv && ed.pv.pr);
+    if (onTeam) loadPeopleLogins();
+    const people = { edit: peopleTools && isAdmin(), marks: onTeam && ed.pv ? ed.pv.people || [] : [],
+      focus: onTeam ? ed.peopleFocus || null : null,
+      own: peopleTools && !isAdmin() ? ownNameNow() : null, act: onTeam ? ed.peopleAct || null : null,
+      alert: onTeam ? ed.peopleAlert || null : null };
     // the edit gate: a project page you may not edit shows no "+" and no pick affordance (the parent refuses them too)
     const locked = pageLocked(ed.page);
     w.postMessage({ type: 'hc-editor', nonce, on: true, settings: currentView(), theme: siteTheme(),
@@ -3565,7 +3606,7 @@
     else if (m.type === 'hc-block-move' && index !== null && Number.isInteger(m.to) && m.to >= 0 && m.to <= MAX_INDEX) moveImage(index, m.to).catch(shown);
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
-    else if (m.type === 'hc-people' && (m.op === 'order' || m.op === 'add')) peopleEdit(m).catch(shown);
+    else if (m.type === 'hc-people') peopleEdit(m).catch(shown);    // js/source.js admits only the people ops
     else if (m.type === 'hc-history' && index !== null && typeof m.snap === 'string') {
       if (ed.page && hist.key === ed.page.pageId) hist.pending = { index, snap: m.snap };   // the next typed change's restore point
     } else if (m.type === 'hc-key' && (m.op === 'undo' || m.op === 'redo')) undoRedo(m.op);
@@ -3747,30 +3788,234 @@
       : 'Image replaced. The new file goes into your proposal with this page.');
     frameTo(ed.route, true);
   }
-  /* Round 2 (R5): the Team page's tools. order: the lists as the frame shows them after a drag, a card-menu move
-     or a pin — written into my draft of data/people.json (HCCore.peopleOrderText refuses any add or drop);
-     add: "+" for that list (U0b: a redirect until U5 adds the person in place). */
+  /* The Team page's tools (round 2, R5; editor UI/UX build U5: plan D15, D16). Every op is written into my draft
+     of data/people.json (and, for a rename or a GitHub account, data/github-links.json in the same draft, so one
+     send carries both), then the page is drawn again from it:
+       order          the lists as the frame shows them after a drag or a Move button (HCCore.peopleOrderText
+                      refuses any add or drop); act names the Move button pressed (focus comes back to it)
+       field          {name, field: 'name'|'title'|'photo', value}: typed in place; a photo without a value asks
+                      for the file here (the signed upload, as an image in a page)
+       remove         {name}: "Removed · Undo" for 8 s; Undo is the undo stack's
+       add-in-place   {group, login, name, title, link, photo}: the "+" card's fields; photo true asks for the
+                      file once the person is in
+     Rights (D15): an admin, every op; anyone else only field name/photo on their own card (ownNameNow); the
+     parent refuses the rest whatever the frame sends. */
+  const LINKS_FILE = C.GITHUB_LINKS_FILE;
+  const PEOPLE_UNDO_MS = 8000;
+  let peopleUndoTimer = null;
+  const peopleRenames = new Map();   // lower-cased login -> {login, from, to}: this tab's renames (the undo stack's)
+  const personList = (text) => { try { return [].concat(...JSON.parse(text).groups.map((g) => g.people.map((p) => p.name))); } catch (e) { return []; } };
+  /* My own card's name as my draft has it now (a rename moves it): the person at the place the roster name has
+     on main, while that place still holds them; null without an own card. */
+  function ownNameNow() {
+    const own = ownCard();
+    const d = ed.draft && ed.draft.key === PEOPLE_PAGE ? ed.draft : drafts.get(PEOPLE_PAGE);
+    if (!own || !d || typeof d.files[PEOPLE_FILE] !== 'string') return own;
+    try {
+      const was = JSON.parse(d.originals[PEOPLE_FILE]);
+      const now = JSON.parse(d.files[PEOPLE_FILE]);
+      for (let gi = 0; gi < was.groups.length; gi += 1) {
+        const pi = was.groups[gi].people.findIndex((p) => p && p.name === own);
+        if (pi >= 0) { const p = now.groups[gi] && now.groups[gi].people[pi]; return p && typeof p.name === 'string' ? p.name : own; }
+      }
+    } catch (e) { /* the roster name */ }
+    return own;
+  }
+  /* The GitHub login of the card now named `name`: a rename made in this tab, else the one login
+     people-public.json gives that roster name (two logins: neither). */
+  function loginOfCard(name) {
+    for (const r of peopleRenames.values()) if (r.to === name) return r.login;
+    if (!peopleLogins) return null;
+    const hits = Object.values(peopleLogins).filter((e) => e.roster === name);
+    return hits.length === 1 ? hits[0].login : null;   // GitHub's case, never the lower-cased key
+  }
+  // the links file joins the draft at the draft's base the first time it is needed
+  async function withLinks(d) {
+    if (typeof d.files[LINKS_FILE] === 'string') return true;
+    const answer = await sessionCache().get(d.base.sha, LINKS_FILE);
+    if (!answer.ok) return false;
+    d.files[LINKS_FILE] = answer.text;
+    d.originals[LINKS_FILE] = answer.text;
+    return true;
+  }
+  /* After an undo or a redo the people file may hold a rename's old name again (or its new one): each rename of
+     this tab puts its login's links line back as it was, or on the new name. Quiet: nothing to say. */
+  function peopleLinksSync(d) {
+    if (!d || typeof d.files[LINKS_FILE] !== 'string' || !peopleRenames.size) return;
+    const names = new Set(personList(d.files[PEOPLE_FILE]));
+    let text = d.files[LINKS_FILE];
+    let was;
+    try { was = JSON.parse(d.originals[LINKS_FILE]).links || {}; } catch (e) { return; }
+    for (const r of peopleRenames.values()) {
+      const key = Object.keys(was).find((k) => k.toLowerCase() === r.login.toLowerCase());
+      const out = names.has(r.to) ? C.githubLinksText(text, r.login, r.to)
+        : C.githubLinksText(text, r.login, key === undefined ? undefined : was[key]);
+      if (!out.problem) text = out.text;
+    }
+    if (text !== d.files[LINKS_FILE]) { d.files[LINKS_FILE] = text; drafts.put(d); }
+  }
+  // a refused or failed op: said in the bubble and over the list (role="alert"), the page drawn again from the draft
+  function peopleFailed(problem) {
+    ed.peopleAlert = String(problem).slice(0, 300);
+    ed.peopleAct = null;
+    say(ed.peopleAlert, 'error');
+    frameTo(ed.route, true);
+  }
+  function peopleWrote(d, focus, act) {
+    ed.draft = d;
+    drafts.put(d);
+    ed.peopleFocus = typeof focus === 'string' ? focus : null;   // the reloaded page comes back to them
+    ed.peopleAct = typeof act === 'string' ? act : null;
+    ed.peopleAlert = null;
+    refreshDock();
+    frameTo(ed.route, true);
+  }
+  // the card focus goes to after `name` is removed: the next one in their list, else the one before, else none
+  function nextAfterRemove(text, name) {
+    try {
+      for (const g of JSON.parse(text).groups) {
+        const ns = g.people.map((p) => p && p.name);
+        const i = ns.indexOf(name);
+        if (i >= 0) return ns[i + 1] || ns[i - 1] || null;
+      }
+    } catch (e) { /* no focus */ }
+    return null;
+  }
+  function removedNotice(name) {
+    if (peopleUndoTimer) clearTimeout(peopleUndoTimer);
+    const undo = h('button', { type: 'button', class: 'cms-btn hc-people-undo', 'data-action': 'people-undo' }, 'Undo');
+    undo.addEventListener('click', () => { clearTimeout(peopleUndoTimer); say(''); undoRedo('undo'); });
+    notice.replaceChildren(document.createTextNode(`Removed ${name} · `), undo);
+    notice.hidden = false;
+    notice.classList.remove('is-error');
+    peopleUndoTimer = setTimeout(() => { if (undo.parentNode === notice) say(''); }, PEOPLE_UNDO_MS);   // unless another line replaced it
+  }
   async function peopleEdit(m) {
     const page = ed.page;
     if (!page || !page.data || !canEditPage(page) || showing() || (ed.pv && ed.pv.pr)) return;
-    if (m.op === 'add') {
-      // the New person form is gone (U0b): "+" follows its redirect (the page + the bubble); U5 adds the person in place
-      ed.addGroup = m.group === 'team' ? 'active' : 'alumni';
-      trayGo('#/new/person');
-      return;
-    }
+    const admin = isAdmin();
+    const mine = !admin && m.op === 'field' && (m.field === 'name' || m.field === 'photo') && m.name === ownNameNow();
+    if (!admin && !mine) { say(peopleRefusal(), 'error'); return; }
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
-    const out = C.peopleOrderText(d.files[page.file], m.team, m.alumni);
-    if (out.problem) { say(out.problem, 'error'); frameTo(ed.route, true); return; }
-    if (out.text === d.files[page.file]) return;
-    ed.draft = d;
-    d.files[page.file] = out.text;
-    drafts.put(d);
-    ed.peopleFocus = typeof m.focus === 'string' ? m.focus : null;   // the reloaded page comes back to them
-    say('');
-    refreshDock();
-    frameTo(ed.route, true);
+    const text = d.files[page.file];
+    if (m.op === 'order') {
+      const out = C.peopleOrderText(text, m.team, m.alumni);
+      if (out.problem) { peopleFailed(out.problem); return; }
+      if (out.text === text) return;
+      d.files[page.file] = out.text;
+      peopleWrote(d, m.focus, m.act);
+      say('');
+      return;
+    }
+    if (m.op === 'remove') {
+      const out = C.peopleRemoveText(text, m.name);
+      if (out.problem) { peopleFailed(out.problem); return; }
+      d.files[page.file] = out.text;
+      peopleWrote(d, nextAfterRemove(text, m.name), null);   // F8: the keyboard stays in the list
+      removedNotice(m.name);
+      return;
+    }
+    if (m.op === 'field' && m.field === 'photo' && typeof m.value !== 'string') { askPersonPhoto(m.name); return; }
+    if (m.op === 'field') {
+      const out = C.peopleFieldText(text, m.name, m.field, m.value);
+      if (out.problem) { peopleFailed(out.problem); return; }
+      if (out.text === text) return;
+      const next = m.field === 'name' ? personList(out.text).find((n) => personList(text).indexOf(n) < 0) || null : null;
+      if (next) {
+        // a rename keeps the person's GitHub link (D15): their login's links line names the new name
+        const login = mine ? viewerLogin() : loginOfCard(m.name);
+        if (login) {
+          if (!(await withLinks(d))) { peopleFailed('GitHub did not answer for data/github-links.json: nothing was changed.'); return; }
+          const links = C.githubLinksText(d.files[LINKS_FILE], login, next);
+          if (links.problem) { peopleFailed(links.problem); return; }
+          const low = login.toLowerCase();
+          const r = peopleRenames.get(low);
+          peopleRenames.set(low, { login, from: r ? r.from : m.name, to: next });
+          d.files[LINKS_FILE] = links.text;
+        }
+      }
+      d.files[page.file] = out.text;
+      peopleWrote(d, next || m.name, null);
+      say('');
+      return;
+    }
+    if (m.op === 'add-in-place') {
+      const out = C.addPersonText(text, { group: m.group === 'team' ? 'active' : 'alumni', name: m.name, title: m.title, photo: '', link: m.link });
+      if (out.problem) { peopleFailed(out.problem.charAt(0).toUpperCase() + out.problem.slice(1)); return; }
+      const name = personList(out.text).find((n) => personList(text).indexOf(n) < 0);
+      if (m.login) {
+        if (!(await withLinks(d))) { peopleFailed('GitHub did not answer for data/github-links.json: nothing was changed.'); return; }
+        // an account already linked to someone (by a links line, or by the automatic name match) stays theirs
+        const known = loginEntry(String(m.login).trim().replace(/^@/, ''));
+        let held = known ? known.roster : null;
+        try {
+          const all = JSON.parse(d.files[LINKS_FILE]).links || {};
+          const k = Object.keys(all).find((x) => x.toLowerCase() === m.login.toLowerCase());
+          if (k !== undefined) held = typeof all[k] === 'string' ? all[k] : null;
+        } catch (e) { /* githubLinksText says what is wrong with the file */ }
+        if (held) { peopleFailed(`The GitHub account ${m.login} is already linked to ${held}: nothing was added.`); return; }
+        // a login GitHub knows is written in GitHub's case (an existing line's case wins, in githubLinksText)
+        const links = C.githubLinksText(d.files[LINKS_FILE], known ? known.login : m.login, name);
+        if (links.problem) { peopleFailed(links.problem); return; }
+        d.files[LINKS_FILE] = links.text;
+      }
+      d.files[page.file] = out.text;
+      peopleWrote(d, name, null);
+      say(`Added ${name}.`);
+      if (m.photo === true) askPersonPhoto(name);
+    }
+  }
+  /* A person's photo (D16): a file asked for here (the click in the frame is this window's activation too; when
+     the browser says it is no longer active, the bubble offers a button), uploaded to the people folder through
+     the one signed path, its image-list entry in my image-list draft, and the card's photo in my Team draft. */
+  let photoInput = null;
+  let photoWant = null;      // {name}: the person the chosen file is for
+  function askPersonPhoto(name) {
+    if (!photoInput) {
+      photoInput = h('input', { type: 'file', class: 'hc-image-input', accept: C.MEDIA_TYPES.join(','), 'aria-label': 'The new photo', tabindex: '-1' });
+      photoInput.hidden = true;
+      photoInput.addEventListener('change', () => { personPhotoChosen().catch(shown); });
+      document.body.appendChild(photoInput);
+    }
+    photoWant = { name };
+    photoInput.value = '';
+    const ua = typeof navigator !== 'undefined' ? navigator.userActivation : null;
+    if (ua && ua.isActive === false) {
+      const pickBtn = h('button', { type: 'button', class: 'cms-btn', 'data-action': 'photo-pick' }, 'Pick the photo');
+      pickBtn.addEventListener('click', () => { say(''); photoInput.click(); });
+      notice.replaceChildren(document.createTextNode(`A photo for ${name}: `), pickBtn);
+      notice.hidden = false;
+      notice.classList.remove('is-error');
+      unfoldDock();
+      return;
+    }
+    photoInput.click();
+  }
+  async function personPhotoChosen() {
+    const f = photoInput && photoInput.files && photoInput.files[0];
+    const want = photoWant;
+    const page = ed.page;
+    if (!f || !want || !page || !page.data) return;
+    photoWant = null;
+    const bad = C.mediaFileProblem(f);
+    if (bad) { say(bad, 'error'); return; }
+    const d = await pageDraft(page);
+    say('Uploading the photo…');
+    const md = await manifestDraftOn(d.base);
+    if (md.problem) { say(md.problem, 'error'); return; }
+    const live = await liveAssets();
+    const gen = sessionGen.current();
+    const out = checked(gen, await uploadImage(f, 'people', live, md.d.files[C.MANIFEST_FILE]));
+    if (out.kind === 'problem') { say(out.message, 'error'); return; }
+    if (ed.page !== page || !canEditPage(page) || (!isAdmin() && want.name !== ownNameNow())) { say(peopleRefusal(), 'error'); return; }
+    const r = C.peopleFieldText(d.files[page.file], want.name, 'photo', out.entry.url);
+    if (r.problem) { peopleFailed(r.problem); return; }
+    if (out.kind !== 'duplicate') { md.d.files[C.MANIFEST_FILE] = out.text; drafts.put(md.d); }
+    d.files[page.file] = r.text;
+    peopleWrote(d, want.name, null);
+    say(out.kind === 'duplicate' ? 'That photo is already on the site: the card uses it now. Nothing was uploaded.'
+      : 'Photo replaced. It goes into your proposal with the Team page.');
   }
 
   async function moveImage(from, to) {
