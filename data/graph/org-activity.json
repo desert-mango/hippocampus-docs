@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-25",
+ "read_at": "2026-10-26",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 205,
+  "commits_365d": 207,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -14,18 +14,6 @@
   "releases": 0
  },
  "weeks": [
-  {
-   "week": "2025-10-20",
-   "days": [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ]
-  },
   {
    "week": "2025-10-27",
    "days": [
@@ -649,9 +637,35 @@
     0,
     0
    ]
+  },
+  {
+   "week": "2026-10-26",
+   "days": [
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_sim",
+   "sha": "8d35ac8",
+   "date": "2026-10-26",
+   "msg": "fix(nodes)resolve relative scenario paths against the package share",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_sim",
+   "sha": "6cde165",
+   "date": "2026-10-26",
+   "msg": "feat(scenarios)!: split scenarios into geometry and field files",
+   "author": "NBauschmann"
+  },
   {
    "repo": "scalar_field_belief",
    "sha": "c6fbbe2",
@@ -812,20 +826,6 @@
    "date": "2026-10-15",
    "msg": "Raise clip_max to 0.05 for experiment_02 fields",
    "author": "Latfoo"
-  },
-  {
-   "repo": "scalar_field_belief",
-   "sha": "5e3a404",
-   "date": "2026-10-15",
-   "msg": "Merge pull request #2 from Latfoo/further_b_thesis_changes",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "scalar_field_interfaces",
-   "sha": "8a0760e",
-   "date": "2026-10-15",
-   "msg": "Merge pull request #2 from Latfoo/main",
-   "author": "NBauschmann"
   }
  ],
  "most_active_repos": [
@@ -842,14 +842,14 @@
    "pushed_at": "2026-07-28"
   },
   {
-   "name": "scalar_field_belief",
-   "commits": 25,
+   "name": "scalar_field_sim",
+   "commits": 26,
    "language": "Python",
-   "pushed_at": "2026-10-23"
+   "pushed_at": "2026-10-26"
   },
   {
-   "name": "scalar_field_sim",
-   "commits": 24,
+   "name": "scalar_field_belief",
+   "commits": 25,
    "language": "Python",
    "pushed_at": "2026-10-23"
   },

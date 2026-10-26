@@ -699,7 +699,7 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 45,
+     "contributions": 47,
      "roster": true
     },
     {
@@ -735,7 +735,7 @@
      "ir_field_hardware": 4,
      "scalar_field_belief": 15,
      "scalar_field_interfaces": 6,
-     "scalar_field_sim": 19
+     "scalar_field_sim": 21
     },
     "lennartalff": {
      "path_planning": 39,

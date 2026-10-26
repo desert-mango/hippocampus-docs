@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-25",
+ "read_at": "2026-10-26",
  "org": "HippoCampusRobotics",
  "repos": {
   ".github": {
@@ -1172,11 +1172,11 @@
    "stars": 1,
    "forks": 1,
    "open_issues": 0,
-   "pushed_at": "2026-10-23",
+   "pushed_at": "2026-10-26",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 24,
+   "commits_365d": 26,
    "html_url": "https://github.com/HippoCampusRobotics/scalar_field_sim"
   },
   "sdr": {
