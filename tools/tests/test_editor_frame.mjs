@@ -194,10 +194,13 @@ test('editor-frame: Enter on a focused block and a click select it (no pencil); 
   kids(rails[2])[0].click();                               // open the picker before block 3
   const picker = kids(rails[2]).find((c) => c.classList.contains('hc-picker'));
   assert.ok(picker && rails[2].classList.contains('is-open'));
-  const kinds = kids(picker).map((b) => b.getAttribute('data-kind'));
-  assert.deepEqual([...kinds].sort(), Object.keys(C.SNIPPET_CATALOG).sort(), 'the seven snippet kinds');
-  kids(picker).find((b) => b.getAttribute('data-kind') === 'warning').click();
-  assert.deepEqual(HC.posts.at(-1), { type: 'hc-block-insert', index: 3, kind: 'warning' });
+  // U4 (D9, D10): five tiles in a row, ONE Note tile (Warning / Attention are picked inside the box)
+  const tiles = kids(kids(picker).find((c) => c.classList.contains('hc-pick-row')));
+  const kinds = tiles.map((b) => b.getAttribute('data-kind'));
+  assert.deepEqual(kinds, ['image', 'note', 'tabs', 'video', 'repo'], 'the five tiles');
+  assert.ok(kinds.every((k) => Object.prototype.hasOwnProperty.call(C.SNIPPET_CATALOG, k)), 'each one a snippet kind');
+  tiles.find((b) => b.getAttribute('data-kind') === 'note').click();
+  assert.deepEqual(HC.posts.at(-1), { type: 'hc-block-insert', index: 3, kind: 'note' });
   assert.equal(kids(rails[2]).some((c) => c.classList.contains('hc-picker')), false, 'the picker closes');
   assert.ok(HC.posts.every((p) => Object.values(p).every((v) => typeof v !== 'string' || !/</.test(v))), 'no HTML in any message');
 });

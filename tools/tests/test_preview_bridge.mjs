@@ -703,6 +703,44 @@ test('hc-history and hc-key (frame -> parent); hc-editor.cmd (parent -> frame): 
    malformed one is dropped) go in its own block. */
 /* ---- U4 ---- */
 
+const IMG = 'https://res.cloudinary.com/demo/image/upload/v1/hippocampus-docs/setup/a.png';
+
+test('U4 bridge: hc-marks passes an index and an HTML string; drops a wrong type, an over-long one, a bad index', () => {
+  assert.deepEqual(SRC.frameMessage('hc-marks', { index: 2, html: '<p>a<ins data-hc-sug="ins">b</ins></p>', md: 'x' }),
+    { type: 'hc-marks', index: 2, html: '<p>a<ins data-hc-sug="ins">b</ins></p>' });
+  assert.deepEqual(SRC.frameMessage('hc-marks', { index: 2, html: '' }), { type: 'hc-marks', index: 2, html: '' }, '"" = no marks left');
+  for (const bad of [{ index: 2, html: 5 }, { index: -1, html: '' }, { index: 2, html: 'x'.repeat(200001) }, { html: '' }]) {
+    assert.equal(SRC.frameMessage('hc-marks', bad), null, JSON.stringify(bad).slice(0, 60));
+  }
+});
+
+test('U4 bridge: hc-note passes plain text up to 2000 characters; hc-media-list carries nothing; hc-image-use only a Cloudinary address', () => {
+  assert.deepEqual(SRC.frameMessage('hc-note', { index: 4, text: 'Check the wiring.', key: 'x' }), { type: 'hc-note', index: 4, text: 'Check the wiring.' });
+  assert.equal(SRC.frameMessage('hc-note', { index: 4, text: 'x'.repeat(2001) }), null);
+  assert.equal(SRC.frameMessage('hc-note', { index: 4, text: ['a'] }), null);
+  assert.deepEqual(SRC.frameMessage('hc-media-list', { evil: '<b>' }), { type: 'hc-media-list' });
+  assert.deepEqual(SRC.frameMessage('hc-image-use', { index: 3, url: IMG }), { type: 'hc-image-use', index: 3, url: IMG });
+  for (const url of ['https://evil.example/a.png', 'javascript:alert(1)', `${IMG}" onerror="x`, 5, `${IMG} x`]) {
+    assert.equal(SRC.frameMessage('hc-image-use', { index: 3, url }), null, String(url));
+  }
+});
+
+test('U4 bridge: hc-editor marks / notes / media are cleaned entry by entry and absent when not sent', () => {
+  const base = { type: 'hc-editor', on: true };
+  const plain = SRC.editorMessage(base);
+  assert.equal('marks' in plain || 'notes' in plain || 'media' in plain, false, 'absent when the parent did not send them');
+  const m = SRC.editorMessage(Object.assign({}, base, {
+    marks: [{ index: 1, html: '<p>x</p>', md: 'x\n', orig: 'y\n', kind: 'paragraph', extra: 1 }, { index: 2, html: 5, md: '', orig: '', kind: 'paragraph' },
+      { index: 3, html: '', md: '', orig: '', kind: 'script' }, null],
+    notes: [{ index: 1, text: 'see' }, { index: 'x', text: 'no' }, { index: 2, text: 'y'.repeat(2001) }],
+    media: [{ url: IMG, label: 'a', x: 1 }, { url: 'https://evil.example/b.png', label: 'b' }, { url: IMG, label: 7 }],
+  }));
+  assert.deepEqual(m.marks, [{ index: 1, html: '<p>x</p>', md: 'x\n', orig: 'y\n', kind: 'paragraph' }]);
+  assert.deepEqual(m.notes, [{ index: 1, text: 'see' }]);
+  assert.deepEqual(m.media, [{ url: IMG, label: 'a' }, { url: IMG, label: '' }]);
+  assert.equal(SRC.editorMessage(Object.assign({}, base, { media: 'x' })).media, undefined, 'a non-list is dropped');
+});
+
 /* ---- U5 ---- */
 
 /* ---- U6 ---- */

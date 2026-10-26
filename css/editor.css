@@ -244,8 +244,10 @@ body.hc-edit-on .page-body > .hc-side > .hc-block { position: relative; cursor: 
 body.hc-edit-on .page-body > .hc-block::after,
 body.hc-edit-on .page-body > .hc-side > .hc-block::after { content: ""; position: absolute; left: -14px; top: 4px; bottom: 4px;
   width: 2px; border-radius: 2px; background: transparent; transition: background-color .15s ease-out; pointer-events: none; }
-body.hc-edit-on.hc-outlines .page-body > .hc-block:hover::after,
-body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:hover::after { background: var(--hc-line-faint); }
+/* D7 (ED14): the hover rule leaves out the selected / open / lit / focused block, so the block you are in keeps
+   its solid line under the pointer (the hover rule has one class more than the solid rule and would win) */
+body.hc-edit-on.hc-outlines .page-body > .hc-block:not(.hc-selected, .hc-open, .hc-hot, :focus-visible):hover::after,
+body.hc-edit-on.hc-outlines .page-body > .hc-side > .hc-block:not(.hc-selected, .hc-open, .hc-hot, :focus-visible):hover::after { background: var(--hc-line-faint); }
 /* keyboard focus: the solid line (a faint one would not reach 3:1 as a focus indicator) */
 body.hc-edit-on .page-body > .hc-block:focus-visible::after,
 body.hc-edit-on .page-body > .hc-block.hc-selected::after,
@@ -286,16 +288,29 @@ body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 
 /* ==== boxes/picker (U4) ==== */
 
-/* the block editors (editor redesign U3, js/editor-blocks.js): built from the site's own parts */
-.hc-boxbar, .hc-codebar { position: absolute; top: calc(1.1rem - 15px); right: 12px; z-index: 4; display: flex; align-items: center; gap: 2px;
-  padding: 2px; border-radius: 8px; background: var(--surface); border: 1px solid var(--edge); box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+/* the open block's ONE toolbar (U4, plan D8; js/editor-blocks.js blockBar): on the block's top edge, inside its
+   frame, right-aligned, in the space the block opens above its first line (so it never covers the heading above),
+   B I Link Code List Comment and, for a box / code, Type ▾ / Language ▾ (Remove last in the menu, D9) */
+.hc-block.hc-open { padding-top: 2.6rem; }
+.hc-blockbar { position: absolute; top: .3rem; right: 0; z-index: 4; display: flex; flex-direction: column; align-items: flex-end;
   font: 500 12.5px var(--sans); cursor: default; }
-.hc-codebar { top: -14px; gap: 6px; padding: 2px 4px 2px 8px; color: var(--body-soft); }
-.hc-codebar select { background: var(--surface); color: var(--heading); border: 1px solid var(--edge); border-radius: 6px; font: 12px var(--sans); padding: 2px 6px; }
-.hc-box-type { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: none;
+.hc-blockbar .hc-fb-row { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 9px; background: var(--surface);
+  border: 1px solid var(--edge); box-shadow: 0 2px 8px rgba(0, 0, 0, .16); }
+.hc-blockbar .hc-fb-linkrow { padding: 4px; border-radius: 9px; background: var(--surface); border: 1px solid var(--edge); }
+.hc-fb-hint { margin: 4px 2px 0; color: var(--body-soft); font: 12px var(--sans); }
+.hc-fb-hint[hidden] { display: none; }
+.hc-fb-word { margin-left: 5px; font: 500 12.5px var(--sans); }
+.hc-fb.hc-fb-comment { width: auto; padding: 0 9px; }
+.hc-fb[aria-pressed="true"] { background: var(--hc-edit-soft); color: var(--hc-edit-ink); }
+.hc-code-lang { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 8px; }
+.hc-pm-sep { height: 1px; margin: 4px 2px; background: var(--edge-soft); }
+.hc-boxmenu .hc-pm-remove { color: var(--hc-del); }
+.hc-blockbar.is-phone { position: fixed; left: 8px; right: 8px; top: auto; z-index: 70; align-items: stretch; }
+.hc-blockbar.is-phone .hc-fb-row { justify-content: space-between; }
+.hc-blockbar.is-phone .hc-fb { min-width: 44px; min-height: 44px; }
+.hc-box-type { display: inline-flex; align-items: center; gap: 6px; height: 32px; width: auto; padding: 0 8px; border: 0; border-radius: 7px; background: none;
   color: var(--heading); font: 600 12.5px var(--sans); cursor: pointer; }
-.hc-box-type:hover, .hc-box-remove:hover { background: var(--surface-2); }
-.hc-box-remove { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--body-soft); cursor: pointer; font: inherit; }
+.hc-box-type:hover { background: var(--surface-2); }
 .hc-chev { color: var(--body-soft); font-size: .7rem; }
 .hc-box-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--hc-edit); }
 .hc-dot-tip { background: var(--ok); } .hc-dot-warning { background: var(--note-warn); } .hc-dot-danger { background: var(--danger); }
@@ -306,10 +321,7 @@ body.hc-edit-on .page-body > .hc-block.hc-open { cursor: text; }
 .hc-boxmenu .hc-pm-item:hover { background: var(--surface-2); }
 .hc-boxmenu .is-current { background: var(--hc-edit-soft); }
 .hc-block.hc-removed { opacity: .55; text-decoration: line-through; text-decoration-color: var(--hc-mark); }
-.hc-formatbar { position: absolute; z-index: 60; padding: 4px; border-radius: 10px; background: var(--surface);
-  border: 1px solid var(--edge); box-shadow: 0 12px 30px rgba(0, 0, 0, .3); }
-[data-theme="light"] .hc-formatbar { box-shadow: 0 10px 26px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06); }
-.hc-formatbar[hidden], .hc-fb-row[hidden], .hc-fb-linkrow[hidden], .hc-fb-err[hidden] { display: none; }
+.hc-fb-row[hidden], .hc-fb-linkrow[hidden], .hc-fb-err[hidden] { display: none; }
 .hc-fb-row { display: flex; gap: 2px; }
 .hc-fb { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 7px; background: none;
   color: var(--heading); cursor: pointer; font: 700 14px var(--sans); transition: background-color .12s ease-out, color .12s ease-out; }
@@ -354,24 +366,59 @@ a.hc-sug-fmt { color: var(--hc-mark); }
 .hc-md-prev { font-size: .95em; }
 .hc-md-foot { padding: 8px 14px; border-top: 1px solid var(--edge-soft); color: var(--body-soft); font: 12.5px var(--sans); }
 
-.hc-plus { position: relative; height: 0; margin: 0; }
-.hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: transparent; }
-.hc-plus > .hc-plus-btn { position: absolute; left: 50%; top: -.75rem; transform: translateX(-50%); z-index: 4;
+/* the "+" (U4, plan D10): an invisible band over the WHOLE gap between two blocks (padding with negative margins:
+   the page moves by nothing); the line and the button show only on hover; the picker opens on a click and only then
+   makes room. Tiles: a small icon and one word (ED27). */
+.hc-plus { position: relative; height: 0; margin: 0; padding: .55rem 0; margin-block: -.55rem; z-index: 3; }
+.hc-plus::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: transparent; transition: background-color .15s ease-out; }
+.hc-plus > .hc-plus-btn { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4;
   width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--edge); background: var(--surface);
-  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s; font: inherit; line-height: 1; }
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s ease-out; font: inherit; line-height: 1; }
 .hc-plus:hover > .hc-plus-btn, .hc-plus.is-open > .hc-plus-btn, .hc-plus-btn:focus-visible {
   opacity: 1; border-color: var(--hc-edit); color: var(--hc-edit-ink); }
 .hc-plus:hover::before, .hc-plus.is-open::before { background: color-mix(in srgb, var(--hc-edit) 40%, transparent); }
-.hc-plus.is-open { height: 6.2rem; }
-.hc-picker { position: absolute; left: 50%; transform: translateX(-50%); top: 1rem; z-index: 5; display: flex;
-  gap: .35rem; padding: .45rem; width: max-content; max-width: 100%; flex-wrap: wrap; justify-content: center;
-  border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-soft);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
-.hc-picker .hc-pick { font: inherit; font-size: .74rem; display: flex; flex-direction: column; align-items: center;
-  gap: .25rem; width: 4.6rem; flex: none; padding: .5rem .3rem; border-radius: 8px; border: 1px solid var(--edge);
+.hc-plus.is-open { height: auto; margin-block: .4rem; padding: 1.2rem 0 .4rem; }
+.hc-plus.is-open > .hc-plus-btn { top: 0; }
+.hc-plus.is-open::before { top: 0; }
+.hc-picker { position: relative; margin: 0 auto; z-index: 5; display: flex; flex-direction: column; align-items: center; gap: .45rem;
+  padding: .45rem; width: max-content; max-width: 100%;
+  border: 1px solid var(--edge); border-radius: 10px; background: var(--bg-soft); box-shadow: 0 10px 30px rgba(0, 0, 0, .25); }
+.hc-pick-row { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: center; }
+.hc-picker .hc-pick { font: 500 .78rem var(--sans); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .3rem; width: 4.4rem; min-height: 4rem; flex: none; padding: .45rem .3rem; border-radius: 8px; border: 1px solid var(--edge);
   background: var(--surface); color: var(--body-soft); cursor: pointer; }
-.hc-picker .hc-pick:hover, .hc-picker .hc-pick:focus-visible { border-color: var(--hc-edit); color: var(--heading); }
-.hc-picker .hc-pick small { font-size: .62rem; color: var(--muted); }
+.hc-picker .hc-pick:hover, .hc-picker .hc-pick:focus-visible, .hc-picker .hc-pick[aria-expanded="true"] { border-color: var(--hc-edit); color: var(--heading); }
+.hc-pick-image { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; max-width: 30rem; }
+.hc-pick-way { min-height: 36px; padding: 0 12px; border: 1px solid var(--edge); border-radius: 8px; background: var(--surface);
+  color: var(--heading); font: 500 13px var(--sans); cursor: pointer; }
+.hc-pick-way:hover, .hc-pick-way:focus-visible { border-color: var(--hc-edit); }
+.hc-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .4rem; width: 100%; max-height: 16rem;
+  overflow: auto; color: var(--body-soft); font: 12.5px var(--sans); }
+.hc-pick-grid[hidden] { display: none; }
+.hc-pick-img { padding: 0; aspect-ratio: 4 / 3; border: 1px solid var(--edge); border-radius: 6px; background: var(--surface); cursor: pointer; overflow: hidden; }
+.hc-pick-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hc-pick-img:hover, .hc-pick-img:focus-visible { border-color: var(--hc-edit); }
+
+/* D9: a removed box says so for 8 seconds, with Undo */
+.hc-removed-pill { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 6; display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--edge); color: var(--heading);
+  font: 500 13px var(--sans); text-decoration: none; opacity: 1; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); }
+.hc-removed-undo { min-height: 30px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--hc-edit-soft); color: var(--hc-edit-ink);
+  font: 600 13px var(--sans); cursor: pointer; }
+
+/* D8 (ED18): "Your note", beside the block in the right margin (below it on narrow screens) */
+.hc-note-card { position: absolute; top: 0; left: calc(100% + 18px); width: 15rem; z-index: 4; padding: 8px 10px 10px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--edge); border-left: 3px solid var(--hc-edit); box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+  font: 13px/1.4 var(--sans); cursor: default; }
+.hc-note-head { margin: 0 0 6px; color: var(--heading); font-weight: 600; }
+.hc-note-text { box-sizing: border-box; width: 100%; min-height: 4.2rem; padding: 6px 8px; border: 1px solid var(--edge); border-radius: 7px;
+  background: var(--bg); color: var(--heading); font: 13px/1.4 var(--sans); resize: vertical; }
+.hc-note-text:focus { outline: 2px solid color-mix(in srgb, var(--hc-edit) 60%, transparent); outline-offset: 0; border-color: var(--hc-edit); }
+.hc-note-remove { margin-top: 6px; min-height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: var(--body-soft);
+  font: 500 12.5px var(--sans); cursor: pointer; }
+.hc-note-remove:hover { background: var(--surface-2); color: var(--heading); }
+@media (max-width: 1180px) { .hc-note-card { position: relative; left: auto; top: auto; width: auto; margin: 8px 0 0; } }
+@media (prefers-reduced-motion: reduce) { .hc-plus::before, .hc-plus > .hc-plus-btn { transition: none; } }
 
 /* ==== people (U5) ==== */
 

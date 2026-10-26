@@ -456,6 +456,7 @@
     const d = page && ed.draft && ed.draft.key === page.pageId ? ed.draft : null;
     Object.assign(hist, { key: page ? page.pageId : null, file: page ? page.file : null,
       last: d && typeof d.files[page.file] === 'string' ? d.files[page.file] : null, undo: [], redo: [], pending: null, typed: null });
+    histLoad(page);                                     // U4 (D6): the steps kept before a reload
   }
   function histNote(d) {
     if (!d || !hist.key || d.key !== hist.key || !d.files || typeof d.files[hist.file] !== 'string') return;
@@ -467,7 +468,7 @@
     if (hist.typing) {
       const same = hist.typed && hist.typed.index === ed.selected && t - hist.typed.at < HIST_BURST_MS;
       hist.typed = { index: ed.selected, at: t };
-      if (!hist.pending && same) return;                  // the same burst: one step
+      if (!hist.pending && same) { histSave(); return; }   // the same burst: one step (kept ending at the new text)
     } else hist.typed = null;
     const snap = hist.typing && hist.pending ? hist.pending : null;
     hist.undo.push({ text: prev, snap: snap ? snap.snap : null, index: snap ? snap.index : null, load: ed.loads,
@@ -475,11 +476,13 @@
     if (hist.undo.length > HIST_MAX) hist.undo.shift();
     hist.redo = [];
     hist.pending = null;
+    histSave();                                         // U4 (D6): the history survives a reload
   }
   function histRemoved(key) {
     if (hist.applying || !hist.key || key !== hist.key) return;
     if (hist.typing) { const d = ed.draft; if (d && d.key === key) histNote(d); return; }   // typed back to the original
     Object.assign(hist, { last: null, undo: [], redo: [], pending: null, typed: null });
+    histSave();
   }
   function histText(page, text, span) {
     const d = ed.draft && ed.draft.key === page.pageId ? ed.draft : drafts.get(page.pageId);
@@ -487,7 +490,7 @@
     hist.applying = true;
     try {
       d.files[page.file] = typeof text === 'string' ? text : d.originals[page.file];
-      if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key);
+      if (keepDraft(d)) drafts.put(d); else drafts.remove(d.key);
     } finally { hist.applying = false; }
     ed.draft = d;
     hist.last = d.files[page.file];
@@ -512,6 +515,7 @@
     to.push({ text: hist.last, snap: save, index: e.index, load: ed.loads, span: spanNow });
     Object.assign(hist, { pending: null, typed: null });
     if (!histText(page, e.text, ed.selected === e.index ? e.span : null)) return;
+    histSave();
     say('');
     if (inPlace) {
       ed.cmdN = (ed.cmdN || 0) + 1;
@@ -2008,7 +2012,7 @@
     }
     // R2b: the undo history belongs to this page's draft; another page starts its own
     if (!page || hist.key !== page.pageId) histReset(page);
-    else if (ed.draft && ed.draft.key === page.pageId) hist.last = ed.draft.files[page.file];
+    else if (ed.draft && ed.draft.key === page.pageId) { hist.last = ed.draft.files[page.file]; histLoad(page); }
     // U7 (plan D12): the frame loads AT ONCE, at main's sha with my draft; what the open proposals add (a
     // proposal drawn over the page, its marks, the review cards) arrives when they are read, by a later
     // postEditor. Only the page file itself waits for them when a proposal may be drawn over it (no draft of
@@ -2323,13 +2327,13 @@
 
   /* "+" over a drawn proposal: after the nearest preceding block of main
      (a conflict block is main's text too). */
-  async function pickInsert(k, kind) {
+  async function pickInsert(k, kind, url) {
     const pv = ed.pv;
-    if (!pv || !pv.ov) return insertBlock(k, kind);
+    if (!pv || !pv.ov) return insertBlock(k, kind, url);
     const list = pv.ov.overlay;
     let j = Math.min(k, list.length) - 1;
     while (j >= 0 && list[j].mainIndex === null) j -= 1;
-    return insertBlock(j >= 0 ? list[j].mainIndex + 1 : 0, kind);
+    return insertBlock(j >= 0 ? list[j].mainIndex + 1 : 0, kind, url);
   }
 
   /* A proposal's block with no card of its own: its review, which is the #/review/<n> redirect now (U0b: the
@@ -3260,7 +3264,9 @@
       // U3: the block to scroll into view once (the first change of a proposal opened from its row), and the
       // blocks the margin's note cards sit beside (the frame reports where they are, as for marked blocks)
       focus: ed.focusOut, anchors: rail.data && Array.isArray(rail.data.notes)
-        ? rail.data.notes.filter((x) => x.anchor !== null).map((x) => x.anchor) : [] }, '*');
+        ? rail.data.notes.filter((x) => x.anchor !== null).map((x) => x.anchor) : [],
+      // U4 (D6, D8, D11): the marks to restore after a load, the notes beside their blocks, the site's images
+      marks: marksMessage(), notes: notesMessage(), media: ed.mediaOut || null }, '*');
     ed.cmdOut = null;                     // a restore is sent once (the frame acts once per n)
   }
 
@@ -3296,10 +3302,232 @@
     sel.span = out.span;
     // typing: one undo step per burst (histNote); a note box's Remove (md '') is a step of its own
     hist.typing = md !== '';
-    try { if (C.isDirty(d)) drafts.put(d); else drafts.remove(d.key); } finally { hist.typing = false; }
+    try { if (keepDraft(d)) drafts.put(d); else drafts.remove(d.key); } finally { hist.typing = false; }
     refreshDock({ typed: true });          // U2 (plan D13): typing folds the bubble
   }
 
+
+  // ------------------------------------------------ U4: notes, marks, history beside the draft ---
+  /* D8 (ED18) notes: Comment in the open block's toolbar leaves a note for the reviewer and changes no text.
+     The draft holds them as notes: [{key, text}] (HCCore.validDraft; U2a's send carries them in the PR body).
+     The key is a 64-hex block key in the records' own form (HCCore.editKey, sha256 over path NUL base NUL head):
+       a block of the draft's base     editKey(path, baseBlock, baseBlock)   (a "change into itself": no real edit
+                                                                            has base === head, so it never collides)
+       a block the draft added         editKey(path, '', draftBlock)        (base '' with a head: no real edit has it)
+     noteKey(path, base, draft) is that rule (HCEditor.helpers.noteKey); a reviewer finds the block by computing it
+     over the proposal's merge-base blocks (and the head's added blocks).
+     D6 (ED30, ED31) marks and history: under their OWN localStorage key per page, hc-cms-marks:<login>/<page>,
+     never inside the draft record (the draft write never depends on them), at most MARKS_CAP characters; history
+     MARKS_HIST steps each way, dropped first when the cap or the quota says no. marks: {<block key>: marked HTML}, a
+     block key being o:<hash of its ORIGINAL text>:<occurrence among base blocks with that hash>, or for an added
+     block a:<the key of the base block before it, or top>:<its place among the adds there>. The frame checks a
+     restored block both ways (js/editor-md.js restoreBlock) and paints a word diff when the check fails. */
+  const MARKS_PREFIX = 'hc-cms-marks:';
+  const MARKS_CAP = 256 * 1024;
+  const MARKS_HIST = 20;
+  const NOTE_MAX = 2000;
+  const MAX_MARKS_HTML = 200000;          // js/source.js MAX_MARKS_HTML
+  const noteKey = (path, base, draft) => (typeof base === 'string' && base
+    ? C.editKey(path, base, base) : C.editKey(path, '', String(draft || '')));
+  function fnv(s) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, '0');
+  }
+  /* The draft's blocks against its base: [{index, base (text | null), draft (text), kind, mkey, same}] for every
+     non-space block of the draft (index = the frame's block index), or null (a text the block model refuses). */
+  function blockMap(d, file) {
+    const orig = d && d.originals ? d.originals[file] : null;
+    const text = d && d.files ? d.files[file] : null;
+    if (typeof text !== 'string') return null;
+    const A = C.splitBlocks(typeof orig === 'string' ? orig : '');
+    const B = C.splitBlocks(text);
+    const diff = C.blockDiff(typeof orig === 'string' ? orig : '', text);
+    if (!A.ok || !B.ok || !diff) return null;
+    const slice = (t, b) => t.slice(b.start, b.end);
+    const okeys = new Map();
+    const seen = new Map();
+    A.blocks.forEach((b, i) => {
+      if (b.kind === 'space') return;
+      const hsh = fnv(slice(orig, b));
+      const n = seen.get(hsh) || 0;
+      seen.set(hsh, n + 1);
+      okeys.set(i, `o:${hsh}:${n}`);
+    });
+    const out = [];
+    let after = 'top';
+    let adds = 0;
+    for (const e of diff) {
+      if (e.b === null || e.b === undefined) { if (e.a !== null && e.a !== undefined) { after = okeys.get(e.a); adds = 0; } continue; }
+      const blk = B.blocks[e.b];
+      const base = e.a !== null && e.a !== undefined ? slice(orig, A.blocks[e.a]) : null;
+      let mkey;
+      if (base !== null) { mkey = okeys.get(e.a); after = mkey; adds = 0; } else { mkey = `a:${after}:${adds}`; adds += 1; }
+      out.push({ index: e.b, base, draft: slice(text, blk), kind: blk.kind, mkey, same: e.status === 'same' });
+    }
+    return out;
+  }
+  // a note item as the editor reads it: an older or hand-edited store may hold anything else, which is skipped
+  const noteList = (d) => (d && Array.isArray(d.notes) ? d.notes : [])
+    .filter((n) => n && typeof n === 'object' && typeof n.key === 'string' && typeof n.text === 'string');
+  const hasNotes = (d) => noteList(d).length > 0;
+  const keepDraft = (d) => C.isDirty(d) || hasNotes(d);
+  const marksKey = (page) => {
+    const login = state.session && typeof state.session.login === 'string' ? state.session.login : null;
+    return login && page ? `${MARKS_PREFIX}${login}/${encodeURIComponent(page.pageId)}` : null;
+  };
+  function marksRead(page) {
+    const k = marksKey(page);
+    const st = localStore();
+    try {
+      const v = k && st ? JSON.parse(st.getItem(k)) : null;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return { marks: {}, history: null };
+      const marks = {};
+      if (v.marks && typeof v.marks === 'object' && !Array.isArray(v.marks)) {
+        for (const [mk, html] of Object.entries(v.marks)) if (typeof html === 'string' && html.length <= MAX_MARKS_HTML) marks[mk] = html;
+      }
+      const hs = v.history && typeof v.history === 'object' ? v.history : null;
+      const step = (e) => e && typeof e === 'object' && typeof e.text === 'string';
+      const history = hs && typeof hs.last === 'string' && Array.isArray(hs.undo) && Array.isArray(hs.redo)
+        && hs.undo.every(step) && hs.redo.every(step) ? hs : null;
+      return { marks, history };
+    } catch (e) { return { marks: {}, history: null }; }
+  }
+  /* Writes what the page keeps beside its draft. A write that does not fit drops the history first, then the
+     marks; a failure is quiet (the draft is already written, under its own key). */
+  function marksWrite(page, kept) {
+    const k = marksKey(page);
+    const st = localStore();
+    if (!k || !st) return false;
+    const tries = [kept, { marks: kept.marks, history: null }, { marks: {}, history: null }];
+    for (const v of tries) {
+      const empty = !Object.keys(v.marks).length && !v.history;
+      try {
+        if (empty) { st.removeItem(k); return true; }
+        const raw = JSON.stringify(v);
+        if (raw.length > MARKS_CAP) continue;
+        st.setItem(k, raw);
+        return true;
+      } catch (e) { /* the quota: try with less */ }
+    }
+    return false;
+  }
+  const histStep = (e) => ({ text: e.text, index: Number.isInteger(e.index) ? e.index : null,
+    span: e.span && Number.isInteger(e.span.start) && Number.isInteger(e.span.end) ? { start: e.span.start, end: e.span.end } : null });
+  /* The history of the page on screen, kept (the last MARKS_HIST steps each way) with the text it ends at. */
+  function histSave() {
+    const page = ed.page;
+    if (!page || hist.key !== page.pageId || typeof hist.last !== 'string') return;
+    const kept = marksRead(page);
+    kept.history = hist.undo.length || hist.redo.length ? { last: hist.last,
+      undo: hist.undo.slice(-MARKS_HIST).map(histStep), redo: hist.redo.slice(-MARKS_HIST).map(histStep) } : null;
+    marksWrite(page, kept);
+  }
+  /* After a reload: the kept history comes back when it ends at exactly the draft's text (else it is dropped).
+     A restored step has no restore point in this frame load, so its undo draws the page again from the text. */
+  function histLoad(page) {
+    const d = ed.draft && page && ed.draft.key === page.pageId ? ed.draft : null;
+    if (!d || hist.key !== page.pageId || hist.undo.length || hist.redo.length) return;
+    const h = marksRead(page).history;
+    if (!h || h.last !== d.files[page.file]) return;
+    const back = (e) => Object.assign(histStep(e), { snap: null, load: -1 });
+    hist.undo = h.undo.slice(-MARKS_HIST).map(back);
+    hist.redo = h.redo.slice(-MARKS_HIST).map(back);
+    hist.last = h.last;
+  }
+  /* hc-marks: the open block's marked HTML after an edit ('' = no marks left), kept under the block's key. */
+  function marksTyped(index, html) {
+    const page = ed.page;
+    const d = ed.draft;
+    if (!page || !d || d.key !== page.pageId || !canEditKey(d.key) || showing() || typeof html !== 'string' || html.length > MAX_MARKS_HTML) return;
+    const map = blockMap(d, page.file);
+    const b = map ? map.find((x) => x.index === index) : null;
+    if (!b) return;
+    const kept = marksRead(page);
+    const live = new Set(map.map((x) => x.mkey));
+    for (const mk of Object.keys(kept.marks)) if (!live.has(mk)) delete kept.marks[mk];   // blocks that are gone
+    if (html && !b.same) kept.marks[b.mkey] = html; else delete kept.marks[b.mkey];
+    marksWrite(page, kept);
+  }
+  /* What the frame repaints after a load: every block my draft changed or added, with its kept marked HTML
+     ('' when none) for the frame's two-way check, else the word diff. Sent once per frame load. */
+  function marksMessage() {
+    const page = ed.page;
+    const d = ed.draft;
+    if (!page || page.data || !d || d.key !== page.pageId || !canEditKey(d.key) || showing() || (ed.pv && ed.pv.ov)) return null;
+    if (ed.marksLoad === ed.loads) return null;
+    const map = blockMap(d, page.file);
+    if (!map) return null;
+    ed.marksLoad = ed.loads;
+    const kept = marksRead(page).marks;
+    const out = [];
+    for (const b of map) {
+      if (b.same || b.draft.length > MAX_BLOCK_MD || (b.base && b.base.length > MAX_BLOCK_MD)) continue;
+      out.push({ index: b.index, html: kept[b.mkey] || '', md: b.draft, orig: b.base === null ? '' : b.base, kind: b.kind });
+    }
+    return out;
+  }
+  /* hc-note: the note on block `index` ('' removes it), written into the draft under the block's key. */
+  async function noteTyped(index, text) {
+    const page = ed.page;
+    if (!page || page.data || !canEditPage(page) || showing() || (ed.pv && ed.pv.ov) || typeof text !== 'string') return;
+    const d = await pageDraft(page);
+    if (ed.page !== page || ed.show) return;
+    const map = blockMap(d, page.file);
+    const b = map ? map.find((x) => x.index === index) : null;
+    if (!b) return;
+    const key = await noteKey(page.file, b.base, b.draft);
+    if (ed.page !== page) return;
+    const t = text.trim().slice(0, NOTE_MAX);
+    const list = noteList(d).filter((n) => n.key !== key);
+    if (t) list.push({ key, text: t });
+    if (list.length) d.notes = list; else delete d.notes;
+    ed.draft = d;
+    if (keepDraft(d)) draftStore().put(d); else drafts.remove(d.key);   // a note is no undo step
+    ed.noteIdx = null;
+    refreshDock();
+    postEditor();                                         // the card follows the draft (notesMessage)
+  }
+  /* The notes as the frame shows them: [{index, text}], found by computing each block's key (cached per text). */
+  async function notesFor(d, page) {
+    if (!hasNotes(d)) return [];
+    const map = blockMap(d, page.file) || [];
+    const by = new Map(noteList(d).map((n) => [n.key, n.text]));
+    const out = [];
+    for (const b of map) {
+      const k = await noteKey(page.file, b.base, b.draft);
+      if (by.has(k)) { out.push({ index: b.index, text: by.get(k) }); by.delete(k); }
+    }
+    return out;
+  }
+  function notesMessage() {
+    const page = ed.page;
+    const d = ed.draft;
+    if (!page || page.data || !d || d.key !== page.pageId || showing() || (ed.pv && ed.pv.ov)) return [];
+    const sig = `${ed.loads}|${JSON.stringify(d.notes || [])}|${d.files[page.file].length}`;
+    if (ed.noteIdx && ed.noteIdx.sig === sig) return ed.noteIdx.list;
+    if (!ed.noteIdx || ed.noteIdx.sig !== sig) {
+      const want = { sig, list: ed.noteIdx ? ed.noteIdx.list : [] };
+      ed.noteIdx = want;
+      notesFor(d, page).then((list) => {
+        if (ed.noteIdx !== want) return;
+        want.list = list;
+        if (list.length || hasNotes(d)) postEditor();
+      }).catch(() => { /* no WebCrypto: the notes stay in the draft, unshown */ });
+    }
+    return ed.noteIdx.list;
+  }
+  /* D11: "Pick one the site has": the images of the site's list (and of my image-list draft), for the frame's grid. */
+  async function mediaListAnswer() {
+    const live = await liveAssets();
+    const md = openManifestDraft();
+    let all = live;
+    if (md) { try { all = C.manifestAssets(JSON.parse(md.files[C.MANIFEST_FILE])); } catch (e) { all = live; } }
+    const list = mediaAssets(all, live).slice(0, 500);
+    ed.mediaUrls = new Set(list.map((a) => a.url));
+    ed.mediaOut = list.map((a) => ({ url: a.url, label: a.label }));
+    postEditor();
+  }
 
   /* hc-block-state: the frame typed in the page, or needs the Markdown box, or closed the block. */
   function blockState(index, editor, reason) {
@@ -3330,6 +3558,10 @@
     else if (m.type === 'hc-block-select' && index !== null) pick(index).catch(shown);
     else if (m.type === 'hc-block-insert' && index !== null && typeof m.kind === 'string') pickInsert(index, m.kind).catch(shown);
     else if (m.type === 'hc-block-md' && index !== null) blockTyped(index, m.md);
+    else if (m.type === 'hc-marks' && index !== null && typeof m.html === 'string') marksTyped(index, m.html);      // U4 (D6)
+    else if (m.type === 'hc-note' && index !== null && typeof m.text === 'string') noteTyped(index, m.text).catch(shown);   // U4 (D8)
+    else if (m.type === 'hc-media-list') mediaListAnswer().catch(shown);                                        // U4 (D11)
+    else if (m.type === 'hc-image-use' && index !== null && typeof m.url === 'string') pickInsert(index, 'image', m.url).catch(shown);
     else if (m.type === 'hc-block-move' && index !== null && Number.isInteger(m.to) && m.to >= 0 && m.to <= MAX_INDEX) moveImage(index, m.to).catch(shown);
     else if (m.type === 'hc-block-state' && index !== null && typeof m.editor === 'string') blockState(index, m.editor, typeof m.reason === 'string' ? m.reason.slice(0, 300) : '');
     else if (m.type === 'hc-block-rects' && Array.isArray(m.rects)) railRects(m.rects, m.view);
@@ -3594,20 +3826,28 @@
     if (canEditPage(page) && imageParts(text.slice(span.start, span.end))) askImage(index);
   }
 
-  async function insertBlock(index, kind) {
+  async function insertBlock(index, kind, url) {
     const page = ed.page;
     if (!page || !canEditPage(page) || !Object.prototype.hasOwnProperty.call(C.SNIPPET_CATALOG, kind) || showing()) return;
+    // U4 (D11): an image the site has, picked in the "+" grid: only an address the parent offered
+    const picked = kind === 'image' && typeof url === 'string' ? url : null;
+    if (picked !== null && !(ed.mediaUrls && ed.mediaUrls.has(picked))) return;
     const d = await pageDraft(page);
     if (ed.page !== page || ed.show) return;
-    const out = C.insertAt(d.files[page.file], index, kind);
+    let out = C.insertAt(d.files[page.file], index, kind);
     if (!out) return;
+    if (picked) {
+      const alt = (String(picked).split('/').pop() || 'image').replace(/\.[A-Za-z0-9]+$/, '').replace(/[[\]\\]/g, ' ').trim().slice(0, 120) || 'image';
+      const r = C.replaceSpan(out.text, { start: out.span.start, end: out.span.end - 1 }, C.imageWith({ alt }, picked));
+      out = { text: r.text, span: { start: r.span.start, end: r.span.end + 1 } };
+    }
     ed.draft = d;
     d.files[page.file] = out.text;
     drafts.put(d);
     Object.assign(ed, { wholeReason: null, selected: blockIndexAt(out.text, out.span.start),
       sel: { key: d.key, file: page.file, span: out.span, whole: false } });
     frameTo(ed.route, true);
-    if (kind === 'image' && ed.selected !== null) askImage(ed.selected);     // "+" Image: pick the file now
+    if (kind === 'image' && !picked && ed.selected !== null) askImage(ed.selected);     // "+" Image > Upload: pick the file now
   }
 
   /* "Edit whole page as Markdown" (the account menu, U0b; and a page the block model refuses, or a block the
@@ -4575,6 +4815,8 @@
     REDIRECTS,
     redirectOf,
     mediaAssets,
+    noteKey,                 // U4 (D8): the 64-hex key of a note on a block (see the U4 section)
+    blockMap: (d, file) => blockMap(d, file),
     newProjectForm,
     makeProjectDraft,
     personFields,

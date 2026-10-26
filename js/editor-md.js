@@ -18,7 +18,10 @@
                                  breaks (hard-wrapped pages keep their wraps). Returns the text with
                                  the original block's trailing newlines, so it drops straight into
                                  HCCore.replaceSpan. Throws an Unsupported error on any node it
-                                 cannot write back faithfully.
+                                 cannot write back faithfully. serialize(root, md, kind,
+                                 {original: true}) (U4, D6) writes the block as it was BEFORE the
+                                 suggestion marks: deletions kept, insertions, format and list
+                                 marks dropped, a note box's first type (data-hc-was).
      editorFor(block)         -> which editor opens the block: 'visual' (type in the page), 'code'
                                  (the code box: fence lines kept, only the inside edited), 'box'
                                  (a note box: its wrapper lines kept, the inside typed), 'image'
@@ -194,8 +197,11 @@
       const name = tag(c);
       const sug = attr(c, 'data-hc-sug');                           // the typing engine's own marks (hc-sug class)
       if (!sug) refuseEnhanced(c);
-      if (sug === 'del') continue;                                  // a suggested deletion: gone
-      if (sug === 'ins') { out += inline(c, st, ctx); continue; }   // a suggested insertion: its text
+      // U4 (D6): st.original writes the block as it was before the marks: deletions kept, insertions and
+      // formats dropped (a restore after a reload checks the marks against the base text with it)
+      if (sug === 'del') { if (st.original) out += inline(c, st, ctx); continue; }   // a suggested deletion: gone
+      if (sug === 'ins') { if (!st.original) out += inline(c, st, ctx); continue; }  // a suggested insertion: its text
+      if (sug === 'fmt' && st.original) { out += inline(c, st, ctx); continue; }
       if (sug === 'fmt' && attr(c, 'data-hc-fmt') === 'code') {      // inline code: its kept text, verbatim
         const t = keptText(c).replace(/\u00a0/g, ' ');
         if (t) { out += codeSpan(t); ctx.lineStart = false; }
@@ -220,6 +226,7 @@
       else if (name === 'strong' || name === 'b') out += `${st.strong}${inline(c, st, ctx)}${st.strong}`;
       else if (name === 'del' || name === 's') out += `${st.del}${inline(c, st, ctx)}${st.del}`;
       else if (name === 'code') out += codeSpan(textOf(c));
+      else if (name === 'br' && ctx.listBreak) { out += '\u0001'; ctx.lineStart = true; }   // a list item ends (D8)
       else if (name === 'br') { out += st.br.endsWith('\n') ? st.br : `${st.br}\n`; ctx.lineStart = true; }
       else if (name === 'a') out += link(c, st, ctx);
       else if (name === 'img') out += image(c, st);
@@ -290,7 +297,17 @@
     refuseEnhanced(el);
     const name = tag(el);
     const raw = tok && tok.raw ? tok.raw.replace(/\n+$/, '') : '';
-    if (name === 'p') return inline(el, st, { lineStart: true });
+    if (name === 'p') {
+      // U4 (D8, ED16): the List button's suggestion on a paragraph: one item per line break
+      const lk = st.original ? null : attr(el, 'data-hc-list');
+      if (lk === 'ul' || lk === 'ol') {
+        const items = inline(el, st, { lineStart: true, listBreak: true }).split('\u0001')
+          .map((t) => t.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean);
+        if (!items.length) return '';
+        return items.map((t, i) => `${lk === 'ol' ? `${i + 1}.` : '-'} ${t}`).join('\n');
+      }
+      return inline(el, st, { lineStart: true });
+    }
     if (/^h[1-6]$/.test(name)) {
       const depth = Number(name[1]);
       const body = inline(el, st, { lineStart: false });
@@ -345,13 +362,16 @@
   /* A list: marker style from the original list token; nested lists indent by the item's content
      width; tight items join with one newline, loose with a blank line. */
   function list(el, tok, st, indent) {
-    const ordered = tag(el) === 'ol';
+    // U4 (D8): the List button turns a list into the other kind (data-hc-list), never in st.original
+    const turned = st.original ? null : attr(el, 'data-hc-list');
+    const converted = (turned === 'ul' || turned === 'ol') && turned !== tag(el);
+    const ordered = converted ? turned === 'ol' : tag(el) === 'ol';
     const toks = tok && tok.type === 'list' ? tok.items : [];
     const rawFirst = toks[0] ? toks[0].raw : '';
     const bullet = ordered ? null : ((/^\s*([-*+])\s/.exec(rawFirst) || [])[1] || '-');
     const startN = ordered ? (Number(attr(el, 'start')) || 1) : 0;
     const delim = ordered ? ((/^\s*\d+([.)])/.exec(rawFirst) || [])[1] || '.') : '';
-    const sameNumber = ordered && toks.length > 1 && toks.every((t) => (/^\s*(\d+)/.exec(t.raw) || [])[1] === (/^\s*(\d+)/.exec(rawFirst) || [])[1]);
+    const sameNumber = ordered && !converted && toks.length > 1 && toks.every((t) => (/^\s*(\d+)/.exec(t.raw) || [])[1] === (/^\s*(\d+)/.exec(rawFirst) || [])[1]);
     const loose = tok && tok.type === 'list' ? !!tok.loose : false;
     const items = elems(el);
     const out = [];
@@ -462,8 +482,9 @@
 
   /* -> Markdown for a run of top-level DOM elements, styled after `md`'s tokens, the original
      gaps between blocks kept where the counts line up. */
-  function blocksOf(nodes, md) {
+  function blocksOf(nodes, md, opts) {
     const st = styleOf(md);
+    st.original = Boolean(opts && opts.original);
     const toks = blockTokens(md);
     const same = toks.length === nodes.length;
     const parts = nodes.map((el, i) => block(el, same ? toks[i] : (toks[i] && tag(el) === tagFor(toks[i]) ? toks[i] : null), st));
@@ -473,7 +494,8 @@
 
   /* serialize(root, md, kind) -> Markdown for the block, with md's trailing newlines. kind is
      HCCore.splitBlocks' kind ('wrapper' for a note box). */
-  function serialize(root, md, kind) {
+  function serialize(root, md, kind, opts) {
+    const original = Boolean(opts && opts.original);
     const orig = String(md || '');
     const end = trailing(orig) || (orig ? '' : '\n\n');
     const nodes = elems(root);
@@ -483,17 +505,20 @@
       if (nodes.length !== 1 || tag(nodes[0]) !== 'div') no('a note box that is not one <div>');
       const box = nodes[0];
       const cls = attr(box, 'class') || '';
-      const type = (/(?:^|\s)adm-([a-z]+)(?:\s|$)/.exec(cls) || [])[1];
+      // U4 (D6): the Type menu keeps the box's first type in data-hc-was (and its title in data-hc-was-title)
+      const was = original ? attr(box, 'data-hc-was') : null;
+      const type = was && /^[a-z]+$/.test(was) ? was : (/(?:^|\s)adm-([a-z]+)(?:\s|$)/.exec(cls) || [])[1];
       if (!type) no('a note box without its type');
       const inside = elems(box);
       const title = inside[0];
       if (!title || tag(title) !== 'p' || attr(title, 'class') !== 'adm-title') no('a note box without its title line');
-      const open = parts.open.replace(ADM_OPEN_RE, (m, t, ti) => `<div class="adm adm-${type}"><p class="adm-title">${escHtml(textOf(title))}</p>`);
-      const innerMd = blocksOf(inside.slice(1), parts.inner);
+      const titleText = was && attr(box, 'data-hc-was-title') !== null ? attr(box, 'data-hc-was-title') : textOf(title);
+      const open = parts.open.replace(ADM_OPEN_RE, (m, t, ti) => `<div class="adm adm-${type}"><p class="adm-title">${escHtml(titleText)}</p>`);
+      const innerMd = blocksOf(inside.slice(1), parts.inner, opts);
       return `${open}\n${parts.lead.slice(1) || '\n'}${innerMd}${parts.tail || '\n\n'}${parts.close}${end}`;
     }
     if (kind === 'code' && (nodes.length !== 1 || tag(nodes[0]) !== 'pre')) no('a code block that is not one <pre>');
-    return blocksOf(nodes, orig) + end;
+    return blocksOf(nodes, orig, opts) + end;
   }
   const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -520,7 +545,119 @@
     return gate(b.text, b.kind).ok ? 'visual' : 'markdown';
   }
 
-  const API = { renderBlock, serialize, gate, editorFor, styleOf, escapeText, linkHref, Unsupported };
+  // ------------------------------------------------- U4 (D6): marks after a reload ---
+
+  /* The text nodes under n in document order, none inside code (a code span or a code box is written from its
+     whole text, so a mark inside it could not be told from the code). */
+  function textsUnder(n, out, inner) {
+    for (const c of kids(n)) {
+      if (c.nodeType === 3) { if (inner) out.push(c); }          // the line breaks between top-level blocks: not text
+      else if (c.nodeType === 1 && tag(c) !== 'code' && tag(c) !== 'pre') textsUnder(c, out, true);
+    }
+    return out;
+  }
+  const plainOf = (n) => textsUnder(n, []).map((t) => t.data).join('');
+  const WORD_RE = /\s+|[^\s]+/g;
+  const DIFF_MAX = 4000000;          // tokens(old) x tokens(new): a bigger block is not diffed
+  /* old vs new words -> [[op, token]] with op 'same' | 'del' | 'ins' (a longest common subsequence). */
+  function wordOps(a, b) {
+    const A = a.match(WORD_RE) || [];
+    const B = b.match(WORD_RE) || [];
+    if ((A.length + 1) * (B.length + 1) > DIFF_MAX) return null;
+    const w = B.length + 1;
+    const dp = new Int32Array((A.length + 1) * w);
+    for (let i = A.length - 1; i >= 0; i -= 1) {
+      for (let j = B.length - 1; j >= 0; j -= 1) {
+        dp[i * w + j] = A[i] === B[j] ? dp[(i + 1) * w + j + 1] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+      }
+    }
+    const ops = [];
+    let i = 0;
+    let j = 0;
+    while (i < A.length || j < B.length) {
+      if (i < A.length && j < B.length && A[i] === B[j]) { ops.push(['same', B[j]]); i += 1; j += 1; }
+      else if (j < B.length && (i >= A.length || dp[i * w + j + 1] >= dp[(i + 1) * w + j])) { ops.push(['ins', B[j]]); j += 1; }
+      else { ops.push(['del', A[i]]); i += 1; }
+    }
+    return ops;
+  }
+  /* Paints a word diff into `root` (a render of the NEW text): the new words wrapped as suggested insertions, the
+     old words put back as suggested deletions where they stood (the typing engine's own marks, so typing goes on
+     from them). Whitespace is never marked. -> true when something was painted. */
+  function paintDiff(root, oldText, doc) {
+    const nodes = textsUnder(root, []);
+    const ops = wordOps(String(oldText), nodes.map((t) => t.data).join(''));
+    if (!ops) return false;
+    const ins = [];
+    const dels = new Map();
+    let pos = 0;
+    for (const [op, tok] of ops) {
+      const word = /\S/.test(tok);
+      if (op === 'del') { if (word) dels.set(pos, `${dels.has(pos) ? `${dels.get(pos)} ` : ''}${tok}`); continue; }
+      if (op === 'ins' && word) ins.push([pos, pos + tok.length]);
+      pos += tok.length;
+    }
+    if (!ins.length && !dels.size) return false;
+    let seq = 0;
+    const mk = (kind, text) => {
+      seq += 1;
+      const el = doc.createElement(kind);
+      el.setAttribute('data-hc-sug', kind);
+      el.setAttribute('data-hc-id', `r${seq}`);
+      el.setAttribute('class', `hc-sug hc-sug-${kind}`);
+      el.appendChild(doc.createTextNode(text));
+      return el;
+    };
+    let at = 0;
+    nodes.forEach((t, k) => {
+      const s0 = at;
+      const e0 = at + t.data.length;
+      at = e0;
+      const last = k === nodes.length - 1;
+      const cuts = new Set([s0, e0]);
+      for (const [a, b] of ins) { if (a > s0 && a < e0) cuts.add(a); if (b > s0 && b < e0) cuts.add(b); }
+      for (const p of dels.keys()) if (p > s0 && p < e0) cuts.add(p);
+      const points = [...cuts].sort((x, y) => x - y);
+      const parts = [];
+      for (let q = 0; q < points.length; q += 1) {
+        const p = points[q];
+        if (dels.has(p) && (p < e0 || last)) { parts.push(mk('del', dels.get(p))); dels.delete(p); }
+        const next = points[q + 1];
+        if (next === undefined) break;
+        const piece = t.data.slice(p - s0, next - s0);
+        if (!piece) continue;
+        parts.push(ins.some(([a, b]) => a <= p && next <= b) ? mk('ins', piece) : doc.createTextNode(piece));
+      }
+      const parent = t.parentNode;
+      for (const n of parts) parent.insertBefore(n, t);
+      parent.removeChild(t);
+    });
+    return true;
+  }
+  /* restoreBlock({html, md, orig, kind}, opts) -> {root, how: 'marks' | 'diff'} | null.
+     html: the block's kept marked HTML (already through js/sanitize.js marks mode; '' = none); md: the draft's text
+     for the block; orig: the base's text ('' = a block the draft added); kind: HCCore.splitBlocks' kind. The kept
+     HTML comes back only when BOTH hold: serialised normally it is md, and serialised with {original: true} it is
+     orig (an added block has no base text: only the first check applies). Otherwise a word diff of orig vs md is
+     painted over a fresh render of md, itself checked to serialise to md. null: neither holds (the page stays as
+     drawn). opts.doc makes the nodes (default: the render's ownerDocument). */
+  function restoreBlock(o, opts) {
+    const md = String(o.md || '');
+    const orig = String(o.orig || '');
+    const write = (root, extra) => { try { return serialize(root, extra ? orig : md, o.kind, extra); } catch (e) { return null; } };
+    if (o.html) {
+      const root = new DOMParser().parseFromString(String(o.html), 'text/html').body;
+      if (write(root) === md && (!orig || write(root, { original: true }) === orig)) return { root, how: 'marks' };
+    }
+    const root = renderBlock(md);
+    const doc = (opts && opts.doc) || root.ownerDocument;
+    if (!doc) return null;
+    if (orig) paintDiff(root, plainOf(renderBlock(orig)), doc);
+    else paintDiff(root, '', doc);
+    return write(root) === md ? { root, how: 'diff' } : null;
+  }
+
+  const API = { renderBlock, serialize, gate, editorFor, styleOf, escapeText, linkHref, Unsupported, restoreBlock, paintDiff };
   if (isNode) module.exports = API;
   if (typeof window !== 'undefined') window.HCEditorMd = API;
 }());

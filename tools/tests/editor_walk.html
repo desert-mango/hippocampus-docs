@@ -15,9 +15,10 @@
   the Editor to one state:
 
     on               the header switch on: the page frame at the route
-    select           on + the frame says hc-block-select (a paragraph block)
-    edit             select + typing in the tray's block editor; the frame
-                     reloads with a NEW nonce, the block still selected
+    edit             (U4) on + the frame says hc-block-select (a paragraph):
+                     the block open in the page with its ONE toolbar at the
+                     top (B I Link Code List Comment), a sentence typed in it
+                     (hc-walk-u4 'type'), shown as a suggestion
     on-geometry      (U7) Editor on changes nothing in the page's geometry:
                      the text column (#content inside its padding), the h1
                      and the sidebar before; the frame's own column and h1
@@ -32,12 +33,18 @@
                      page); ask the frame (hc-walk-scroll, the TEST-ONLY hook
                      below) until its scrollY is >= 100 px and steady over 3
                      answers. No typing (U4's). Writes data-walk-scroll-before
-    insert           on + the "+" rail before the first paragraph with its
-                     picker OPEN (the kinds, before one is chosen; mockup
-                     a-3): the frame's own rail button is clicked through
-                     js/editor-frame.js's test-only walk hook (below)
-    inserted         on + the frame says hc-block-insert {index, 'note'}: the
-                     note inserted, selected, its Markdown in the tray
+    insert           (U4) on + the "+" rail before the first paragraph with
+                     its picker OPEN: five tiles (Image, Note, Tabs, Video,
+                     Repo), an icon and one word each; the frame's own rail
+                     button is clicked through the test-only walk hook
+    reload-marks     (U4) edit, then the page frame loads again (hc-key
+                     redraw): the typed words come back marked (restored
+                     from hc-cms-marks:<login>/<page>)
+    box              (U4) a note box inserted before the first paragraph,
+                     open, its Type menu open: Note Tip Important Warning
+                     Danger, then Remove this box
+    comment          (U4) a paragraph open, Comment pressed: a "Your note"
+                     card beside the block, the text unchanged
     phone            on, under 768 px: the round photo button tapped, the
                      bubble open as a bottom sheet (U2, D14); the site's
                      frame is 390 px wide (smoke.mjs shoots it at 390)
@@ -585,42 +592,8 @@
     return {
       /* ---- U0 (existing) ---- */
       on: async () => { await editorOn(); },
-      select: async () => {
-        await editorOn();
-        frameSays('hc-block-select', { index: await paragraphIndex() });
-        await until(() => { const t = blockEditor(); return t && t.value.trim(); }, 'the block\'s text in the tray');
-        await until(() => SD.body.classList.contains('hc-tray-open'), 'the open tray');
-      },
-      edit: async () => {
-        const before = await editorOn();
-        frameSays('hc-block-select', { index: await paragraphIndex() });
-        const ta = await until(() => { const t = blockEditor(); return t && t.value.trim() ? t : null; }, 'the block editor');
-        ta.value += ' The walk typed this sentence.';
-        ta.dispatchEvent(new SW.Event('input', { bubbles: true }));
-        await frameReady(before);            // reloaded with a NEW nonce, the block still selected
-        await until(() => /walk typed/.test(blockEditor().value), 'the edit kept in the tray');
-      },
-      insert: async () => {
-        await editorOn();
-        const index = await paragraphIndex();
-        const want = SW.HCEditorFrame.INSERT_KINDS.map((k) => k.kind);   // the site's own copy of the file
-        let reply = null;
-        await until(() => {
-          const f = pageFrame();
-          if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-picker', index }, '*');
-          reply = pickerReplies.length ? pickerReplies[pickerReplies.length - 1] : null;
-          return reply && reply.index === index && reply.open === true;
-        }, `the frame's "+" picker open before block ${index} (last answer ${JSON.stringify(reply)})`);
-        if (JSON.stringify(reply.kinds) !== JSON.stringify(want)) {
-          throw new Error(`the picker shows ${JSON.stringify(reply.kinds)}, not ${JSON.stringify(want)}`);
-        }
-      },
-      inserted: async () => {
-        const before = await editorOn();
-        frameSays('hc-block-insert', { index: await paragraphIndex(), kind: 'note' });
-        await until(() => { const t = blockEditor(); return t && /adm-note/.test(t.value); }, 'the inserted note in the tray');
-        await frameReady(before);
-      },
+      // (U4 replaced select / edit / insert / inserted: the tray's block editor is gone; see the U4 block)
+      // U0b: the proposals list is gone; the phone shows the dock (U2 re-points this step to the sheet)
       // U2 (plan D14): the round photo button bottom right, tapped: the bubble as a bottom sheet
       phone: async () => {
         await editorOn();
@@ -749,6 +722,87 @@
       },
 
       /* ---- U4 ---- */
+      /* Typing in the page (plan D6–D11). The frame is sandboxed: hc-walk-u4 asks it (TEST-ONLY, localhost) to type,
+         open the toolbar's menu or write a note, and answers what it shows. */
+      ...(() => {
+        const askU4 = (op, ok, what) => {
+          let last = null;
+          const got = (e) => {
+            const f = pageFrame();
+            if (f && e.source === f.contentWindow && e.data && e.data.type === 'hc-walk-u4-state') last = e.data;
+          };
+          window.addEventListener('message', got);
+          let asked = false;
+          return until(() => {
+            const f = pageFrame();
+            if (f && f.contentWindow && (!asked || op === 'state')) { f.contentWindow.postMessage({ type: 'hc-walk-u4', op }, '*'); asked = true; }
+            if (last && ok(last)) { window.removeEventListener('message', got); return last; }
+            if (last && op !== 'state') { asked = false; op = 'state'; }
+            return null;
+          }, `${what} (last answer ${JSON.stringify(last)})`);
+        };
+        const opened = async (index, editor) => askU4('state', (st) => st.open && st.open.index === index
+          && (!editor || st.open.editor === editor) && st.bar, `block ${index} open with its toolbar at the top`);
+        const openPara = async () => {
+          const before = await editorOn();
+          const index = await paragraphIndex();
+          frameSays('hc-block-select', { index });
+          await opened(index, 'visual');
+          return { before, index };
+        };
+        return {
+          // an open block, its ONE toolbar on its top edge (B I Link Code List Comment), a sentence typed in yellow
+          edit: async () => {
+            const { index } = await openPara();
+            const st = await askU4('type', (x) => x.sug > 0, 'the typed words marked in the page');
+            const want = ['Bold', 'Italic', 'Link', 'Code', 'List', 'Comment'];
+            if (JSON.stringify(st.items.map((l) => l.split(':')[0])) !== JSON.stringify(want)) throw new Error(`the toolbar shows ${JSON.stringify(st.items)}`);
+            if (!st.open || st.open.index !== index) throw new Error('the block closed');
+          },
+          // the "+" picker open: five tiles, an icon and one word each
+          insert: async () => {
+            await editorOn();
+            const index = await paragraphIndex();
+            const want = ['image', 'note', 'tabs', 'video', 'repo'];
+            let reply = null;
+            await until(() => {
+              const f = pageFrame();
+              if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'hc-walk-picker', index }, '*');
+              reply = pickerReplies.length ? pickerReplies[pickerReplies.length - 1] : null;
+              return reply && reply.index === index && reply.open === true;
+            }, `the frame's "+" picker open before block ${index} (last answer ${JSON.stringify(reply)})`);
+            if (JSON.stringify(reply.kinds) !== JSON.stringify(want)) throw new Error(`the picker shows ${JSON.stringify(reply.kinds)}, not ${JSON.stringify(want)}`);
+          },
+          // type, then the page frame loads again: the marks come back from beside the draft
+          'reload-marks': async () => {
+            const { before, index } = await openPara();
+            await askU4('type', (x) => x.sug > 0, 'the typed words marked in the page');
+            await until(() => { try { return Object.keys(SW.localStorage).some((k) => k.indexOf('hc-cms-marks:') === 0); } catch (e) { return false; } },
+              'the marks kept beside the draft (hc-cms-marks:<login>/<page>)');
+            const nonce = nonceOf(pageFrame());
+            frameSays('hc-key', { op: 'redraw' });               // the parent draws the page again: a new frame load
+            await frameReady(nonce);
+            await askU4('state', (x) => x.restored.length > 0 && x.sug > 0, `the marks restored after the reload (block ${index})`);
+            void before;
+          },
+          // a note box open, its Type ▾ menu open: the five kinds, Remove last
+          box: async () => {
+            const before = await editorOn();
+            const index = await paragraphIndex();
+            frameSays('hc-block-insert', { index, kind: 'note' });
+            await frameReady(before);
+            const st0 = await askU4('state', (x) => x.open && x.open.editor === 'box' && x.bar, 'the new note box open with its toolbar');
+            const st = await askU4('menu', (x) => x.menu.length > 0, 'the Type ▾ menu open');
+            if (st.menu[st.menu.length - 1] !== 'Remove this box') throw new Error(`the menu ends with ${JSON.stringify(st.menu)}`);
+            void st0;
+          },
+          // Comment: "Your note" beside the block, the text unchanged
+          comment: async () => {
+            await openPara();
+            await askU4('comment', (x) => x.notes > 0, 'a "Your note" card beside the block');
+          },
+        };
+      })(),
 
       /* ---- U5 ---- */
 

@@ -68,15 +68,16 @@
 (function () {
   'use strict';
 
+  // U4 (D9, D10, ED26, ED27): five tiles, a small icon and one word each; ONE Note tile (its kind is picked inside
+  // the box, Type ▾); the icons are inline SVG paths on a 16-px grid
   const INSERT_KINDS = Object.freeze([
-    Object.freeze({ kind: 'image', label: 'Image', hint: 'from Media' }),
-    Object.freeze({ kind: 'note', label: 'Note', hint: 'callout' }),
-    Object.freeze({ kind: 'warning', label: 'Warning', hint: 'callout' }),
-    Object.freeze({ kind: 'attention', label: 'Attention', hint: 'callout' }),
-    Object.freeze({ kind: 'tabs', label: 'Tabs', hint: 'per platform' }),
-    Object.freeze({ kind: 'video', label: 'Video', hint: 'a link' }),
-    Object.freeze({ kind: 'repo', label: 'Repo card', hint: 'org repository' }),
+    Object.freeze({ kind: 'image', label: 'Image', icon: ['M2.5 3.5h11v9h-11z', 'M2.5 10.5l3-3 3 3 2-2 3 3', 'M10.5 6h.01'] }),
+    Object.freeze({ kind: 'note', label: 'Note', icon: ['M3 2.5h7l3 3v8H3z', 'M5.5 7h5', 'M5.5 9.5h5'] }),
+    Object.freeze({ kind: 'tabs', label: 'Tabs', icon: ['M2.5 5.5h11v7h-11z', 'M2.5 5.5v-2h4v2', 'M6.5 5.5v-2h4v2'] }),
+    Object.freeze({ kind: 'video', label: 'Video', icon: ['M2.5 3.5h11v9h-11z', 'M7 6l3 2-3 2z'] }),
+    Object.freeze({ kind: 'repo', label: 'Repo', icon: ['M4 2.5h8v11H4z', 'M6 5h4', 'M6 7.5h4', 'M6 10h2'] }),
   ]);
+  const SVG_NS = 'http://www.w3.org/2000/svg';
   const MARK_CLASS = Object.freeze({ add: 'hc-prop-add', del: 'hc-prop-del', change: 'hc-prop-change',
     conflict: 'hc-prop-conflict' });
   const SETTING_CLASS = Object.freeze({ outlines: 'hc-outlines', compact: 'hc-compact' });
@@ -85,6 +86,7 @@
   const PEOPLE_SCRIPT = 'js/editor-people.js';   // the Team page's people tools, loaded on demand
   const MAX_BLOCK_MD = 200000;  // js/source.js MAX_BLOCK_MD: a longer hc-block-md is refused by the bridge
   const OPEN_EDITORS = Object.freeze(['visual', 'code', 'box']);
+  const PHONE_BAR_QUERY = '(max-width: 767px)';   // D8: the toolbar sits above the keyboard
   const ELEMENT = 1;
 
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -224,6 +226,70 @@
       return b;
     }
 
+    /* An inline SVG icon from 16-px-grid paths (aria-hidden), or null where the document makes no SVG. */
+    function pathIcon(paths, size) {
+      if (typeof doc.createElementNS !== 'function') return null;
+      const svg = doc.createElementNS(SVG_NS, 'svg');
+      for (const [k, v] of [['viewBox', '0 0 16 16'], ['width', String(size)], ['height', String(size)], ['aria-hidden', 'true'],
+        ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '1.4'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round']]) svg.setAttribute(k, v);
+      for (const d of paths) { const p = doc.createElementNS(SVG_NS, 'path'); p.setAttribute('d', d); svg.appendChild(p); }
+      return svg;
+    }
+
+    /* D11 (ED51): the Image tile's two ways, under the tiles: Upload (the parent's file chooser, as before) and
+       "Pick one the site has" (a grid of the site's images, asked of the parent: hc-media-list -> hc-editor.media). */
+    function imageChoices(picker, index, tile) {
+      let row = null;
+      for (const c of Array.from(picker.childNodes)) if (classesOf(c).indexOf('hc-pick-image') >= 0) row = c;
+      if (row) { picker.removeChild(row); tile.setAttribute('aria-expanded', 'false'); return; }
+      row = doc.createElement('div');
+      row.className = 'hc-pick-image';
+      const up = button('hc-pick-way', 'Upload an image from this computer', 'Upload');
+      up.addEventListener('click', (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        closePicker();
+        HC.post('hc-block-insert', { index, kind: 'image' });
+      });
+      const pick = button('hc-pick-way', 'Pick one of the images the site has', 'Pick one the site has');
+      const grid = doc.createElement('div');
+      grid.className = 'hc-pick-grid';
+      grid.setAttribute('role', 'list');
+      grid.hidden = true;
+      pick.addEventListener('click', (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        grid.hidden = false;
+        if (state && Array.isArray(state.media)) drawMedia(grid, index, state.media);
+        else { grid.textContent = 'Loading the site\'s images…'; HC.post('hc-media-list', {}); }
+      });
+      row.appendChild(up);
+      row.appendChild(pick);
+      row.appendChild(grid);
+      picker.appendChild(row);
+      tile.setAttribute('aria-expanded', 'true');
+      if (openPicker) openPicker.grid = grid;
+    }
+    function drawMedia(grid, index, media) {
+      while (grid.firstChild) grid.removeChild(grid.firstChild);
+      grid.setAttribute('data-ready', 'true');
+      if (!media.length) { grid.textContent = 'The site has no images yet: use Upload.'; return; }
+      for (const a of media) {
+        const b = button('hc-pick-img', `Use ${a.label}`, '');
+        b.setAttribute('role', 'listitem');
+        b.setAttribute('title', a.label);
+        const img = doc.createElement('img');
+        img.setAttribute('src', a.url);
+        img.setAttribute('alt', '');
+        img.setAttribute('loading', 'lazy');
+        b.appendChild(img);
+        b.addEventListener('click', (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          closePicker();
+          HC.post('hc-image-use', { index, url: a.url });
+        });
+        grid.appendChild(b);
+      }
+    }
+
     function closePicker() {
       if (!openPicker) return;
       const { rail, picker } = openPicker;
@@ -245,26 +311,30 @@
         const picker = doc.createElement('div');
         picker.className = 'hc-picker';
         picker.setAttribute('role', 'menu');
+        picker.setAttribute('aria-label', 'Add here');
+        const tiles = doc.createElement('div');
+        tiles.className = 'hc-pick-row';
+        picker.appendChild(tiles);
         for (const k of INSERT_KINDS) {
-          const b = button('hc-pick', `Add ${k.label}`, '');
+          const b = button('hc-pick', `Add ${k.label === 'Repo' ? 'a repository card' : k.label === 'Image' ? 'an image' : `a ${k.label.toLowerCase()}`}`, '');
           b.setAttribute('data-kind', k.kind);
           b.setAttribute('role', 'menuitem');
+          const ic = pathIcon(k.icon, 20);
+          if (ic) b.appendChild(ic);
           const name = doc.createElement('span');
           name.textContent = k.label;
-          const hint = doc.createElement('small');
-          hint.textContent = k.hint;
           b.appendChild(name);
-          b.appendChild(hint);
           b.addEventListener('click', (ev) => {
             if (ev && ev.stopPropagation) ev.stopPropagation();
+            if (k.kind === 'image') { imageChoices(picker, index, b); return; }   // D11: Upload, or one the site has
             closePicker();
             HC.post('hc-block-insert', { index, kind: k.kind });
           });
-          picker.appendChild(b);
+          tiles.appendChild(b);
         }
         r.appendChild(picker);
-        r.classList.add('is-open');
-        openPicker = { rail: r, picker };
+        r.classList.add('is-open');           // D10 (ED28): the room opens on this click only, never on hover
+        openPicker = { rail: r, picker, index };
       });
       r.appendChild(plus);
       return r;
@@ -536,6 +606,10 @@
         }
       }
       syncOpen(s);
+      syncNotes(s);                     // U4 (D8): my notes beside their blocks
+      restoreMarks(s);                  // U4 (D6): the marks kept before a reload
+      if (openPicker && openPicker.grid && !openPicker.grid.hidden && Array.isArray(s.media)
+        && openPicker.grid.getAttribute('data-ready') !== 'true') drawMedia(openPicker.grid, openPicker.index, s.media);
       queueRects();
       syncPeople(s);
       paintSignal();
@@ -628,28 +702,65 @@
       const targets = attachTargets(now);
       w.classList.add('hc-open');
       const B = win.HCEditorBlocks;
+      const T = win.HCEditorType;
+      // D8 (ED15): ONE toolbar on the block's top edge, inside its frame (js/editor-blocks.js blockBar)
+      const hostOf = () => {
+        const sel = doc.getSelection ? doc.getSelection() : null;
+        const ts = now.targets || [];
+        return (sel && sel.rangeCount && ts.find((t) => t.contains(sel.anchorNode))) || ts[0] || null;
+      };
+      const opts = {
+        kind: editor,
+        check: (v) => (typeof M.linkHref === 'function' ? M.linkHref(v) : null),
+        onFormat: (what, href, range) => formatIn(now, what, href, range),
+        onComment: () => noteCard(now.index, true),
+        onRemove: () => removeBlock(now),
+        onList: () => { const host = hostOf(); if (!host) return; noteBefore(now, true); T.list(host); schedule(now); },
+        listState: () => T.listState(hostOf()),
+      };
       if (editor === 'box') {
         const adm = root.querySelector('.adm');
-        const bar = B.boxBar(doc, adm, {
+        const current = () => (B.BOX_TYPES.find(([k]) => adm.classList.contains(`adm-${k}`)) || B.BOX_TYPES[0])[0];
+        opts.box = {
+          current,
           onType: (k, l) => {
             noteBefore(now, true);
+            const title = adm.querySelector('.adm-title');
+            // the first type, for the marks kept across a reload (js/editor-md.js serialize {original: true})
+            if (adm.getAttribute('data-hc-was') === null) {
+              adm.setAttribute('data-hc-was', current());
+              adm.setAttribute('data-hc-was-title', title ? title.textContent : '');
+            }
             for (const [kk] of B.BOX_TYPES) adm.classList.remove(`adm-${kk}`);
             adm.classList.add(`adm-${k}`);
-            const title = adm.querySelector('.adm-title');
             if (title) title.textContent = l;
             schedule(now);
           },
-          onRemove: () => removeBlock(now),
-        });
-        w.insertBefore(bar, root);                // beside the typed DOM, never inside what is serialized
-        now.handles.push({ detach() { bar.remove(); } });
+        };
       }
       if (editor === 'code') {
         const pre = root.querySelector('pre');
         const cur = (/(?:^|\s)language-(\S+)/.exec(targets[0].className || '') || [])[1] || '';
-        const bar = B.codeBar(doc, pre, { current: cur, onChange: (l) => { noteBefore(now, true); pre.setAttribute('data-hc-lang', l); schedule(now); } });
-        w.insertBefore(bar, root);                // beside the typed DOM, never inside what is serialized
-        now.handles.push({ detach() { bar.remove(); } });
+        opts.code = { current: cur, onChange: (l) => { noteBefore(now, true); pre.setAttribute('data-hc-lang', l); schedule(now); } };
+      }
+      const bar = B.blockBar(doc, opts);
+      w.insertBefore(bar.el, root);               // beside the typed DOM, never inside what is serialized
+      now.bar = bar;
+      now.handles.push({ detach() { bar.close(); if (bar.el.parentNode) bar.el.parentNode.removeChild(bar.el); } });
+      // phone (ED65): the toolbar is fixed just above the on-screen keyboard (visualViewport), never over the text
+      const vv = win.visualViewport;
+      if (vv && typeof win.matchMedia === 'function' && win.matchMedia(PHONE_BAR_QUERY).matches && bar.el.style) {
+        const place = () => { bar.el.style.bottom = `${Math.max(0, Math.round((win.innerHeight || 0) - vv.height - (vv.offsetTop || 0)))}px`; };
+        bar.el.classList.add('is-phone');
+        place();
+        vv.addEventListener('resize', place);
+        vv.addEventListener('scroll', place);
+        now.handles.push({ detach() { vv.removeEventListener('resize', place); vv.removeEventListener('scroll', place); } });
+      }
+      // the toolbar opened room above the text: a click's caret lands where it was aimed
+      if (lastClick && typeof bar.el.getBoundingClientRect === 'function') {
+        const h = bar.el.getBoundingClientRect().height || 0;
+        lastClick = { x: lastClick.x, y: lastClick.y + h };
       }
       if (editor !== 'code') now.targets = targets;
       placeCaret(targets);
@@ -723,6 +834,7 @@
       burst = null;
       root.innerHTML = back.html;
       if (typeof back.md === 'string') root.setAttribute('data-hc-md-sent', back.md);
+      postMarks(c.index, root);                   // U4 (D6): the kept marks follow the undo
       const now = openNow && openNow.index === c.index ? openNow : null;
       if (now) {
         now.root = root;
@@ -776,49 +888,33 @@
       HC.post('hc-block-md', { index: now.index, md: '' });
       closeBlock(true);
       now.w.classList.add('hc-removed');
+      // D9 (ED32): no one-click loss — the removal is an undo step (js/editor.js), and says so for 8 seconds
+      const pill = win.HCEditorBlocks.removedPill(doc, { onUndo: () => HC.post('hc-key', { op: 'undo' }),
+        setTimeout: (fn, ms) => win.setTimeout(fn, ms) });
+      now.w.appendChild(pill);
     }
 
-    /* The formatting bar over a selection inside the open block (U3): Bold, Italic, inline code, Link, as suggestions. */
-    let fbar = null;
-    function formatBar() {
-      if (fbar || !win.HCEditorBlocks || !doc.body) return fbar;
-      fbar = win.HCEditorBlocks.formatBar(doc, {
-        // a link address: js/editor-md.js's rule (https://, http://, #/, /, a page path), the one the serializer re-checks
-        check: (v) => (win.HCEditorMd && typeof win.HCEditorMd.linkHref === 'function' ? win.HCEditorMd.linkHref(v) : null),
-        onFormat: (what, href, range) => {
-          const now = openNow;
-          const sel = doc.getSelection();
-          if (!now || !now.targets || !sel) return;
-          if (range) {                                   // Link: the selection saved before the address field took the focus
-            const owner = now.targets.find((t) => t.contains(range.commonAncestorContainer));
-            if (!owner) return;
-            owner.focus({ preventScroll: true });
-            sel.removeAllRanges();
-            sel.addRange(range);
-          }
-          if (!sel.rangeCount) return;
-          const host = now.targets.find((t) => t.contains(sel.anchorNode));
-          if (!host) return;
-          noteBefore(now, true);
-          win.HCEditorType.format(host, what, href);
-          schedule(now);
-          fbar.hide();
-        },
-      });
-      doc.body.appendChild(fbar.el);
-      return fbar;
+    /* B / I / Code / Link from the open block's toolbar (D8) and the keys (Cmd/Ctrl+E, +K), as suggestions. */
+    function formatIn(now, what, href, range) {
+      const sel = doc.getSelection ? doc.getSelection() : null;
+      if (!now || openNow !== now || !now.targets || !sel) return;
+      if (range) {                                   // Link: the selection saved before the address field took the focus
+        const owner = now.targets.find((t) => t.contains(range.commonAncestorContainer));
+        if (!owner) return;
+        owner.focus({ preventScroll: true });
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      if (!sel.rangeCount) return;
+      const host = now.targets.find((t) => t.contains(sel.anchorNode));
+      if (!host) return;
+      noteBefore(now, true);
+      win.HCEditorType.format(host, what, href);
+      schedule(now);
+      if (now.bar) now.bar.refresh();
     }
-    if (doc.addEventListener) {
-      doc.addEventListener('selectionchange', () => {
-        const now = openNow;
-        const sel = doc.getSelection ? doc.getSelection() : null;
-        const fb = now && now.targets ? formatBar() : fbar;
-        if (!fb || (fb.busy && fb.busy())) return;     // the Link address field has the focus
-        if (!now || !now.targets || !sel || sel.isCollapsed || !sel.rangeCount || !now.targets.some((t) => t.contains(sel.anchorNode))) { fb.hide(); return; }
-        const r = sel.getRangeAt(0).getBoundingClientRect();
-        if (r && (r.width || r.height)) fb.showAt(r); else fb.hide();
-      });
-    }
+    // the List button follows the caret (bulleted / numbered / none)
+    if (doc.addEventListener) doc.addEventListener('selectionchange', () => { if (openNow && openNow.bar) openNow.bar.refresh(); });
 
     function placeCaret(targets) {
       const first = targets[0];
@@ -867,6 +963,117 @@
       now.sent = md;
       if (now.root) now.root.setAttribute('data-hc-md-sent', md);
       HC.post('hc-block-md', { index: now.index, md });
+      postMarks(now.index, now.root);
+    }
+
+    /* ---- U4 (D6, ED30): the marks survive a reload ----
+       After every edit the block's marked HTML goes to the parent (hc-marks; '' when no mark is left), which keeps
+       it beside the draft. After a load the parent sends, for every block the draft changed, that HTML with the
+       draft's and the base's text (hc-editor.marks); js/editor-md.js restoreBlock checks it both ways (else paints a
+       word diff) and the block shows it as its edit root, so typing goes on from the marks. Once per block per load. */
+    const MAX_MARKS_HTML = 200000;
+    function postMarks(index, root) {
+      if (!root || typeof root.innerHTML !== 'string') return;
+      const marked = typeof root.querySelector === 'function' ? root.querySelector('[data-hc-sug], [data-hc-list], [data-hc-was]') : null;
+      const html = marked ? root.innerHTML : '';
+      if (html.length <= MAX_MARKS_HTML) HC.post('hc-marks', { index, html });
+    }
+    const restored = new Set();
+    function restoreMarks(s) {
+      const list = s && Array.isArray(s.marks) ? s.marks.filter((m) => !restored.has(`${m.index}|${m.md}`)) : [];
+      if (!list.length) return;
+      for (const m of list) restored.add(`${m.index}|${m.md}`);
+      loadScripts().then((ok) => {
+        const M = win.HCEditorMd;
+        const S = win.HCSanitize;
+        if (!ok || !M || typeof M.restoreBlock !== 'function') return;
+        for (const m of list) {
+          if (openNow && openNow.index === m.index) continue;          // the open block's DOM is the truth
+          const w = wrapperFor(m.index);
+          if (!w || Array.from(w.childNodes).some((c) => c.nodeType === ELEMENT && classesOf(c).indexOf('hc-edit-root') >= 0)) continue;
+          let out = null;
+          try {
+            const html = m.html && S && typeof S.clean === 'function' ? S.clean(m.html, { marks: true }) : '';
+            out = M.restoreBlock({ html, md: m.md, orig: m.orig, kind: m.kind });
+          } catch (e) { out = null; }
+          if (!out) continue;
+          const fresh = doc.createElement('div');
+          fresh.className = 'hc-edit-root';
+          fresh.setAttribute('data-hc-md-sent', m.md);
+          fresh.setAttribute('data-hc-restored', out.how);
+          while (out.root.firstChild) fresh.appendChild(out.root.firstChild);
+          for (const c of Array.from(w.childNodes)) {
+            if (sentinelIndex(c, prefix) !== null || classesOf(c).indexOf('hc-note-card') >= 0) continue;
+            w.removeChild(c);
+          }
+          w.appendChild(fresh);
+        }
+        queueRects();
+      });
+    }
+
+    /* ---- U4 (D8, ED18): Comment — a note for the reviewer beside the block; the text stays as it is ----
+       The card ("Your note") sits in the margin while editing; every change goes to the parent (hc-note), which keeps
+       it in the draft (notes: [{key, text}]) and sends my notes back (hc-editor.notes) after a load. */
+    const NOTE_MAX = 2000;
+    const noteCards = new Map();       // block index -> {card, area, local}
+    function dropNote(index) {
+      const c = noteCards.get(index);
+      if (c && c.card.parentNode) c.card.parentNode.removeChild(c.card);
+      noteCards.delete(index);
+    }
+    function noteCard(index, focus) {
+      const w = wrapperFor(index);
+      if (!w) return null;
+      let c = noteCards.get(index);
+      if (!c || c.card.parentNode !== w) {
+        if (c) dropNote(index);
+        const card = doc.createElement('aside');
+        card.className = 'hc-note-card';
+        card.setAttribute('contenteditable', 'false');
+        card.setAttribute('aria-label', 'Your note');
+        const head = doc.createElement('p');
+        head.className = 'hc-note-head';
+        head.textContent = 'Your note';
+        const area = doc.createElement('textarea');
+        area.className = 'hc-note-text';
+        area.setAttribute('aria-label', 'Your note for the reviewer');
+        area.setAttribute('maxlength', String(NOTE_MAX));
+        area.setAttribute('rows', '3');
+        area.setAttribute('placeholder', 'A note for the reviewer. The text stays as it is.');
+        const rm = button('hc-note-remove', 'Remove your note', 'Remove');
+        const hold = (e) => { if (e && e.stopPropagation) e.stopPropagation(); };   // a click here never picks the block
+        card.addEventListener('click', hold);
+        card.addEventListener('mousedown', hold);
+        card.addEventListener('keydown', hold);
+        area.addEventListener('input', () => {
+          const cc = noteCards.get(index);
+          if (cc) cc.local = true;
+          HC.post('hc-note', { index, text: String(area.value || '').slice(0, NOTE_MAX) });
+        });
+        area.addEventListener('blur', () => { if (!String(area.value || '').trim()) { dropNote(index); HC.post('hc-note', { index, text: '' }); } });
+        rm.addEventListener('click', (e) => { hold(e); dropNote(index); HC.post('hc-note', { index, text: '' }); });
+        card.appendChild(head);
+        card.appendChild(area);
+        card.appendChild(rm);
+        w.appendChild(card);
+        c = { card, area, local: true };
+        noteCards.set(index, c);
+      }
+      if (focus && typeof c.area.focus === 'function') c.area.focus({ preventScroll: true });
+      return c;
+    }
+    function syncNotes(s) {
+      const want = new Map((s && Array.isArray(s.notes) ? s.notes : []).map((n) => [n.index, n.text]));
+      for (const [i, c] of Array.from(noteCards)) {
+        if (!want.has(i) && !c.local) dropNote(i);
+      }
+      for (const [i, text] of want) {
+        const c = noteCard(i, false);
+        if (!c) continue;
+        c.local = false;
+        if (doc.activeElement !== c.area) c.area.value = text;
+      }
     }
 
     /* Typing stops; the DOM (and its suggestion marks) stays on the page as it is. */
@@ -878,7 +1085,6 @@
       for (const hd of now.handles) hd.detach();
       for (const hd of now.typing || []) hd.detach();
       if (now.root) for (const t of Array.from(now.root.querySelectorAll('[contenteditable]'))) t.removeAttribute('contenteditable');
-      if (fbar) fbar.close();
       now.w.classList.remove('hc-open', 'hc-open-md');
       if (tellParent) report(now.index, 'closed', '');
     }
@@ -963,17 +1169,10 @@
         const k = String(e.key || '').toLowerCase();
         if (k !== 'k' && k !== 'e') return;
         const sel = doc.getSelection ? doc.getSelection() : null;
-        if (!sel || sel.isCollapsed || !sel.rangeCount || !openNow.targets.some((t) => t.contains(sel.anchorNode))) return;
-        const fb = formatBar();
-        if (!fb) return;
+        if (!sel || sel.isCollapsed || !sel.rangeCount || !openNow.targets.some((t) => t.contains(sel.anchorNode)) || !openNow.bar) return;
         e.preventDefault();
-        if (k === 'e') {
-          const host = openNow.targets.find((t) => t.contains(sel.anchorNode));
-          noteBefore(openNow, true);
-          win.HCEditorType.format(host, 'code');
-          schedule(openNow);
-          fb.hide();
-        } else fb.openLink(sel.getRangeAt(0).getBoundingClientRect());
+        if (k === 'e') formatIn(openNow, 'code');
+        else openNow.bar.openLink();
       });
       // round 2 (R2b): Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y) go to the parent's one history; a text field
       // (the Markdown box, the link address) keeps its own
@@ -1068,6 +1267,7 @@
             log: log.map((x) => Object.assign({}, x)), loadedAt, nonce16: prefix, now: scrollYNow(), rects }, e.origin);
           return;
         }
+        if (d.type === 'hc-walk-u4') { walkU4(d, e); return; }        // U4's steps (below)
         if (d.type !== 'hc-walk-picker' || !Number.isInteger(d.index)) return;
         const root = doc.getElementById('content') || doc.body;
         let r = null;
@@ -1083,9 +1283,45 @@
         if (open && typeof r.scrollIntoView === 'function') {
           try { r.scrollIntoView({ block: 'center' }); } catch (err) { /* a courtesy */ }
         }
-        const kinds = open ? Array.from(openPicker.picker.childNodes).map((b) => b.getAttribute('data-kind')) : [];
+        const row = open ? Array.from(openPicker.picker.childNodes).find((n) => classesOf(n).indexOf('hc-pick-row') >= 0) : null;
+        const kinds = row ? Array.from(row.childNodes).map((b) => b.getAttribute('data-kind')) : [];
         e.source.postMessage({ type: 'hc-walk-picker-open', index: d.index, open, kinds }, e.origin);
       });
+    }
+
+    /* TEST-ONLY (U4's walk steps, under the same localhost-and-walk condition as above): {type: 'hc-walk-u4', op}
+       answers {type: 'hc-walk-u4-state', op, open, bar, items, menu, notes, restored, sug}. op 'type' types a sentence
+       at the end of the open block (the typing engine's own insert), 'menu' clicks the toolbar's first item (Type ▾ /
+       Language ▾), 'comment' clicks Comment and writes a note; 'state' only answers. */
+    function walkU4(d, e) {
+      const now = openNow;
+      const bar = now && now.bar ? now.bar.el : null;
+      const row = bar ? Array.from(bar.childNodes).find((n) => classesOf(n).indexOf('hc-fb-row') >= 0) : null;
+      const items = row ? Array.from(row.childNodes) : [];
+      if (d.op === 'type' && now && now.targets && now.targets.length) {
+        const t = now.targets[now.targets.length - 1];
+        const sel = doc.getSelection();
+        const r = doc.createRange();
+        r.selectNodeContents(t);
+        r.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r);
+        noteBefore(now);
+        win.HCEditorType.insert(t, ' The walk typed this sentence.');
+        schedule(now);
+      } else if (d.op === 'menu' && items[0]) items[0].click();
+      else if (d.op === 'comment' && now) {
+        const c = noteCard(now.index, true);
+        if (c) { c.area.value = 'A note from the walk: please check this step.'; c.area.dispatchEvent(new win.Event('input')); }
+      }
+      if (bar && typeof bar.scrollIntoView === 'function') { try { bar.scrollIntoView({ block: 'center' }); } catch (err) { /* a courtesy */ } }
+      const menu = bar ? Array.from(bar.childNodes).find((n) => classesOf(n).indexOf('hc-boxmenu') >= 0) : null;
+      const root = doc.getElementById('content') || doc.body;
+      e.source.postMessage({ type: 'hc-walk-u4-state', op: d.op, open: now ? { index: now.index, editor: now.editor } : null,
+        bar: Boolean(bar && bar.parentNode), items: items.map((b) => b.getAttribute('aria-label') || b.textContent),
+        menu: menu ? Array.from(menu.childNodes).filter((n) => n.tagName === 'BUTTON').map((n) => n.textContent) : [],
+        notes: noteCards.size, restored: Array.from(root.querySelectorAll('[data-hc-restored]')).map((n) => n.getAttribute('data-hc-restored')),
+        sug: root.querySelectorAll('[data-hc-sug]').length }, e.origin);
     }
 
     HC.post('hc-ready');

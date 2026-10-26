@@ -127,13 +127,40 @@
     td: CELL_ATTRS,
   };
 
+  /* Marks mode (U4, plan D6): clean(html, {marks: true}) is the Editor's restore of a block's suggestion marks
+     after a reload (js/editor-frame.js), never the live site's pages. On top of the policy above it keeps the
+     typing engine's own mark: the <ins> element, the data-hc-* attributes js/editor-type.js and the block toolbar
+     write (each value checked by shape), and the hc-sug classes. */
+  let marksMode = false;
+  const MARK_ELEMENTS = new Set(['ins']);
+  const shape = (re, max) => (v) => (v.length <= max && re.test(v) ? v : null);
+  const plainText = (max) => (v) => (v.length <= max && !/[\u0000-\u001f\u007f]/.test(v) ? v : null);
+  const MARK_ATTRS = {
+    'data-hc-sug': oneOf('ins', 'del', 'fmt'),
+    'data-hc-id': shape(/^[A-Za-z0-9_-]+$/, 40),
+    'data-hc-fmt': oneOf('strong', 'em', 'code', 'link'),
+    'data-hc-href': plainText(2000),          // js/editor-md.js linkHref checks it again when it is written
+    'data-hc-list': oneOf('ul', 'ol'),
+    'data-hc-was': shape(/^[a-z]+$/, 20),
+    'data-hc-was-title': plainText(200),
+    'data-hc-lang': shape(/^[A-Za-z0-9_+#.-]*$/, 40),
+  };
+  const MARK_CLASSES = new Set(['hc-sug', 'hc-sug-ins', 'hc-sug-del', 'hc-sug-fmt', 'hc-sug-list']);
+  function cleanMarkClass(value) {
+    const kept = value.split(/[\t\n\f\r ]+/).filter((token) => token
+      && (MARK_CLASSES.has(token) || CLASS_EXACT.has(token) || CLASS_PATTERNS.some((re) => re.test(token))));
+    return kept.length ? kept.join(' ') : null;
+  }
+
   function cleanAttributes(el, name) {
     const own = ELEMENT_ATTRS[name] || {};
     for (const attr of Array.from(el.attributes)) {
       const attrName = String(attr.name).toLowerCase();
-      const rule = Object.prototype.hasOwnProperty.call(own, attrName) ? own[attrName]
+      const markRule = !marksMode ? null : attrName === 'class' ? cleanMarkClass
+        : Object.prototype.hasOwnProperty.call(MARK_ATTRS, attrName) ? MARK_ATTRS[attrName] : null;
+      const rule = markRule || (Object.prototype.hasOwnProperty.call(own, attrName) ? own[attrName]
         : Object.prototype.hasOwnProperty.call(GLOBAL_ATTRS, attrName) ? GLOBAL_ATTRS[attrName]
-          : null;
+          : null);
       const kept = rule ? rule(String(attr.value)) : null;
       if (kept === null) el.removeAttribute(attr.name);
       else if (kept !== attr.value) el.setAttribute(attr.name, kept);
@@ -153,7 +180,7 @@
       const name = String(node.localName || '').toLowerCase();
       if (node.namespaceURI !== HTML_NS || DROP_WHOLE.has(name)) {
         parent.removeChild(node);
-      } else if (ELEMENTS.has(name)) {
+      } else if (ELEMENTS.has(name) || (marksMode && MARK_ELEMENTS.has(name))) {
         cleanAttributes(node, name);
         cleanChildren(node);
       } else {
@@ -163,11 +190,12 @@
     }
   }
 
-  function clean(html) {
+  function clean(html, opts) {
     if (html === null || html === undefined) return '';
     const doc = new DOMParser().parseFromString(String(html), 'text/html');
     if (!doc || !doc.body) return '';
-    cleanChildren(doc.body);
+    marksMode = Boolean(opts && opts.marks === true);
+    try { cleanChildren(doc.body); } finally { marksMode = false; }
     return doc.body.innerHTML;
   }
 

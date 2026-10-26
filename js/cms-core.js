@@ -1831,7 +1831,15 @@
       || !Object.prototype.hasOwnProperty.call(d.originals, p)
       || (d.originals[p] !== null && typeof d.originals[p] !== 'string'))) return false;
     const b = d.base;
-    return isObj(b) && isRef(b.ref) && isSha(b.sha) && (b.number === null || Number.isInteger(b.number));
+    if (!(isObj(b) && isRef(b.ref) && isSha(b.sha) && (b.number === null || Number.isInteger(b.number)))) return false;
+    // U4 (D6, D8): the optional extras. notes: a list of {key: 64-hex block key, text} (Comment; sent with the
+    // proposal; splitSend's cleanNotes drops a malformed item, so a list with one is still a draft);
+    // marks / history: kept under their own key (hc-cms-marks:<login>/<page>), so a draft carrying them is still a
+    // draft only when they have the shapes the editor writes
+    if (d.notes !== undefined && !(Array.isArray(d.notes) && d.notes.length <= 500)) return false;   // items: cleanNotes
+    if (d.marks !== undefined && !isObj(d.marks)) return false;
+    if (d.history !== undefined && !(isObj(d.history) && Array.isArray(d.history.undo) && Array.isArray(d.history.redo))) return false;
+    return true;
   }
 
   // a change to send: a file that differs, or page notes (a notes-only draft is sent too: U2 fix round 1, for U4)

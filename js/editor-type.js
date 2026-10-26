@@ -12,8 +12,9 @@
      typing          -> <ins data-hc-sug="ins">: shown in the accent colour, underlined. Typing inside
                         or right after your own inserted text extends it (one suggestion).
      Backspace/Del   -> original text is NOT removed: it is wrapped in <del data-hc-sug="del">, struck
-                        through; the caret skips over text that is already struck. Deleting your own
-                        inserted text removes it outright.
+                        through. With the caret at the right end of a struck run, Backspace gives its
+                        last letter back (one per press); Delete at its left end gives the first back
+                        (D7, ED19). Deleting your own inserted text removes it outright.
      select + type   -> the selection is struck and the new text follows it: ONE suggestion (Replace).
      Bold / Italic / inline code / Link
                      -> <b|i|code|a data-hc-sug="fmt" data-hc-fmt="strong|em|code|link"> (a link also
@@ -125,6 +126,26 @@
     }
     return 'struck';
   }
+  /* D7 (ED19): give struck character k back (it leaves its <del>; the rest of the run stays struck). */
+  function unstrikeCharAt(root, k) {
+    const c = charAt(root, k);
+    const del = c ? up(c.node, isDel, root) : null;
+    if (!del) return null;
+    let ch = c.node;
+    if (c.i > 0) ch = ch.splitText(c.i);
+    if (ch.length > 1) ch.splitText(1);
+    if (ch.parentNode !== del) return null;          // struck text deeper inside the mark: never guessed
+    const after = [];
+    for (let n = ch.nextSibling; n; n = n.nextSibling) after.push(n);
+    if (after.length) {
+      const rest = mark(root.ownerDocument, 'del', idOf(del));
+      after.forEach((n) => rest.appendChild(n));
+      del.parentNode.insertBefore(rest, del.nextSibling);
+    }
+    del.parentNode.insertBefore(ch, del.nextSibling);
+    if (!del.firstChild) del.remove();
+    return 'restored';
+  }
   /* the line breaks inside the selection: an inserted one goes, an original one is struck */
   function breaksInSelection(root) {
     const s = root.ownerDocument.getSelection();
@@ -167,12 +188,27 @@
     }
     const k = absOf(root, c0.node, c0.off);
     const total = root.textContent.length;
-    let j = forward ? k : k - 1;
-    while (j >= 0 && j < total) { const c = charAt(root, j); if (c && up(c.node, isDel, root)) j += forward ? 1 : -1; else break; }
-    if (j < 0 || j >= total) return;
     // a character outside the BMP (an emoji) is two UTF-16 units: both go, never half of one
     const unit = (x) => { const c = charAt(root, x); return c ? c.node.data.charCodeAt(c.i) : 0; };
     const high = (u) => u >= 0xd800 && u <= 0xdbff, low = (u) => u >= 0xdc00 && u <= 0xdfff;
+    const struck = (x) => { const c = x >= 0 && x < total ? charAt(root, x) : null; return Boolean(c && up(c.node, isDel, root)); };
+    // D7 (ED19): the caret at the RIGHT end of a struck run (Backspace) or its LEFT end (Delete) gives the
+    // nearest struck character back, one per press, instead of jumping over the run
+    const near0 = forward ? k : k - 1;
+    if (struck(near0)) {
+      let a = near0, b = near0;
+      if (!forward && low(unit(a)) && struck(a - 1) && high(unit(a - 1))) a -= 1;
+      if (forward && high(unit(b)) && struck(b + 1) && low(unit(b + 1))) b += 1;
+      let back = null;
+      for (let x = b; x >= a; x--) back = unstrikeCharAt(root, x) || back;
+      if (!back) return;
+      tidy(root);
+      caretAt(root, forward ? b + 1 : a);
+      return;
+    }
+    let j = forward ? k : k - 1;
+    while (j >= 0 && j < total) { const c = charAt(root, j); if (c && up(c.node, isDel, root)) j += forward ? 1 : -1; else break; }
+    if (j < 0 || j >= total) return;
     let from = j, to = j;
     if (!forward && low(unit(j)) && j > 0 && high(unit(j - 1))) from = j - 1;
     if (forward && high(unit(j)) && j + 1 < total && low(unit(j + 1))) to = j + 1;
@@ -262,6 +298,31 @@
     s.removeAllRanges(); const r2 = doc.createRange(); r2.selectNodeContents(el); s.addRange(r2);
   }
 
+  /* D8 (ED16): the List button. A paragraph becomes a bulleted list (one item per line break), then a numbered
+     one, then a paragraph again; a list already in the page becomes the other kind, then itself again. A list
+     suggestion is an attribute on the block element (data-hc-list="ul|ol", class hc-sug-list): js/editor-md.js
+     serialize() writes the list, and with {original: true} the block as it was. -> the state after the click. */
+  const LIST_KINDS = Object.freeze(['ul', 'ol']);
+  function listState(el) {
+    if (!isEl(el)) return 'none';
+    const v = el.getAttribute('data-hc-list');
+    if (LIST_KINDS.indexOf(v) >= 0) return v;
+    const t = String(el.tagName).toLowerCase();
+    return LIST_KINDS.indexOf(t) >= 0 ? t : 'none';
+  }
+  function list(el) {
+    if (!isEl(el)) return 'none';
+    const t = String(el.tagName).toLowerCase();
+    if (t !== 'p' && LIST_KINDS.indexOf(t) < 0) return listState(el);
+    const order = t === 'p' ? [null, 'ul', 'ol'] : [null, t === 'ul' ? 'ol' : 'ul'];
+    const cur = LIST_KINDS.indexOf(el.getAttribute('data-hc-list')) >= 0 ? el.getAttribute('data-hc-list') : null;
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    const cls = String(el.className || '').split(/\s+/).filter((c) => c && c !== 'hc-sug-list');
+    if (next) { el.setAttribute('data-hc-list', next); cls.push('hc-sug-list'); } else el.removeAttribute('data-hc-list');
+    if (cls.length) el.className = cls.join(' '); else el.removeAttribute('class');
+    return listState(el);
+  }
+
   /* -> {detach()}. opts.onChange() runs after every handled edit; opts.plain: no suggestion marks
      (a code box: the browser edits plain text, Enter included). */
   function attach(root, opts) {
@@ -335,7 +396,7 @@
       root.removeEventListener('compositionend', onCompositionEnd); } };
   }
 
-  const API = { attach, insert, erase, format };
+  const API = { attach, insert, erase, format, list, listState };
   if (typeof window !== 'undefined') window.HCEditorType = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 }());

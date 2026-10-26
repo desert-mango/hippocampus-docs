@@ -215,6 +215,12 @@
   const BLOCK_EDITORS = Object.freeze(['visual', 'code', 'box', 'mdbox', 'markdown', 'closed']);
   const OPEN_KINDS = Object.freeze(['paragraph', 'heading', 'list', 'code', 'wrapper', 'image', 'table', 'html']);
   const MAX_BLOCK_MD = 200000;
+  // U4 (D6, D8, D11): the marks, notes and site images that cross the bridge
+  const MAX_MARKS_HTML = 200000;
+  const NOTE_MAX = 2000;
+  const MAX_NOTES = 500;
+  const MAX_MEDIA = 500;
+  const isImageUrl = (u) => typeof u === 'string' && u.length <= 2000 && /^https:\/\/res\.cloudinary\.com\/[^\s"'<>\\]+$/.test(u);
 
   function httpError(path, status, detail) {
     const err = new Error(`${path}: HTTP ${status}` + (detail ? ` (${detail})` : ''));
@@ -357,6 +363,18 @@
     }
     /* Per-unit blocks (editor UI/UX build, U0): a new frame -> parent message kind goes in its unit's block. */
     /* ---- U4 ---- */
+    // D6: the open block's marked HTML after an edit ('' = no marks left); the parent keeps it, the frame
+    // sanitises it (js/sanitize.js, marks mode) and checks it both ways before it paints it again
+    if (type === 'hc-marks') {
+      return isIndex(d.index) && typeof d.html === 'string' && d.html.length <= MAX_MARKS_HTML ? { type, index: d.index, html: d.html } : null;
+    }
+    // D8: Comment — the note on block `index` ('' removes it); plain text, capped
+    if (type === 'hc-note') {
+      return isIndex(d.index) && typeof d.text === 'string' && d.text.length <= NOTE_MAX ? { type, index: d.index, text: d.text } : null;
+    }
+    // D11: the "+" Image tile asks for the site's images; then puts one in at the "+" `index`
+    if (type === 'hc-media-list') return { type };
+    if (type === 'hc-image-use') return isIndex(d.index) && isImageUrl(d.url) ? { type, index: d.index, url: d.url } : null;
 
     /* ---- U5 ---- */
 
@@ -426,6 +444,18 @@
       // the blocks a margin note card sits beside: reported in hc-block-rects like the marked ones
       anchors: Array.isArray(m.anchors) ? m.anchors.filter(isIndex).slice(0, 500) : [],    // at most 500 note cards on one page
       /* ---- U4 ---- */
+      // D6: the blocks my draft changed after a load: kept marked HTML ('' = none), the draft's text, the base's
+      // text ('' for an added block) and the block kind; one bad entry is dropped, never guessed. D8: my notes
+      // beside their blocks (plain text). D11: the site's images for "Pick one the site has" (Cloudinary only).
+      // Each field is there only when the parent sent it.
+      ...(Array.isArray(m.marks) ? { marks: m.marks.slice(0, MAX_OVERLAY).filter((x) => x && typeof x === 'object' && isIndex(x.index)
+        && typeof x.html === 'string' && x.html.length <= MAX_MARKS_HTML && typeof x.md === 'string' && x.md.length <= MAX_BLOCK_MD
+        && typeof x.orig === 'string' && x.orig.length <= MAX_BLOCK_MD && OPEN_KINDS.indexOf(x.kind) >= 0)
+        .map((x) => ({ index: x.index, html: x.html, md: x.md, orig: x.orig, kind: x.kind })) } : {}),
+      ...(Array.isArray(m.notes) ? { notes: m.notes.slice(0, MAX_NOTES).filter((x) => x && typeof x === 'object' && isIndex(x.index)
+        && typeof x.text === 'string' && x.text.length <= NOTE_MAX).map((x) => ({ index: x.index, text: x.text })) } : {}),
+      ...(Array.isArray(m.media) ? { media: m.media.slice(0, MAX_MEDIA).filter((x) => x && typeof x === 'object' && isImageUrl(x.url))
+        .map((x) => ({ url: x.url, label: typeof x.label === 'string' ? x.label.slice(0, 300) : '' })) } : {}),
 
       /* ---- U5 ---- */
 
