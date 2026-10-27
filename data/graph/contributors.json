@@ -699,7 +699,7 @@
     {
      "login": "NBauschmann",
      "name": "Nathalie Bauschmann",
-     "contributions": 47,
+     "contributions": 53,
      "roster": true
     },
     {
@@ -733,7 +733,7 @@
     "NBauschmann": {
      "ir_adc_read": 1,
      "ir_field_hardware": 4,
-     "scalar_field_belief": 15,
+     "scalar_field_belief": 21,
      "scalar_field_interfaces": 6,
      "scalar_field_sim": 21
     },
