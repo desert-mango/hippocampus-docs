@@ -5,7 +5,7 @@ reinforcement-learning pipeline for thruster-driven AUV control. The original re
 released `warplab/isaac-auv-env` implementation define the pipeline; this project tests its
 reproducibility and vehicle-specific behavior rather than claiming that upstream work.
 
-## What Kyle built and tested
+## What was built and tested
 
 - Reproduced the CUREE simulation pipeline through a policy that passed the project's two
   registered success bars.
