@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-28",
+ "read_at": "2026-10-29",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 214,
+  "commits_365d": 215,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -643,8 +643,8 @@
    "days": [
     9,
     0,
+    1,
     0,
-    null,
     null,
     null,
     null
@@ -652,6 +652,13 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_belief",
+   "sha": "a1a6400",
+   "date": "2026-10-28",
+   "msg": "feat(belief): add visGP belief and playground backend",
+   "author": "NBauschmann"
+  },
   {
    "repo": "scalar_field_belief",
    "sha": "378f539",
@@ -819,13 +826,6 @@
    "date": "2026-10-19",
    "msg": "Update repository URLs in README.md",
    "author": "NBauschmann"
-  },
-  {
-   "repo": "hippo_common",
-   "sha": "67f6063",
-   "date": "2026-10-16",
-   "msg": "fix(tf_publisher): preserve incoming pose timestamps",
-   "author": "NBauschmann"
   }
  ],
  "most_active_repos": [
@@ -837,9 +837,9 @@
   },
   {
    "name": "scalar_field_belief",
-   "commits": 31,
+   "commits": 32,
    "language": "Python",
-   "pushed_at": "2026-10-26"
+   "pushed_at": "2026-10-28"
   },
   {
    "name": "fav_docs",

@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-10-28",
+ "read_at": "2026-10-29",
  "org": "HippoCampusRobotics",
  "repos": {
   ".github": {
@@ -1144,11 +1144,11 @@
    "stars": 1,
    "forks": 0,
    "open_issues": 0,
-   "pushed_at": "2026-10-26",
+   "pushed_at": "2026-10-28",
    "archived": false,
    "fork": false,
    "private": false,
-   "commits_365d": 31,
+   "commits_365d": 32,
    "html_url": "https://github.com/HippoCampusRobotics/scalar_field_belief"
   },
   "scalar_field_interfaces": {
