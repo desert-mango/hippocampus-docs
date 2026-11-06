@@ -95,12 +95,16 @@ Deleting files can be dangerous because it is quite irreversible by its nature. 
 ## Install the Convenience Scripts
 
 
-Install the scripts via
+The scripts live in the `scripts/` folder of the `hippo_common` **source** repository. The `ros-jazzy-hippo-common` apt package does not contain them, so a machine that only uses the pre-built packages (for example a Raspberry Pi) needs a checkout of `hippo_common` for this step.
+
+If `hippo_common` is cloned into your workspace (see [Workspace Setup](#/setup/getting-started/workspace-setup)), install the scripts via
 
 
 ```console
-$ ~/ros2/src/hippo_core/hippo_common/scripts/install_scripts.sh
+$ ~/ros2/src/hippo_common/scripts/install_scripts.sh
 ```
+
+The script copies `build-ros` and `clean-ros` to `~/.local/bin`, which must be on your `PATH`.
 
 For a better auto completion we add the required `argcomplete` line to our `.zshrc` by executing
 
