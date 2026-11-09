@@ -1,6 +1,6 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-11-06",
+ "read_at": "2026-11-09",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
@@ -14,18 +14,6 @@
   "releases": 0
  },
  "weeks": [
-  {
-   "week": "2025-11-03",
-   "days": [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-   ]
-  },
   {
    "week": "2025-11-10",
    "days": [
@@ -646,6 +634,18 @@
     0,
     0,
     0,
+    0,
+    0
+   ]
+  },
+  {
+   "week": "2026-11-09",
+   "days": [
+    0,
+    null,
+    null,
+    null,
+    null,
     null,
     null
    ]
