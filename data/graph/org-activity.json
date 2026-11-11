@@ -1,11 +1,11 @@
 {
  "generated": "run tools/build_github_data.py to regenerate",
- "read_at": "2026-11-10",
+ "read_at": "2026-11-11",
  "org": "HippoCampusRobotics",
  "window_days": 365,
  "totals": {
   "public_repos": 97,
-  "commits_365d": 215,
+  "commits_365d": 217,
   "authors_365d": 5,
   "repos_touched_365d": 16,
   "stars": 32,
@@ -642,8 +642,8 @@
    "week": "2026-11-09",
    "days": [
     0,
+    2,
     0,
-    null,
     null,
     null,
     null,
@@ -652,6 +652,20 @@
   }
  ],
  "recent_commits": [
+  {
+   "repo": "scalar_field_belief",
+   "sha": "f343aa1",
+   "date": "2026-11-10",
+   "msg": "feat(attentive-kernel-gp): add attentive kernel",
+   "author": "NBauschmann"
+  },
+  {
+   "repo": "scalar_field_belief",
+   "sha": "771d4ac",
+   "date": "2026-11-10",
+   "msg": "feat(belief): add fixed target transform and set as default",
+   "author": "NBauschmann"
+  },
   {
    "repo": "scalar_field_belief",
    "sha": "a1a6400",
@@ -812,20 +826,6 @@
    "date": "2026-10-19",
    "msg": "fix(ipp): correct planner cancellation and recovery, bound ir buffer",
    "author": "NBauschmann"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "f09e98c",
-   "date": "2026-10-19",
-   "msg": "refactor(ipp): clean up formatting and node shutdown",
-   "author": "NBauschmann"
-  },
-  {
-   "repo": "ipp_rig",
-   "sha": "a49210e",
-   "date": "2026-10-19",
-   "msg": "Update repository URLs in README.md",
-   "author": "NBauschmann"
   }
  ],
  "most_active_repos": [
@@ -837,9 +837,9 @@
   },
   {
    "name": "scalar_field_belief",
-   "commits": 32,
+   "commits": 34,
    "language": "Python",
-   "pushed_at": "2026-10-28"
+   "pushed_at": "2026-11-10"
   },
   {
    "name": "fav_docs",
