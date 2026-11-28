@@ -233,7 +233,8 @@ The configuration file is at `/etc/mavlink-router/main.conf` and can contain the
 
 # Path to UART device. like `/dev/ttyS0`
 # Mandatory, no default value
-Device =/dev/ttyACM0
+# /dev/fcu_usb is the stable name from /etc/udev/rules.d/50-fcu.rules
+Device =/dev/fcu_usb
 Baud = 921600
 
 [UdpEndpoint hippo-celsius]
